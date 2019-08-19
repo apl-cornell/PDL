@@ -1,0 +1,31 @@
+\documentclass{article}
+\usepackage{mathpartir}
+\usepackage{ttquot}
+
+\begin{document}
+
+\title{SpecLang Semantics}
+\author{Drew Zagieboylo}
+\maketitle
+
+
+\section{Typing Rules}
+\section{Dynamic Semantics}
+\begin{mathpar}
+  \inferrule*[Left={speculate}] { \langle \Delta, \sigma, e \rangle \Downarrow (l', n) \\ l = l'."next"}
+             { \langle \Delta, \sigma, "speculate"(v_1, e) \rangle \Downarrow (l, n)} \\
+  \inferrule*[Left={assign-seq}]{ \langle \Delta, \sigma, e \rangle \Downarrow (l, n) }
+             { \langle \Delta, \sigma, v := e \rangle \Downarrow \langle \Delta[\bar{v} \mapsto l],
+               \sigma[\bar{v} \mapsto n], "skip" \rangle} \\
+  \inferrule*[Left={assign-comb}]{ \langle \Delta, \sigma, e \rangle \Downarrow (l, n) }
+             { \langle \Delta, \sigma, v = e \rangle \Downarrow \langle \Delta[v \mapsto l],
+               \sigma[v \mapsto n], "skip" \rangle}               
+\end{mathpar} \\
+\begin{mathpar}
+  \inferrule*[Left={verify-success}]{ \langle \Delta, \sigma, e \rangle \Downarrow n \\
+    \sigma(v) = n \\ \langle \Delta, e \rangle \Downarrow l }
+  { \langle \Delta, \sigma, v."verify"(e) \rangle \Downarrow \langle \Delta[v \mapsto l], \sigma, "skip" \rangle}\\
+  \inferrule*[Left={verify-fail}]{ \langle \Delta, \sigma, e \rangle \Downarrow n \\ \sigma(v) \neq n }
+  { \langle \Delta, \sigma, v."verify"(e) \rangle \Downarrow \langle \Delta[v \mapsto \top], \sigma, "skip" \rangle}         
+\end{mathpar}
+\end{document}
