@@ -10,22 +10,50 @@
 
 
 \section{Typing Rules}
+
+
 \section{Dynamic Semantics}
+Expression Semantics
 \begin{mathpar}
   \inferrule*[Left={speculate}] { \langle \Delta, \sigma, e \rangle \Downarrow (l', n) \\ l = l'."next"}
-             { \langle \Delta, \sigma, "speculate"(v_1, e) \rangle \Downarrow (l, n)} \\
+             { \langle \Delta, \sigma, "speculate"(v_1, e) \rangle \Downarrow (l, n)}
+\end{mathpar}
+Statement Semantics
+\begin{mathpar}
+  \inferrule*[Left={test-true}]{ \langle \Delta, \sigma, e \rangle \Downarrow (l, n) \\ \Delta(v) = l}
+             { \langle \Delta, \sigma, "if"("test " e) " then " c_1 " else " c_2 \rangle \rightarrow
+               \langle \Delta, \sigma, c_1 \rangle} \\
+  \inferrule*[Left={test-false}]{ \langle \Delta, \sigma, e \rangle \Downarrow (l, n) \\ \Delta(v) \neq l}
+             { \langle \Delta, \sigma, "if"("test " e) " then " c_1 " else " c_2 \rangle \rightarrow
+               \langle \Delta, \sigma, c_1 \rangle} \\             
   \inferrule*[Left={assign-seq}]{ \langle \Delta, \sigma, e \rangle \Downarrow (l, n) }
-             { \langle \Delta, \sigma, v := e \rangle \Downarrow \langle \Delta[\bar{v} \mapsto l],
+             { \langle \Delta, \sigma, v := e \rangle \rightarrow \langle \Delta[\bar{v} \mapsto l],
                \sigma[\bar{v} \mapsto n], "skip" \rangle} \\
   \inferrule*[Left={assign-comb}]{ \langle \Delta, \sigma, e \rangle \Downarrow (l, n) }
-             { \langle \Delta, \sigma, v = e \rangle \Downarrow \langle \Delta[v \mapsto l],
+             { \langle \Delta, \sigma, v = e \rangle \rightarrow \langle \Delta[v \mapsto l],
                \sigma[v \mapsto n], "skip" \rangle}               
-\end{mathpar} \\
+\end{mathpar}
+Resolve Block Semantics
 \begin{mathpar}
   \inferrule*[Left={verify-success}]{ \langle \Delta, \sigma, e \rangle \Downarrow n \\
     \sigma(v) = n \\ \langle \Delta, e \rangle \Downarrow l }
-  { \langle \Delta, \sigma, v."verify"(e) \rangle \Downarrow \langle \Delta[v \mapsto l], \sigma, "skip" \rangle}\\
+  { \langle \Delta, \sigma, v."verify"(e) \rangle \rightarrow \langle \Delta[v \mapsto l], \sigma, "skip" \rangle}\\
   \inferrule*[Left={verify-fail}]{ \langle \Delta, \sigma, e \rangle \Downarrow n \\ \sigma(v) \neq n }
-  { \langle \Delta, \sigma, v."verify"(e) \rangle \Downarrow \langle \Delta[v \mapsto \top], \sigma, "skip" \rangle}         
+  { \langle \Delta, \sigma, v."verify"(e) \rangle \rightarrow \langle \Delta[v \mapsto \top], \sigma, "skip" \rangle}         
+\end{mathpar}
+Thread Semantics
+\begin{mathpar}
+  \inferrule*[Left={resolve-step}] { \langle \Delta, \sigma, c_r \rangle
+    \rightarrow \langle \Delta^\prime, \sigma^\prime, c_r^\prime \rangle }
+             { \langle \Delta, \sigma, c_r, c_s, t \rangle
+               \rightarrow \langle \Delta^\prime, \sigma^\prime, c_r^\prime, c_s, t \rangle } \\
+  \inferrule*[Left={combinational-step}] { \langle \Delta, \sigma, c_s \rangle
+    \rightarrow \langle \Delta^\prime, \sigma^\prime, c_s^\prime \rangle }
+             { \langle \Delta, \sigma, "skip", c_s, t \rangle
+               \rightarrow \langle \Delta^\prime, \sigma^\prime, "skip", c_s^\prime, t \rangle } \\
+  \inferrule*[Left={tick}] { \Delta' = \Delta[x_i \mapsto \Delta(\bar{x_i})][\bar{x_j} \mapsto \bar{x_j}] \\
+               \sigma' = \sigma[x_i \mapsto \sigma(\bar{x_i})][\bar{x_j} \mapsto \bar{x_j}] }
+             { \langle \Delta, \sigma, "skip", "skip", t \rangle
+               \rightarrow_{\mathcal{R},\mathcal{S}} \langle \Delta^\prime, \sigma^\prime, \mathcal{R}, \mathcal{S} , t+1 \rangle}
 \end{mathpar}
 \end{document}
