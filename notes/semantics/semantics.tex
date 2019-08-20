@@ -43,6 +43,9 @@ Statement Typing
              { \Gamma, \Delta, pc \vdash "Spec "v \{s_1...s_n\} \dashv \Gamma[v \mapsto \mathcal{S}], \Delta[v \mapsto \mathcal{S}]}\\
   \inferrule*[Left={declaration-var}] { v \not\in "dom("\Gamma")" }
              { \Gamma, \Delta, pc \vdash v \{l\} \dashv \Gamma[v \mapsto \{l\}], \Delta}\\
+  \inferrule*[Left={if}] { \Gamma, \Delta, pc \vdash e : (\mathcal{S}, \{s\}) \\
+             \Gamma, \Delta, pc \sqcup s \vdash c_i \dashv \Gamma, \Delta_i \\ i \in \{1, 2\} }
+             { \Gamma, \Delta, pc \vdash "if(" e ") then " c_1 " else " c_2 \dashv \Gamma, \Delta_1 \cup \Delta_2}\\
   \inferrule*[Left={test}] { \Gamma, \Delta[v \mapsto \{s_1...s_n\}], pc \vdash c_1 \dashv \Gamma, \Delta_1 \\
     \Gamma, \Delta[v \mapsto  "not" \{s_1...s_n\}], pc \vdash c_2 \dashv \Gamma, \Delta_2 }
              { \Gamma, \Delta, pc \vdash "if"("test " v, \{s_1...s_n\}) " then " c_1 " else " c_2
