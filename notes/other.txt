@@ -1,0 +1,3 @@
+This is a link to some of the notes Andru has on how to formulate a speculative processor in a more PL-like style (rather than HDL):
+
+https://docs.google.com/document/d/1HBcdLW71aK6R_f7XjjVXl_BJ6jDjCD0smh4h97oIanc/edit?usp=sharing
