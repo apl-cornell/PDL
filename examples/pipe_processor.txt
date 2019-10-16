@@ -1,0 +1,83 @@
+
+
+pc_gen(pc) {
+/*
+  spec_is_br = bpred.is_br(pc);
+  if (spec_is_br) {
+    spec_npc = btb.pred(pc);
+  } else {
+    spec_npc = pc + 4;
+  }
+  pc_gen.send(spec_npc);
+*/
+  insn_channel = insn_cache.send(pc);
+  decode.send(pc, insn_channel);
+
+}
+
+decode(pc, ichannel) {
+
+  insn = ichannel.recv(pc);
+  op = opcode(insn);
+  if (is_mem_op(op)) {
+     addr_channel = rf.read1(addr(insn));
+     val_channel = rf.read2(val(insn));
+     lst_unit.send(op, addr_channel, val_channel, val(insn));
+     pc_gen.send(pc + 4);   
+  } else {
+    rf1_channel = rf.read1(r1(insn));
+    rf2_channel = rf.read2(r2(insn));
+    if (!is_br(op)) {
+      pc_gen.send(pc + 4);
+      execute.send(op, rf1_channel, rf2_channel, imm(insn), dest(insn));
+    } else {
+      br_unit.send(op, rf1_channel, rf2_channel, imm(insn), pc);
+    }
+  }
+}
+
+execute(op, arg1, arg2, imm, dest) {
+
+  val1 = arg1.recv();
+  val2 = arg2.recv();
+  result = switch(op) {
+     case ADD:
+       val1 + val2
+     case MUL:
+       val1 * val2
+  }
+  write_back.send(result, dest);
+}
+
+br_unit(op, arg1, arg2, imm, pc) {
+
+  result = switch(op) {
+    case BEQ:
+      arg1 == arg2
+    case BNEQ:
+      arg1 != arg2
+  }
+
+  if (result) {
+    pc_gen.send(pc + imm);
+  } else {
+    pc_gen.send(pc + 4);
+  }
+
+}
+
+lst_unit(op, addr, val, dest) {
+
+  switch(op) {
+    case ST:
+      mem.write(addr, val) //blocking write
+    case LD:
+      res = mem.read(addr); //blocking read
+      write_back.send(res, dest);
+  }
+}
+
+
+write_back(result, dest) {
+  rf.write(val, dest);
+}
