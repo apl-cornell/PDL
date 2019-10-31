@@ -1,0 +1,56 @@
+Function
+  = id:ID _ "(" _ p:Params _ ")"_ "{"
+    _ b:Body _
+    "}" { return { "name": id, "params": p, "body": b}; }
+    
+Params
+  = id:ID _ "," _ p:Params { p.unshift(id); return p; }
+    / id:ID { return [id]; }
+Body
+  = s:Statement "\n" m:Body { m.unshift(s); return m; }
+  / s:Statement { return [s]; }
+  
+Statement
+  = _ c:Connect ";" { return c; }
+  / _ r:Run ";" { return r; }
+  / _ r:Ret ";" { return r; }
+
+Connect
+  = dest:ID _ "<=" _ src:Expr { return dest + " := " + src; }
+
+Run
+  = "run" _ c:Call { return "run " + c; }
+
+Ret
+  = "ret" _ c:Call { return "return " + c; }
+
+Call
+  = id:ID "(" _ e:ExprList _ ")" { return "call " + id + " with " + e; }
+
+ExprList
+  = e:Expr _ "," _ p:ExprList { p.unshift(e); return p; }
+  / el:Expr { return [el]; }
+
+Expr
+  = b:Binop { return b; }
+  / c:Call { return c; }
+  / l:LHS { return l; }
+  
+LHS
+  = "(" i:Expr ")" { return i; }
+  / i:ID { return i; }
+  / i:Integer { return i; }
+
+Binop
+  = lhs: LHS _ "+" _ rhs: Expr { return "(" + lhs + " + " + rhs + ")"; }
+  / lhs: LHS _ "&" _ rhs: Expr { return "(" + lhs + " and " + rhs + ")" ; }
+  / lhs: LHS _ "|" _ rhs: Expr { return "(" + lhs + " or " + rhs + ")"; }
+
+ID "identifier"
+ = [a-zA-Z][a-zA-Z0-9]* { return text(); }
+ 
+Integer "integer"
+  = [0-9]+ { return parseInt(text(), 10); }
+
+_ "whitespace"
+  = [ \t\n\r]*
