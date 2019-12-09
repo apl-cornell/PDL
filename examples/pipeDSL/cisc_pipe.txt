@@ -13,9 +13,10 @@ def cpu {
     bpred = new branch_pred();
 }
 
-#The only parallelism in the this pipeline occurs
-#when *spawn* is called, thus sending arguments back to the
-#beginning of the pipeline in parallel
+#This implements a CISC ISA where instructions are of the form <op> <arg1> <arg2>
+#Where args can be register indices or memory locations (depending on a few bits in arg1 and arg2)
+#This implementation maybe serializes the reads to its operations, assuming it has a memory
+#which can only support executing 1 read request per cycle
 
 cpu(pc) {
 
@@ -24,11 +25,10 @@ cpu(pc) {
   op = opcode(insn); #selects some bits from the instruction
   rs1 = rs1(insn);
   rs2 = rs2(insn);
-  dest = dest(insn);
-  arg1 <- rf.read1(rs1);
-  arg2 <- rf.read2(rs2);
-
+  dest = rs2;
   if (op == BR) {
+     arg1 <- rf.read1(rs1);
+     arg2 <- rf.read2(rs2);
      //
      take_br = br_unit(insn, arg1, arg2) # checks the kind of comparison and executes it     
      if (take_br) {
@@ -38,22 +38,32 @@ cpu(pc) {
      }
   } else {
      spawn cpu(pc + 4);
-     match (opcode) {
-       case ARITH: {
-         //
-	 res <- alu(arg1, arg2, aop(insn));
-	 //
-	 rf.write(dest, res);
+     arg1 <- match (rs1) {
+       case REGISTER: {
+         rf.read1(rs1);
        }
-       case LD: {
-         //
-	 val <- dmem.read(arg1 + imm(insn));
-	 //
-	 rf.write(dest, val);
+       case MEMORY: {
+        dmem.read(rs1);
        }
-       case ST: {
-         //
-	 dmem.write(arg1 + imm(insn), arg2);
+     }
+     // #need break here b/c dmem only has 1 port
+     arg2 <- match (rs2) {
+       case REGISTER: {
+         rf.read2(rs2);
+       }
+       case MEMORY: {
+         dmem.read(rs2);
+       }
+     }
+     //
+     res <- alu(arg1, arg2, op);
+     //
+     match (dest) {
+       case REGISTER: {
+         rf.write(dest, res);
+       }
+       case MEMORY: {
+         dmem.write(dest, res);
        }
      }
   }
