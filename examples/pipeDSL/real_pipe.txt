@@ -1,0 +1,68 @@
+# === comment
+// === clock cycle boundary
+=  === blocking write (a.k.a combinational logic, w/in a clock cycle)
+<- === non-blocking write (a.k.a register or memory update, is visible next clock cycle)
+
+#This block is the dest of definitions for instantiating the cpu
+def cpu {
+    #some pseudo syntax here for defining the units in our datapath
+    imem = new cache<insn>();
+    rf = new regfile();
+    dmem = new cache<data>();
+    alu = new arith_unit();
+    bpred = new branch_pred();
+}
+
+#This is a stupid CPU which has pipelining (i.e., the //
+indicate that we put clock cycle boundaries between operations).
+However, there is no parallelism from the pipelinining since
+we don't recursively call "cpu" until the very end of computation
+(the return statement).
+
+cpu(pc) {
+
+  insn <- imem.send(pc);
+  //
+  op = opcode(insn); #selects some bits from the instruction
+  rs1 = rs1(insn);
+  rs2 = rs2(insn);
+  dest = dest(insn);
+  arg1 <- rf.read1(rs1);
+  arg2 <- rf.read2(rs2);
+
+  if (op == BR) {
+     //
+     take_br = br_unit(insn, arg1, arg2) # checks the kind of comparison and executes it     
+     if (take_br) {
+     	return cpu(pc + imm(insn));
+     } else {
+        return cpu(pc + 4);
+     }
+  } else {
+     spawn cpu(pc + 4);
+     match (opcode) {
+       case ARITH: {
+         //
+	 res <- alu(arg1, arg2, aop(insn));
+	 //
+	 rf.write(dest, res);
+       }
+       case LD: {
+         //
+	 val <- dmem.read(arg1 + imm(insn));
+	 //
+	 rf.write(dest, val);
+       }
+       case ST: {
+         //
+	 dmem.write(arg1 + imm(insn), arg2);
+       }
+     }
+  }
+}
+
+#actually instantiate and inintialize the cpu
+main {
+  cpu = new cpu();
+  cpu.send(0);
+}
