@@ -15,6 +15,8 @@ module CPU ();
    reg [31:0] s2_insn;
    reg 	      s2_insn_valid;   
 
+   reg        s2_rf_rw;
+ 	      
    wire       s2_valid; 	     
    wire       s2_ready;      
 
@@ -48,7 +50,9 @@ module CPU ();
 	       .read_2_addr(rf_read_2_addr),
 	       .read_2_en(rf_read_2_en),
 	       .read_2_out(rf_read_2_out));
-   
+
+   reg         rf_can_rw;
+
    reg [31:0]  sa3_pc;
    reg 	       sa3_pc_valid;
    reg [31:0]  sa3_insn;
@@ -88,6 +92,7 @@ always@(posedge clk) begin
    if (reset) begin
       s1_pc <= 0;
       s1_pc_valid <= true;
+      rf_can_rw <= true;      
       //reset everything else too
    end
 end
@@ -98,10 +103,24 @@ end
 //sa3 (br) -> s1
 //sb3 (alu/ld/st) -> sb3_2
 //sb3_2 -> none
-   
+
+//         START   
+//           |
+//           V
+// --------> s1 <--------
+// |         |          |
+// |         s2         |
+// |   ______|_____     |
+// |  /            \----|
+// |  V            V
+// |-sa3           sb3
+//                  |   
+//                  V   
+//                sb3_2
+
 // if (s1 valid && imem ready && s2 ready) : s1 -> s2
-// if (s2 valid && insn valid && sa3 ready && op == "br") : s2 -> sa3
-// if (s2 valid && insn valid && sb3 ready && op != "br" && s1 ready) : s2 -> sb3 && s2 -> s1
+// if (s2 valid && insn valid && rf_can_rw && sa3 ready && op == "br") : s2 -> sa3
+// if (s2 valid && insn valid && rf_can_rw && sb3 ready && op != "br" && s1 ready) : s2 -> sb3 && s2 -> s1
 // if (sa3 valid && s1 ready) : sa3 -> s1
 
 // if (sb3 valid && op == "arith" && sb3_2 ready) : sb3 -> sb3_2
@@ -124,19 +143,19 @@ always@(*) begin
    s2_valid = s2_pc_valid && s2_insn_valid;   
    //when are all stage 2 inputs valid
    //and all stage 2 receivers are ready
-   if (s2_valid && s2_next_stage == "sa" && sa3_ready) begin
+   if (s2_valid && s2_next_stage == "sa" && sa3_ready && s2_rf_rw) begin
       s2_to_sa3 = true;
    end else begin
       s2_to_sa3 = false;
    end
    to_sa3 = s2_to_sa3;
    //send both to s1 and sb3 since this executes a `spawn`
-   if (s2_valid && s2_next_stage == "sb" && s3b_ready && s1_ready) begin
-      s2_to_s3b = true;
+   if (s2_valid && s2_next_stage == "sb" && sb3_ready && s1_ready && s2_rf_rw) begin
+      s2_to_sb3 = true;
    end else begin
-      s2_to_s3b = false;
+      s2_to_sb3 = false;
    end
-   to_sb3 = s2_to_sa3;   
+   to_sb3 = s2_to_sb3;   
    //when are all of the stage 3a inputs valid
    sa3_valid = sa3_insn_valid & sa3_arg1_valid & sa3_arg2_valid & sa3_opcode_valid;
    //when s3a inputs are valid and s1 receivers are ready

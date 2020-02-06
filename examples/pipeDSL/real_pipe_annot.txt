@@ -1,0 +1,85 @@
+# === comment
+// === clock cycle boundary
+=  === blocking write (a.k.a combinational logic, w/in a clock cycle)
+<- === non-blocking write (a.k.a register or memory update, is visible next clock cycle)
+
+#This block is the dest of definitions for instantiating the cpu
+def cpu {
+    #some pseudo syntax here for defining the units in our datapath
+    imem = new cache<insn>();
+    rf = new regfile();
+    dmem = new cache<data>();
+    alu = new arith_unit();
+    bpred = new branch_pred();
+}
+
+#The only parallelism in the this pipeline occurs
+#when *spawn* is called, thus sending arguments back to the
+#beginning of the pipeline in parallel
+
+cpu{imem.READ <= caps}(int: pc)(proc: parent) {
+
+  # need imem READ capability
+  insn <- imem.send(pc);
+  //
+  # earliest point we release imem.READ
+  
+  op = opcode(insn); #selects some bits from the instruction
+  rs1 = rs1(insn);
+  rs2 = rs2(insn);
+  dest = dest(insn);
+  # need rf READ capability
+  if (!caps.contains(rf.READ)) {
+    parent.recv(rf.READ);
+    # how do we know where parent is? i.e., which stage currently has the capability?
+    # Alternately, the caps can be a literal register. Then it's up to the
+    # parent to understand where their child is so they can update it.
+  }
+  arg1 <- rf.read1(rs1);
+  arg2 <- rf.read2(rs2);
+
+  if (op == BR) {
+     //
+     # earliest point we release rf.READ
+     take_br = br_unit(insn, arg1, arg2) # checks the kind of comparison and executes it     
+     if (take_br) {
+     	return cpu(pc + imm(insn));
+     } else {
+        return cpu(pc + 4);
+     }
+  } else {
+     spawn cpu(pc + 4);
+     //
+     # earliest point we release rf.READ
+     if (opcode == ARITH) {
+     	res <- alu(arg1, arg2, aop(insn))
+     }
+     if (opcode == LD) {
+     	val <- dmem.read(arg1 + imm(insn));
+     }
+     # need dmem WRITE Capability
+     if (opcode == ST) {
+     	dmem.write(arg1 + imm(insn), arg2);
+     }
+     //
+     #earliest point we release dmem.WRITE
+     # need rf WRITE capability
+     if (!caps.contains(rf.WRITE)) {
+       parent.recv(rf.WRITE);
+     }
+     if (opcode == ARITH) {
+	 rf.write(dest, res);
+     }
+     if (opcode == LD) {
+     	 rf.write(dest, val);
+     }
+     //
+     # earliest point we release rf.WRITE
+  }
+}
+
+#actually instantiate and inintialize the cpu
+main {
+  cpu = new cpu();
+  cpu.send(0)({all capabilities});
+}
