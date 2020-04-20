@@ -30,7 +30,7 @@ module CPU ();
 	       .addr_in  (s1_imem_addr),
 	       .op_in (CACHE_READ), //constant read
 	       .write_data_in (0), //not used
-	       .ready_out (s2_imem_valid),
+	       .ready_out (s2_imem_ready),
 	       .valid_out (s2_imem_valid),
 	       .data_out  (s2_imem_data));
    reg [31:0]  s2_pc;
@@ -126,7 +126,7 @@ end
 // if (sb3 valid && op == "arith" && sb3_2 ready) : sb3 -> sb3_2
 // if (sb3 valid && op == "ld" || op == "st" && dmem_ready && sb3_2 ready) : sb3 -> sb3_2
 
-//control logic
+//Valid signals and ready valid control logic
 always@(*) begin
    //when are all of stage 1 inputs valid
    s1_valid = s1_pc_valid;
@@ -138,50 +138,56 @@ always@(*) begin
    else begin
       s1_to_s2 = false;
    end
-   to_s2 = s1_to_s2;
    //when are all of stage 2 inputs valid
    s2_valid = s2_pc_valid && s2_insn_valid;   
    //when are all stage 2 inputs valid
    //and all stage 2 receivers are ready
-   if (s2_valid && s2_next_stage == "sa" && sa3_ready && s2_rf_rw) begin
+   if (s2_valid && s2_next_stage == "sa" 
+      		&& sa3_ready && s2_rf_rw) begin
       s2_to_sa3 = true;
    end else begin
       s2_to_sa3 = false;
    end
-   to_sa3 = s2_to_sa3;
+
    //send both to s1 and sb3 since this executes a `spawn`
-   if (s2_valid && s2_next_stage == "sb" && sb3_ready && s1_ready && s2_rf_rw) begin
+   if (s2_valid && s2_next_stage == "sb" && sb3_ready
+      		&& s1_ready && s2_rf_rw) begin
       s2_to_sb3 = true;
+      s2_to_s1 = true;
    end else begin
       s2_to_sb3 = false;
+      s2_to_s1 = false;
    end
-   to_sb3 = s2_to_sb3;   
    //when are all of the stage 3a inputs valid
-   sa3_valid = sa3_insn_valid & sa3_arg1_valid & sa3_arg2_valid & sa3_opcode_valid;
+   sa3_valid = sa3_insn_valid & sa3_arg1_valid
+   	       & sa3_arg2_valid & sa3_opcode_valid;
    //when s3a inputs are valid and s1 receivers are ready
-   //note that this is not quite ready, if s1_pc_valid is true but it's being sent this cycle we can still send
-   if (sa3_valid && ~s1_pc_valid) begin
+   if (sa3_valid && s1_ready) begin
       sa3_to_s1 = true;
    end else begin
-      sa3_to_s1 = false;      
+      sa3_to_s1 = false;    
    end
 
+   sb3_valid = sb3_insn_valid & sb3_arg1_valid
+   	       & sb3_arg2_valid & sb3_opcode_valid;
    //when are all of the stage 3b inputs are valid and stage3b receivers are ready
-   sb3_valid = sb3_insn_valid & sb3_arg1_valid & sb3_arg2_valid & sb3_opcode_valid;
-   if (sb3_valid && dmem_ready_in && dmem_valid_in && s3_2_ready && s1_ready) begin
+   dmem_rv = sb3_case_arith || (dmem_ready_in && dmem_valid_in)
+   if (sb3_valid && dmem_rv && s3_2_ready) begin
       sb3_to_sb3_2 = true;
    end else begin
       sb3_to_sb3_2 = false;      
    end
-   
-   to_s1 = sa3_to_s1 & ..._to_s1;
 end
+
 //stage 1
 //first establish datapath connections
 always@(*) begin
    s1_imem_valid = s1_pc_valid;
    s1_imem_addr = s1_pc;
+   //now readiness
+   s1_ready = ~s1_pc_valid;
 end // always@ begin
+
 //execute the 1 cycle latency operations
 always@(posedge clk) begin
    if (s1_to_s2) begin
@@ -189,11 +195,11 @@ always@(posedge clk) begin
       s2_pc_valid <= s1_pc_valid;
    end
 end
+
 //stage 2
 //first establish datapath connections
 always@(*) begin
-   //ready when we don't currently have an insn saved
-   //into the register we're saving the output to
+   //ready when we don't have an instruction in the s2 stage already
    s2_imem_ready = ~s2_insn_valid;
    s2_opcode = opcode(s2_insn);   
    s2_rs1 = rs1(s2_insn);
@@ -220,7 +226,7 @@ always@(posedge clk) begin
       sa3_pc <= s2_pc;
       sa3_pc_valid <= s2_pc_valid;
       sa3_insn <= s2_insn;
-      sa3_insn_valid<= s2_insn_valid;
+      sa3_insn_valid <= s2_insn_valid;
       sa3_opcode <= s2_opcode;
       sa3_opcode_valid <= true;      
       sa3_arg1 <= rf_read_1_out;
