@@ -8,58 +8,63 @@ module CPU;
      STAGE_3A = 3'd2,
      STAGE_3B = 3'd3,
      STAGE_3B_2 = 3'd4;
-	
-   reg[31:0]  s1_pc;
-   reg 	      s1_pc_valid;	      
 
-   wire       s1_valid; 	     
-   wire       s1_ready;
+   localparam OP_LD = 3'd0,
+     OP_ST = 3'd1,
+     OP_ADD = 3'd2,
+     OP_MUL = 3'd3,
+     OP_SUB = 3'd4,
+     OP_DIV = 3'd5;
+
+   //Sequential
+   reg[31:0]  s1_pc;
+   reg 	      s1_pc_valid; 
+   //Combinational
+   reg       s1_valid; 	     
+   reg       s1_ready;
    
    wire       s1_imem_ready;
-   wire       s1_imem_valid;
-   wire       s1_imem_addr;
-   
+   reg        s1_imem_valid;
+   reg [31:0]       s1_imem_addr;
+   //Seq
    reg [31:0] s2_pc;
    reg 	      s2_pc_valid;
 
    reg [31:0] s2_insn;
    reg 	      s2_insn_valid;   
 
-   reg        s2_rf_rw;
- 	      
-   wire       s2_valid; 	     
-   wire       s2_ready;      
+   //Comb
+   reg       s2_valid; 	     
+   reg       s2_ready;      
 
-   wire        s2_imem_valid;
-   wire        s2_imem_ready;
+   wire         s2_imem_valid;
+   reg        s2_imem_ready;
    wire [31:0] s2_imem_data;
    
    
-   cache imem (.ready_in (s1_imem_ready),
+   cache  imem(.ready_in (s1_imem_ready),
 	       .valid_in (s1_imem_valid),
 	       .addr_in  (s1_imem_addr),
 	       .op_in (CACHE_READ), //constant read
-	       .write_data_in (0), //not used
+	       .write_data_in (32'b0), //not used
 	       .ready_out (s2_imem_ready),
 	       .valid_out (s2_imem_valid),
 	       .data_out  (s2_imem_data));
+   //Comb
+   reg [2:0]  opcode;
+   reg [31:0] s2_rs1,s2_rs2,s2_dest;
+   reg [4:0]  s2_next_stage;   
 
-   wire [7:0]  opcode;
-   wire [31:0] s2_rs1;
-   wire [31:0] s2_rs2;
-   wire [31:0] s2_dest;
-   wire [4:0]  s2_next_stage;   
-
-   regfile rf (.write_en (rf_write_en),
+   regfile  rf(.write_en (rf_write_en),
 	       .write_addr (rf_write_addr),
 	       .write_val (rf_write_val),
 	       .read_1_addr(rf_read_1_addr),
-	       .read_1_en(rf_read_1_en)
+	       .read_1_en(rf_read_1_en),
 	       .read_1_out(rf_read_1_out),
 	       .read_2_addr(rf_read_2_addr),
 	       .read_2_en(rf_read_2_en),
 	       .read_2_out(rf_read_2_out));
-
+   //Seq
    reg         rf_can_rw;
 
    reg [31:0]  sa3_pc;
@@ -74,7 +79,7 @@ module CPU;
 
    reg [31:0]  sb3_pc;
    reg 	       sb3_pc_valid;
-   reg [7:0]   sb3_opcode;
+   reg [2:0]   sb3_opcode;
    reg 	       sb3_opcode_valid;
    reg [31:0]  sb3_insn;
    reg 	       sb3_insn_valid;
@@ -82,13 +87,20 @@ module CPU;
    reg 	       sb3_arg1_valid;   
    reg [31:0]  sb3_arg2;
    reg 	       sb3_arg2_valid;   
+
+   //Comb
+   reg [31:0]  alu_arg_1_in, alu_arg_2_in, result;
+   reg [1:0]   alu_op_in;
    
-   ALU alu (.arg_1 (alu_arg_1_in),
+   alu arith_unit(.arg_1 (alu_arg_1_in),
 	    .arg_2 (alu_arg_2_in),
 	    .alu_op (alu_op_in),
 	    .result (alu_result_out));
-
-   cache dmem (.ready_in (dmem_ready_in),
+   //Comb
+   reg [31:0]  dmem_addr, dmem_write_data_in, dmem_data;
+   reg 	       dmem_ready_in, dmem_valid_in, dmem_ready_out, dmem_valid_out, dmem_op;
+   
+   cache dmem(.ready_in (dmem_ready_in),
 	       .valid_in (dmem_valid_in),
 	       .addr_in  (dmem_addr),
 	       .write_data_in  (dmem_write_data_in),
@@ -96,6 +108,17 @@ module CPU;
 	       .ready_out (dmem_ready_out),
 	       .valid_out (dmem_valid_out),
 	       .data_out  (dmem_data));
+   //Seq
+   reg 	       sb3_2_valid;
+   reg [4:0]   sb3_2_opcode;
+   reg [31:0]  sb3_2_res;
+   reg [4:0]   sb3_2_dest;
+   
+   
+   //Comb
+   reg 	       sb3_case_arith, sb3_case_ld, sb3_case_st;
+
+
    
 always@(posedge clk) begin
    if (reset) begin
@@ -180,8 +203,7 @@ always@(*) begin
    sb3_valid = sb3_insn_valid & sb3_arg1_valid
    	       & sb3_arg2_valid & sb3_opcode_valid;
    //when are all of the stage 3b inputs are valid and stage3b receivers are ready
-   dmem_rv = sb3_case_arith || (dmem_ready_in && dmem_valid_in)
-   if (sb3_valid && dmem_rv && s3_2_ready) begin
+   if (sb3_valid && (sb3_case_arith || (dmem_ready_in && dmem_valid_in)) && s3_2_ready) begin
       sb3_to_sb3_2 = true;
    end else begin
       sb3_to_sb3_2 = false;      
@@ -279,7 +301,7 @@ end
 
 //stage sb3 (OTHER INSTS) datapath
 always@(*) begin
-   sb3_case_arith = sb3_opcode == ARITH;
+   sb3_case_arith = sb3_opcode != LD && sb3_opcode != ST;
    sb3_case_ld = sb3_opcode == LD;
    sb3_case_st = sb3_opcode == ST;
 
@@ -290,8 +312,8 @@ always@(*) begin
 
    sb3_dmem_addr = sb3_arg1 + imm(sb3_insn);   
    dmem_addr = sb3_dmem_addr;
-   dmem_op = (sb3_case_ld) ? READ : ((sb3_case_st) ? WRITE : <dontcare>);
-   dmem_write_data_in = (sb3_case_st) ? sb3_arg2 : <dontcare>;
+   dmem_op = (sb3_case_st) ? CACHE_WRITE : CACHE_READ;   
+   dmem_write_data_in = (sb3_case_st) ? sb3_arg2 : 32'b0;   
    dmem_valid_in = sb3_pc_valid && (sb3_case_ld || sb3_case_st);
 
 end
@@ -319,7 +341,6 @@ always@(*) begin
    sb3_2_case_arith = sb3_2_opcode == ARITH;
    sb3_2_case_ld = sb3_2_opcode == LD;
    sb3_2_case_st = sb3_2_opcode == ST;
-   sb3_2_val = dmem_data;   
    
    rf_write_en = sb3_2_valid && (sb3_2_case_ld || sb3_2_case_arith);
    rf_write_addr = sb3_2_dest;

@@ -1,6 +1,5 @@
 module cache (ready_in, valid_in, addr_in, op_in,
 	      write_data_in, ready_out, valid_out, data_out);
-
    input valid_in, ready_out, op_in;
    input [31:0] addr_in, write_data_in;
    output 	ready_in, valid_out;
