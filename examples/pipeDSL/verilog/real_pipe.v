@@ -1,4 +1,14 @@
-module CPU ();
+module CPU;
+
+   localparam CACHE_READ = 1'b0,
+     CACHE_WRITE = 1'b1;
+
+   localparam STAGE_1 = 3'd0,
+     STAGE_2 = 3'd1,
+     STAGE_3A = 3'd2,
+     STAGE_3B = 3'd3,
+     STAGE_3B_2 = 3'd4;
+	
    reg[31:0]  s1_pc;
    reg 	      s1_pc_valid;	      
 
@@ -25,7 +35,7 @@ module CPU ();
    wire [31:0] s2_imem_data;
    
    
-   Cache imem (.ready_in (s1_imem_ready),
+   cache imem (.ready_in (s1_imem_ready),
 	       .valid_in (s1_imem_valid),
 	       .addr_in  (s1_imem_addr),
 	       .op_in (CACHE_READ), //constant read
@@ -33,15 +43,14 @@ module CPU ();
 	       .ready_out (s2_imem_ready),
 	       .valid_out (s2_imem_valid),
 	       .data_out  (s2_imem_data));
-   reg [31:0]  s2_pc;
-   reg [31:0]  s2_insn;
+
    wire [7:0]  opcode;
    wire [31:0] s2_rs1;
    wire [31:0] s2_rs2;
    wire [31:0] s2_dest;
-   wire        STAGE s2_next_stage;   
+   wire [4:0]  s2_next_stage;   
 
-   RegFile rf (.write_en (rf_write_en),
+   regfile rf (.write_en (rf_write_en),
 	       .write_addr (rf_write_addr),
 	       .write_val (rf_write_val),
 	       .read_1_addr(rf_read_1_addr),
@@ -79,7 +88,7 @@ module CPU ();
 	    .alu_op (alu_op_in),
 	    .result (alu_result_out));
 
-   Cache dmem (.ready_in (dmem_ready_in),
+   cache dmem (.ready_in (dmem_ready_in),
 	       .valid_in (dmem_valid_in),
 	       .addr_in  (dmem_addr),
 	       .write_data_in  (dmem_write_data_in),
@@ -142,7 +151,7 @@ always@(*) begin
    s2_valid = s2_pc_valid && s2_insn_valid;   
    //when are all stage 2 inputs valid
    //and all stage 2 receivers are ready
-   if (s2_valid && s2_next_stage == "sa" 
+   if (s2_valid && s2_next_stage == STAGE_3A 
       		&& sa3_ready && s2_rf_rw) begin
       s2_to_sa3 = true;
    end else begin
@@ -150,7 +159,7 @@ always@(*) begin
    end
 
    //send both to s1 and sb3 since this executes a `spawn`
-   if (s2_valid && s2_next_stage == "sb" && sb3_ready
+   if (s2_valid && s2_next_stage == STAGE_3B && sb3_ready
       		&& s1_ready && s2_rf_rw) begin
       s2_to_sb3 = true;
       s2_to_s1 = true;
@@ -205,7 +214,7 @@ always@(*) begin
    s2_rs1 = rs1(s2_insn);
    s2_rs2 = rs2(s2_insn);
    s2_dest = dest(s2_insn);
-   s2_next_stage = (op == BR) ? "sa" : "sb"; //comes from the if
+   s2_next_stage = (op == BR) ? STAGE_3A : STAGE_3B; //comes from the if
    rf_read_1_addr = s2_rs1;
    rf_read_2_addr = s2_rs2;
    rf_read_1_en = s2_to_sa3 | s2_to_sb3;
@@ -316,3 +325,6 @@ always@(*) begin
    rf_write_addr = sb3_2_dest;
    rf_write_val = (sb3_case_ld) ? sb3_2_val : sb3_2_res;
 end // always@ begin
+
+
+endmodule
