@@ -13,15 +13,26 @@ module CPU(clk, reset);
      STAGE_3B = 3'd3,
      STAGE_3B_2 = 3'd4;
 
+   //instruction layout { 0-2 : opcode, 3-7: arg1, 8-12: arg2, 13-17: dest, 18-31: imm }
    localparam OP_LD = 3'd0,
      OP_ST = 3'd1,
      OP_ADD = 3'd2,
      OP_MUL = 3'd3,
      OP_SUB = 3'd4,
      OP_DIV = 3'd5,
-     OP_BEQ = 3'd6,
-     OP_J   = 3'd7; 
-   
+     OP_BEQ = 3'd6;   
+
+   function automatic take_br;
+      input [2:0] opcode;
+      input [31:0] arg1, arg2;
+      begin
+      if (opcode == OP_BEQ)
+	 take_br = arg1 == arg2;
+      else
+	 take_br = FALSE;
+      end
+   endfunction
+
    //Sequential
    reg[31:0]  s1_pc;
    reg 	      s1_pc_valid; 
@@ -81,6 +92,8 @@ module CPU(clk, reset);
    reg 	       sa3_arg2_valid;
    //Comb
    wire        sa3_ready;
+   wire [31:0] sa3_next_cpu;
+   
    //Seq
    reg [31:0]  sb3_pc;
    reg 	       sb3_pc_valid;
@@ -91,12 +104,16 @@ module CPU(clk, reset);
    reg [31:0]  sb3_arg1;
    reg 	       sb3_arg1_valid;   
    reg [31:0]  sb3_arg2;
-   reg 	       sb3_arg2_valid;   
-
+   reg 	       sb3_arg2_valid;
+   reg [4:0]   sb3_dest;
+   reg 	       sb3_dest_valid;
+ 	       
    //Comb
-   wire        sb3_ready;
-   wire [31:0]  alu_arg_1_in, alu_arg_2_in;
+   wire        sb3_ready, sb3_case_arith, sb3_case_ld, sb3_case_st;
+   wire [31:0] alu_arg_1_in, alu_arg_2_in;
    wire [31:0] alu_result_out;
+   wire [31:0] sb3_result;
+
    wire [2:0]   alu_op_in;
 
    alu arith_unit(.arg_1 (alu_arg_1_in),
@@ -118,15 +135,15 @@ module CPU(clk, reset);
 	       .valid_out (dmem_valid_out),
 	       .data_out  (dmem_data));
    //Seq
-   reg 	       sb3_2_valid;
+   reg 	       sb3_2_valid, sb3_2_val_valid;
    reg [2:0]   sb3_2_opcode;
-   reg [31:0]  sb3_2_res;
+   reg [31:0]  sb3_2_res, sb3_2_val;
    reg [4:0]   sb3_2_dest;
    
    
    //Comb
-   wire        sb3_2_ready, sb3_case_arith, sb3_case_ld, sb3_case_st;
-
+   wire        sb3_2_ready, sb3_2_case_arith, sb3_2_case_ld, sb3_2_case_st;
+   
 
    
 always@(posedge clk) begin
@@ -195,14 +212,12 @@ end
    assign dmem_rv = sb3_case_arith | (dmem_ready_in & dmem_valid_in);
    assign sb3_to_sb3_2 = sb3_valid & dmem_rv & sb3_2_ready;
 
-//stage 1
-//first establish datapath connections
-always@(*) begin
-   s1_imem_valid = s1_pc_valid;
-   s1_imem_addr = s1_pc;
+   //stage 1
+   //first establish datapath connections
+   assign s1_imem_valid = s1_pc_valid;
+   assign s1_imem_addr = s1_pc;
    //now readiness
-   s1_ready = ~s1_pc_valid;
-end // always@ begin
+   assign s1_ready = !s1_pc_valid;
 
 //execute the 1 cycle latency operations
 always@(posedge clk) begin
@@ -212,125 +227,117 @@ always@(posedge clk) begin
    end
 end
 
-//stage 2
-//first establish datapath connections
-always@(*) begin
+   //stage 2
+   //first establish datapath connections
    //ready when we don't have an instruction in the s2 stage already
-   s2_imem_ready = ~s2_insn_valid;
-   s2_opcode = opcode(s2_insn);   
-   s2_rs1 = rs1(s2_insn);
-   s2_rs2 = rs2(s2_insn);
-   s2_dest = dest(s2_insn);
-   s2_next_stage = (op == BR) ? STAGE_3A : STAGE_3B; //comes from the if
-   rf_read_1_addr = s2_rs1;
-   rf_read_2_addr = s2_rs2;
-   rf_read_1_en = s2_to_sa3 | s2_to_sb3;
-   rf_read_2_en = s2_to_sa3 | s2_to_sb3;
-   s2_next_cpu = s2_pc + 4;
-end // always@ begin
+   assign s2_imem_ready = ~s2_insn_valid;
+   assign s2_opcode = s2_insn[2:0];
+   assign s2_rs1 = s2_insn[7:3];
+   assign s2_rs2 = s2_insn[12:8];
+   assign s2_dest = s2_insn[17:13];
+   assign s2_next_stage = (s2_opcode == OP_BEQ) ? STAGE_3A : STAGE_3B; //comes from the if
+   assign rf_read_1_addr = s2_rs1;
+   assign rf_read_2_addr = s2_rs2;
+   assign rf_read_1_en = s2_to_sa3 | s2_to_sb3;
+   assign rf_read_2_en = s2_to_sa3 | s2_to_sb3;
+   assign s2_next_cpu = s2_pc + 32'd4;
    
-//receive input from imem   
-always@(posedge clk) begin
-   if (s2_imem_valid && s2_imem_ready) begin
-      s2_insn <= s2_imem_data;
-      s2_insn_valid <= TRUE;
+   //receive input from imem   
+   always@(posedge clk) begin
+      if (s2_imem_valid && s2_imem_ready) begin
+	 s2_insn <= s2_imem_data;
+	 s2_insn_valid <= TRUE;
+      end
    end
-end
-//execute the 1 cycle latency operations
-always@(posedge clk) begin
-   if (s2_to_sa3) begin
-      sa3_pc <= s2_pc;
-      sa3_pc_valid <= s2_pc_valid;
-      sa3_insn <= s2_insn;
-      sa3_insn_valid <= s2_insn_valid;
-      sa3_opcode <= s2_opcode;
-      sa3_opcode_valid <= TRUE;      
-      sa3_arg1 <= rf_read_1_out;
-      sa3_arg1_valid <= TRUE;      
-      sa3_arg2 <= rf_read_2_out;
-      sa3_arg2_valid <= TRUE;
+   //execute the 1 cycle latency operations
+   always@(posedge clk) begin
+      if (s2_to_sa3) begin
+	 sa3_pc <= s2_pc;
+	 sa3_pc_valid <= s2_pc_valid;
+	 sa3_insn <= s2_insn;
+	 sa3_insn_valid <= s2_insn_valid;
+	 sa3_opcode <= s2_opcode;
+	 sa3_opcode_valid <= TRUE;      
+	 sa3_arg1 <= rf_read_1_out;
+	 sa3_arg1_valid <= TRUE;      
+	 sa3_arg2 <= rf_read_2_out;
+	 sa3_arg2_valid <= TRUE;
+      end
+      if (s2_to_sb3) begin
+	 //this also sends a new pc to s1
+	 s1_pc <= s2_next_cpu;      
+	 s1_pc_valid <= s2_pc_valid;
+	 //
+	 sb3_pc <= s2_pc;
+	 sb3_pc_valid <= s2_pc_valid;
+	 sb3_insn <= s2_insn;
+	 sb3_insn_valid <= s2_insn_valid;      
+	 sb3_opcode <= s2_opcode;
+	 sb3_opcode_valid <= TRUE;
+	 sb3_arg1 <= rf_read_1_out;      
+	 sb3_arg1_valid <= TRUE;      
+	 sb3_arg2 <= rf_read_2_out;
+	 sb3_arg2_valid <= TRUE;
+	 sb3_dest <= s2_dest;
+	 sb3_dest_valid <= TRUE;      
+      end
    end
-   if (s2_to_sb3) begin
-      //this also sends a new pc to s1
-      s1_pc <= s2_next_cpu;      
-      s1_pc_valid <= s2_pc_valid;
-      //
-      sb3_pc <= s2_pc;
-      sb3_pc_valid <= s2_pc_valid;
-      sb3_insn <= s2_insn;
-      sb3_insn_valid <= s2_insn_valid;      
-      sb3_opcode <= s2_opcode;
-      sb3_opcode_valid <= TRUE;
-      sb3_arg1 <= rf_read_1_out;      
-      sb3_arg1_valid <= TRUE;      
-      sb3_arg2 <= rf_read_2_out;
-      sb3_arg2_valid <= TRUE;
-      sb3_dest <= sb2_dest;
-      sb3_dest_valid <= TRUE;      
-   end
-end
-
-//stage sa3 (BR instruction) datapath
-always@(*) begin
-   sa3_take_br = br_unit(sa3_opcode, sa3_arg1, sa3_arg2);
-   sa3_next_cpu = sa3_pc + ((sa3_take_br) ? imm(sa3_insn) : 4);
-end
-
-//stage sa3 1 cycle latency operations
-always@(posedge clk) begin
-   if (sa3_to_s1) begin
-      s1_pc <= sa3_next_cpu;
-      s1_pc_valid <= TRUE;
-   end
-end
-
-//stage sb3 (OTHER INSTS) datapath
-always@(*) begin
-   sb3_case_arith = sb3_opcode != LD && sb3_opcode != ST;
-   sb3_case_ld = sb3_opcode == LD;
-   sb3_case_st = sb3_opcode == ST;
-
-   alu_arg_1_in = sb3_arg1;
-   alu_arg_2_in = sb3_arg2;
-   alu_op_in = aop(sb3_insn);   
-   sb3_result = alu_result_out;
-
-   sb3_dmem_addr = sb3_arg1 + imm(sb3_insn);   
-   dmem_addr = sb3_dmem_addr;
-   dmem_op = (sb3_case_st) ? CACHE_WRITE : CACHE_READ;   
-   dmem_write_data_in = (sb3_case_st) ? sb3_arg2 : 32'b0;   
-   dmem_valid_in = sb3_pc_valid && (sb3_case_ld || sb3_case_st);
-
-end
-
-//stage sb3 1 cycle latency operations
-always@(posedge clk) begin
-   if (sb3_to_sb3_2) begin
-      sb3_2_valid <= TRUE;      
-      sb3_2_opcode <= sb3_opcode;      
-      sb3_2_res <= sb3_result;
-      sb3_2_dest <= sb3_dest;
-   end
-end
-
-//receive input from dmem   
-always@(posedge clk) begin
-   if (dmem_ready_out && dmem_valid_out) begin
-      sb3_2_val <= dmem_data;      
-      sb3_2_val_valid <= TRUE;      
-   end
-end
-
-//stage sb3_2 datapath
-always@(*) begin
-   sb3_2_case_arith = sb3_2_opcode == ARITH;
-   sb3_2_case_ld = sb3_2_opcode == LD;
-   sb3_2_case_st = sb3_2_opcode == ST;
    
-   rf_write_en = sb3_2_valid && (sb3_2_case_ld || sb3_2_case_arith);
-   rf_write_addr = sb3_2_dest;
-   rf_write_val = (sb3_case_ld) ? sb3_2_val : sb3_2_res;
-end // always@ begin
+   //stage sa3 (BR instruction) datapath
+   assign sa3_take_br = take_br(sa3_opcode, sa3_arg1, sa3_arg2);
+   assign sa3_next_cpu = sa3_pc + ((sa3_take_br) ? { 18'b0, sa3_insn[31:18] } : 32'd4);
+
+
+   //stage sa3 1 cycle latency operations
+   always@(posedge clk) begin
+      if (sa3_to_s1) begin
+	 s1_pc <= sa3_next_cpu;
+	 s1_pc_valid <= TRUE;
+      end
+   end
+
+   //stage sb3 (OTHER INSTS) datapath
+   assign sb3_case_arith = sb3_opcode != OP_LD & sb3_opcode != OP_ST;
+   assign sb3_case_ld = sb3_opcode == OP_LD;
+   assign sb3_case_st = sb3_opcode == OP_ST;
+
+   assign alu_arg_1_in = sb3_arg1;
+   assign alu_arg_2_in = sb3_arg2;
+   assign alu_op_in = sb3_insn[2:0];
+   assign sb3_result = alu_result_out;
+
+   assign sb3_dmem_addr = sb3_arg1 + { 18'b0, sb3_insn[31:18] };   
+   assign dmem_addr = sb3_dmem_addr;
+   assign dmem_op = (sb3_case_st) ? CACHE_WRITE : CACHE_READ;   
+   assign dmem_write_data_in = (sb3_case_st) ? sb3_arg2 : 32'b0;   
+   assign dmem_valid_in = sb3_pc_valid & (sb3_case_ld | sb3_case_st);
+
+   //stage sb3 1 cycle latency operations
+   always@(posedge clk) begin
+      if (sb3_to_sb3_2) begin
+	 sb3_2_valid <= TRUE;      
+	 sb3_2_opcode <= sb3_opcode;      
+	 sb3_2_res <= sb3_result;
+	 sb3_2_dest <= sb3_dest;
+      end
+   end
+   
+   //receive input from dmem   
+   always@(posedge clk) begin
+      if (dmem_ready_out && dmem_valid_out) begin
+	 sb3_2_val <= dmem_data;      
+	 sb3_2_val_valid <= TRUE;
+      end
+   end
+
+   //stage sb3_2 datapath
+   assign sb3_2_case_arith = sb3_2_opcode != OP_LD | sb3_2_opcode != OP_ST;   
+   assign sb3_2_case_ld = sb3_2_opcode == OP_LD;
+   assign sb3_2_case_st = sb3_2_opcode == OP_ST;
+   
+   assign rf_write_en = (sb3_2_valid & sb3_2_case_arith) | (sb3_2_val_valid & sb3_2_case_ld);
+   assign rf_write_addr = sb3_2_dest;
+   assign rf_write_val = (sb3_case_ld) ? sb3_2_val : sb3_2_res;
 
 
 endmodule
