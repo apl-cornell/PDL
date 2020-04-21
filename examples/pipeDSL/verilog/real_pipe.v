@@ -53,7 +53,8 @@ module CPU(clk, reset);
    wire [31:0] s2_imem_data;
    
    
-   cache  imem(.ready_in (s1_imem_ready),
+   cache  imem(.clk (clk),
+	       .ready_in (s1_imem_ready),
 	       .valid_in (s1_imem_valid),
 	       .addr_in  (s1_imem_addr),
 	       .op_in (CACHE_READ), //constant read
@@ -70,7 +71,8 @@ module CPU(clk, reset);
    wire [31:0] rf_read_1_out, rf_read_2_out;
    wire 	       rf_read_1_en, rf_read_2_en, rf_write_en;
 	       
-   regfile  rf(.write_en (rf_write_en),
+   regfile  rf(.clk(clk),
+	       .write_en (rf_write_en),
 	       .write_addr (rf_write_addr),
 	       .write_val (rf_write_val),
 	       .read_1_addr(rf_read_1_addr),
@@ -126,14 +128,15 @@ module CPU(clk, reset);
    wire [31:0] dmem_data;   
    wire        dmem_ready_in, dmem_valid_out;
    
-   cache dmem(.ready_in (dmem_ready_in),
-	       .valid_in (dmem_valid_in),
-	       .addr_in  (dmem_addr),
-	       .write_data_in  (dmem_write_data_in),
-	       .op_in    (dmem_op),
-	       .ready_out (dmem_ready_out),
-	       .valid_out (dmem_valid_out),
-	       .data_out  (dmem_data));
+   cache dmem(.clk(clk),
+	      .ready_in (dmem_ready_in),
+	      .valid_in (dmem_valid_in),
+	      .addr_in  (dmem_addr),
+	      .write_data_in  (dmem_write_data_in),
+	      .op_in    (dmem_op),
+	      .ready_out (dmem_ready_out),
+	      .valid_out (dmem_valid_out),
+	      .data_out  (dmem_data));
    //Seq
    reg 	       sb3_2_valid, sb3_2_val_valid;
    reg [2:0]   sb3_2_opcode;
