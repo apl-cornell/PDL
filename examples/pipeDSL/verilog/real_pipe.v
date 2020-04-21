@@ -1,5 +1,9 @@
-module CPU;
-
+module CPU(clk, reset);
+   input clk, reset;
+   
+   localparam FALSE = 1'b0,
+     TRUE = 1'b1;
+   
    localparam CACHE_READ = 1'b0,
      CACHE_WRITE = 1'b1;
 
@@ -14,31 +18,27 @@ module CPU;
      OP_ADD = 3'd2,
      OP_MUL = 3'd3,
      OP_SUB = 3'd4,
-     OP_DIV = 3'd5;
-
+     OP_DIV = 3'd5,
+     OP_BEQ = 3'd6,
+     OP_J   = 3'd7; 
+   
    //Sequential
    reg[31:0]  s1_pc;
    reg 	      s1_pc_valid; 
    //Combinational
-   reg       s1_valid; 	     
-   reg       s1_ready;
+   wire       s1_valid, s1_ready;
    
-   wire       s1_imem_ready;
-   reg        s1_imem_valid;
-   reg [31:0]       s1_imem_addr;
+   wire       s1_imem_ready, s1_imem_valid;
+   wire [31:0]       s1_imem_addr;
    //Seq
    reg [31:0] s2_pc;
    reg 	      s2_pc_valid;
-
    reg [31:0] s2_insn;
-   reg 	      s2_insn_valid;   
+   reg 	      s2_insn_valid;
+   reg 	       s2_rf_rw;
 
    //Comb
-   reg       s2_valid; 	     
-   reg       s2_ready;      
-
-   wire         s2_imem_valid;
-   reg        s2_imem_ready;
+   wire       s2_valid, s2_ready, s2_imem_valid, s2_imem_ready;
    wire [31:0] s2_imem_data;
    
    
@@ -51,10 +51,14 @@ module CPU;
 	       .valid_out (s2_imem_valid),
 	       .data_out  (s2_imem_data));
    //Comb
-   reg [2:0]  opcode;
-   reg [31:0] s2_rs1,s2_rs2,s2_dest;
-   reg [4:0]  s2_next_stage;   
-
+   wire [2:0]  opcode;
+   wire [31:0] s2_rs1,s2_rs2,s2_dest;
+   wire [4:0]  s2_next_stage;
+   wire [4:0]  rf_write_addr, rf_read_1_addr, rf_read_2_addr;   
+   wire [31:0] rf_write_val;
+   wire [31:0] rf_read_1_out, rf_read_2_out;
+   wire 	       rf_read_1_en, rf_read_2_en, rf_write_en;
+	       
    regfile  rf(.write_en (rf_write_en),
 	       .write_addr (rf_write_addr),
 	       .write_val (rf_write_val),
@@ -65,18 +69,19 @@ module CPU;
 	       .read_2_en(rf_read_2_en),
 	       .read_2_out(rf_read_2_out));
    //Seq
-   reg         rf_can_rw;
-
    reg [31:0]  sa3_pc;
    reg 	       sa3_pc_valid;
    reg [31:0]  sa3_insn;
    reg 	       sa3_insn_valid;
-   
+   reg [2:0]   sa3_opcode;
+   reg         sa3_opcode_valid;
    reg [31:0]  sa3_arg1;
    reg 	       sa3_arg1_valid;   
    reg [31:0]  sa3_arg2;
    reg 	       sa3_arg2_valid;
-
+   //Comb
+   wire        sa3_ready;
+   //Seq
    reg [31:0]  sb3_pc;
    reg 	       sb3_pc_valid;
    reg [2:0]   sb3_opcode;
@@ -89,16 +94,20 @@ module CPU;
    reg 	       sb3_arg2_valid;   
 
    //Comb
-   reg [31:0]  alu_arg_1_in, alu_arg_2_in, result;
-   reg [1:0]   alu_op_in;
-   
+   wire        sb3_ready;
+   wire [31:0]  alu_arg_1_in, alu_arg_2_in;
+   wire [31:0] alu_result_out;
+   wire [2:0]   alu_op_in;
+
    alu arith_unit(.arg_1 (alu_arg_1_in),
 	    .arg_2 (alu_arg_2_in),
 	    .alu_op (alu_op_in),
 	    .result (alu_result_out));
    //Comb
-   reg [31:0]  dmem_addr, dmem_write_data_in, dmem_data;
-   reg 	       dmem_ready_in, dmem_valid_in, dmem_ready_out, dmem_valid_out, dmem_op;
+   wire [31:0]  dmem_addr, dmem_write_data_in;
+   wire         dmem_valid_in, dmem_ready_out, dmem_op;
+   wire [31:0] dmem_data;   
+   wire        dmem_ready_in, dmem_valid_out;
    
    cache dmem(.ready_in (dmem_ready_in),
 	       .valid_in (dmem_valid_in),
@@ -110,21 +119,21 @@ module CPU;
 	       .data_out  (dmem_data));
    //Seq
    reg 	       sb3_2_valid;
-   reg [4:0]   sb3_2_opcode;
+   reg [2:0]   sb3_2_opcode;
    reg [31:0]  sb3_2_res;
    reg [4:0]   sb3_2_dest;
    
    
    //Comb
-   reg 	       sb3_case_arith, sb3_case_ld, sb3_case_st;
+   wire        sb3_2_ready, sb3_case_arith, sb3_case_ld, sb3_case_st;
 
 
    
 always@(posedge clk) begin
    if (reset) begin
       s1_pc <= 0;
-      s1_pc_valid <= true;
-      rf_can_rw <= true;      
+      s1_pc_valid <= TRUE;
+      s2_rf_rw <= TRUE;
       //reset everything else too
    end
 end
@@ -159,56 +168,32 @@ end
 // if (sb3 valid && op == "ld" || op == "st" && dmem_ready && sb3_2 ready) : sb3 -> sb3_2
 
 //Valid signals and ready valid control logic
-always@(*) begin
+
+   wire s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2;
+   
    //when are all of stage 1 inputs valid
-   s1_valid = s1_pc_valid;
+   assign s1_valid = s1_pc_valid;
    //when are all stage 1 outputs valid and all
    //stage 1 receivers are ready
-   if (s1_imem_ready && s2_ready && s1_valid) begin
-      s1_to_s2 = true;
-   end
-   else begin
-      s1_to_s2 = false;
-   end
+   assign s1_to_s2 = s1_imem_ready & s2_ready & s1_valid;
    //when are all of stage 2 inputs valid
-   s2_valid = s2_pc_valid && s2_insn_valid;   
+   assign s2_valid = s2_pc_valid & s2_insn_valid;   
    //when are all stage 2 inputs valid
    //and all stage 2 receivers are ready
-   if (s2_valid && s2_next_stage == STAGE_3A 
-      		&& sa3_ready && s2_rf_rw) begin
-      s2_to_sa3 = true;
-   end else begin
-      s2_to_sa3 = false;
-   end
-
+   assign s2_to_sa3 = s2_valid & (s2_next_stage == STAGE_3A) & sa3_ready & s2_rf_rw;
    //send both to s1 and sb3 since this executes a `spawn`
-   if (s2_valid && s2_next_stage == STAGE_3B && sb3_ready
-      		&& s1_ready && s2_rf_rw) begin
-      s2_to_sb3 = true;
-      s2_to_s1 = true;
-   end else begin
-      s2_to_sb3 = false;
-      s2_to_s1 = false;
-   end
+   assign s2_to_sb3 = s2_valid & s2_next_stage == STAGE_3B && sb3_ready & s1_ready && s2_rf_rw;
+   assign s2_to_s1 = s2_to_sb3;
    //when are all of the stage 3a inputs valid
-   sa3_valid = sa3_insn_valid & sa3_arg1_valid
-   	       & sa3_arg2_valid & sa3_opcode_valid;
+   assign sa3_valid = sa3_insn_valid & sa3_arg1_valid & sa3_arg2_valid & sa3_opcode_valid;
    //when s3a inputs are valid and s1 receivers are ready
-   if (sa3_valid && s1_ready) begin
-      sa3_to_s1 = true;
-   end else begin
-      sa3_to_s1 = false;    
-   end
-
-   sb3_valid = sb3_insn_valid & sb3_arg1_valid
-   	       & sb3_arg2_valid & sb3_opcode_valid;
+   assign sa3_to_s1 = sa3_valid && s1_ready;
+   //when sb3 inputs are all valid
+   assign sb3_valid = sb3_insn_valid & sb3_arg1_valid & sb3_arg2_valid & sb3_opcode_valid;
    //when are all of the stage 3b inputs are valid and stage3b receivers are ready
-   if (sb3_valid && (sb3_case_arith || (dmem_ready_in && dmem_valid_in)) && s3_2_ready) begin
-      sb3_to_sb3_2 = true;
-   end else begin
-      sb3_to_sb3_2 = false;      
-   end
-end
+   wire dmem_rv;
+   assign dmem_rv = sb3_case_arith | (dmem_ready_in & dmem_valid_in);
+   assign sb3_to_sb3_2 = sb3_valid & dmem_rv & sb3_2_ready;
 
 //stage 1
 //first establish datapath connections
@@ -248,7 +233,7 @@ end // always@ begin
 always@(posedge clk) begin
    if (s2_imem_valid && s2_imem_ready) begin
       s2_insn <= s2_imem_data;
-      s2_insn_valid <= true;
+      s2_insn_valid <= TRUE;
    end
 end
 //execute the 1 cycle latency operations
@@ -259,11 +244,11 @@ always@(posedge clk) begin
       sa3_insn <= s2_insn;
       sa3_insn_valid <= s2_insn_valid;
       sa3_opcode <= s2_opcode;
-      sa3_opcode_valid <= true;      
+      sa3_opcode_valid <= TRUE;      
       sa3_arg1 <= rf_read_1_out;
-      sa3_arg1_valid <= true;      
+      sa3_arg1_valid <= TRUE;      
       sa3_arg2 <= rf_read_2_out;
-      sa3_arg2_valid <= true;
+      sa3_arg2_valid <= TRUE;
    end
    if (s2_to_sb3) begin
       //this also sends a new pc to s1
@@ -275,13 +260,13 @@ always@(posedge clk) begin
       sb3_insn <= s2_insn;
       sb3_insn_valid <= s2_insn_valid;      
       sb3_opcode <= s2_opcode;
-      sb3_opcode_valid <= true;
+      sb3_opcode_valid <= TRUE;
       sb3_arg1 <= rf_read_1_out;      
-      sb3_arg1_valid <= true;      
+      sb3_arg1_valid <= TRUE;      
       sb3_arg2 <= rf_read_2_out;
-      sb3_arg2_valid <= true;
+      sb3_arg2_valid <= TRUE;
       sb3_dest <= sb2_dest;
-      sb3_dest_valid <= true;      
+      sb3_dest_valid <= TRUE;      
    end
 end
 
@@ -295,7 +280,7 @@ end
 always@(posedge clk) begin
    if (sa3_to_s1) begin
       s1_pc <= sa3_next_cpu;
-      s1_pc_valid <= true;
+      s1_pc_valid <= TRUE;
    end
 end
 
@@ -321,7 +306,7 @@ end
 //stage sb3 1 cycle latency operations
 always@(posedge clk) begin
    if (sb3_to_sb3_2) begin
-      sb3_2_valid <= true;      
+      sb3_2_valid <= TRUE;      
       sb3_2_opcode <= sb3_opcode;      
       sb3_2_res <= sb3_result;
       sb3_2_dest <= sb3_dest;
@@ -332,7 +317,7 @@ end
 always@(posedge clk) begin
    if (dmem_ready_out && dmem_valid_out) begin
       sb3_2_val <= dmem_data;      
-      sb3_2_val_valid <= true;      
+      sb3_2_val_valid <= TRUE;      
    end
 end
 

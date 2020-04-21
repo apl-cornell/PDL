@@ -22,7 +22,7 @@ endmodule
 module alu (arg_1, arg_2, alu_op, result);
 
    input [31:0] arg_1, arg_2;
-   input [1:0] 	alu_op;
+   input [2:0] 	alu_op;
    output [31:0] result;
    
 endmodule
