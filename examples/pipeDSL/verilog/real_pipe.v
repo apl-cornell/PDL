@@ -186,7 +186,7 @@ end
 
 //Valid signals and ready valid control logic
 
-   wire s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2;
+   wire s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2, sb3_2_to_done;
    
    //when are all of stage 1 inputs valid
    assign s1_valid = s1_pc_valid;
@@ -211,7 +211,8 @@ end
    wire dmem_rv;
    assign dmem_rv = sb3_case_arith | (dmem_ready_in & dmem_valid_in);
    assign sb3_to_sb3_2 = sb3_valid & dmem_rv & sb3_2_ready;
-
+   assign sb3_2_to_done = sb3_2_valid & ((sb3_2_case_arith) | (sb3_2_val_valid & sb3_2_case_ld));
+   
    //stage 1
    //first establish datapath connections
    assign s1_imem_valid = s1_pc_valid;
@@ -335,9 +336,36 @@ end
    assign sb3_2_case_ld = sb3_2_opcode == OP_LD;
    assign sb3_2_case_st = sb3_2_opcode == OP_ST;
    
-   assign rf_write_en = (sb3_2_valid & sb3_2_case_arith) | (sb3_2_val_valid & sb3_2_case_ld);
+   assign rf_write_en = sb3_2_to_done;
    assign rf_write_addr = sb3_2_dest;
    assign rf_write_val = (sb3_case_ld) ? sb3_2_val : sb3_2_res;
 
+
+   //clear all of the valid bits:
+   always@(posedge clk) begin
+      if (s1_to_s2 & !(s2_to_s1 | sa3_to_s1)) begin
+	 s2_pc_valid <= FALSE;
+      end
+      if ((s2_to_sa3 | s2_to_sb3) & !(s1_to_s2)) begin
+	 s2_pc_valid <= FALSE;
+	 s2_insn_valid <= FALSE;
+      end
+      if (sa3_to_s1 & !s2_to_sa3) begin
+	 sa3_insn_valid <= FALSE;
+	 sa3_arg1_valid <= FALSE;
+	 sa3_arg2_valid <= FALSE;
+	 sa3_opcode_valid <= FALSE;
+      end
+      if (sb3_to_sb3_2 & !s2_to_sb3) begin
+	 sb3_insn_valid <= FALSE;
+	 sb3_arg1_valid <= FALSE;
+	 sb3_arg2_valid <= FALSE;
+	 sb3_opcode_valid <= FALSE;
+      end
+      if (sb3_2_to_done & !sb3_to_sb3_2) begin
+	 sb3_2_valid <= FALSE;
+	 sb3_2_val_valid <= FALSE;
+      end
+end
 
 endmodule
