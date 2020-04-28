@@ -28,7 +28,7 @@ module cache (clk, reset, ready_in, valid_in, addr_in, op_in,
 	 req_op <= 0;
       end else begin
 	 if (valid_in & ready_in) begin
-	    req_addr <= addr_in;
+	    req_addr <= addr_in >> 2;
 	    req_write_data <= write_data_in;
 	    req_op <= op_in;
 	    req_valid <= 1'b1;
@@ -42,28 +42,35 @@ module cache (clk, reset, ready_in, valid_in, addr_in, op_in,
    end
 endmodule
    
-module regfile (clk, write_en, write_addr, write_val,
+module regfile (clk, reset, write_en, write_addr, write_val,
 		read_1_addr, read_1_en, read_1_out,
 		read_2_addr, read_2_en, read_2_out);
-   input clk;
+   input clk, reset;
    input write_en, read_1_en, read_2_en;
    input [4:0] write_addr, read_1_addr, read_2_addr;
    input [31:0] write_val;
    output reg [31:0] read_1_out, read_2_out;
-
+   integer 	     i;
+   
    reg [31:0] 	 mem [0:31];
    always@(posedge clk) begin
-      if (write_en) begin
-	 mem[write_addr] <= write_val;
-      end
-      if (read_1_en) begin
-	 read_1_out <= mem[read_1_addr];
-      end
-      if (read_2_en) begin
-	 read_2_out <= mem[read_2_addr];
-      end
+      if (reset) begin
+	 begin
+	    for (i=0; i<32; i=i+1) mem[i] <= 32'b0;
+	 end
+      end else begin
+	 if (write_en) begin
+	    mem[write_addr] <= write_val;
+	 end
+	 if (read_1_en) begin
+	    read_1_out <= mem[read_1_addr];
+	 end
+	 if (read_2_en) begin
+	    read_2_out <= mem[read_2_addr];
+	 end
+      end // else: !if(reset)
    end
-   
+      
 endmodule   
 
 module alu (arg_1, arg_2, alu_op, result);
