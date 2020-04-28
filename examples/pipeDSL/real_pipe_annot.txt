@@ -34,6 +34,17 @@ cpu{imem.READ <= caps}(int: pc)(proc: parent) {
     # how do we know where parent is? i.e., which stage currently has the capability?
     # Alternately, the caps can be a literal register. Then it's up to the
     # parent to understand where their child is so they can update it.
+
+    #New IDEA: Capabilities all have an _earliest_ point at which they must be acquired.
+    # Always acquire them at that _earliest_ point. Therefore, the cap is a statically located
+    # register that can be updated by later stages which "hold" the caps.
+    # This means that _all_ uses for that cap must be acquired at once (e.g. if
+    # we're going to read 2 different locations from the RF at different times,
+    # we must get the RF-READ cap for both locations before the first one happens).
+    #
+    # This also plays nice with the idea that we can't recover capabilities once we give
+    # them up; we don't want to go back to a different stage and read that stages cap register,
+    # but we can go write to it to release our capabilities.
   }
   arg1 <- rf.read1(rs1);
   arg2 <- rf.read2(rs2);
