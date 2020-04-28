@@ -212,10 +212,10 @@ module CPU(clk, reset);
    initial begin
 //      $monitor($time, " s1_pc = %h, s1_pc_valid = %b, s2_pc = %h, s2_pc_valid = %b, s2npc = %h, 2->1=%b", s1_pc, s1_pc_valid, s2_pc, s2_pc_valid, s2_next_cpu, s2_to_s1);
       
-//      $monitor($time, " 1->2=%b, 2->3a=%b, 2->3b=%b, 2->1=%b, 3a->1=%b, 3b->3b2=%b",s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2);
+      $monitor($time, " 1->2=%b, 2->3a=%b, 2->3b=%b, 2->1=%b, 3a->1=%b, 3b->3b2=%b",s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2);
 //      $monitor($time, " s2_pc = %h, s2_valid=%b, s2_insn=%b, s2_opcode=%d,2->3a=%b, 2->3b=%b, next_stage=%b, sb3r=%b, s1r=%b",
 //	       s2_pc, s2_valid, s2_insn, s2_opcode, s2_to_sa3, s2_to_sb3, s2_next_stage, sb3_ready, s1_ready);
-      $monitor($time, " sa3_pc = %h, sa3_valid=%b, sa3_arg1=%h, sa3_arg2=%h, sa3_take_br=%b, sa3_next_cpu=%h", sa3_pc, sa3_valid, sa3_arg1, sa3_arg2, sa3_take_br, sa3_next_cpu);
+//      $monitor($time, " sa3_pc = %h, sa3_valid=%b, sa3_arg1=%h, sa3_arg2=%h, sa3_take_br=%b, sa3_next_cpu=%h", sa3_pc, sa3_valid, sa3_arg1, sa3_arg2, sa3_take_br, sa3_next_cpu);
    end
      
    always@(posedge clk) begin
@@ -375,9 +375,11 @@ end
 	    sa3_arg2_valid <= TRUE;
 	 end
 	 if (s2_to_sb3) begin
-	 //this also sends a new pc to s1
+   	    //this also sends a new pc to s1
 	    s1_pc <= s2_next_cpu;      
 	    s1_pc_valid <= s2_pc_valid;
+	    //writes will happen in later stages
+	    s2_rf_rw <= FALSE;
 	    //
 	    sb3_pc <= s2_pc;
 	    sb3_pc_valid <= s2_pc_valid;
@@ -464,7 +466,10 @@ end
    assign rf_write_addr = sb3_2_dest;
    assign rf_write_val = (sb3_case_ld) ? sb3_2_val : sb3_2_res;
 
-
+   //release all capabilities
+   always@(posedge clk) begin
+      s2_rf_rw <= TRUE;
+   end
    //clear all of the valid bits:
    always@(posedge clk) begin
       if (!reset) begin
