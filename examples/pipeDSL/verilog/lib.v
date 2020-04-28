@@ -1,6 +1,6 @@
-module cache (clk, ready_in, valid_in, addr_in, op_in,
+module cache (clk, reset, ready_in, valid_in, addr_in, op_in,
 	      write_data_in, ready_out, valid_out, data_out);
-   input clk;
+   input clk, reset;
    input valid_in, ready_out, op_in;
    input [31:0] addr_in, write_data_in;
    output 	ready_in, valid_out;
@@ -15,6 +15,16 @@ module cache (clk, ready_in, valid_in, addr_in, op_in,
    assign data_out = mem[req_addr];
    assign valid_out = req_valid;
    assign ready_in = !req_valid | ready_out;
+
+   initial begin
+      $readmemb("rom_image.mem", mem);
+   end
+     
+   always@(posedge clk) begin
+      if(reset) begin
+	 req_valid <= 0;
+      end
+   end
    
    always@(posedge clk) begin
       if (valid_in & ready_in) begin
@@ -59,38 +69,24 @@ endmodule
 module alu (arg_1, arg_2, alu_op, result);
   
    input [31:0] arg_1, arg_2;
-   input [2:0] 	alu_op;
+   input [6:0] 	alu_op;
    output [31:0] result;   
    reg [31:0] 	 tmp;
    assign result = tmp;
    
-   localparam OP_LD = 3'd0,
-     OP_ST = 3'd1,
-     OP_ADD = 3'd2,
-     OP_MUL = 3'd3,
-     OP_SUB = 3'd4,
-     OP_DIV = 3'd5,
-     OP_BEQ = 3'd6;
+   localparam ADD_OP = 6'b000000,
+     SUB_OP = 6'd32;
    
    always@(*) begin
       case(alu_op)
-	OP_ADD : begin
+	ADD_OP : begin
 	   tmp = arg_1 + arg_2;
 	end
-	OP_MUL : begin
-	   tmp = arg_1 * arg_2;
-	end
-	OP_SUB : begin
+	SUB_OP : begin
 	   tmp = arg_1 - arg_2;
 	end
-	OP_DIV : begin
-	   tmp = arg_1 / arg_2;
-	end
-	OP_ST : begin
-	   tmp = 32'b0;
-	end
-	OP_LD : begin
-	   tmp = 32'b0;
+	default : begin
+	   tmp = 0;
 	end
       endcase // case (alu_op)
    end // always@ (*)

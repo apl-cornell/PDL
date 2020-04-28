@@ -13,20 +13,65 @@ module CPU(clk, reset);
      STAGE_3B = 3'd3,
      STAGE_3B_2 = 3'd4;
 
-   //instruction layout { 0-2 : opcode, 3-7: arg1, 8-12: arg2, 13-17: dest, 18-31: imm }
-   localparam OP_LD = 3'd0,
-     OP_ST = 3'd1,
-     OP_ADD = 3'd2,
-     OP_MUL = 3'd3,
-     OP_SUB = 3'd4,
-     OP_DIV = 3'd5,
-     OP_BEQ = 3'd6;   
+   localparam OP_LOAD = 7'b0000011,
+     OP_STORE = 7'b0100011,
+     OP_ARITH = 7'b0110011,
+     OP_BRANCH = 7'b1100011;
 
+   function automatic [6:0] opcode_bits;
+      input [31:0] instruction;
+      begin
+	 opcode_bits = instruction[6:0];
+      end
+   endfunction // if
+
+   function automatic [4:0] rd_bits;
+      input [31:0] instruction;
+      begin
+	 rd_bits = instruction[11:7];
+      end 
+   endfunction // if
+
+   function automatic [2:0] func3_bits;
+      input [31:0] instruction;
+      begin
+	 func3_bits = instruction[14:12];
+      end
+   endfunction // if
+
+   function automatic [4:0] rs1_bits;
+      input [31:0] instruction;
+      begin
+	 rs1_bits = instruction[19:15];
+      end
+   endfunction
+
+   function automatic [4:0] rs2_bits;
+      input [31:0] instruction;
+      begin
+	 rs2_bits = instruction[24:20];
+      end
+   endfunction // if
+
+   function automatic [11:0] imm12_bits;
+      input [31:0] instruction;
+      begin
+	 imm12_bits = instruction[31:20];
+      end
+   endfunction      
+
+   function automatic [6:0] func7_bits;
+      input [31:0] instruction;
+      begin
+	 func7_bits = instruction[31:25];
+      end
+   endfunction // if
+   
    function automatic take_br;
-      input [2:0] opcode;
+      input [6:0] opcode;
       input [31:0] arg1, arg2;
       begin
-      if (opcode == OP_BEQ)
+      if (opcode == OP_BRANCH)
 	 take_br = arg1 == arg2;
       else
 	 take_br = FALSE;
@@ -51,9 +96,10 @@ module CPU(clk, reset);
    //Comb
    wire       s2_valid, s2_ready, s2_imem_valid, s2_imem_ready;
    wire [31:0] s2_imem_data;
-   
+        
    
    cache  imem(.clk (clk),
+	       .reset (reset),
 	       .ready_in (s1_imem_ready),
 	       .valid_in (s1_imem_valid),
 	       .addr_in  (s1_imem_addr),
@@ -63,9 +109,9 @@ module CPU(clk, reset);
 	       .valid_out (s2_imem_valid),
 	       .data_out  (s2_imem_data));
    //Comb
-   wire [2:0]  opcode;
+   wire [6:0]  s2_opcode;
    wire [31:0] s2_rs1,s2_rs2,s2_dest;
-   wire [4:0]  s2_next_stage;
+   wire [2:0]  s2_next_stage;
    wire [4:0]  rf_write_addr, rf_read_1_addr, rf_read_2_addr;   
    wire [31:0] rf_write_val;
    wire [31:0] rf_read_1_out, rf_read_2_out;
@@ -86,7 +132,7 @@ module CPU(clk, reset);
    reg 	       sa3_pc_valid;
    reg [31:0]  sa3_insn;
    reg 	       sa3_insn_valid;
-   reg [2:0]   sa3_opcode;
+   reg [6:0]   sa3_opcode;
    reg         sa3_opcode_valid;
    reg [31:0]  sa3_arg1;
    reg 	       sa3_arg1_valid;   
@@ -99,7 +145,7 @@ module CPU(clk, reset);
    //Seq
    reg [31:0]  sb3_pc;
    reg 	       sb3_pc_valid;
-   reg [2:0]   sb3_opcode;
+   reg [6:0]   sb3_opcode;
    reg 	       sb3_opcode_valid;
    reg [31:0]  sb3_insn;
    reg 	       sb3_insn_valid;
@@ -116,7 +162,7 @@ module CPU(clk, reset);
    wire [31:0] alu_result_out;
    wire [31:0] sb3_result;
 
-   wire [2:0]   alu_op_in;
+   wire [6:0]   alu_op_in;
 
    alu arith_unit(.arg_1 (alu_arg_1_in),
 	    .arg_2 (alu_arg_2_in),
@@ -129,6 +175,7 @@ module CPU(clk, reset);
    wire        dmem_ready_in, dmem_valid_out;
    
    cache dmem(.clk(clk),
+	      .reset(reset),
 	      .ready_in (dmem_ready_in),
 	      .valid_in (dmem_valid_in),
 	      .addr_in  (dmem_addr),
@@ -139,7 +186,7 @@ module CPU(clk, reset);
 	      .data_out  (dmem_data));
    //Seq
    reg 	       sb3_2_valid, sb3_2_val_valid;
-   reg [2:0]   sb3_2_opcode;
+   reg [6:0]   sb3_2_opcode;
    reg [31:0]  sb3_2_res, sb3_2_val;
    reg [4:0]   sb3_2_dest;
    
@@ -148,15 +195,53 @@ module CPU(clk, reset);
    wire        sb3_2_ready, sb3_2_case_arith, sb3_2_case_ld, sb3_2_case_st;
    
 
-   
-always@(posedge clk) begin
-   if (reset) begin
-      s1_pc <= 0;
-      s1_pc_valid <= TRUE;
-      s2_rf_rw <= TRUE;
-      //reset everything else too
+   initial begin
+//      $monitor($time, " s1_pc = %h, s1_valid=%b,imemr=%b,imemv=%b", s1_pc, s1_valid,s1_imem_ready,s1_imem_valid);
+      $monitor($time, " 1->2=%b, 2->3a=%b, 2->3b=%b, 2->1=%b, 3a->1=%b, 3b->3b2=%b",s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2);
+//      $monitor($time, " s2_pc = %h, s2_valid=%b, s2_opcode=%d,2->3a=%b, 2->3b=%b, next_stage=%b, sb3r=%b, s1r=%b",
+//	       s2_pc, s2_valid, s2_opcode, s2_to_sa3, s2_to_sb3, s2_next_stage, sb3_ready, s1_ready);
+      
    end
-end
+     
+   always@(posedge clk) begin
+      if (reset) begin
+	 s1_pc <= 0;
+	 s1_pc_valid <= TRUE;
+	 s2_rf_rw <= TRUE;
+	 s2_pc <= 0;
+	 s2_pc_valid <= FALSE;
+	 s2_insn <= 0;
+	 s2_insn_valid <= FALSE;
+	 sa3_pc <= 0;
+	 sa3_pc_valid <= FALSE;
+	 sa3_insn <= 0;
+	 sa3_insn_valid <= FALSE;
+	 sa3_opcode <= 0;
+	 sa3_opcode_valid <= FALSE;
+	 sa3_arg1 <= 0;
+	 sa3_arg1_valid <= FALSE;
+	 sa3_arg2 <= 0;
+	 sa3_arg2_valid <= FALSE;
+	 sb3_pc <= 0;
+	 sb3_pc_valid <= FALSE;
+	 sb3_opcode <= 0;
+	 sb3_opcode_valid <= FALSE;
+	 sb3_insn <= 0;
+	 sb3_insn_valid <= FALSE;
+	 sb3_arg1 <= 0;
+	 sb3_arg1_valid <= FALSE;
+	 sb3_arg2 <= 0;
+	 sb3_arg2_valid <= FALSE;
+	 sb3_dest <= 0;
+	 sb3_dest_valid <= FALSE;
+	 sb3_2_valid <= FALSE;
+	 sb3_2_val_valid <= FALSE;
+	 sb3_2_opcode <= 0;
+	 sb3_2_res <= 0;
+	 sb3_2_val <= 0;
+	 sb3_2_dest <= 0;
+      end
+   end
 
 //pipeline stages:
 //s1 (imem access) -> s2
@@ -202,7 +287,7 @@ end
    //and all stage 2 receivers are ready
    assign s2_to_sa3 = s2_valid & (s2_next_stage == STAGE_3A) & sa3_ready & s2_rf_rw;
    //send both to s1 and sb3 since this executes a `spawn`
-   assign s2_to_sb3 = s2_valid & s2_next_stage == STAGE_3B && sb3_ready & s1_ready && s2_rf_rw;
+   assign s2_to_sb3 = s2_valid & s2_next_stage == STAGE_3B & sb3_ready & s1_ready & s2_rf_rw;
    assign s2_to_s1 = s2_to_sb3;
    //when are all of the stage 3a inputs valid
    assign sa3_valid = sa3_insn_valid & sa3_arg1_valid & sa3_arg2_valid & sa3_opcode_valid;
@@ -235,16 +320,18 @@ end
    //first establish datapath connections
    //ready when we don't have an instruction in the s2 stage already
    assign s2_imem_ready = ~s2_insn_valid;
-   assign s2_opcode = s2_insn[2:0];
-   assign s2_rs1 = s2_insn[7:3];
-   assign s2_rs2 = s2_insn[12:8];
-   assign s2_dest = s2_insn[17:13];
-   assign s2_next_stage = (s2_opcode == OP_BEQ) ? STAGE_3A : STAGE_3B; //comes from the if
+   assign s2_opcode = opcode_bits(s2_insn);
+   assign s2_rs1 = rs1_bits(s2_insn);
+   assign s2_rs2 = rs2_bits(s2_insn);   
+   assign s2_dest = rd_bits(s2_insn);   
+   assign s2_next_stage = (s2_opcode == OP_BRANCH) ? STAGE_3A : STAGE_3B; //comes from the if
    assign rf_read_1_addr = s2_rs1;
    assign rf_read_2_addr = s2_rs2;
    assign rf_read_1_en = s2_to_sa3 | s2_to_sb3;
    assign rf_read_2_en = s2_to_sa3 | s2_to_sb3;
    assign s2_next_cpu = s2_pc + 32'd4;
+
+   assign s2_ready = !s2_pc_valid | s2_to_sa3 | s2_to_sb3;
    
    //receive input from imem   
    always@(posedge clk) begin
@@ -286,6 +373,10 @@ end
 	 sb3_dest_valid <= TRUE;      
       end
    end
+
+   //sa3+sb3 readieness
+   assign sb3_ready = !sb3_insn_valid | sb3_to_sb3_2;
+   assign sa3_ready = !sa3_insn_valid | sa3_to_s1;
    
    //stage sa3 (BR instruction) datapath
    assign sa3_take_br = take_br(sa3_opcode, sa3_arg1, sa3_arg2);
@@ -301,13 +392,13 @@ end
    end
 
    //stage sb3 (OTHER INSTS) datapath
-   assign sb3_case_arith = sb3_opcode != OP_LD & sb3_opcode != OP_ST;
-   assign sb3_case_ld = sb3_opcode == OP_LD;
-   assign sb3_case_st = sb3_opcode == OP_ST;
+   assign sb3_case_arith = sb3_opcode == OP_ARITH;
+   assign sb3_case_ld = sb3_opcode == OP_LOAD;
+   assign sb3_case_st = sb3_opcode == OP_STORE;
 
    assign alu_arg_1_in = sb3_arg1;
    assign alu_arg_2_in = sb3_arg2;
-   assign alu_op_in = sb3_insn[2:0];
+   assign alu_op_in = func7_bits(sb3_insn);
    assign sb3_result = alu_result_out;
 
    assign sb3_dmem_addr = sb3_arg1 + { 18'b0, sb3_insn[31:18] };   
@@ -325,6 +416,9 @@ end
 	 sb3_2_dest <= sb3_dest;
       end
    end
+
+   //readieness
+   assign sb3_2_ready = !sb3_2_valid | sb3_2_to_done;
    
    //receive input from dmem   
    always@(posedge clk) begin
@@ -335,9 +429,9 @@ end
    end
 
    //stage sb3_2 datapath
-   assign sb3_2_case_arith = sb3_2_opcode != OP_LD | sb3_2_opcode != OP_ST;   
-   assign sb3_2_case_ld = sb3_2_opcode == OP_LD;
-   assign sb3_2_case_st = sb3_2_opcode == OP_ST;
+   assign sb3_2_case_arith = sb3_2_opcode == OP_ARITH;
+   assign sb3_2_case_ld = sb3_2_opcode == OP_LOAD;
+   assign sb3_2_case_st = sb3_2_opcode == OP_STORE;
    
    assign rf_write_en = sb3_2_to_done;
    assign rf_write_addr = sb3_2_dest;
@@ -347,7 +441,7 @@ end
    //clear all of the valid bits:
    always@(posedge clk) begin
       if (s1_to_s2 & !(s2_to_s1 | sa3_to_s1)) begin
-	 s2_pc_valid <= FALSE;
+	 s1_pc_valid <= FALSE;
       end
       if ((s2_to_sa3 | s2_to_sb3) & !(s1_to_s2)) begin
 	 s2_pc_valid <= FALSE;

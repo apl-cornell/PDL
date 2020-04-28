@@ -10,12 +10,12 @@ module cpu_tb;
       $display($time, " <<Starting Simulation>>");
       #5 reset = 1'b0;
       $display($time, " <<Reset Done>");
-      #100;
+      #20;
       $display($time, " Stopping");      
       $finish;
    end
 
    always begin
-      #10 clk = ~clk;
+      #1 clk = ~clk;
    end
 endmodule
