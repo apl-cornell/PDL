@@ -23,22 +23,22 @@ module cache (clk, reset, ready_in, valid_in, addr_in, op_in,
    always@(posedge clk) begin
       if(reset) begin
 	 req_valid <= 0;
-      end
-   end
-   
-   always@(posedge clk) begin
-      if (valid_in & ready_in) begin
-	 req_addr <= addr_in;
-	 req_write_data <= write_data_in;
-	 req_op <= op_in;
-	 req_valid <= 1'b1;
-      end else if (valid_out & ready_out) begin
-	 req_valid <= 0'b0;
-      end
-      if (req_valid & req_op == CACHE_WRITE) begin
-	 mem[req_addr] <= req_write_data;
-      end
-	 
+	 req_addr <= 0;
+	 req_write_data <= 0;
+	 req_op <= 0;
+      end else begin
+	 if (valid_in & ready_in) begin
+	    req_addr <= addr_in;
+	    req_write_data <= write_data_in;
+	    req_op <= op_in;
+	    req_valid <= 1'b1;
+	 end else if (valid_out & ready_out) begin
+	    req_valid <= 0'b0;
+	 end
+	 if (req_valid & req_op == CACHE_WRITE) begin
+	    mem[req_addr] <= req_write_data;
+	 end
+      end // else: !if(reset)
    end
 endmodule
    

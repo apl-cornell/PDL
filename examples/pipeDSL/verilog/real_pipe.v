@@ -66,7 +66,19 @@ module CPU(clk, reset);
 	 func7_bits = instruction[31:25];
       end
    endfunction // if
-   
+
+   function automatic [31:0] br_offset;
+      input [31:0] instruction;
+      reg [12:0]   imm;
+      begin
+	 imm = { instruction[31:31], instruction[7:7],instruction[30:25], instruction[11:8], 1'b0 };
+	 if (instruction[31:31]) begin
+	    br_offset = { ~18'b0, imm };
+	 end else begin
+	    br_offset = { 18'b0, imm };
+	 end
+      end
+   endfunction
    function automatic take_br;
       input [6:0] opcode;
       input [31:0] arg1, arg2;
@@ -95,7 +107,8 @@ module CPU(clk, reset);
 
    //Comb
    wire       s2_valid, s2_ready, s2_imem_valid, s2_imem_ready;
-   wire [31:0] s2_imem_data;
+   wire [31:0] s2_imem_data, s2_next_cpu;
+   
         
    
    cache  imem(.clk (clk),
@@ -196,8 +209,9 @@ module CPU(clk, reset);
    
 
    initial begin
-//      $monitor($time, " s1_pc = %h, s1_valid=%b,imemr=%b,imemv=%b", s1_pc, s1_valid,s1_imem_ready,s1_imem_valid);
-      $monitor($time, " 1->2=%b, 2->3a=%b, 2->3b=%b, 2->1=%b, 3a->1=%b, 3b->3b2=%b",s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2);
+      $monitor($time, " s1_pc = %h, s1_pc_valid = %b, s2_pc = %h, s2_pc_valid = %b, s2npc = %h, 2->1=%b", s1_pc, s1_pc_valid, s2_pc, s2_pc_valid, s2_next_cpu, s2_to_s1);
+      
+//      $monitor($time, " 1->2=%b, 2->3a=%b, 2->3b=%b, 2->1=%b, 3a->1=%b, 3b->3b2=%b",s1_to_s2, s2_to_sa3, s2_to_sb3, s2_to_s1, sa3_to_s1, sb3_to_sb3_2);
 //      $monitor($time, " s2_pc = %h, s2_valid=%b, s2_opcode=%d,2->3a=%b, 2->3b=%b, next_stage=%b, sb3r=%b, s1r=%b",
 //	       s2_pc, s2_valid, s2_opcode, s2_to_sa3, s2_to_sb3, s2_next_stage, sb3_ready, s1_ready);
       
@@ -310,9 +324,11 @@ module CPU(clk, reset);
 
 //execute the 1 cycle latency operations
 always@(posedge clk) begin
-   if (s1_to_s2) begin
-      s2_pc <= s1_pc;
-      s2_pc_valid <= s1_pc_valid;
+   if (!reset) begin
+      if (s1_to_s2) begin
+	 s2_pc <= s1_pc;
+	 s2_pc_valid <= s1_pc_valid;
+      end
    end
 end
 
@@ -335,43 +351,47 @@ end
    
    //receive input from imem   
    always@(posedge clk) begin
-      if (s2_imem_valid && s2_imem_ready) begin
-	 s2_insn <= s2_imem_data;
-	 s2_insn_valid <= TRUE;
+      if(!reset) begin
+	 if (s2_imem_valid && s2_imem_ready) begin
+	    s2_insn <= s2_imem_data;
+	    s2_insn_valid <= TRUE;
+	 end
       end
    end
    //execute the 1 cycle latency operations
    always@(posedge clk) begin
-      if (s2_to_sa3) begin
-	 sa3_pc <= s2_pc;
-	 sa3_pc_valid <= s2_pc_valid;
-	 sa3_insn <= s2_insn;
-	 sa3_insn_valid <= s2_insn_valid;
-	 sa3_opcode <= s2_opcode;
-	 sa3_opcode_valid <= TRUE;      
-	 sa3_arg1 <= rf_read_1_out;
-	 sa3_arg1_valid <= TRUE;      
-	 sa3_arg2 <= rf_read_2_out;
-	 sa3_arg2_valid <= TRUE;
-      end
-      if (s2_to_sb3) begin
+      if (!reset) begin
+	 if (s2_to_sa3) begin
+	    sa3_pc <= s2_pc;
+	    sa3_pc_valid <= s2_pc_valid;
+	    sa3_insn <= s2_insn;
+	    sa3_insn_valid <= s2_insn_valid;
+	    sa3_opcode <= s2_opcode;
+	    sa3_opcode_valid <= TRUE;      
+	    sa3_arg1 <= rf_read_1_out;
+	    sa3_arg1_valid <= TRUE;      
+	    sa3_arg2 <= rf_read_2_out;
+	    sa3_arg2_valid <= TRUE;
+	 end
+	 if (s2_to_sb3) begin
 	 //this also sends a new pc to s1
-	 s1_pc <= s2_next_cpu;      
-	 s1_pc_valid <= s2_pc_valid;
-	 //
-	 sb3_pc <= s2_pc;
-	 sb3_pc_valid <= s2_pc_valid;
-	 sb3_insn <= s2_insn;
-	 sb3_insn_valid <= s2_insn_valid;      
-	 sb3_opcode <= s2_opcode;
-	 sb3_opcode_valid <= TRUE;
-	 sb3_arg1 <= rf_read_1_out;      
-	 sb3_arg1_valid <= TRUE;      
-	 sb3_arg2 <= rf_read_2_out;
-	 sb3_arg2_valid <= TRUE;
-	 sb3_dest <= s2_dest;
-	 sb3_dest_valid <= TRUE;      
-      end
+	    s1_pc <= s2_next_cpu;      
+	    s1_pc_valid <= s2_pc_valid;
+	    //
+	    sb3_pc <= s2_pc;
+	    sb3_pc_valid <= s2_pc_valid;
+	    sb3_insn <= s2_insn;
+	    sb3_insn_valid <= s2_insn_valid;      
+	    sb3_opcode <= s2_opcode;
+	    sb3_opcode_valid <= TRUE;
+	    sb3_arg1 <= rf_read_1_out;      
+	    sb3_arg1_valid <= TRUE;      
+	    sb3_arg2 <= rf_read_2_out;
+	    sb3_arg2_valid <= TRUE;
+	    sb3_dest <= s2_dest;
+	    sb3_dest_valid <= TRUE;      
+	 end
+      end // if (!reset)
    end
 
    //sa3+sb3 readieness
@@ -380,14 +400,16 @@ end
    
    //stage sa3 (BR instruction) datapath
    assign sa3_take_br = take_br(sa3_opcode, sa3_arg1, sa3_arg2);
-   assign sa3_next_cpu = sa3_pc + ((sa3_take_br) ? { 18'b0, sa3_insn[31:18] } : 32'd4);
+   assign sa3_next_cpu = sa3_pc + ((sa3_take_br) ? br_offset(sa3_insn) : 32'd4);
 
 
    //stage sa3 1 cycle latency operations
    always@(posedge clk) begin
-      if (sa3_to_s1) begin
-	 s1_pc <= sa3_next_cpu;
-	 s1_pc_valid <= TRUE;
+      if (!reset) begin
+	 if (sa3_to_s1) begin
+	    s1_pc <= sa3_next_cpu;
+	    s1_pc_valid <= TRUE;
+	 end
       end
    end
 
@@ -409,22 +431,26 @@ end
 
    //stage sb3 1 cycle latency operations
    always@(posedge clk) begin
-      if (sb3_to_sb3_2) begin
-	 sb3_2_valid <= TRUE;      
-	 sb3_2_opcode <= sb3_opcode;      
-	 sb3_2_res <= sb3_result;
-	 sb3_2_dest <= sb3_dest;
+      if (!reset) begin
+	 if (sb3_to_sb3_2) begin
+	    sb3_2_valid <= TRUE;      
+	    sb3_2_opcode <= sb3_opcode;      
+	    sb3_2_res <= sb3_result;
+	    sb3_2_dest <= sb3_dest;
+	 end
       end
    end
-
+   
    //readieness
    assign sb3_2_ready = !sb3_2_valid | sb3_2_to_done;
    
    //receive input from dmem   
    always@(posedge clk) begin
-      if (dmem_ready_out && dmem_valid_out) begin
-	 sb3_2_val <= dmem_data;      
-	 sb3_2_val_valid <= TRUE;
+      if (!reset) begin
+	 if (dmem_ready_out && dmem_valid_out) begin
+	    sb3_2_val <= dmem_data;      
+	    sb3_2_val_valid <= TRUE;
+	 end
       end
    end
 
@@ -440,29 +466,31 @@ end
 
    //clear all of the valid bits:
    always@(posedge clk) begin
-      if (s1_to_s2 & !(s2_to_s1 | sa3_to_s1)) begin
-	 s1_pc_valid <= FALSE;
-      end
-      if ((s2_to_sa3 | s2_to_sb3) & !(s1_to_s2)) begin
-	 s2_pc_valid <= FALSE;
-	 s2_insn_valid <= FALSE;
-      end
-      if (sa3_to_s1 & !s2_to_sa3) begin
-	 sa3_insn_valid <= FALSE;
-	 sa3_arg1_valid <= FALSE;
-	 sa3_arg2_valid <= FALSE;
-	 sa3_opcode_valid <= FALSE;
-      end
-      if (sb3_to_sb3_2 & !s2_to_sb3) begin
-	 sb3_insn_valid <= FALSE;
-	 sb3_arg1_valid <= FALSE;
-	 sb3_arg2_valid <= FALSE;
-	 sb3_opcode_valid <= FALSE;
-      end
-      if (sb3_2_to_done & !sb3_to_sb3_2) begin
-	 sb3_2_valid <= FALSE;
-	 sb3_2_val_valid <= FALSE;
-      end
-end
+      if (!reset) begin
+	 if (s1_to_s2 & !(s2_to_s1 | sa3_to_s1)) begin
+	    s1_pc_valid <= FALSE;
+	 end
+	 if ((s2_to_sa3 | s2_to_sb3) & !(s1_to_s2)) begin
+	    s2_pc_valid <= FALSE;
+	    s2_insn_valid <= FALSE;
+	 end
+	 if (sa3_to_s1 & !s2_to_sa3) begin
+	    sa3_insn_valid <= FALSE;
+	    sa3_arg1_valid <= FALSE;
+	    sa3_arg2_valid <= FALSE;
+	    sa3_opcode_valid <= FALSE;
+	 end
+	 if (sb3_to_sb3_2 & !s2_to_sb3) begin
+	    sb3_insn_valid <= FALSE;
+	    sb3_arg1_valid <= FALSE;
+	    sb3_arg2_valid <= FALSE;
+	    sb3_opcode_valid <= FALSE;
+	 end
+	 if (sb3_2_to_done & !sb3_to_sb3_2) begin
+	    sb3_2_valid <= FALSE;
+	    sb3_2_val_valid <= FALSE;
+	 end
+      end // if (!reset)
+   end
 
 endmodule
