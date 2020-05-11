@@ -5,13 +5,17 @@
 
 \newcommand{\step}[0]{\ensuremath{\rightarrow}}
 \newcommand{\bstep}[0]{\ensuremath{\Downarrow}}
-\makeatletter
+\newcommand{\pstep}[0]{\ensuremath{\rightarrow_{\mathcal{S}}}}
+\newcommand{\skips}[0]{~\textsf{skip}~}
+\newcommand{\outputs}[0]{~\textsf{output}~}
+\newcommand{\spawns}[0]{~\textsf{spawn}~}
 \newcommand{\bop}{~\textsf{bop}~}
 \newcommand{\uop}{~\textsf{uop}~}
-\newcommand{\conf}{\langle \Gamma,\@confx}
+\makeatletter
+\newcommand{\conf}[1]{\langle #1\@confx}
 \newcommand\@confx{\@ifnextchar\stopconf{\@confend}{\@confi}}
 \newcommand\@confend[1]{\rangle}
-\newcommand\@confi[1]{#1 \@confx}
+\newcommand\@confi[1]{,#1 \@confx}
 \makeatother
 
 \begin{document}
@@ -24,26 +28,64 @@
 \begin{align*}
   \begin{array}{lc}
     \mbox{Integers} & n \\
-    \mbox{Variables} & v\\
+    \mbox{Variables} & v,f\\
     \mbox{Expressions} & e\\
     \mbox{Statements} & c\\
+    \mbox{Functions} & \mathcal{F}\\
+    \mbox{Objects} & \mathcal{O}\\
   \end{array}
 \end{align*}
 
 \section{Operational Semantics}
 Expression Semantics
 \begin{mathpar}
-  \inferrule*[Left={Int-Lookup}]{\Gamma(v) = n}{\conf{v}\stopconf \bstep n}\\
-  \inferrule*[Left={Uop}]{\conf{e}\stopconf \bstep n' \\ \uop n' = n''}
-             {\conf{\uop n}\stopconf \bstep n''}\\
-  \inferrule*[Left={Binop}]{\conf{e_1}\stopconf \bstep n \\ \conf{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
-             {\conf{e_1 \bop e_2}\stopconf \bstep n''}\\
-  \inferrule*[Left={Function Call}]{\Gamma(f) \in \mathcal{F} \\ \conf{e}\stopconf \bstep n' \\ \Gamma(f)(n') = n}
-             {\conf{f(e)}\stopconf \bstep n} \\
+  \inferrule*[Left={Int-Lookup}]{\sigma(v) = n}{\conf{\sigma}{v}\stopconf \bstep n}\\
+  \inferrule*[Left={Uop}]{\conf{\sigma}{e}\stopconf \bstep n' \\ \uop n' = n''}
+             {\conf{\sigma}{\uop n}\stopconf \bstep n''}\\
+  \inferrule*[Left={Binop}]{\conf{\sigma}{e_1}\stopconf \bstep n \\ \conf{\sigma}{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
+             {\conf{\sigma}{e_1 \bop e_2}\stopconf \bstep n''}\\
+  \inferrule*[Left={Function Call}]{f \in \mathcal{F} \\ \conf{\sigma}{e}\stopconf \bstep n' \\ f(n') = n}
+             {\conf{\sigma}{f(e)}\stopconf \bstep n} \\
+\end{mathpar}
+Module Invocation
+\begin{mathpar}
+  \inferrule*[Left={Message Send}]{r = \{name, e_1...e_m\} \\ v \in \mathcal{O} \\ \textsf{invoke}(v, name, e_1...e_m) = n}
+             {\conf{\sigma}{v.send(r)}\stopconf \bstep n}\\
 \end{mathpar}
 Statement Semantics
 \begin{mathpar}
-  \inferrule*[Left={TimeBarrier}]{ }{TODO}\\
+  \inferrule*[Left={Output}]{\conf{\sigma}{e}\stopconf \bstep n}
+             {\conf{\sigma}{\Delta}{\outputs e}\stopconf \step_{\{\outputs n\}} \conf{\sigma}{\Delta}{\skips}\stopconf}\\
+  \inferrule*[Left={Asynch-Assign}]{ \conf{\sigma}{v_2.send(r)}\stopconf \bstep n \\ \Delta' = \Delta[v_1 \mapsto n]}
+             {\conf{\sigma}{\Delta} {v_1 \leftarrow v_2.send(r)}\stopconf \step_r \conf{\sigma}{\Delta'}{\skips}\stopconf}\\
+  \inferrule*[Left={Assign}]{ \conf{\sigma}{e}\stopconf \bstep n \\ \sigma' = \sigma[v \mapsto n]}
+             {\conf{\sigma}{\Delta}{v = e}\stopconf \step \conf{\sigma'}{\Delta}{\skips}\stopconf}\\
+  \inferrule*[Left={If-True}]{\conf{\sigma}{e}\stopconf \bstep n \\ n != 0 }
+             {\conf{\sigma}{\Delta}{\textsf{if~}(e)\textsf{~then~} s_1 \textsf{~else~}s_2}\stopconf \step \conf{\sigma}{\Delta}{s_1}\stopconf}\\
+  \inferrule*[Left={If-False}]{\conf{\sigma}{e}\stopconf \bstep 0}
+             {\conf{\sigma}{\Delta}{\textsf{if~}(e)\textsf{~then~} s_1 \textsf{~else~}_2}\stopconf \step \conf{\sigma}{\Delta}{s_2}\stopconf}\\
+  \inferrule*[Left={Seq}]{\conf{\sigma}{\Delta}{s_1}\stopconf \step \conf{\sigma'}{\Delta'}{s_1'}\stopconf}
+             {\conf{\sigma}{\Delta}{s_1 ; s_2}\stopconf \step \conf{\sigma'}{\Delta'}{s_1';s_2}\stopconf}\\
+  \inferrule*[Left={Seq-Term}]{ }{\conf{\sigma}{\Delta}{\skips ; s}\stopconf \step \conf{\sigma}{\Delta}{s}\stopconf}\\
+  \inferrule*[Left={TimeBarrier}]{\conf{\sigma}{\Delta}{s_1}\stopconf \step \conf{\sigma'}{\Delta'}{s_1'}\stopconf}
+             {\conf{\sigma}{\Delta}{s_1 --- s_2}\stopconf \step \conf{\sigma'}{\Delta'}{s_1' --- s_2}\stopconf}\\
+  \inferrule*[Left={Spawn}]{\textsf{args} \not\in \sigma \\ r = \{e_1...e_m\} \\
+    \conf{\sigma}{e_i}\stopconf \bstep n_i \\ \sigma' = \sigma[\textsf{args} = \{n_1...n_m\}]}
+             {\conf{\sigma}{\Delta}{\spawns r}\stopconf \step \conf{\sigma'}{\Delta}{\skips}\stopconf}\\
 \end{mathpar}
-
+Pipeline Semantics
+\begin{mathpar}
+  \inferrule*[Left={Eval-Event}]{s != \skips \\
+    \conf{\sigma}{\Delta}{s}\stopconf \step_t \conf{\sigma'}{\Delta'}{s'}\stopconf \\ t != \emptyset}
+             {\conf{\sigma}{\Delta}{\mathcal{T}}{\tau}{s}\stopconf \pstep \conf{\sigma'}{\Delta'}{\mathcal{T}}{\tau \cup \{t\}}{s'}\stopconf}\\
+  \inferrule*[Left={Eval}]{s != \skips \\ \conf{\sigma}{\Delta}{s}\stopconf \step \conf{\sigma'}{\Delta'}{s'}\stopconf}
+             {\conf{\sigma}{\Delta}{\mathcal{T}}{\tau}{s}\stopconf \pstep \conf{\sigma'}{\Delta'}{\mathcal{T}}{\tau}{s'}\stopconf}\\
+  \inferrule*[Left={TimeBar-Term}]{\Delta' = \emptyset \\ \{x_1...x_m\} = \textsf{dom}(\Delta) \\
+    \sigma' = \sigma[x_1 \mapsto \Delta(x_1)]...[x_m \mapsto \Delta(x_m)] \\ \tau' = \emptyset}
+             {\conf{\sigma}{\Delta}{\skips --- s}\stopconf \step \conf{\sigma'}{\Delta'}{\mathcal{T};\tau}{\tau'}{s}\stopconf}\\
+  \inferrule*[Left={Loop}]{\{n_1...n_m\} = \sigma(\textsf{args}) \\ \sigma' = \{"one" \mapsto n_1..."m" \mapsto n_m\} \\
+    \Delta' = \emptyset \\ \tau' = \emptyset}
+             {\conf{\sigma}{\Delta}{\mathcal{T}}{\tau}{\skips}\stopconf \pstep
+               \conf{\sigma'}{\Delta'}{\mathcal{T};\tau}{\tau'}{\mathcal{S}}\stopconf}\\
+\end{mathpar}
 \end{document}
