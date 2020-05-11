@@ -1,0 +1,81 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{mathpartir}
+\usepackage{ttquot}
+
+\newcommand{\step}[0]{\ensuremath{\rightarrow}}
+\newcommand{\bstep}[0]{\ensuremath{\Downarrow}}
+\newcommand{\pstep}[0]{\ensuremath{\rightarrow_{\mathcal{S}}}}
+\newcommand{\skips}[0]{~\textsf{skip}~}
+\newcommand{\outputs}[0]{~\textsf{output}~}
+\newcommand{\spawns}[0]{~\textsf{spawn}~}
+\newcommand{\bop}{~\textsf{bop}~}
+\newcommand{\uop}{~\textsf{uop}~}
+\makeatletter
+\newcommand{\conf}[1]{\langle #1\@confx}
+\newcommand\@confx{\@ifnextchar\stopconf{\@confend}{\@confi}}
+\newcommand\@confend[1]{\rangle}
+\newcommand\@confi[1]{,#1 \@confx}
+\makeatother
+
+\begin{document}
+
+\title{Sequential Semantics for Pipeline DSL}
+\author{Drew Zagieboylo}
+\maketitle
+
+\section{MetaVariables}
+\begin{align*}
+  \begin{array}{lc}
+    \mbox{Integers} & n \\
+    \mbox{Variables} & v,f\\
+    \mbox{Expressions} & e\\
+    \mbox{Statements} & c\\
+    \mbox{Functions} & \mathcal{F}\\
+    \mbox{Objects} & \mathcal{O}\\
+  \end{array}
+\end{align*}
+
+\section{Notes}
+
+This language consists of a DAG of pipeline stages.
+Each stage can be _occupied_ or _unoccupied_ and _active_ or _inactive.
+Occupied stages contain valid pipeline data from a prior
+pipeline stage.
+Active stages have received all of their inputs (from both
+pipeline stages and other modules).
+Every cycle, each _active_ stage executes its commands
+and sends data to each of its ready successors (for that execution path).
+Once a stage has sent data to all of its successors (for that execution path),
+then it becomes unoccupied and invalid.
+The semantics allow for "short-circuiting" such that a stage which is
+becoming unoccupied can still receive data and remain occupied in the next cycle.
+
+Additionally, this language has a notion of locks or barriers,
+which provide further requirements before a stage can become active.
+For instance, some stage may execute a command that acquires a read-lock
+on a memory and then also execute a command to read that memory. Or it may
+simply acquire the lock without reading the memory. They are separate commands.
+\section{Operational Semantics}
+Expression Semantics
+\begin{mathpar}
+  \inferrule*[Left={Int-Lookup}]{\sigma(v) = n}{\conf{\sigma}{v}\stopconf \bstep n}\\
+  \inferrule*[Left={Uop}]{\conf{\sigma}{e}\stopconf \bstep n' \\ \uop n' = n''}
+             {\conf{\sigma}{\uop n}\stopconf \bstep n''}\\
+  \inferrule*[Left={Binop}]{\conf{\sigma}{e_1}\stopconf \bstep n \\ \conf{\sigma}{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
+             {\conf{\sigma}{e_1 \bop e_2}\stopconf \bstep n''}\\
+  \inferrule*[Left={Function Call}]{f \in \mathcal{F} \\ \conf{\sigma}{e}\stopconf \bstep n' \\ f(n') = n}
+             {\conf{\sigma}{f(e)}\stopconf \bstep n} \\
+\end{mathpar}
+Stage Execution
+\begin{mathpar}
+  \inferrule*[Left={Message Send}]{r = \{name, e_1...e_m\} \\ v \in \mathcal{O} \\ \textsf{invoke}(v, name, e_1...e_m) = n}
+             {\conf{\sigma}{v.send(r)}\stopconf \bstep c(name)}\\
+\end{mathpar}
+Statement Semantics
+\begin{mathpar}
+
+Pipeline Semantics
+\begin{mathpar}
+\end{mathpar}
+\end{document}
