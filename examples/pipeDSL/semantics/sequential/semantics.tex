@@ -1,0 +1,49 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{mathpartir}
+\usepackage{ttquot}
+
+\newcommand{\step}[0]{\ensuremath{\rightarrow}}
+\newcommand{\bstep}[0]{\ensuremath{\Downarrow}}
+\makeatletter
+\newcommand{\bop}{~\textsf{bop}~}
+\newcommand{\uop}{~\textsf{uop}~}
+\newcommand{\conf}{\langle \Gamma,\@confx}
+\newcommand\@confx{\@ifnextchar\stopconf{\@confend}{\@confi}}
+\newcommand\@confend[1]{\rangle}
+\newcommand\@confi[1]{#1 \@confx}
+\makeatother
+
+\begin{document}
+
+\title{Sequential Semantics for Pipeline DSL}
+\author{Drew Zagieboylo}
+\maketitle
+
+\section{MetaVariables}
+\begin{align*}
+  \begin{array}{lc}
+    \mbox{Integers} & n \\
+    \mbox{Variables} & v\\
+    \mbox{Expressions} & e\\
+    \mbox{Statements} & c\\
+  \end{array}
+\end{align*}
+
+\section{Operational Semantics}
+Expression Semantics
+\begin{mathpar}
+  \inferrule*[Left={Int-Lookup}]{\Gamma(v) = n}{\conf{v}\stopconf \bstep n}\\
+  \inferrule*[Left={Uop}]{\conf{e}\stopconf \bstep n' \\ \uop n' = n''}
+             {\conf{\uop n}\stopconf \bstep n''}\\
+  \inferrule*[Left={Binop}]{\conf{e_1}\stopconf \bstep n \\ \conf{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
+             {\conf{e_1 \bop e_2}\stopconf \bstep n''}\\
+  \inferrule*[Left={Function Call}]{\Gamma(f) \in \mathcal{F} \\ \conf{e}\stopconf \bstep n' \\ \Gamma(f)(n') = n}
+             {\conf{f(e)}\stopconf \bstep n} \\
+\end{mathpar}
+Statement Semantics
+\begin{mathpar}
+  \inferrule*[Left={TimeBarrier}]{ }{TODO}\\
+\end{mathpar}
+
+\end{document}
