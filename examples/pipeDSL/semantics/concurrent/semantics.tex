@@ -2,7 +2,7 @@
 \usepackage{amsmath}
 \usepackage{mathpartir}
 \usepackage{ttquot}
-
+\usepackage{pl-syntax}
 \newcommand{\step}[0]{\ensuremath{\rightarrow}}
 \newcommand{\bstep}[0]{\ensuremath{\Downarrow}}
 \newcommand{\pstep}[0]{\ensuremath{\rightarrow_{\mathcal{S}}}}
@@ -36,10 +36,54 @@
   \end{array}
 \end{align*}
 
+Program: List of Modules and Initial Conditions
+Module: List of Stages, List of Locks, List of Formal Parameters (used to set initial conditions)
+Lock: A special lock object with a few methods (acquire(), release(), reserve())
+Stage: A set of receive statements, combinations assignments and guarded send statements
+Input: Valid Bit, 
+Commands: Limited IMP (no loops) + Barrier Statements
+Barrier: Lock Name
+Message: Module, Message Contents
+Message Contents: Function Name, List of Arguments
+
+\begin{figure}[h]
+\begin{syntax}
+  \abstractCategory[Variables]{v, x, z}
+  \abstractCategory[Integers]{n, m}
+  \abstractCategory[Locks]{L}
+  \abstractCategory[Channels]{C}
+  
+  \category[Programs]{P}
+  \alternative{ \{ List(M), List(v \mapsto n) \}}
+
+  \category[Modules]{M}
+  \alternative{ \{List(S), List(L), List(v)\}}
+
+  \category[Stages]{S}
+  \alternative{ "com" }
+
+  \category[Expressions]{e}
+  \alternative{ e " binop " e }
+  \alternativeLine{ " unop " e }
+  \alternativeLine{ e " ? " e " : " e }
+  \alternativeLine{ v }
+  \alternative{ n }
+  \alternative{ b }
+  \category[Commands]{"com"}
+  \alternative{ "skip" }
+  \alternative{ "com " ; " com" }
+  \alternative{ v = e }
+  \alternativeLine{ v = "recv " C}
+  \alternative{ "if ("e") send(" e, C")"}
+  \alternativeLine{ L".acquire()"}
+  \alternative{ L".release()"}
+  \alternative{ L".reserve()"}
+\end{syntax}
+\end{figure}
 \section{Notes}
 
 This language consists of a DAG of pipeline stages.
-Each stage can be _occupied_ or _unoccupied_ and _active_ or _inactive.
+Each stage can be _occupied_ or _unoccupied_ and _active_ or _inactive_.
 Occupied stages contain valid pipeline data from a prior
 pipeline stage.
 Active stages have received all of their inputs (from both
@@ -59,23 +103,25 @@ simply acquire the lock without reading the memory. They are separate commands.
 \section{Operational Semantics}
 Expression Semantics
 \begin{mathpar}
-  \inferrule*[Left={Int-Lookup}]{\sigma(v) = n}{\conf{\sigma}{v}\stopconf \bstep n}\\
-  \inferrule*[Left={Uop}]{\conf{\sigma}{e}\stopconf \bstep n' \\ \uop n' = n''}
-             {\conf{\sigma}{\uop n}\stopconf \bstep n''}\\
-  \inferrule*[Left={Binop}]{\conf{\sigma}{e_1}\stopconf \bstep n \\ \conf{\sigma}{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
-             {\conf{\sigma}{e_1 \bop e_2}\stopconf \bstep n''}\\
-  \inferrule*[Left={Function Call}]{f \in \mathcal{F} \\ \conf{\sigma}{e}\stopconf \bstep n' \\ f(n') = n}
-             {\conf{\sigma}{f(e)}\stopconf \bstep n} \\
+  \inferrule*[Left={Ternary}]{\conf{\sigma}{e_b}\stopconf \bstep c \\ \conf{\sigma}{e_t}\stopconf \bstep n_t \\
+  \conf{\sigma}{e_f}\stopconf \bstep n_f \\ n = c \neq 0 " ? " n_t " : " n_f}
+             {\conf{\sigma}{e_b " ? " e_t " : " e_f}\stopconf \bstep n}\\
 \end{mathpar}
-Stage Execution
+Command Execution
 \begin{mathpar}
-  \inferrule*[Left={Message Send}]{r = \{name, e_1...e_m\} \\ v \in \mathcal{O} \\ \textsf{invoke}(v, name, e_1...e_m) = n}
-             {\conf{\sigma}{v.send(r)}\stopconf \bstep c(name)}\\
+  \inferrule*[Left={Recv-Block}]{ C.isEmpty()}
+             {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma}{v = "recv " C}\stopconf}\\
+  \inferrule*[Left={Recv}]{!C.isEmpty() \\ \sigma' = \sigma[v \mapsto C.pop()]}
+             {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma'}{\skips}\stopconf}\\
+  \inferrule*[Left={Send-Values}]{ \conf{\sigma}{e_g}\stopconf \bstep n_g \\ \conf{\sigma}{e}\stopconf \bstep n_v}
+             {\conf{\sigma}{"if ("e_g") send(" e_v, C")"}\stopconf \step \conf{\sigma}{"if ("n_g") send(" n_v, C")"}\stopconf}\\
+  \inferrule*[Left={Send-Guard-True}]{  n_g \neq 0 }
+             {\conf{\sigma}{"if ("n_g") send(" n_v, C")"}\stopconf \step \conf{\sigma}{"send(" n_v, C")"}\stopconf}\\
+  \inferrule*[Left={Send-Guard-False}]{  n_g = 0}
+             {\conf{\sigma}{"if ("n_g") send(" n_v, C")"}\stopconf \step \conf{\sigma}{\skips}\stopconf}\\
+  \inferrule*[Left={Send-Block}]{ C.isFull() }
+             {\conf{\sigma}{"send(" n_v, C")"}\stopconf \step \conf{\sigma}{"send(" n_v, C")"}\stopconf}\\             
 \end{mathpar}
 Statement Semantics
-\begin{mathpar}
-
 Pipeline Semantics
-\begin{mathpar}
-\end{mathpar}
 \end{document}

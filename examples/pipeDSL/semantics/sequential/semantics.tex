@@ -9,6 +9,8 @@
 \newcommand{\skips}[0]{~\textsf{skip}~}
 \newcommand{\outputs}[0]{~\textsf{output}~}
 \newcommand{\spawns}[0]{~\textsf{spawn}~}
+\newcommand{\locks}[0]{~\textsf{wait-for-lock}~}
+\newcommand{\bypass}[0]{~\textsf{bypass}~}
 \newcommand{\bop}{~\textsf{bop}~}
 \newcommand{\uop}{~\textsf{uop}~}
 \makeatletter
@@ -54,10 +56,14 @@ Module Invocation
 \end{mathpar}
 Statement Semantics
 \begin{mathpar}
+  \inferrule*[Left={Lock}]{ }
+             {\conf{\sigma}{\Delta}{\locks v}\stopconf \step \conf{\sigma}{\Delta}{\skips}\stopconf}\\
   \inferrule*[Left={Output}]{\conf{\sigma}{e}\stopconf \bstep n}
              {\conf{\sigma}{\Delta}{\outputs e}\stopconf \step_{\{\outputs n\}} \conf{\sigma}{\Delta}{\skips}\stopconf}\\
   \inferrule*[Left={Asynch-Assign}]{ \conf{\sigma}{v_2.send(r)}\stopconf \bstep n \\ \Delta' = \Delta[v_1 \mapsto n]}
              {\conf{\sigma}{\Delta} {v_1 \leftarrow v_2.send(r)}\stopconf \step_r \conf{\sigma}{\Delta'}{\skips}\stopconf}\\
+  \inferrule*[Left={Asynch-Bypass}]{ \conf{\sigma}{v_2.send(r)}\stopconf \bstep n \\ \Delta' = \Delta[v_1 \mapsto n]}
+             {\conf{\sigma}{\Delta} {v_1 \leftarrow \bypass v_2.send(r)}\stopconf \step_r \conf{\sigma}{\Delta'}{\skips}\stopconf}\\
   \inferrule*[Left={Assign}]{ \conf{\sigma}{e}\stopconf \bstep n \\ \sigma' = \sigma[v \mapsto n]}
              {\conf{\sigma}{\Delta}{v = e}\stopconf \step \conf{\sigma'}{\Delta}{\skips}\stopconf}\\
   \inferrule*[Left={If-True}]{\conf{\sigma}{e}\stopconf \bstep n \\ n != 0 }
