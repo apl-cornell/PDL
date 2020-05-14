@@ -54,13 +54,13 @@ Message Contents: Function Name, List of Arguments
   \abstractCategory[Channels]{C}
   
   \category[Programs]{P}
-  \alternative{ \{ List(M), List(v \mapsto n) \}}
+  \alternative{ \{ List(M), List(v \mapsto n) \}} %Set of module declarations, Set of module instantiations, Set of Initial Conditions for each instantiated module
 
   \category[Modules]{M}
-  \alternative{ \{List(S), List(L), List(v)\}}
+  \alternative{ \{List(S), List(L), List(v)\}} %List of stages, first element is root stage; List of Locks; List of formal parameters set by initial conditions
 
   \category[Stages]{S}
-  \alternative{ "com" }
+  \alternative{ \{List("pred"), "com", List("succ") \}}
 
   \category[Expressions]{e}
   \alternative{ e " binop " e }
@@ -69,15 +69,21 @@ Message Contents: Function Name, List of Arguments
   \alternativeLine{ v }
   \alternative{ n }
   \alternative{ b }
+
+  \category[Predecessors]{"pred"}
+  \alternative{ v = "recv " C }
+
   \category[Commands]{"com"}
   \alternative{ "skip" }
   \alternative{ "com " ; " com" }
   \alternative{ v = e }
-  \alternativeLine{ v = "recv " C}
-  \alternative{ "if ("e") send(" e, C")"}
   \alternativeLine{ L".acquire()"}
   \alternative{ L".release()"}
   \alternative{ L".reserve()"}
+
+  \category[Successors]{"succ"}
+  \alternative{ "if ("v") send(" v, C")" }
+
 \end{syntax}
 \end{figure}
 \section{Notes}
@@ -100,28 +106,85 @@ which provide further requirements before a stage can become active.
 For instance, some stage may execute a command that acquires a read-lock
 on a memory and then also execute a command to read that memory. Or it may
 simply acquire the lock without reading the memory. They are separate commands.
+
+\begin{figure}
+  \[\begin{array}{r|l} \hline
+    \text{Variable Mappings} & \Sigma: S \rightarrow \sigma \\
+    \text{State Variable Mappings} & \sigma: v \rightarrow n \\
+    \text{Receive Status} & \Pi: S \rightarrow \pi \\
+    \text{State Receive Status} & \pi: C \rightarrow b \\
+    \text{Send Status} & \Delta: S \rightarrow C \rightarrow b \\
+    \text{State Send Status} & \delta: C \rightarrow b \\ \hline
+  \end{array}\]
+  \caption{Environment Types}
+\end{figure}
+
 \section{Operational Semantics}
 Expression Semantics
 \begin{mathpar}
-  \inferrule*[Left={Ternary}]{\conf{\sigma}{e_b}\stopconf \bstep c \\ \conf{\sigma}{e_t}\stopconf \bstep n_t \\
-  \conf{\sigma}{e_f}\stopconf \bstep n_f \\ n = c \neq 0 " ? " n_t " : " n_f}
+  \inferrule*[Left={Uop}]{\conf{\sigma}{e}\stopconf \bstep n' \\ \uop n' = n''}
+             {\conf{\sigma}{\uop n}\stopconf \bstep n''}\\
+  \inferrule*[Left={Binop}]{\conf{\sigma}{e_1}\stopconf \bstep n \\ \conf{\sigma}{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
+             {\conf{\sigma}{e_1 \bop e_2}\stopconf \bstep n''}\\
+  \inferrule*[Left={Int-Lookup}]{\sigma(v) = n}{\conf{\sigma}{v}\stopconf \bstep n}\\
+  \inferrule*[Left={Ternary}]{\conf{\sigma}{e_b}\stopconf \bstep n_c \\ \conf{\sigma}{e_t}\stopconf \bstep n_t \\
+  \conf{\sigma}{e_f}\stopconf \bstep n_f \\ n_c \neq 0 " ? " n_t " : " n_f}
              {\conf{\sigma}{e_b " ? " e_t " : " e_f}\stopconf \bstep n}\\
 \end{mathpar}
-Command Execution
+Receive Semantics
 \begin{mathpar}
-  \inferrule*[Left={Recv-Block}]{ C.isEmpty()}
-             {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma}{v = "recv " C}\stopconf}\\
-  \inferrule*[Left={Recv}]{!C.isEmpty() \\ \sigma' = \sigma[v \mapsto C.pop()]}
-             {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma'}{\skips}\stopconf}\\
-  \inferrule*[Left={Send-Values}]{ \conf{\sigma}{e_g}\stopconf \bstep n_g \\ \conf{\sigma}{e}\stopconf \bstep n_v}
-             {\conf{\sigma}{"if ("e_g") send(" e_v, C")"}\stopconf \step \conf{\sigma}{"if ("n_g") send(" n_v, C")"}\stopconf}\\
-  \inferrule*[Left={Send-Guard-True}]{  n_g \neq 0 }
-             {\conf{\sigma}{"if ("n_g") send(" n_v, C")"}\stopconf \step \conf{\sigma}{"send(" n_v, C")"}\stopconf}\\
-  \inferrule*[Left={Send-Guard-False}]{  n_g = 0}
-             {\conf{\sigma}{"if ("n_g") send(" n_v, C")"}\stopconf \step \conf{\sigma}{\skips}\stopconf}\\
-  \inferrule*[Left={Send-Block}]{ C.isFull() }
-             {\conf{\sigma}{"send(" n_v, C")"}\stopconf \step \conf{\sigma}{"send(" n_v, C")"}\stopconf}\\             
+  \inferrule*[Left={Block-Recv}]{ C.isEmpty() " or " \pi(C) = "true"}
+             {\conf{\sigma}{\pi}{v = "recv " C}\stopconf \step \conf{\sigma}{\pi}\stopconf}\\
+  \inferrule*[Left={Accept-Recv}]{!C.isEmpty() \\ \pi(C) = "false" \\ \sigma' = \sigma[v \mapsto C.pop()] \\
+    \pi' = \pi[C \mapsto "true"]}
+             {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma'}{\pi'}\stopconf}\\
+  \inferrule*[Left={Recv-List}]{
+    \mathcal{P} = \{"pred"_0..."pred"_n\} \\
+    \forall p \in \mathcal{P}. \conf{\sigma}{\pi}{p}\stopconf \step \conf{\sigma_p'}{\pi_p'}\stopconf \\
+    \sigma' = \bigcup_{p \in \mathcal{P}} \sigma_p' \\ \pi' = \bigcup_{p \in \mathcal{P}} \pi_p'}
+             {\conf{\sigma}{\pi}{\mathcal{P}}\stopconf \step \conf{\sigma'}{\pi'}\stopconf}\\
 \end{mathpar}
-Statement Semantics
-Pipeline Semantics
+
+Command Semantics
+\begin{mathpar}
+  \inferrule*[Left={Seq-Skip}]{ }
+             {\conf{\sigma}{\skips ; "com"_2}\stopconf \step \conf{\sigma}{"com"_2}\stopconf}\\
+  \inferrule*[Left={Seq}]{ \conf{\sigma}{"com"_1}\stopconf \step \conf{\sigma'}{"com"_1'}\stopconf}
+             {\conf{\sigma}{"com"_1" ; com"_2}\stopconf \step \conf{\sigma'}{"com"_1'" ; com"_2}\stopconf}\\
+  \inferrule*[Left={Assign}]{ v \not\in "dom"(\sigma) \\ \conf{\sigma}{e}\stopconf \bstep n \\ \sigma' = \sigma[v \mapsto n]}
+             {\conf{\sigma}{v = e}\stopconf \step \conf{\sigma'}{\skips}\stopconf}\\
+\end{mathpar}
+Send Semantics
+\begin{mathpar}
+  \inferrule*[Left={Send-Guard-True}]{  \sigma(v_g) \neq 0 }
+             {\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf \step
+               \conf{\sigma}{\delta}{"send(" v_v, C")"}\stopconf}\\
+  \inferrule*[Left={Send-Guard-False}]{  \sigma(v_g) = 0  \\ \delta' = \delta[C \mapsto "true"]}
+             {\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send-Blocked}]{ C.isFull() " or " \delta(C) = "true"}
+             {\conf{\sigma}{\delta}{"send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send}]{ !C.isFull() \\ \delta(C) = "false" \\ \delta' = \delta[C \mapsto "true"] \\ C.push(\sigma(v_v))}
+             {\conf{\sigma}{\delta}{"send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send-List}]
+             { \mathcal{S} = \{"succ"_0..."succ"_n\} \\
+               \forall s \in \mathcal{S}. \conf{\sigma}{\delta}{s}\stopconf \step^* \conf{\delta_s'}\stopconf \\
+             \delta' = \bigcup_{s \in \mathcal{S}} \delta_s' }
+             {\conf{\sigma}{\delta}{\mathcal{S}}\stopconf \step \conf{\delta'}\stopconf}\\
+\end{mathpar}
+Module Semantics
+\begin{mathpar}
+  \inferrule*[Left={Execute-Recvs}]{ \forall s \in S. \conf{\Sigma(s)}{\Pi(s)}{s."recv"}\stopconf \step
+    \conf{\sigma_s'}{\pi_s'}\stopconf \\
+    \Sigma' = \bigcup_{s\in S} \sigma_s' \\ \Pi' = \bigcup_{s \in S} \pi_s'}
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "recv"\}}\stopconf \step 
+               \conf{\Sigma'}{\Pi'}{\Delta}{\{List(S), "exec"\}}\stopconf} \\
+  \inferrule*[Left={Execute-Commands}]{\forall s \in S. \conf{\Sigma(s)}{s."com"}\stopconf \step^*
+    \conf{\sigma_s'}{\skips}\stopconf \\ \forall s \in S. \Sigma'[s \mapsto \sigma_s']}
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "exec"\}}\stopconf \step
+              \conf{\Sigma'}{\Pi}{\Delta}{\{List(S), "send"\}}\stopconf}\\
+  \inferrule*[Left={Execute-Sends}]{\forall s \in S. \conf{\Sigma(s)}{\Delta(s)}{s."send"}\stopconf \step
+    \conf{\delta_s'}\stopconf}
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S),"send"\}}\stopconf \step
+             \conf{\Sigma}{\Pi}{\Delta'}{\{List(S), "endcycle"\}}\stopconf}\\
+\end{mathpar}
 \end{document}
