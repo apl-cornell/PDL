@@ -131,7 +131,7 @@ be commands in the second phase of execution or extra guards in the send phase.
     \text{State Variable Mappings} & \sigma: v \rightarrow n \\
     \text{Receive Status} & \Pi: S \rightarrow \pi \\
     \text{State Receive Status} & \pi: C \rightarrow b \\
-    \text{Send Status} & \Delta: S \rightarrow C \rightarrow b \\
+    \text{Send Status} & \Delta: S \rightarrow \delta \\
     \text{State Send Status} & \delta: C \rightarrow b \\ \hline
   \end{array}\]
   \caption{Environment Types}
@@ -153,7 +153,7 @@ Receive Semantics
 \begin{mathpar}
   \inferrule*[Left={Block-Recv}]{ C.isEmpty() " or " \pi(C) = "true"}
              {\conf{\sigma}{\pi}{v = "recv " C}\stopconf \step \conf{\sigma}{\pi}\stopconf}\\
-  \inferrule*[Left={Accept-Recv}]{!C.isEmpty() \\ \pi(C) = "false" \\ \sigma' = \sigma[v \mapsto C.pop()] \\
+  \inferrule*[Left={Accept-Recv}]{!C.isEmpty() \\ \pi(C) = "false" \\ \sigma' = \sigma[v \mapsto C.peek()] \\
     \pi' = \pi[C \mapsto "true"]}
              {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma'}{\pi'}\stopconf}\\
   \inferrule*[Left={Recv-List}]{
@@ -174,39 +174,65 @@ Command Semantics
 \end{mathpar}
 Send Semantics
 \begin{mathpar}
-  \inferrule*[Left={Send-Guard-True}]{  \sigma(v_g) \neq 0 }
-             {\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf \step
-               \conf{\sigma}{\delta}{"send(" v_v, C")"}\stopconf}\\
+%  \boxed{\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf
+%    \step \conf{\delta'}\stopconf}\\
   \inferrule*[Left={Send-Guard-False}]{  \sigma(v_g) = 0  \\ \delta' = \delta[C \mapsto "true"]}
              {\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
-  \inferrule*[Left={Send-Blocked}]{ C.isFull() " or " \delta(C) = "true"}
-             {\conf{\sigma}{\delta}{"send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
-  \inferrule*[Left={Send}]{ !C.isFull() \\ \delta(C) = "false" \\ \delta' = \delta[C \mapsto "true"] \\ C.push(\sigma(v_v))}
-             {\conf{\sigma}{\delta}{"send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send-Blocked}]{ \sigma(v_g) \neq 0 \\ C.isFull() " or " \delta(C) = "true"}
+             {\conf{\sigma}{\delta}{"if ("v_g" send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send}]{ \sigma(v_g) \neq 0 \\ !C.isFull() \\ \delta(C) = "false"
+    \\ \delta' = \delta[C \mapsto "true"] \\ C.push(\sigma(v_v))}
+             {\conf{\sigma}{\delta}{"if ("v_g" send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
   \inferrule*[Left={Send-List}]
              { \forall c \in "dom"(\pi). \pi(c) = "true" \\
                \mathcal{S} = \{"succ"_0..."succ"_n\} \\
-               \forall s \in \mathcal{S}. \conf{\sigma}{\delta}{s}\stopconf \step^* \conf{\delta_s'}\stopconf \\
+               \forall s \in \mathcal{S}. \conf{\sigma}{\delta}{s}\stopconf \step \conf{\delta_s'}\stopconf \\
              \delta' = \bigcup_{s \in \mathcal{S}} \delta_s' }
              {\conf{\sigma}{\pi}{\delta}{\mathcal{S}}\stopconf \step \conf{\delta'}\stopconf}\\
   \inferrule*[Left={Wait-List}]
              { \exists c \in "dom"(\pi). \pi(c) = "false" }
              {\conf{\sigma}{\pi}{\delta}{\mathcal{S}}\stopconf \step \conf{\delta}\stopconf}\\
 \end{mathpar}
+
+End of Cycle Semantics
+\begin{mathpar}
+  \inferrule*[Left={Retry}] {\exists c \in "dom"(\delta). \delta(c) = "false" }
+             {\conf{\pi}{\delta}\stopconf \step \conf{\pi}{\delta}\stopconf} \\
+  \inferrule*[Left={Reset}] {\delta = \{c_1 \mapsto "true"...c_n \mapsto "true"\} \\
+    \pi = \{C_1 \mapsto "true"...C_n \mapsto "true"\} \\ \forall C_i. C_i.pop() \\
+    \pi' = \{C_1 \mapsto "false"...C_n \mapsto "false" \} \\
+    \delta' = \{c_1 \mapsto "false"..c_n \mapsto "false"\}}
+             {\conf{\pi}{\delta}\stopconf \step \conf{\pi'}{\delta'}\stopconf}\\
+\end{mathpar}
 Module Semantics
 \begin{mathpar}
-  \inferrule*[Left={Execute-Recvs}]{ \forall s \in S. \conf{\Sigma(s)}{\Pi(s)}{s."recv"}\stopconf \step
+  \inferrule*[Left={Execute-Recvs}]{
+    \forall s \in S. \conf{\Sigma(s)}{\Pi(s)}{s."recv"}\stopconf \step
     \conf{\sigma_s'}{\pi_s'}\stopconf \\
     \Sigma' = \bigcup_{s\in S} \sigma_s' \\ \Pi' = \bigcup_{s \in S} \pi_s'}
-             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "recv"\}}\stopconf \step 
+             {\conf{\Sigma}{\Pi}{\Delta}{List(S)}\stopconf \step
                \conf{\Sigma'}{\Pi'}{\Delta}{\{List(S), "exec"\}}\stopconf} \\
   \inferrule*[Left={Execute-Commands}]{\forall s \in S. \conf{\Sigma(s)}{s."com"}\stopconf \step^*
     \conf{\sigma_s'}{\skips}\stopconf \\ \forall s \in S. \Sigma'[s \mapsto \sigma_s']}
              {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "exec"\}}\stopconf \step
               \conf{\Sigma'}{\Pi}{\Delta}{\{List(S), "send"\}}\stopconf}\\
   \inferrule*[Left={Execute-Sends}]{\forall s \in S. \conf{\Sigma(s)}{\Pi(s)}{\Delta(s)}{s."send"}\stopconf \step
-    \conf{\delta_s'}\stopconf}
+    \conf{\delta_s'}\stopconf \\ \Delta' = \bigcup_{s \in S} \delta_s'}
              {\conf{\Sigma}{\Pi}{\Delta}{\{List(S),"send"\}}\stopconf \step
              \conf{\Sigma}{\Pi}{\Delta'}{\{List(S), "endcycle"\}}\stopconf}\\
+  \inferrule*[Left={End-Cycles}]{ \forall s \in S. \conf{\Pi(s)}{\Delta(s)}\stopconf \step
+  \conf{\pi_s'}{\delta_s'}\stopconf \\ \Pi' = \bigcup_{s \in S} \pi_s' \\ \Delta' = \bigcup_{s \in S} \delta_s' }
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "endcycle"\}}\stopconf \step
+             \conf{\emptyset}{\Pi'}{\Delta'}{\{List(S), "recv"\}}\stopconf}\\
 \end{mathpar}
 \end{document}
+
+
+In this semantics, each module is comprised of a set of stages.
+In each cycle, every stage will, in parallel, check for inputs for validity
+and outputs for readiness. If all of its inputs are ready, then it
+will compute the values of its outpus and send any which are ready this cycle.
+Every cycle, this procedure is repeated until all outputs have been sent.
+On the cycle when a stage has sent all of its outputs, it will mark its
+inputs as used (by popping them off of its input queues) and none
+of its outputs as sent.
