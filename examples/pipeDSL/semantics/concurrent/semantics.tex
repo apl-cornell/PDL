@@ -58,6 +58,7 @@ multiple variables
 \begin{figure}[h]
 \begin{syntax}
   \abstractCategory[Variables]{v, x, z}
+  \abstractCategory[Arrays]{v[], x[], z[]}
   \abstractCategory[Integers]{n, m}
   \abstractCategory[Locks]{L}
   \abstractCategory[Channels]{C}
@@ -66,7 +67,10 @@ multiple variables
   \alternative{ \{ List(M), List(v \mapsto n) \}} %Set of module declarations, Set of module instantiations, Set of Initial Conditions for each instantiated module
 
   \category[Modules]{M}
-  \alternative{ \{List(S), List(L), List(v)\}} %List of stages, first element is root stage; List of Locks; List of formal parameters set by initial conditions
+  \alternative{ \{List(S), List("Mem"), List(v)\}} %List of stages, first element is root stage; List of Locks; List of formal parameters set by initial conditions
+
+  \category[Memories]{"mem"}
+  \alternative{ \{L, v[]\}}
 
   \category[Stages]{S}
   \alternative{ \{List("pred"), "com", List("succ") \}}
@@ -92,6 +96,8 @@ multiple variables
 
   \category[Successors]{"succ"}
   \alternative{ "if ("v") send(" v, C")" }
+  \alternative{ "if ("v") read mem("v")" }
+  \alternative{ "if ("v") write mem("v, v")" }
 
 \end{syntax}
 \end{figure}
@@ -132,7 +138,7 @@ be commands in the second phase of execution or extra guards in the send phase.
     \text{Receive Status} & \Pi: S \rightarrow \pi \\
     \text{State Receive Status} & \pi: C \rightarrow b \\
     \text{Send Status} & \Delta: S \rightarrow \delta \\
-    \text{State Send Status} & \delta: C \rightarrow b \\ \hline
+    \text{State Send Status} & \delta: (C + "mem") \rightarrow b \\ \hline
   \end{array}\]
   \caption{Environment Types}
 \end{figure}
@@ -176,8 +182,8 @@ Send Semantics
 \begin{mathpar}
 %  \boxed{\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf
 %    \step \conf{\delta'}\stopconf}\\
-  \inferrule*[Left={Send-Guard-False}]{  \sigma(v_g) = 0  \\ \delta' = \delta[C \mapsto "true"]}
-             {\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={-Guard-False}]{  \sigma(v_g) = 0  \\ \delta' = \delta[C \mapsto "true"]}
+             {\conf{\sigma}{\delta}{"if ("v_g")" ...}\stopconf \step \conf{\delta}\stopconf}\\
   \inferrule*[Left={Send-Blocked}]{ \sigma(v_g) \neq 0 \\ C.isFull() " or " \delta(C) = "true"}
              {\conf{\sigma}{\delta}{"if ("v_g" send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
   \inferrule*[Left={Send}]{ \sigma(v_g) \neq 0 \\ !C.isFull() \\ \delta(C) = "false"
