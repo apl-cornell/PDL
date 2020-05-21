@@ -21,51 +21,36 @@ def cpu {
 cpu(pc) {
 
   insn <- imem.send(pc);
-  //
+  ---
   op = opcode(insn); #selects some bits from the instruction
   rs1 = rs1(insn);
   rs2 = rs2(insn);
-  dest = rs2;
-  if (op == BR) {
-     arg1 <- rf.read1(rs1);
-     arg2 <- rf.read2(rs2);
-     //
-     take_br = br_unit(insn, arg1, arg2) # checks the kind of comparison and executes it     
-     if (take_br) {
-     	return cpu(pc + imm(insn));
-     } else {
-        return cpu(pc + 4);
-     }
+  dest = dest(insn);
+  call cpu(pc + 4);
+  if (rs1 == MEM || rs2 == MEM) {
+    dmem.acquire();
+  }
+  if (rs1 == RF) {
+    rf[rs1].acquire();
+  }
+  if (rs2 == RF) {
+    rf[rs2].acquire();
+  }
+  if (dest == MEM) {
+    dmem.reserve();
   } else {
-     spawn cpu(pc + 4);
-     arg1 <- match (rs1) {
-       case REGISTER: {
-         rf.read1(rs1);
-       }
-       case MEMORY: {
-        dmem.read(rs1);
-       }
-     }
-     // #need break here b/c dmem only has 1 port
-     arg2 <- match (rs2) {
-       case REGISTER: {
-         rf.read2(rs2);
-       }
-       case MEMORY: {
-         dmem.read(rs2);
-       }
-     }
-     //
-     res <- alu(arg1, arg2, op);
-     //
-     match (dest) {
-       case REGISTER: {
-         rf.write(dest, res);
-       }
-       case MEMORY: {
-         dmem.write(dest, res);
-       }
-     }
+    rf[dest].reserve();
+  }
+  arg1 <- (rs1 == MEM) ? dmem.read(rs1) : rf.read(rs1);
+  ---
+  arg1 <- (rs2 == MEM) ? dmem.read(rs1) : rf.read(rs2);
+  ---
+  res <- alu(arg1, arg2, op);
+  ---
+  if (dest == MEM) {
+     dmem.write(dest, res);
+  } else {
+     rf.write(dest, res);
   }
 }
 

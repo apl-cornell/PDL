@@ -51,9 +51,20 @@ Stage:
 A set of receive statements, a sequential program generating combinational assignments,
 and a set of guarded send statements\newline
 
-TODO: make the data along channels be "Values" rather than just numbers, since
-we will actually be sending records along channels and reading out records into
-multiple variables
+TODOs:
+\begin{itemize}
+\item Make the data along channels be "Values" rather than just numbers, since 
+we will actually be sending records along channels and reading out records into multiple variables.
+\item Make "pred" (a.k.a. receives) conditional as well. This is tricky; since we haven't
+received yet, we don't have any data that tells us whether or not to execute the receive.
+Maybe we allow for conditional receives as commands? That makes things pretty ugly.
+\item In general, I'm not super happy with how the communication semantics work right now;
+need to clean them up.
+\item Include Locks - they probably fit best as a different kind of channel;
+so "succ" contains ``Lock.acquire()'' and "pred" contains ``Lock.release'' and
+``Lock.reserve()''. See the point on conditional receives for handling the issue
+of acquiring locks only if we need to.
+\end{itemize}
 
 \begin{figure}[h]
 \begin{syntax}
