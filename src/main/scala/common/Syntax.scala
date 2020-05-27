@@ -14,16 +14,18 @@ object Syntax {
   }
 
   object OpConstructor {
-    val add: (Long, Long) => Long = (_ + _)
-    val mul: (Long, Long) => Long = (_ * _)
-    val div: (Long, Long) => Long = (_ / _)
-    val sub: (Long, Long) => Long = (_ - _)
-    val mod: (Long, Long) => Long = (_ % _)
+    val add: (Double, Double) => Double = (_ + _)
+    val mul: (Double, Double) => Double = (_ * _)
+    val div: (Double, Double) => Double  = (_ / _)
+    val sub: (Double, Double) => Double = (_ - _)
+    val mod: (Double, Double) => Double  = (_ % _)
     val band: (Long, Long) => Long = (_ & _)
     val bor: (Long, Long) => Long = (_ | _)
     val bxor: (Long, Long) => Long = (_ ^ _)
     val sl: (Long, Long) => Long = (_ << _)
     val sr: (Long, Long) => Long = (_ >> _)
+    val or: (Boolean, Boolean) => Boolean = (_ || _)
+    val and: (Boolean, Boolean) => Boolean = (_ && _)
   }
 
   import Annotations._
@@ -72,17 +74,20 @@ object Syntax {
   sealed trait BOp extends Positional {
     val op: String;
     override def toString = this.op
-    def toFun: Option[(Long, Long) => Long] = this match {
-      case n: NumOp => Some(n.fun)
-      case b: BitOp => Some(b.fun)
+    def apply(v1: AnyVal, v2: AnyVal): Option[AnyVal] = this match {
+      case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].doubleValue(),
+        v2.asInstanceOf[Number].doubleValue()))
+      case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].longValue(),
+        v2.asInstanceOf[Number].longValue()))
+      case b: BoolOp => Some(b.fun(v1.asInstanceOf[Boolean], v2.asInstanceOf[Boolean]))
       case _ => None
     }
   }
 
   case class EqOp(op: String) extends BOp
   case class CmpOp(op: String) extends BOp
-  case class BoolOp(op: String) extends BOp
-  case class NumOp(op: String, fun: (Long, Long) => Long) extends BOp
+  case class BoolOp(op: String, fun: (Boolean, Boolean) => Boolean) extends BOp
+  case class NumOp(op: String, fun: (Double, Double) => Double) extends BOp
   case class BitOp(op: String, fun: (Long, Long) => Long) extends BOp
 
   sealed trait Expr extends Positional with TypeAnnotation {
@@ -110,6 +115,7 @@ object Syntax {
     if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CReturn(exp: Expr) extends Command
+  case class COutput(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case object CEmpty extends Command
 }

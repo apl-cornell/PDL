@@ -8,8 +8,8 @@ object Main {
     logger.debug("Hello")
     val p: Parser = new Parser();
     val i: Interpreter = new Interpreter();
-    val r = p.parseAll(p.expr, "0xf & 7 + 11");
-    val output = i.interp_expr(r.get)
+    val r = p.parseAll(p.cmd, "v := 4; output v");
+    val output = i.interp_command(r.get)
     logger.info(output.toString());
   }
 

@@ -7,19 +7,22 @@ import scala.collection.immutable
 
 class Interpreter {
 
-    def interp_expr(e: Expr): Long = e match {
+    type Environment = scala.collection.immutable.Map[Id, AnyVal]
+
+    def interp_expr(e: Expr, env:Environment): AnyVal = e match {
         case i: EInt => i.v
-        case o: EBinop => o.op.toFun match {
-            case Some(f) => f(interp_expr(o.e1), interp_expr(o.e2))
-            case None => throw Errors.UnexpectedExpr(o)
+        case o: EBinop => o.op.apply(interp_expr(o.e1, env), interp_expr(o.e2, env)) match {
+            case Some(v) => v
+            case None => throw Errors.UnexpectedExpr(e)
         }
+        case v: EVar => env(v.id)
         case ex => throw Errors.UnexpectedExpr(ex)
     }
 
-    type Environment = scala.collection.immutable.Map[Id, Number]
+
 
     def interp_command(c: Command): Unit = {
-        interp_command_helper(c, new immutable.HashMap[Id, Number]())
+        interp_command_helper(c, new immutable.HashMap[Id, AnyVal]())
     }
 
     def interp_command_helper(c: Command, env: Environment): Environment = c match {
@@ -31,14 +34,30 @@ class Interpreter {
             val e2 = interp_command_helper(c1, env)
             interp_command_helper(c2, e2)
         }
+        case CIf(cond, tbr, fbr) => {
+            val b = interp_expr(cond, env)
+            env
+        }
         case CAssign(lhs, rhs) => {
-            val rval = interp_expr(rhs)
+            val rval = interp_expr(rhs, env)
             lhs match {
                 case EVar(id) => {
-                    env + (id -> rval)
+                    env.get(id) match {
+                        case Some(v) => throw Errors.AlreadySetException(id)
+                        case None =>  env + (id -> rval)
+                    }
                 }
                 case _ => throw Errors.UnexpectedExpr(lhs)
             }
+        }
+        case CExpr(exp) => {
+            interp_expr(exp, env)
+            env
+        }
+        case COutput(exp) => {
+            val v = interp_expr(exp, env)
+            println(v)
+            env
         }
         case _ => env
     }

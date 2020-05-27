@@ -59,8 +59,8 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val bOr: P[BOp] = positioned("|" ^^  { op => BitOp(op, OC.bor) })
   lazy val bXor: P[BOp] = positioned("^" ^^ { op => BitOp(op, OC.bxor) })
 
-  lazy val and: P[BOp] = positioned("&&" ^^ { op => BoolOp(op) })
-  lazy val or: P[BOp] = positioned("||" ^^  { op => BoolOp(op) })
+  lazy val and: P[BOp] = positioned("&&" ^^ { op => BoolOp(op, OC.and) })
+  lazy val or: P[BOp] = positioned("||" ^^  { op => BoolOp(op, OC.or) })
 
   /** Expressions
    * The bin* parsers implement the precedence order of operators described
@@ -87,6 +87,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val simpleCmd: P[Command] = positioned {
+    "output" ~> expr ^^ { case e => COutput(e) } |
       "return" ~> expr ^^ { case e => CReturn(e) } |
       expr ~ ":=" ~ expr ^^ { case l ~ _ ~ r => CAssign(l, r) } |
       expr ^^ { case e => CExpr(e) }

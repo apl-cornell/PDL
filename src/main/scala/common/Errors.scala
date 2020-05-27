@@ -15,4 +15,7 @@ object Errors {
   case class UnexpectedExpr(e: Expr) extends RuntimeException(
     withPos(s"Cannot interpret $e", e.pos)
   )
+
+  case class AlreadySetException(id: Id) extends RuntimeException(
+    s"Triced to set variable $id twice.")
 }
