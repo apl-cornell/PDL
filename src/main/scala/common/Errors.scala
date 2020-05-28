@@ -16,6 +16,10 @@ object Errors {
     withPos(s"Cannot interpret $e", e.pos)
   )
 
+  case class InvalidBitExtraction(s: Int, e: Int) extends RuntimeException(
+    s"Start: $s must be less than or equal to End: $e"
+  )
+
   case class AlreadySetException(id: Id) extends RuntimeException(
-    s"Triced to set variable $id twice.")
+    s"Tried to set variable $id twice.")
 }

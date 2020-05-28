@@ -75,12 +75,24 @@ object Syntax {
   sealed trait BOp extends Positional {
     val op: String;
     override def toString = this.op
-    def apply(v1: Any, v2: Any): Option[Any] = this match {
+    def operate(v1: Any, v2: Any): Option[Any] = this match {
       case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].doubleValue(),
         v2.asInstanceOf[Number].doubleValue()))
       case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].intValue(),
         v2.asInstanceOf[Number].intValue()))
       case b: BoolOp => Some(b.fun(v1.asInstanceOf[Boolean], v2.asInstanceOf[Boolean]))
+      case e: EqOp => e.op match {
+        case "==" => Some(v1 == v2)
+        case "!=" => Some(v1 != v2)
+        case _ => None
+      }
+      case c: CmpOp => c.op match {
+        case ">" => Some(1.asInstanceOf[Int] > v2.asInstanceOf[Int])
+        case ">=" => Some(1.asInstanceOf[Int] >= v2.asInstanceOf[Int])
+        case "<=" =>  Some(1.asInstanceOf[Int] <= v2.asInstanceOf[Int])
+        case "<" => Some(1.asInstanceOf[Int] < v2.asInstanceOf[Int])
+        case _ => None
+      }
       case _ => None
     }
   }
@@ -99,7 +111,6 @@ object Syntax {
     }
   }
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
-  case class ERational(d: String) extends Expr
   case class EBool(v: Boolean) extends Expr
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
@@ -109,8 +120,6 @@ object Syntax {
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
-  case class ECast(e: Expr, castType: Type) extends Expr
-
 
   sealed trait Command extends Positional
   case class CSeq(c1: Command, c2: Command) extends Command
@@ -151,8 +160,9 @@ object Syntax {
 
   sealed trait Circuit extends Positional
 
+  case class CirMem(size: Int, typ: Type) extends Circuit
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
   case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends Circuit
-  case class CirName(name: Id, c: CirNew) extends Circuit
+  case class CirName(name: Id, c: Circuit) extends Circuit
 
 }

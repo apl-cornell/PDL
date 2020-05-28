@@ -51,8 +51,8 @@ pipe cpu(pc: Int)[rf, imem, dmem] {
 }
 
 circuit {
-    i = new memory()[];
-    d = new memory()[];
-    r = new regfile()[];
+    i = memory(1024);
+    d = memory(1024);
+    r = memory(32);
     c = new cpu(0)[r, i, d];
 }

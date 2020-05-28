@@ -186,8 +186,11 @@ class Parser extends RegexParsers with PackratParsers {
     }
   }
 
+  lazy val cmem: P[CirMem] = positioned {
+    "memory" ~> parens(posint ~ typ) ^^ { case s ~ t => CirMem(s, t) }
+  }
   lazy val cname: P[Circuit] = positioned {
-    iden ~ "=" ~ cnew ^^ { case i ~ _ ~ n => CirName(i, n)}
+    iden ~ "=" ~ (cnew | cmem) ^^ { case i ~ _ ~ n => CirName(i, n)}
   }
 
   lazy val cseq: P[Circuit] = positioned {
