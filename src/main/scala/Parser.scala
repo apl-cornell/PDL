@@ -26,13 +26,23 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val octal = "0[0-7]+".r ^^ { n => Integer.parseInt(n.substring(1), 8) }
   lazy val boolean = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
+  lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
+  lazy val recLiteral = positioned {
+    braces(repsep(recLiteralField, ",")) ^^ { case fieldList => ERecLiteral(fieldList.toMap) }
+  }
+
+  lazy val variable: P[Expr] = positioned {
+    iden ^^ { case id => EVar(id) }
+  }
+
   lazy val simpleAtom: P[Expr] = positioned {
+      recLiteral |
       hex ^^ { case h => EInt(h, 16) } |
       octal ^^ { case o => EInt(o, 8) } |
       uInt |
       boolean ^^ { case b => EBool(b) } |
       iden ~ parens(repsep(expr, ",")) ^^ { case f ~ args => EApp(f, args) } |
-      iden ^^ { case id => EVar(id) } |
+      variable |
       parens(expr)
   }
 
@@ -70,7 +80,7 @@ class Parser extends RegexParsers with PackratParsers {
   def parseOp(base: P[Expr], op: P[BOp]): P[Expr] = positioned {
     chainl1[Expr](base, op ^^ { case op => EBinop(op, _, _)})
   }
-  lazy val binMul = parseOp(recAccess, mulOps)
+  lazy val binMul = parseOp(recAccess | simpleAtom, mulOps)
   lazy val binAdd = parseOp(binMul, addOps)
   lazy val binEq = parseOp(binAdd, eqOps)
   lazy val binSh = parseOp(binEq, shOps)
@@ -83,12 +93,13 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val recAccess: P[Expr] = positioned {
     recAccess ~ "." ~ iden ^^ { case rec ~ _ ~ f => ERecAccess(rec, f) } |
-      simpleAtom
+      variable | recLiteral
   }
+
 
   lazy val simpleCmd: P[Command] = positioned {
     "output" ~> expr ^^ { case e => COutput(e) } |
-      "return" ~> expr ^^ { case e => CReturn(e) } |
+      "call" ~> iden ^^ { case i => CCall(i) } |
       expr ~ ":=" ~ expr ^^ { case l ~ _ ~ r => CAssign(l, r) } |
       expr ^^ { case e => CExpr(e) }
   }
@@ -116,5 +127,22 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val cmd: P[Command] = positioned {
     seqCmd ~ "---" ~ cmd ^^ { case c1 ~ _ ~ c2 => CTBar(c1, c2) } |
       seqCmd
+  }
+
+  lazy val typ: P[Type] = iden.? ^^ { _ => TVoid() } //TODO fill in type parsing
+
+  lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t => Param(i, t) }
+
+  lazy val fdef: P[FuncDef] = positioned {
+    iden ~ parens(repsep(param,",")) ~ ":" ~ typ ~ braces(cmd) ^^ {
+      case i ~ ps ~ _ ~ t ~ c => FuncDef(i, ps, t, c)
+    }
+  }
+
+  //TODO fill in module parsing
+  lazy val pipedef: P[PipeDef] = positioned {
+    iden ~ parens(repsep(param,",")) ~ brackets(repsep(iden,",")) ~ braces(cmd) ^^ {
+      case i ~ ps ~ mods ~ c => PipeDef(i, ps, mods, c)
+    }
   }
 }

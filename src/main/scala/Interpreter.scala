@@ -7,22 +7,27 @@ import scala.collection.immutable
 
 class Interpreter {
 
-    type Environment = scala.collection.immutable.Map[Id, AnyVal]
+    type Environment = scala.collection.immutable.Map[Id, Any]
 
-    def interp_expr(e: Expr, env:Environment): AnyVal = e match {
+    def interp_expr(e: Expr, env:Environment): Any = e match {
         case i: EInt => i.v
         case o: EBinop => o.op.apply(interp_expr(o.e1, env), interp_expr(o.e2, env)) match {
             case Some(v) => v
             case None => throw Errors.UnexpectedExpr(e)
         }
         case v: EVar => env(v.id)
+        case r: ERecLiteral => r.fields
+        case rf: ERecAccess => {
+            val rec = interp_expr(rf.rec, env)
+            rec.asInstanceOf[Map[Id, Any]](rf.fieldName)
+        }
         case ex => throw Errors.UnexpectedExpr(ex)
     }
 
 
 
     def interp_command(c: Command): Unit = {
-        interp_command_helper(c, new immutable.HashMap[Id, AnyVal]())
+        interp_command_helper(c, new immutable.HashMap[Id, Any]())
     }
 
     def interp_command_helper(c: Command, env: Environment): Environment = c match {

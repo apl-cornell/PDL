@@ -1,6 +1,7 @@
 package pipedsl.common
 import scala.util.parsing.input.{Positional, Position}
 import Errors._
+import common.Security._
 
 object Syntax {
   /**
@@ -10,6 +11,9 @@ object Syntax {
 
     sealed trait TypeAnnotation {
       var typ: Option[Type] = None;
+    }
+    sealed trait LabelAnnotation {
+      var lbl: Option[Label] = None;
     }
   }
 
@@ -30,7 +34,7 @@ object Syntax {
 
   import Annotations._
 
-  case class Id(v: String) extends Positional with TypeAnnotation {
+  case class Id(v: String) extends Positional with TypeAnnotation with LabelAnnotation {
     override def toString = s"$v"
   }
 
@@ -74,7 +78,7 @@ object Syntax {
   sealed trait BOp extends Positional {
     val op: String;
     override def toString = this.op
-    def apply(v1: AnyVal, v2: AnyVal): Option[AnyVal] = this match {
+    def apply(v1: Any, v2: Any): Option[Any] = this match {
       case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].doubleValue(),
         v2.asInstanceOf[Number].doubleValue()))
       case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].longValue(),
@@ -114,8 +118,25 @@ object Syntax {
   case class CAssign(lhs: Expr, rhs: Expr) extends Command {
     if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CReturn(exp: Expr) extends Command
+  case class CCall(id: Id) extends Command
   case class COutput(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case object CEmpty extends Command
+
+  sealed trait Definition extends Positional
+
+  case class FuncDef(
+    name: Id,
+    args: List[Param],
+    ret: Type,
+    body: Command) extends Definition
+
+  case class PipeDef(
+    name: Id,
+    input: List[Param],
+    modules: List[Id], //TODO external module connections
+    body: Command) extends Definition
+
+  case class Param(name: Id, typ: Type) extends Positional
+
 }
