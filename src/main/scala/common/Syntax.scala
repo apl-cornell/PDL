@@ -23,11 +23,11 @@ object Syntax {
     val div: (Double, Double) => Double  = (_ / _)
     val sub: (Double, Double) => Double = (_ - _)
     val mod: (Double, Double) => Double  = (_ % _)
-    val band: (Long, Long) => Long = (_ & _)
-    val bor: (Long, Long) => Long = (_ | _)
-    val bxor: (Long, Long) => Long = (_ ^ _)
-    val sl: (Long, Long) => Long = (_ << _)
-    val sr: (Long, Long) => Long = (_ >> _)
+    val band: (Int, Int) => Int = (_ & _)
+    val bor: (Int, Int) => Int = (_ | _)
+    val bxor: (Int, Int) => Int = (_ ^ _)
+    val sl: (Int, Int) => Int = (_ << _)
+    val sr: (Int, Int) => Int = (_ >> _)
     val or: (Boolean, Boolean) => Boolean = (_ || _)
     val and: (Boolean, Boolean) => Boolean = (_ && _)
   }
@@ -42,9 +42,6 @@ object Syntax {
     override def toString = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
-      case _: TRational => "rational"
-      case _: TFloat => "float"
-      case _: TDouble => "double"
       case TFixed(t,i, un) => s"${if (un) "u" else ""}fix<$t,$i>"
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TStaticInt(s) => s"static($s)"
@@ -81,8 +78,8 @@ object Syntax {
     def apply(v1: Any, v2: Any): Option[Any] = this match {
       case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].doubleValue(),
         v2.asInstanceOf[Number].doubleValue()))
-      case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].longValue(),
-        v2.asInstanceOf[Number].longValue()))
+      case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].intValue(),
+        v2.asInstanceOf[Number].intValue()))
       case b: BoolOp => Some(b.fun(v1.asInstanceOf[Boolean], v2.asInstanceOf[Boolean]))
       case _ => None
     }
@@ -92,7 +89,7 @@ object Syntax {
   case class CmpOp(op: String) extends BOp
   case class BoolOp(op: String, fun: (Boolean, Boolean) => Boolean) extends BOp
   case class NumOp(op: String, fun: (Double, Double) => Double) extends BOp
-  case class BitOp(op: String, fun: (Long, Long) => Long) extends BOp
+  case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
   sealed trait Expr extends Positional with TypeAnnotation {
     def isLVal = this match {
@@ -101,7 +98,7 @@ object Syntax {
       case _ => false
     }
   }
-  case class EInt(v: Int, base: Int = 10) extends Expr
+  case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class ERational(d: String) extends Expr
   case class EBool(v: Boolean) extends Expr
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
@@ -127,6 +124,7 @@ object Syntax {
   }
   case class CCall(id: Id, args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
+  case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case object CEmpty extends Command
 
@@ -145,5 +143,16 @@ object Syntax {
     body: Command) extends Definition
 
   case class Param(name: Id, typ: Type) extends Positional
+
+  case class Prog(
+    fdefs: List[FuncDef],
+    pipedefs: List[PipeDef],
+    circ: Circuit) extends Positional
+
+  sealed trait Circuit extends Positional
+
+  case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
+  case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends Circuit
+  case class CirName(name: Id, c: CirNew) extends Circuit
 
 }

@@ -1,4 +1,15 @@
-cpu(pc: Int)[rf, imem, dmem] {
+def alu(arg1: typ1, arg2: typ2, op: typ3): rtyp {
+    if (op == 1) {
+        return arg1 + arg2;
+    } else if (op == 2) {
+        return arg1 >> arg2;
+    } else if (op == 3) {
+        return arg1 - arg2;
+    } else {
+        return arg1 * arg2;
+    }
+}
+pipe cpu(pc: Int)[rf, imem, dmem] {
     insn <- imem[pc];
     ---
     op_type = insn{1:0};
@@ -23,22 +34,25 @@ cpu(pc: Int)[rf, imem, dmem] {
     }
     alu_res = arg1 + add_arg2;
     ---
-    if(op_type == 0b10) {
-    //LD
+    if (op_type == 0b10) {
+        //LD
         mem_res = dmem[alu_res];
-    } else {
-        if (op_type == 0b11) {
-         //ST
-            dmem[alu_res] = arg2;
-        }
+    } else if (op_type == 0b11) {
+        //ST
+        dmem[alu_res] = arg2;
     }
     ---
     if (op_type == 0b1) {
         rf[rd] = alu_res;
-    } else {
-        if (op_type == 0b10) {
-            rf[rd] = mem_res;
-        }
+    } else if (op_type == 0b10) {
+        rf[rd] = mem_res;
     }
     call cpu(npc);
+}
+
+circuit {
+    i = new memory()[];
+    d = new memory()[];
+    r = new regfile()[];
+    c = new cpu(0)[r, i, d];
 }
