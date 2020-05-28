@@ -11,6 +11,8 @@ class Parser extends RegexParsers with PackratParsers {
   def parens[T](parser: P[T]): P[T] = "(" ~> parser <~ ")"
   def angular[T](parser: P[T]): P[T] = "<" ~> parser <~ ">"
 
+  override protected val whiteSpace = """(\s|\/\/.*|(/\*((\*[^/])|[^*])*\*/))+""".r
+
   // General syntax components
   lazy val iden: P[Id] = positioned {
     "" ~> "[a-zA-Z_][a-zA-Z0-9_]*".r ^^ { v => Id(v) }
@@ -24,6 +26,7 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val uInt: P[Expr] = "(-)?[0-9]+".r ^^ { n => EInt(n.toInt) }
   lazy val hex = "0x[0-9a-fA-F]+".r ^^ { n => Integer.parseInt(n.substring(2), 16) }
   lazy val octal = "0[0-7]+".r ^^ { n => Integer.parseInt(n.substring(1), 8) }
+  lazy val binary = "0b[0-1]+".r ^^ { n => Integer.parseInt(n.substring(2), 2) }
   lazy val boolean = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
   lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
@@ -39,8 +42,10 @@ class Parser extends RegexParsers with PackratParsers {
       recLiteral |
       hex ^^ { case h => EInt(h, 16) } |
       octal ^^ { case o => EInt(o, 8) } |
+      binary ^^ { case b => EInt(b, 2) } |
       uInt |
       boolean ^^ { case b => EBool(b) } |
+      ternary |
       iden ~ parens(repsep(expr, ",")) ^^ { case f ~ args => EApp(f, args) } |
       variable |
       parens(expr)
@@ -80,7 +85,7 @@ class Parser extends RegexParsers with PackratParsers {
   def parseOp(base: P[Expr], op: P[BOp]): P[Expr] = positioned {
     chainl1[Expr](base, op ^^ { case op => EBinop(op, _, _)})
   }
-  lazy val binMul = parseOp(recAccess | simpleAtom, mulOps)
+  lazy val binMul = parseOp(memAccess | bitAccess | recAccess | simpleAtom, mulOps)
   lazy val binAdd = parseOp(binMul, addOps)
   lazy val binEq = parseOp(binAdd, eqOps)
   lazy val binSh = parseOp(binEq, shOps)
@@ -93,14 +98,25 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val recAccess: P[Expr] = positioned {
     recAccess ~ "." ~ iden ^^ { case rec ~ _ ~ f => ERecAccess(rec, f) } |
-      variable | recLiteral
+      expr
   }
 
+  lazy val memAccess: P[Expr] = positioned {
+    expr ~ brackets(expr) ^^ { case m ~ i => EMemAccess(m, i) }
+  }
 
+  lazy val bitAccess: P[Expr] = positioned {
+    expr ~ braces(expr ~ ":" ~ expr) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e)}
+  }
+
+  lazy val ternary: P[Expr] = positioned {
+    parens(expr) ~ "?" ~ expr ~ ":" ~ expr ^^ { case c ~ _ ~ t ~ _ ~ v => ETernary(c,t,v) }
+  }
   lazy val simpleCmd: P[Command] = positioned {
     "output" ~> expr ^^ { case e => COutput(e) } |
-      "call" ~> iden ^^ { case i => CCall(i) } |
-      expr ~ ":=" ~ expr ^^ { case l ~ _ ~ r => CAssign(l, r) } |
+      "call" ~ iden ~ parens(repsep(expr,",")) ^^ { case _ ~ i ~ args => CCall(i, args) } |
+      expr ~ "=" ~ expr ^^ { case l ~ _ ~ r => CAssign(l, r) } |
+      expr ~ "<-" ~ expr ^^ { case l ~ _ ~ r => CRecv(l, r) } |
       expr ^^ { case e => CExpr(e) }
   }
 

@@ -97,6 +97,7 @@ object Syntax {
   sealed trait Expr extends Positional with TypeAnnotation {
     def isLVal = this match {
       case _:EVar => true
+      case _:EMemAccess => true
       case _ => false
     }
   }
@@ -106,6 +107,9 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
+  case class EMemAccess(mem: Expr, index: Expr) extends Expr
+  case class EBitExtract(num: Expr, start: Expr, end: Expr) extends Expr
+  case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(e: Expr, castType: Type) extends Expr
@@ -118,7 +122,10 @@ object Syntax {
   case class CAssign(lhs: Expr, rhs: Expr) extends Command {
     if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CCall(id: Id) extends Command
+  case class CRecv(lhs: Expr, rhs: Expr) extends Command {
+    if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
+  }
+  case class CCall(id: Id, args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case object CEmpty extends Command

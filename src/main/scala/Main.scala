@@ -18,9 +18,9 @@ object Main {
     if (!Files.exists(inputFile)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
-    val r = p.parseAll(p.cmd, new String(Files.readAllBytes(inputFile)));
-    val output = i.interp_command(r.get)
-    logger.info(output.toString());
+    val r = p.parseAll(p.pipedef, new String(Files.readAllBytes(inputFile)));
+    //val output = i.interp_command(r.get)
+    logger.info(r.toString());
   }
 
 }
