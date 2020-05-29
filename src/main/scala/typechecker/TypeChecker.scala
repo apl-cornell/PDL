@@ -1,9 +1,10 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.{MissingType, UnexpectedType}
-import pipedsl.common.Syntax
+import pipedsl.common.Errors._
 import pipedsl.common.Syntax._
-import pipedsl.typechecker.Environments.TypeEnvironment
+import Environments.TypeEnvironment
+import Subtypes._
+
 
 //TODO kinds of typechecking we need to do:
 
@@ -56,16 +57,38 @@ object TypeChecker {
     case CAssign(lhs, rhs) => {
       val lTyp = checkExpression(lhs, tenv)
       val rTyp = checkExpression(rhs, tenv)
+      if (isSubtype(rTyp, lTyp)) tenv
+      else throw UnexpectedSubtype(rhs.pos, "assignment", lTyp, rTyp)
     }
-    case CRecv(lhs, rhs) =>
-    case CCall(id, args) =>
-    case COutput(exp) =>
-    case CReturn(exp) =>
-    case CExpr(exp) =>
-    case Syntax.CEmpty =>
+    case CRecv(lhs, rhs) => {
+      val lTyp = checkExpression(lhs, tenv)
+      val rTyp = checkExpression(rhs, tenv)
+      if (isSubtype(rTyp, lTyp)) tenv
+      else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
+    }
+    case CCall(id, args) => //TODO need module types first
+    case COutput(exp) => {
+      checkExpression(exp, tenv)
+      tenv
+    }
+    case CReturn(exp) => //TODO need context for being in a function definition
+    case CExpr(exp) =>{
+      checkExpression(exp, tenv)
+      tenv
+    }
+    case CEmpty => tenv
   }
 
-  def checkExpression(e: Expr, tenv: TypeEnvironment): Type = {
-    TVoid()
+  def checkExpression(e: Expr, tenv: TypeEnvironment): Type = e match {
+    case EInt(v, base, bits) =>
+    case EBool(v) =>
+    case EBinop(op, e1, e2) =>
+    case ERecAccess(rec, fieldName) =>
+    case ERecLiteral(fields) =>
+    case EMemAccess(mem, index) =>
+    case EBitExtract(num, start, end) =>
+    case ETernary(cond, tval, fval) =>
+    case EApp(func, args) =>
+    case EVar(id) =>
   }
 }

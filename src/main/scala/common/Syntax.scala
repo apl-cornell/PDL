@@ -43,12 +43,10 @@ object Syntax {
     override def toString = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
-      case TFixed(t,i, un) => s"${if (un) "u" else ""}fix<$t,$i>"
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TStaticInt(s) => s"static($s)"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
-      case TAlias(n) => n.toString
     }
   }
   // Types that can be upcast to Ints
@@ -59,13 +57,8 @@ object Syntax {
   case class TVoid() extends Type
   case class TBool() extends Type
 
-  case class TRational(value:String) extends Type
-  case class TFloat() extends Type
-  case class TDouble() extends Type
-  case class TFixed(ltotal:Int, lint:Int, unsigned:Boolean) extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TAlias(name: Id) extends Type
 
   /**
    * Define common helper methods implicit classes.

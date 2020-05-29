@@ -33,6 +33,9 @@ object Errors {
   case class UnexpectedType(pos: Position, node: String, exp: String, actual: Type) extends TypeError(
     s"Expected type $exp in $node, received: $actual.", pos)
 
+  case class UnexpectedSubtype(pos: Position, node: String, exp: Type, actual: Type) extends TypeError(
+    s"Expected subtype of $exp in $node, received: $actual.", pos)
+
   case class MissingType(pos: Position, node: String) extends TypeError(
     s"No type found for $node", pos)
 
