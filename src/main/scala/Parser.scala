@@ -108,6 +108,8 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val and: P[BOp] = positioned("&&" ^^ { op => BoolOp(op, OC.and) })
   lazy val or: P[BOp] = positioned("||" ^^ { op => BoolOp(op, OC.or) })
 
+  lazy val concat: P[BOp] = positioned("++" ^^ { op => BitOp(op, OC.concat) })
+
   /** Expressions
    * The bin* parsers implement the precedence order of operators described
    * for C/C++: https://en.cppreference.com/w/c/language/operator_precedence
@@ -126,14 +128,17 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val binBOr = parseOp(binBXor, bOr)
   lazy val binAnd = parseOp(binBOr, and)
   lazy val binOr = parseOp(binAnd, or)
-  lazy val expr = positioned(binOr)
+  lazy val binConcat = parseOp(binOr, concat)
+  lazy val expr = positioned(binConcat)
 
   lazy val simpleCmd: P[Command] = positioned {
     "return" ~> expr ^^ { case e => CReturn(e) } |
     "output" ~> expr ^^ { case e => COutput(e) } |
       "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => CCall(i, args) } |
-      expr ~ "=" ~ expr ^^ { case l ~ _ ~ r => CAssign(l, r) } |
-      expr ~ "<-" ~ expr ^^ { case l ~ _ ~ r => CRecv(l, r) } |
+      typ.? ~ expr ~ "=" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
+        CAssign(l, r) } |
+      typ.? ~ expr ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
+        CRecv(l, r) } |
       expr ^^ { case e => CExpr(e) }
   }
 
@@ -163,7 +168,11 @@ class Parser extends RegexParsers with PackratParsers {
       seqCmd
   }
 
-  lazy val typ: P[Type] = iden.? ^^ { _ => TVoid() } //TODO fill in type parsing
+  lazy val sizedInt: P[Type] = "int" ~ angular(posint) ^^ { _ => TVoid() }
+
+  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ^^ { _ => TVoid() }
+
+  lazy val typ: P[Type] = memory | sizedInt
 
   lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t => Param(i, t) }
 
@@ -174,9 +183,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   //TODO fill in module parsing
-  lazy val pipedef: P[PipeDef] = positioned {
-    "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(iden, ",")) ~ braces(cmd) ^^ {
-      case i ~ ps ~ mods ~ c => PipeDef(i, ps, mods, c)
+  lazy val moddef: P[ModuleDef] = positioned {
+    "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ braces(cmd) ^^ {
+      case i ~ ps ~ mods ~ c => ModuleDef(i, ps, mods, c)
     }
   }
 
@@ -187,7 +196,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val cmem: P[CirMem] = positioned {
-    "memory" ~> parens(posint ~ typ) ^^ { case s ~ t => CirMem(s, t) }
+    "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(addr, elem) }
   }
   lazy val cname: P[Circuit] = positioned {
     iden ~ "=" ~ (cnew | cmem) ^^ { case i ~ _ ~ n => CirName(i, n)}
@@ -203,7 +212,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val prog: P[Prog] = positioned {
-    fdef.+ ~ pipedef.+ ~ circuit ^^ {
+    fdef.+ ~ moddef.+ ~ circuit ^^ {
       case f ~ p ~ c => Prog(f, p, c)
     }
   }

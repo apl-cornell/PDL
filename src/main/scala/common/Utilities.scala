@@ -12,4 +12,11 @@ object Utilities {
     }
     bits
   }
+
+  implicit class RichOption[A](opt: Option[A]) {
+    def getOrThrow[T <: Throwable](except: T) = opt match {
+      case Some(v) => v
+      case None => throw except
+    }
+  }
 }

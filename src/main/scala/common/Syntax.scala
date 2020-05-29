@@ -30,6 +30,7 @@ object Syntax {
     val sr: (Int, Int) => Int = (_ >> _)
     val or: (Boolean, Boolean) => Boolean = (_ || _)
     val and: (Boolean, Boolean) => Boolean = (_ && _)
+    val concat: (Int, Int) => Int = (_ + _) //TODO fix for interpreter
   }
 
   import Annotations._
@@ -45,7 +46,6 @@ object Syntax {
       case TFixed(t,i, un) => s"${if (un) "u" else ""}fix<$t,$i>"
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TStaticInt(s) => s"static($s)"
-      case TIndex(s, d) => s"idx($s, $d)"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TAlias(n) => n.toString
@@ -55,11 +55,6 @@ object Syntax {
   sealed trait IntType
   case class TSizedInt(len: Int, unsigned: Boolean) extends Type with IntType
   case class TStaticInt(v: Int) extends Type with IntType
-  case class TIndex(static: (Int, Int), dynamic: (Int, Int)) extends Type with IntType {
-    // Our ranges are represented as s..e with e excluded from the range.
-    // Therefore, the maximum value is one than the product of the interval ends.
-    val maxVal: Int = static._2 * dynamic._2 - 1
-  }
   // Use case class instead of case object to get unique positions
   case class TVoid() extends Type
   case class TBool() extends Type
@@ -71,6 +66,19 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TAlias(name: Id) extends Type
+
+  /**
+   * Define common helper methods implicit classes.
+   */
+  implicit class RichType(typ: Type) {
+    def matchOrError[A](pos: Position, construct: String, exp: String)
+            (andThen: PartialFunction[Type, A]): A = {
+      val mismatchError: PartialFunction[Type, A] = {
+        case _ => throw UnexpectedType(pos, construct, exp, typ)
+      }
+      andThen.orElse(mismatchError)(typ)
+    }
+  }
 
   sealed trait BOp extends Positional {
     val op: String;
@@ -145,22 +153,22 @@ object Syntax {
     ret: Type,
     body: Command) extends Definition
 
-  case class PipeDef(
+  case class ModuleDef(
     name: Id,
     input: List[Param],
-    modules: List[Id], //TODO external module connections
+    modules: List[Param], //TODO external module connections
     body: Command) extends Definition
 
   case class Param(name: Id, typ: Type) extends Positional
 
   case class Prog(
-    fdefs: List[FuncDef],
-    pipedefs: List[PipeDef],
-    circ: Circuit) extends Positional
+          fdefs: List[FuncDef],
+          pipedefs: List[ModuleDef],
+          circ: Circuit) extends Positional
 
   sealed trait Circuit extends Positional
 
-  case class CirMem(size: Int, typ: Type) extends Circuit
+  case class CirMem(addrSize: Int, typ: Type) extends Circuit
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
   case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends Circuit
   case class CirName(name: Id, c: Circuit) extends Circuit

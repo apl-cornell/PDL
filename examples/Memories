@@ -1,0 +1,21 @@
+Memories are the built-in array type for our DSL,
+which correspond to any physical memories such as SRAM OR
+black box circuits with a memory interface (e.g. some caches)
+
+Memory Types are written as such:
+
+elemType[addrSize]
+
+where elemType is some non-memory type,
+and addrSize is a constant of unsigned integer type //TODO support statically evaluatable expressions
+which denotes how many bits are required to address the memory.
+A memory with addrSize = a, can store 2^a elements.
+
+This corresponds to the following information about a memory:
+
+Memory: {
+  readOut: elemType
+  writeInt: elemType
+  addressType: int<addrSize>
+}
+

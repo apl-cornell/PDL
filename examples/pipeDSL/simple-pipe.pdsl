@@ -1,4 +1,4 @@
-def alu(arg1: typ1, arg2: typ2, op: typ3): rtyp {
+def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
     if (op == 1) {
         return arg1 + arg2;
     } else if (op == 2) {
@@ -9,34 +9,34 @@ def alu(arg1: typ1, arg2: typ2, op: typ3): rtyp {
         return arg1 * arg2;
     }
 }
-pipe cpu(pc: Int)[rf, imem, dmem] {
+pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     insn <- imem[pc];
     ---
-    op_type = insn{1:0};
-    op = insn{3:2};
-    rs1 = insn{8:4};
-    rs2 = insn{13:9};
-    rd = insn{18:14};
-    imm = insn{31:19};
-    arg1 <- rf[rs1];
-    arg2 <- rf[rs2];
+    int<2> op_type = insn{1:0};
+    int<2> op = insn{3:2};
+    int<5> rs1 = insn{8:4};
+    int<5> rs2 = insn{13:9};
+    int<5> rd = insn{18:14};
+    int<13> imm = insn{31:19};
+    int<32> arg1 <- rf[rs1];
+    int<32> arg2 <- rf[rs2];
     //hello
     ---
     //op_type == BR;
-    offset = (op_type == 0b0 && arg1 == arg2) ? imm : 4;
-    npc = pc + offset;
-    //op_type == ADD;
+    int<32> offset = (op_type == 0b0 && arg1 == arg2) ? imm : 4;
+    int<32> npc = pc + offset;
+    //op_type == ALU;
     if (op_type == 0b1) {
-      add_arg2 = arg2;
+      int<32> add_arg2 = arg2;
     } else {
     //LD/ST
-      add_arg2 = imm;
+      int<32> add_arg2 = imm;
     }
-    alu_res = arg1 + add_arg2;
+    int<32> alu_res = alu(arg1, add_arg2, op);
     ---
     if (op_type == 0b10) {
         //LD
-        mem_res = dmem[alu_res];
+        int<32> mem_res = dmem[alu_res];
     } else if (op_type == 0b11) {
         //ST
         dmem[alu_res] = arg2;
@@ -51,8 +51,8 @@ pipe cpu(pc: Int)[rf, imem, dmem] {
 }
 
 circuit {
-    i = memory(1024);
-    d = memory(1024);
-    r = memory(32);
+    i = memory(int<32>, 32);
+    d = memory(int<32>, 32);
+    r = memory(int<32>, 5);
     c = new cpu(0)[r, i, d];
 }
