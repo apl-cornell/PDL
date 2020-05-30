@@ -26,7 +26,7 @@ class Parser extends RegexParsers with PackratParsers {
     "\"" ~> "[^\"]*".r <~ "\""
 
   // Atoms
-  lazy val uInt: P[Expr] = "(-)?[0-9]+".r ^^ { n => EInt(n.toInt, 10, log2(n.toInt)) }
+  lazy val uInt: P[Expr] = "[0-9]+".r ^^ { n => EInt(n.toInt, 10, log2(n.toInt)) }
   lazy val hex = "0x[0-9a-fA-F]+".r ^^ {
     n => EInt(Integer.parseInt(n.substring(2), 16), 16, 4 * n.length())
   }
@@ -53,11 +53,11 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val memAccess: P[Expr] = positioned {
-    expr ~ brackets(expr) ^^ { case m ~ i => EMemAccess(m, i) }
+    iden ~ brackets(expr) ^^ { case m ~ i => EMemAccess(m, i) }
   }
 
   lazy val bitAccess: P[Expr] = positioned {
-    expr ~ braces(expr ~ ":" ~ expr) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
+    expr ~ braces(posint ~ ":" ~ posint) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
   }
 
   lazy val ternary: P[Expr] = positioned {

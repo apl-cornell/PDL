@@ -39,12 +39,12 @@ object Syntax {
     override def toString = s"$v"
   }
 
+
   sealed trait Type extends Positional {
     override def toString = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
-      case TStaticInt(s) => s"static($s)"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
     }
@@ -52,13 +52,13 @@ object Syntax {
   // Types that can be upcast to Ints
   sealed trait IntType
   case class TSizedInt(len: Int, unsigned: Boolean) extends Type with IntType
-  case class TStaticInt(v: Int) extends Type with IntType
   // Use case class instead of case object to get unique positions
   case class TVoid() extends Type
   case class TBool() extends Type
 
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
+  case class TMemType(elem: Type, addrSize: Int) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -116,8 +116,8 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Expr, index: Expr) extends Expr
-  case class EBitExtract(num: Expr, start: Expr, end: Expr) extends Expr
+  case class EMemAccess(mem: Id, index: Expr) extends Expr
+  case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr

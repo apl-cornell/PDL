@@ -30,6 +30,9 @@ object Errors {
   case class AlreadyBoundType(pos: Position, node: String, oldT: Type, newT: Type) extends TypeError(
     s"Tried to bind type: $newT to $node but already has type: $oldT", pos)
 
+  case class ArgLengthMismatch(pos: Position, arglen: Int, typlen: Int) extends TypeError(
+    s"Expected $typlen arguments, got $arglen", pos)
+
   case class UnexpectedType(pos: Position, node: String, exp: String, actual: Type) extends TypeError(
     s"Expected type $exp in $node, received: $actual.", pos)
 

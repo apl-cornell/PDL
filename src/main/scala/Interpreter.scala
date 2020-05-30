@@ -23,7 +23,7 @@ class Interpreter {
             rec.asInstanceOf[Map[Id, Any]](rf.fieldName)
         }
         case m: EMemAccess => {
-            val mem = interp_expr(m.mem, env)
+            val mem = env(m.mem)
             val idx = interp_expr(m.index, env)
             mem.asInstanceOf[Array[Any]](idx.asInstanceOf[Int])
         }
@@ -37,8 +37,8 @@ class Interpreter {
         }
         case be: EBitExtract => {
             val n = interp_expr(be.num, env).asInstanceOf[Int]
-            val start = interp_expr(be.start, env).asInstanceOf[Int]
-            val end = interp_expr(be.end, env).asInstanceOf[Int]
+            val start = be.start
+            val end = be.end
             if (start > end) throw Errors.InvalidBitExtraction(start, end)
             val mask = ~0 << (31 - end) >> (31 - end)
             (mask & n) >> start
