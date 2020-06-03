@@ -27,6 +27,10 @@ object Errors {
   case class AlreadySetException(id: Id) extends RuntimeException(
     s"Tried to set variable $id twice.")
 
+  case class MalformedFunction(pos: Position, msg: String) extends RuntimeException(
+    withPos(s"Bad Function Definition: $msg", pos)
+  )
+
   case class AlreadyBoundType(pos: Position, node: String, oldT: Type, newT: Type) extends TypeError(
     s"Tried to bind type: $newT to $node but already has type: $oldT", pos)
 

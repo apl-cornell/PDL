@@ -47,6 +47,8 @@ object Syntax {
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
+      case TMemType(elem, size) => s"${elem.toString}[${size}]"
+      case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")}"
     }
   }
   // Types that can be upcast to Ints
@@ -59,6 +61,7 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int) extends Type
+  case class TModType(inputs: List[Type], refs: List[Type]) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -148,7 +151,7 @@ object Syntax {
 
   case class ModuleDef(
     name: Id,
-    input: List[Param],
+    inputs: List[Param],
     modules: List[Param], //TODO external module connections
     body: Command) extends Definition
 
@@ -156,7 +159,7 @@ object Syntax {
 
   case class Prog(
           fdefs: List[FuncDef],
-          pipedefs: List[ModuleDef],
+          moddefs: List[ModuleDef],
           circ: Circuit) extends Positional
 
   sealed trait Circuit extends Positional

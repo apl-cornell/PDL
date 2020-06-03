@@ -1,16 +1,16 @@
 def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
-    if (op == 1) {
+    if (op == 1<2>) {
         return arg1 + arg2;
-    } else if (op == 2) {
+    } else if (op == 2<2>) {
         return arg1 >> arg2;
-    } else if (op == 3) {
+    } else if (op == 3<2>) {
         return arg1 - arg2;
     } else {
         return arg1 * arg2;
     }
 }
 pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
-    insn <- imem[pc];
+    int<32> insn <- imem[pc];
     ---
     int<2> op_type = insn{1:0};
     int<2> op = insn{3:2};
@@ -23,7 +23,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     //hello
     ---
     //op_type == BR;
-    int<32> offset = (op_type == 0b0 && arg1 == arg2) ? imm : 4;
+    int<32> offset = ((op_type == 0b0) && (arg1 == arg2)) ? imm : 4;
     int<32> npc = pc + offset;
     //op_type == ALU;
     if (op_type == 0b1) {
@@ -37,9 +37,12 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     if (op_type == 0b10) {
         //LD
         int<32> mem_res = dmem[alu_res];
-    } else if (op_type == 0b11) {
+    } else {
+        int<32> mem_res = 0;
+        if (op_type == 0b11) {
         //ST
-        dmem[alu_res] = arg2;
+            dmem[alu_res] = arg2;
+        }
     }
     ---
     if (op_type == 0b1) {

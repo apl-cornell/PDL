@@ -6,6 +6,8 @@ import pipedsl.common.Utilities._
 
 object Environments {
 
+    val EmptyEnv: TypeEnvironment = Env()
+
     sealed trait TypeEnvironment {
         /**
          * Use application syntax to get a type bindings for [[id]].

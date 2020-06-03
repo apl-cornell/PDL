@@ -3,6 +3,7 @@ package pipedsl
 import com.typesafe.scalalogging.Logger
 import java.io.File
 import java.nio.file.Files
+import typechecker.{Environments, TypeChecker}
 
 object Main {
   val logger: Logger = Logger("main")
@@ -21,6 +22,9 @@ object Main {
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
     //val output = i.interp_command(r.get)
     logger.info(r.toString());
+    val fenv = TypeChecker.checkFuncDef(r.get.fdefs(0), Environments.EmptyEnv)
+    val menv = TypeChecker.checkModuleDef(r.get.moddefs(0), fenv)
+    //TypeChecker.checkCommand(r.get.moddefs(0).body, Environments.EmptyEnv)
   }
 
 }
