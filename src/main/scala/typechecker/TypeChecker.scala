@@ -4,7 +4,7 @@ import pipedsl.common.Errors._
 import pipedsl.common.Syntax._
 import Environments.TypeEnvironment
 import Subtypes._
-import pipedsl.common.Syntax
+
 
 
 //TODO kinds of typechecking we need to do:
@@ -28,6 +28,13 @@ object TypeChecker {
 
   def typeCheck(p: Prog): Unit = {
     val Prog(fdefs, mdefs, cir) = p
+    val fenv = fdefs.foldLeft[TypeEnvironment](Environments.EmptyEnv)((tenv, fdef) => {
+      checkFuncDef(fdef, tenv)
+    })
+    val menv = mdefs.foldLeft[TypeEnvironment](fenv)((tenv, mdef) => {
+      checkModuleDef(mdef, tenv)
+    })
+    checkCircuit(cir, menv)
   }
 
 
@@ -76,6 +83,52 @@ object TypeChecker {
     checkCommand(m.body, pipeEnv)
     val modTyp = TModType(inputTyps, modTyps)
     tenv.add(m.name, modTyp)
+  }
+
+  def checkCircuit(c: Circuit, tenv: TypeEnvironment): TypeEnvironment = c match {
+    case CirSeq(c1, c2) => {
+      val e1 = checkCircuit(c1, tenv)
+      checkCircuit(c2, e1)
+    }
+    case CirConnect(name, c) => {
+      val (t, env2) = checkCirExpr(c, tenv)
+      env2.add(name, t)
+    }
+  }
+
+  def checkCirExpr(c: CirExpr, tenv: TypeEnvironment): (Type, TypeEnvironment) = c match {
+    case CirMem(elemTyp, addrSize) => {
+      val mtyp = TMemType(elemTyp, addrSize)
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
+    case CirNew(mod, inits, mods) => {
+      val mtyp = tenv(mod)
+      mtyp match {
+        case TModType(ityps, refs) => {
+          if(ityps.length != inits.length) {
+            throw ArgLengthMismatch(c.pos, ityps.length, inits.length)
+          }
+          ityps.zip(inits).foreach( t => t match {
+            case (expectedT, arg) => {
+              val (atyp, aenv) = checkExpression(arg, tenv)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(arg.pos, arg.toString, expectedT, atyp)
+              }
+            }
+          })
+          refs.zip(mods).foreach( t => t match {
+            case (reftyp, mname) => {
+              if (!(isSubtype(tenv(mname), reftyp))) {
+                throw UnexpectedSubtype(mname.pos, mname.toString, reftyp, tenv(mname))
+              }
+            }
+          })
+          (mtyp, tenv)
+        }
+        case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
+      }
+    }
   }
 
   def checkCommand(c: Command, tenv: TypeEnvironment): TypeEnvironment = c match {

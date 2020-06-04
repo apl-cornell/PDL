@@ -181,29 +181,28 @@ class Parser extends RegexParsers with PackratParsers {
     }
   }
 
-  //TODO fill in module parsing
   lazy val moddef: P[ModuleDef] = positioned {
     "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ braces(cmd) ^^ {
       case i ~ ps ~ mods ~ c => ModuleDef(i, ps, mods, c)
     }
   }
 
-  lazy val cnew: P[CirNew] = positioned {
+  lazy val cnew: P[CirExpr] = positioned {
     "new" ~ iden ~ parens(repsep(expr,",")) ~ brackets(repsep(iden,",")).? ^^ {
       case _ ~ i ~ args ~ mods => CirNew(i, args, if (mods.isDefined) mods.get else List[Id]())
     }
   }
-
-  lazy val cmem: P[CirMem] = positioned {
-    "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(addr, elem) }
+  lazy val cmem: P[CirExpr] = positioned {
+    "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(elem, addr) }
   }
-  lazy val cname: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem) ^^ { case i ~ _ ~ n => CirName(i, n)}
+
+  lazy val cconn: P[Circuit] = positioned {
+    iden ~ "=" ~ (cnew | cmem) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cseq: P[Circuit] = positioned {
-    cname ~ ";" ~ cseq ^^ { case n ~ _ ~ c => CirSeq(n, c) } |
-    cname <~ ";" | cname
+    cconn ~ ";" ~ cseq ^^ { case n ~ _ ~ c => CirSeq(n, c) } |
+      cconn <~ ";" | cconn
   }
 
   lazy val circuit: P[Circuit] = positioned {
