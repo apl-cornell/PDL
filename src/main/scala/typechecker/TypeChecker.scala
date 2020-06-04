@@ -39,7 +39,7 @@ object TypeChecker {
     val rt = checkFuncWellFormed(f.body, e1)
     if (!rt.isDefined) {
       throw MalformedFunction(f.pos, "Missing return statement")
-    } else if (!isEquiv(ftyp, rt.get)) {
+    } else if (!areEqual(ftyp.ret, rt.get)) {
       throw UnexpectedType(f.pos, s"${f.name} return type", ftyp.toString(), rt.get)
     }
     tenv.add(f.name, ftyp)
@@ -58,7 +58,7 @@ object TypeChecker {
       val rt = checkFuncWellFormed(cons, tenv)
       val rf = checkFuncWellFormed(alt, tenv)
       (rt, rf) match {
-        case (Some(t1), Some(t2)) if isEquiv(t1, t2) => rt
+        case (Some(t1), Some(t2)) if areEqual(t1, t2) => rt
         case (Some(t1), Some(t2)) => throw MalformedFunction(c.pos, s"Mismatched return types ${t1.toString()}, and ${t2.toString()}")
         case (None, None) => None
         case _ => throw MalformedFunction(c.pos, "Missing return in branch of if")
@@ -125,7 +125,7 @@ object TypeChecker {
     val (typ, nenv) = _checkE(e, tenv);
     if (e.typ.isDefined) {
       if (e.isLVal) {
-        if (!isEquiv(e.typ.get, typ)) throw UnexpectedType(e.pos, e.toString(), typ.toString(), e.typ.get)
+        if (!areEqual(e.typ.get, typ)) throw UnexpectedType(e.pos, e.toString(), typ.toString(), e.typ.get)
       } else {
         throw AlreadyBoundType(e.pos, e.toString(), e.typ.get, typ)
       }
@@ -140,23 +140,23 @@ object TypeChecker {
     case EBinop(op, e1, e2) => {
       val (t1, env1) = checkExpression(e1, tenv)
       val (t2, env2) = checkExpression(e2, env1)
-      //TODO this is overly pessimistic, can concat different size integers
-      if (!isEquiv(t1, t2)) {
-        throw UnexpectedType(e2.pos, e2.toString(), t1.toString(), t2)
-      }
       op match {
-        case EqOp(_) => (TBool(), env2)
-        case CmpOp(_) => (TBool(), env2)
-        case BoolOp(_, _) => t1.matchOrError(e1.pos, "boolean op", "boolean") { case _: TBool => (TBool(), env2) }
-        case NumOp(_, _) => t1.matchOrError(e1.pos, "number op", "number") { case t: TSizedInt => (t, env2) }
-        case BitOp(n, _) => n match {
-          case "++" => (t1, t2) match {
-            case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
-            case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
+        case BitOp("++", _) => (t1, t2) match {
+          //handle concatenation separately since it doesn't require equal operands
+          case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
+        }
+        case _ => if (!areEqual(t1, t2)) { throw UnexpectedType(e2.pos, e2.toString(), t1.toString(), t2) } else {
+          op match {
+            case EqOp(_) => (TBool(), env2)
+            case CmpOp(_) => (TBool(), env2)
+            case BoolOp(_, _) => t1.matchOrError(e1.pos, "boolean op", "boolean") { case _: TBool => (TBool(), env2) }
+            case NumOp(_, _) => t1.matchOrError(e1.pos, "number op", "number") { case t: TSizedInt => (t, env2) }
+            case BitOp(_, _) => t1.matchOrError(e1.pos, "bit op", "sized integer") { case t: TSizedInt => (t, env2) }
           }
-          case _ => t1.matchOrError(e1.pos, s"$n op", "sized number") { case t: TSizedInt => (t, env2) }
         }
       }
+
     }
     case ERecAccess(rec, fieldName) => {
       val (rt, renv) = checkExpression(rec, tenv)
@@ -182,7 +182,7 @@ object TypeChecker {
     }
     case EBitExtract(num, start, end) => {
       val (ntyp, nenv) = checkExpression(num, tenv)
-      val bitsLeft = math.abs(end - start)
+      val bitsLeft = math.abs(end - start) + 1
       ntyp.matchOrError(e.pos, "bit extract", "sized number") {
         case TSizedInt(l, u) if l >= bitsLeft => (TSizedInt(bitsLeft, u), nenv)
         case _ => throw UnexpectedType(e.pos, "bit extract", "sized number larger than extract range", ntyp)
@@ -193,8 +193,8 @@ object TypeChecker {
       ctyp.matchOrError(cond.pos, "ternary condition", "boolean") { case _: TBool => () }
       val (ttyp, trenv) = checkExpression(tval, cenv)
       val (ftyp, fenv) = checkExpression(fval, cenv)
-      if (isEquiv(ttyp, ftyp)) (ttyp, trenv.intersect(fenv))
-      else throw UnexpectedType(e.pos, "ternary", "both conditions must match type", ftyp)
+      if (areEqual(ttyp, ftyp)) (ttyp, trenv.intersect(fenv))
+      else throw UnexpectedType(e.pos, "ternary", s"false condition must match ${ttyp.toString}", ftyp)
     }
     case EApp(func, args) => {
       val ftyp = tenv(func)
@@ -217,7 +217,7 @@ object TypeChecker {
     }
     case EVar(id) => e.typ match {
       case Some(t) if !tenv.get(id).isDefined => (t, tenv.add(id, t))
-      case Some(t) => if (isEquiv(t,tenv(id))) {
+      case Some(t) => if (areEqual(t,tenv(id))) {
         (t, tenv)
       } else {
         throw UnexpectedType(id.pos, "variable", "variable type set to new conflicting type", t)

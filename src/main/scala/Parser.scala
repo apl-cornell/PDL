@@ -28,13 +28,13 @@ class Parser extends RegexParsers with PackratParsers {
   // Atoms
   lazy val uInt: P[Expr] = "[0-9]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(n.toInt, 10, if (bits.isDefined) bits.get else log2(n.toInt)) }
   lazy val hex = "0x[0-9a-fA-F]+".r ~ angular(posint).? ^^ { case (n ~ bits) => EInt(Integer.parseInt(n.substring(2), 16), 16,
-    if (bits.isDefined) bits.get else 4 * n.length()) }
+    if (bits.isDefined) bits.get else 4 * n.substring(2).length()) }
   lazy val octal = "0[0-7]+".r ~ angular(posint).? ^^ {
     case (n ~ bits) => EInt(Integer.parseInt(n.substring(1), 8), 8,
-      if (bits.isDefined) bits.get else 3 * n.length()) }
+      if (bits.isDefined) bits.get else 3 * n.substring(1).length()) }
   lazy val binary = "0b[0-1]+".r ~ angular(posint).? ^^ {
     case (n ~ bits)  => EInt(Integer.parseInt(n.substring(2), 2), 2,
-      if (bits.isDefined) bits.get else n.length()) }
+      if (bits.isDefined) bits.get else n.substring(2).length()) }
   lazy val boolean = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
   lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
