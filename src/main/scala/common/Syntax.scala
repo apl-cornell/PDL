@@ -39,7 +39,6 @@ object Syntax {
     override def toString = s"$v"
   }
 
-
   sealed trait Type extends Positional {
     override def toString = this match {
       case _: TVoid => "void"

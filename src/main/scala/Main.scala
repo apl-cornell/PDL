@@ -3,7 +3,7 @@ package pipedsl
 import com.typesafe.scalalogging.Logger
 import java.io.File
 import java.nio.file.Files
-import typechecker.{Environments, TypeChecker}
+import typechecker.{BaseTypeChecker, Environments, TimingTypeChecker}
 
 object Main {
   val logger: Logger = Logger("main")
@@ -20,9 +20,9 @@ object Main {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
-    //val output = i.interp_command(r.get)
     logger.info(r.toString());
-    TypeChecker.typeCheck(r.get)
+    val basetypes = BaseTypeChecker.check(r.get, None)
+    TimingTypeChecker.check(r.get, Some(basetypes))
   }
 
 }

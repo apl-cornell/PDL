@@ -46,4 +46,6 @@ object Errors {
   case class MissingType(pos: Position, node: String) extends TypeError(
     s"No type found for $node", pos)
 
+  case class UnavailableArgUse(pos: Position, node: String) extends TypeError(
+    s"$node used when not yet available", pos)
 }
