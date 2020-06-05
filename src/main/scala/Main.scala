@@ -23,6 +23,8 @@ object Main {
     logger.info(r.toString());
     val basetypes = BaseTypeChecker.check(r.get, None)
     TimingTypeChecker.check(r.get, Some(basetypes))
+    val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
+    logger.info(stages.toString())
   }
 
 }
