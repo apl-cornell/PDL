@@ -136,7 +136,7 @@ class Parser extends RegexParsers with PackratParsers {
       "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => CCall(i, args) } |
       typ.? ~ expr ~ "=" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CAssign(l, r) } |
-      typ.? ~ expr ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
+      typ.? ~ expr ~ "<-" ~ memAccess ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r) } |
       expr ^^ { case e => CExpr(e) }
   }

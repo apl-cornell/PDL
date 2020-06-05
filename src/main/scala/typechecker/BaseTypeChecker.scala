@@ -76,7 +76,7 @@ object BaseTypeChecker extends TypeChecks {
     checkCommand(m.body, finalEnv)
     finalEnv
   }
-
+  //checks that all paths have at most 1 call statement
   def checkModuleBodyWellFormed(c: Command, hascall: Boolean): Boolean = c match {
     case CSeq(c1, c2) => {
       val hc2 = checkModuleBodyWellFormed(c1, hascall)
