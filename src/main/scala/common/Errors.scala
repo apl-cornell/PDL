@@ -31,6 +31,10 @@ object Errors {
     withPos(s"Bad Function Definition: $msg", pos)
   )
 
+  case class UnexpectedCall(pos: Position) extends RuntimeException(
+    withPos(s"Module should have at most 1 call statement through execution path", pos)
+  )
+
   case class AlreadyBoundType(pos: Position, node: String, oldT: Type, newT: Type) extends TypeError(
     s"Tried to bind type: $newT to $node but already has type: $oldT", pos)
 

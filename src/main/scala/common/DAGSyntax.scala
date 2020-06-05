@@ -1,4 +1,7 @@
-package common
+package pipedsl.common
+
+import pipedsl.common.Syntax._
+
 //TODO better name
 /*
  * This file contains syntax for the intermediate language which
@@ -7,4 +10,19 @@ package common
  */
 object DAGSyntax {
 
+  //Things that can send values to other things
+  sealed trait Sender {
+    val name: Id
+  }
+
+
+  class Stage(n: Id) extends Sender {
+    override val name: Id = n
+  }
+
+  class BlackBox(n: Id) extends Sender {
+    override val name: Id = n
+  }
+
+  class Receive(v:Id, from:Sender)
 }

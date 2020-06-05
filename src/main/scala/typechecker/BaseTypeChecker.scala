@@ -5,6 +5,7 @@ import pipedsl.common.Syntax._
 import Environments.TypeEnvironment
 import Subtypes._
 import TypeChecker.TypeChecks
+import pipedsl.common.Syntax
 
 
 //TODO kinds of typechecking we need to do:
@@ -69,9 +70,29 @@ object BaseTypeChecker extends TypeChecks {
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
     val inEnv = m.inputs.foldLeft[TypeEnvironment](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[TypeEnvironment](inEnv)((env, p) => { env.add(p.name, p.typ) })
-    checkCommand(m.body, pipeEnv)
     val modTyp = TModType(inputTyps, modTyps)
-    tenv.add(m.name, modTyp)
+    val finalEnv = pipeEnv.add(m.name, modTyp)
+    checkModuleBodyWellFormed(m.body, false)
+    checkCommand(m.body, finalEnv)
+    finalEnv
+  }
+
+  def checkModuleBodyWellFormed(c: Command, hascall: Boolean): Boolean = c match {
+    case CSeq(c1, c2) => {
+      val hc2 = checkModuleBodyWellFormed(c1, hascall)
+      checkModuleBodyWellFormed(c2, hc2)
+    }
+    case CTBar(c1, c2) => {
+      val hc2 = checkModuleBodyWellFormed(c1, hascall)
+      checkModuleBodyWellFormed(c2, hc2)
+    }
+    case CIf(cond, cons, alt) => {
+      val hct = checkModuleBodyWellFormed(cons, hascall)
+      val hcf = checkModuleBodyWellFormed(alt, hascall)
+      hct || hcf
+    }
+    case CCall(id, args) => if (hascall) { throw UnexpectedCall(c.pos) } else { true }
+    case _ => hascall
   }
 
   def checkCircuit(c: Circuit, tenv: TypeEnvironment): TypeEnvironment = c match {
@@ -148,7 +169,24 @@ object BaseTypeChecker extends TypeChecks {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
-    case CCall(id, args) => tenv//TODO need module types first
+    case CCall(id, args) => {
+      tenv(id) match {
+        case TModType(ityps, _) => {
+          if (args.length != ityps.length) {
+            throw ArgLengthMismatch(c.pos, args.length, ityps.length)
+          }
+          ityps.zip(args).foreach(t => t match {
+            case (expectedT, a) =>
+              val (atyp, aenv) = checkExpression(a, tenv)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(a.pos, a.toString(), expectedT, atyp)
+              }
+          })
+          tenv
+        }
+        case _ => throw UnexpectedType(c.pos, id.toString, "Module type", tenv(id))
+      }
+    }
     case COutput(exp) => {
       checkExpression(exp, tenv)
       tenv
