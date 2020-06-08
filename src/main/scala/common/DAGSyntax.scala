@@ -14,7 +14,7 @@ object DAGSyntax {
     Id(s"${from.name}_to_${to.name}")
   }
 
-  class Channel(s: Process, r: Process) {
+  case class Channel(s: Process, r: Process) {
     val name: Id = channelName(s, r)
     val sender: Process = s
     val receiver: Process = r
@@ -24,7 +24,9 @@ object DAGSyntax {
     val name: Id = n
   }
 
-  class PStage(n:Id, var recvs:List[Receive], var body: Command, var sends: List[Send]) extends Process(n)
+
+  class PStage(n:Id, var preds:List[Receive], var body: List[Command], var succs: List[Send]) extends Process(n)
+
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t
   }
@@ -32,15 +34,10 @@ object DAGSyntax {
     val mtyp: TModType = t
   }
 
-  class Receive(g: Option[Id], d: List[EVar], s: Channel) {
-    val guard: Option[Id] = g
-    val dest: List[EVar] = d
-    val source: Channel = s
-  }
-  class Send(g: Option[Id], s: List[EVar], d: Channel) {
-    val guard: Option[Id] = g
-    val source: List[EVar] = s
-    val dest: Channel = d
-  }
+  case class Receive(g: Option[Id], into: EVar, s: Channel)
+  case class Send(g: Option[Id], from: EVar, d: Channel)
 
+  sealed trait Message
+  case class MRead(src: EVar) extends Message
+  case class MWrite(dest: EVar, value: EVar) extends Message
 }

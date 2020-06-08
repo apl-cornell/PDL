@@ -3,12 +3,14 @@ package pipedsl.typechecker
 import pipedsl.common.Syntax._
 import Environments.TypeEnvironment
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedLVal}
+import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedLVal}
 import pipedsl.common.Syntax
 
 /*
  * Currently this checks that variables set by receive statements
- * are not used until after a `---` separator.
+ * are not used until after a `---` separator. It also checks that
+ * any access to memory or an external module happens as part of a
+ * "receive" statement rather than a normal assign.
  * This checker should maybe check more timing related behavior in the future
  * (such as lock acquisition)
  */
@@ -41,15 +43,20 @@ object TimingTypeChecker extends TypeChecks {
       checkCommand(c2, v2 ++ nv2, NoneAvailable)
     }
     case CIf(cond, cons, alt) => {
-      checkExpr(cond, vars)
+      if(checkExpr(cond, vars)) {
+        throw UnexpectedAsyncReference(cond.pos, cond.toString)
+      }
       val (vt, nvt) = checkCommand(cons, vars, nextVars)
       val (vf, nvf) = checkCommand(alt, vars, nextVars)
       (vt.intersect(vf), nvt.intersect(nvf))
     }
     case CAssign(lhs, rhs) => {
-      checkExpr(rhs, vars)
+      if (checkExpr(rhs, vars)) {
+        throw UnexpectedAsyncReference(rhs.pos, rhs.toString)
+      }
       lhs match {
         case EVar(id) => (vars + id, nextVars)
+        case _: EMemAccess => throw UnexpectedAsyncReference(lhs.pos, lhs.toString)
         case _ => (vars, nextVars)
       }
     }
@@ -61,40 +68,49 @@ object TimingTypeChecker extends TypeChecks {
       }
     }
     case CCall(id, args) => {
-      args.foreach(a => checkExpr(a, vars))
+      args.foreach(a => if(checkExpr(a, vars)) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
       (vars, nextVars)
     }
     case COutput(exp) => {
-      checkExpr(exp, vars)
+      if (checkExpr(exp, vars)) {
+        throw UnexpectedAsyncReference(exp.pos, exp.toString)
+      }
       (vars, nextVars)
     }
     case CReturn(exp) => {
-      checkExpr(exp, vars)
+      if (checkExpr(exp, vars)) {
+        throw UnexpectedAsyncReference(exp.pos, exp.toString)
+      }
       (vars, nextVars)
     }
     case CExpr(exp) => {
-      checkExpr(exp, vars)
+      if (checkExpr(exp, vars)) {
+        throw UnexpectedAsyncReference(exp.pos, exp.toString)
+      }
       (vars, nextVars)
     }
     case Syntax.CEmpty => (vars, nextVars)
   }
 
-  def checkExpr(e: Expr, vars: Available): Unit = e match {
+  //Returns true if any subexpression references memory or an external module
+  def checkExpr(e: Expr, vars: Available): Boolean = e match {
     case EBinop(op, e1, e2) => {
-      checkExpr(e1, vars)
-      checkExpr(e2, vars)
+      checkExpr(e1, vars) || checkExpr(e2, vars)
     }
-    case ERecAccess(rec, fieldName) => checkExpr(rec, vars)
-    case EMemAccess(mem, index) => checkExpr(index, vars)
-    case EBitExtract(num, start, end) => checkExpr(num, vars)
+    case ERecAccess(rec, _) => checkExpr(rec, vars)
+    case EMemAccess(_, index) => {
+      checkExpr(index, vars)
+      true
+    }
+    case EBitExtract(num, _, _) => checkExpr(num, vars)
     case ETernary(cond, tval, fval) => {
-      checkExpr(cond, vars)
-      checkExpr(tval, vars)
-      checkExpr(fval, vars)
+      checkExpr(cond, vars) || checkExpr(tval, vars) || checkExpr(fval, vars)
     }
-    case EApp(func, args) => args.foreach(a => checkExpr(a, vars))
-    case EVar(id) => if(!vars(id)) { throw UnavailableArgUse(e.pos, id.toString)}
-    case _ =>
+    case EApp(func, args) => args.foldLeft[Boolean](false)((usesMem, a) => checkExpr(a, vars) || usesMem)
+    case EVar(id) => if(!vars(id)) { throw UnavailableArgUse(e.pos, id.toString)} else { false }
+    case _ => false
   }
   //No timing in the circuit, just connections
   override def checkCircuit(c: Circuit, env: TypeEnvironment): TypeEnvironment = env

@@ -23,10 +23,75 @@ object PipeCompiler {
         case _ => throw UnexpectedType(m.pos, m.name.toString, "Module or Memory", m.typ)
       }))
     })
-    convertToStage(m.body, extMems)
+    val stageList = splitToStages(m.body)
+    stageList(0)
   }
 
-  def convertToStage(c: Command, ext: Map[Id, Process]): PStage = c match {
+  def splitToStages(c: Command): List[PStage] = c match {
+    case CTBar(c1, c2) =>{
+      val firstStages = splitToStages(c1)
+      val secondStages = splitToStages(c2)
+      //sequential pipeline, last stage in c1 sends to first in c2
+      val lastc1 = firstStages.last
+      val firstc2 = secondStages.head
+      sendPipelineVariables(lastc1, firstc2)
+      firstStages ++ secondStages
+    }
+      //TODO once we add other control structures (like split+join) update this
+    case _ => {
+      List(new PStage(nextStageId(), List(), splitCommands(c), List()))
+    }
+  }
+
+  /*
+   * Turns the recursive definition of commands into a list
+   * of non-control commands. This assumes there are no TBar
+   * or other pipeline structure commands in c.
+   */
+  def splitCommands(c: Command): List[Command] = c match {
+    case CSeq(c1, c2) =>
+      splitCommands(c1) ++ splitCommands(c2)
+    case _ => List(c)
+  }
+
+  /*
+   * Adds a send to s1 and a receive to s2
+   * which communicates all of the pipeline variables used in s2
+   * returns the Channel created to communicate between these stages
+   */
+  def sendPipelineVariables(s1: PStage, s2: PStage): Channel = {
+    val extSends = s1.body.foldLeft[List[ExtRead]](List())( (l, c) => {
+      l ++ getExtSends(c)
+    })
+    val recvars = getReadVarsC(s2.body)
+    val s1tos2Sends = recvars -- extSends.foldLeft[Set[EVar]](Set())((s, exts) => { s + exts._1 })
+    val s1Tos2 = Channel(s1, s2)
+    val (sends, recvs) = s1tos2Sends.foldLeft[(List[Send], List[Receive])]((s1.succs, s2.preds))((l, v) => {
+      (l._1 :+ Send(None, v, s1Tos2), l._2 :+ Receive(None, v, s1Tos2))
+    })
+    s1.succs = sends
+    s2.preds = recvs
+    s1Tos2
+  }
+  type ExtRead = (EVar, EVar, Id)
+  /*
+   * This creates the appropriate send and receive operations between
+   * stage1, an external module and stage2 for statements of the form:
+   * v <- m[a]
+   */
+  def sendExternalReads(s1: PStage, s2: PStage, extmems: Map[Id, Process]): Unit = {
+    val extSends = s1.body.foldLeft[List[ExtRead]](List())( (l, c) => {
+     l ++ getExtSends(c)
+    })
+    val recvars = getReadVarsC(s2.body)
+    val s1tomemtos2 = extSends.filter(t => { recvars(t._1) } )
+    s1tomemtos2.foreach(t => {
+      val recvar = t._1
+      val sendvar = t._2
+      val mem = extmems(t._3)
+    })
+  }
+  /*def convertToStage(c: Command, ext: Map[Id, Process]): PStage = c match {
     case CTBar(c1, c2) => {
       val stg1 = convertToStage(c1, ext)
       val stg2 = convertToStage(c2, ext)
@@ -37,22 +102,23 @@ object PipeCompiler {
       // vars sent from s1 to s2 directly are all that are read,
       // but not sent via an external module/memory read
       val s1tos2Sends = recvars -- extSends.foldLeft[Set[EVar]](Set())((s, exts) => { s + exts._1 })
-      val s1Tos2 = new Channel(stg1, stg2)
-      val s = new Send(None, s1tos2Sends.toList, s1Tos2)
-      val r = new Receive(None, s1tos2Sends.toList, s1Tos2)
-      stg1.sends = List(s)
-      stg2.recvs = List(r)
+      val s1Tos2 = Channel(stg1, stg2)
+      val s = Send(None, s1tos2Sends.toList, s1Tos2)
+      val r = Receive(None, s1tos2Sends.toList, s1Tos2)
+      stg1.succs = List(stg2)
+      stg2.preds = List(stg1)
       stg1
     }
     case _ => {
       new PStage(nextStageId(), List(), c, List())
     }
-  }
+  }*/
 
   //Get the variable we're sending and the variable we expect
   //To receive into
   //Returns (RecVar, SendVar, ExtMod)
-  def getExtSends(c: Command): List[(EVar, EVar, Id)] = c match {
+
+  def getExtSends(c: Command): List[ExtRead] = c match {
     case CSeq(c1, c2) => getExtSends(c1) ++ getExtSends(c2)
     case CIf(_, cons, alt) => getExtSends(cons) ++ getExtSends(alt)
     case CAssign(_, _) => List()
@@ -66,28 +132,30 @@ object PipeCompiler {
     case _ => List()
   }
   //All variables that are read from prior stage
-  def getReadVarsC(c: Command): Set[EVar] = c match {
-    case CSeq(c1, c2) => {
-      getReadVarsC(c1) ++ (getReadVarsC(c2) -- getWriteVarsC(c1))
+  def getReadVarsC(cs: List[Command]): Set[EVar] = {
+    var result: Set[EVar] = Set()
+    var writevars: Set[EVar] = Set()
+    for (c <- cs) {
+      c match {
+          //TODO turn ifs into straight-line code before using this
+        case CIf(cond, cons, alt) =>
+          writevars = writevars ++ getWriteVarsC(cons) ++ getWriteVarsC(alt)
+          result = result ++ getReadVarsE(cond) ++ getReadVarsC(splitCommands(cons)) ++ getReadVarsC(splitCommands(alt))
+        case CAssign(lhs, rhs) =>
+          result = result ++ getReadVarsE(rhs)
+          writevars ++ getWriteVarsE(lhs)
+        case CRecv(lhs, rhs) =>  result = result ++ getReadVarsE(rhs)
+        case CCall(id, args) =>
+          result = args.foldLeft[Set[EVar]](result)((l, a) => {
+            l ++ getReadVarsE(a)
+          })
+        case COutput(exp) => result = result ++ getReadVarsE(exp)
+        case CReturn(exp) => result = result ++ getReadVarsE(exp)
+        case CExpr(exp) => result = result ++ getReadVarsE(exp)
+        case _ => {}
+      }
     }
-    case CIf(cond, cons, alt) => {
-      getReadVarsE(cond) ++ getReadVarsC(cons) ++ getReadVarsC(alt)
-    }
-    case CAssign(lhs, rhs) => (lhs match {
-      case EMemAccess(_, index) => getReadVarsE(index)
-      case _ => Set()
-    }) ++ getReadVarsE(rhs)
-    case CRecv(lhs, rhs) => (lhs match {
-      case EMemAccess(_, index) => getReadVarsE(index)
-      case _ => Set()
-    }) ++ getReadVarsE(rhs)
-    case CCall(_, args) => args.foldLeft[Set[EVar]](Set())((l, a) => {
-      l ++ getReadVarsE(a)
-    })
-    case COutput(exp) => getReadVarsE(exp)
-    case CReturn(exp) => getReadVarsE(exp)
-    case CExpr(exp) => getReadVarsE(exp)
-    case Syntax.CEmpty => Set()
+    result -- writevars
   }
 
   //All variables written by this stage

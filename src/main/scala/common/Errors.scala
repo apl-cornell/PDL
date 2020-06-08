@@ -52,4 +52,8 @@ object Errors {
 
   case class UnavailableArgUse(pos: Position, node: String) extends TypeError(
     s"$node used when not yet available", pos)
+
+  case class UnexpectedAsyncReference(pos: Position, node: String) extends TypeError (
+    s"$node references memory in a synchronous statement", pos)
+
 }
