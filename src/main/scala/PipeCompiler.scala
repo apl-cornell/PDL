@@ -7,13 +7,26 @@ import pipedsl.common.Syntax._
 
 object PipeCompiler {
 
-  var counter = 0
+  var stgCounter = 0
+  var varCounter = 0
+  val usedNames: scala.collection.mutable.Set[String] = scala.collection.mutable.Set[String]()
+
+  def freshVar(baseName: String): Id = {
+    var n = baseName
+    while (usedNames(n)) {
+      n = baseName + "_" + varCounter
+      varCounter += 1
+    }
+    usedNames.add(n)
+    Id(n)
+  }
 
   def nextStageId(): Id = {
-    val s = s"Stage__$counter"
-    counter += 1
+    val s = s"Stage__$stgCounter"
+    stgCounter += 1
     Id(s)
   }
+
 
   def compileToDag(m: ModuleDef): PStage = {
     val extMems: Map[Id, Process] = m.modules.foldLeft[Map[Id,Process]](Map()) ((l, m) => {
@@ -34,7 +47,7 @@ object PipeCompiler {
       //sequential pipeline, last stage in c1 sends to first in c2
       val lastc1 = firstStages.last
       val firstc2 = secondStages.head
-      sendPipelineVariables(lastc1, firstc2)
+      //TODO sendPipelineVariables(lastc1, firstc2)
       firstStages ++ secondStages
     }
       //TODO once we add other control structures (like split+join) update this
@@ -48,17 +61,36 @@ object PipeCompiler {
    * of non-control commands. This assumes there are no TBar
    * or other pipeline structure commands in c.
    */
-  def splitCommands(c: Command): List[Command] = c match {
+  def splitCommands(c: Command): List[StageCommand] = c match {
     case CSeq(c1, c2) =>
       splitCommands(c1) ++ splitCommands(c2)
-    case _ => List(c)
+    case CIf(cons, cond, alt) => {
+      val cts = splitCommands(cond)
+      val cfs = splitCommands(alt)
+      val varsWritten = getWriteVarsC(cts).intersect(getWriteVarsC(cfs))
+      val newCts = cts.foldLeft[List[StageCommand]](List())((l, c) => {
+        c match {
+          case SAssign(lhs, rhs) => {
+            l
+          }
+          case SReceive(lhs, rhs,x) => l
+          case _ => l :+ c
+        }
+      })
+      newCts
+    }
+    case _ => List(toStageCmd(c))
   }
 
-  /*
+  /**
    * Adds a send to s1 and a receive to s2
    * which communicates all of the pipeline variables used in s2
    * returns the Channel created to communicate between these stages
+   * @param s1
+   * @param s2
+   * @return
    */
+    /*
   def sendPipelineVariables(s1: PStage, s2: PStage): Channel = {
     val extSends = s1.body.foldLeft[List[ExtRead]](List())( (l, c) => {
       l ++ getExtSends(c)
@@ -66,19 +98,21 @@ object PipeCompiler {
     val recvars = getReadVarsC(s2.body)
     val s1tos2Sends = recvars -- extSends.foldLeft[Set[EVar]](Set())((s, exts) => { s + exts._1 })
     val s1Tos2 = Channel(s1, s2)
-    val (sends, recvs) = s1tos2Sends.foldLeft[(List[Send], List[Receive])]((s1.succs, s2.preds))((l, v) => {
-      (l._1 :+ Send(None, v, s1Tos2), l._2 :+ Receive(None, v, s1Tos2))
+    val (sends, recvs) = s1tos2Sends.foldLeft[(List[SSend], List[SReceive])]((s1.succs, s2.preds))((l, v) => {
+      (l._1 :+ SSend(None, v, s1Tos2), l._2 :+ SReceive(None, v, s1Tos2))
     })
     s1.succs = sends
     s2.preds = recvs
     s1Tos2
   }
   type ExtRead = (EVar, EVar, Id)
+  */
   /*
    * This creates the appropriate send and receive operations between
    * stage1, an external module and stage2 for statements of the form:
    * v <- m[a]
    */
+  /*
   def sendExternalReads(s1: PStage, s2: PStage, extmems: Map[Id, Process]): Unit = {
     val extSends = s1.body.foldLeft[List[ExtRead]](List())( (l, c) => {
      l ++ getExtSends(c)
@@ -90,7 +124,7 @@ object PipeCompiler {
       val sendvar = t._2
       val mem = extmems(t._3)
     })
-  }
+  } */
   /*def convertToStage(c: Command, ext: Map[Id, Process]): PStage = c match {
     case CTBar(c1, c2) => {
       val stg1 = convertToStage(c1, ext)
@@ -114,6 +148,7 @@ object PipeCompiler {
     }
   }*/
 
+  /*
   //Get the variable we're sending and the variable we expect
   //To receive into
   //Returns (RecVar, SendVar, ExtMod)
@@ -131,6 +166,8 @@ object PipeCompiler {
     }
     case _ => List()
   }
+  */
+  /*
   //All variables that are read from prior stage
   def getReadVarsC(cs: List[Command]): Set[EVar] = {
     var result: Set[EVar] = Set()
@@ -157,14 +194,18 @@ object PipeCompiler {
     }
     result -- writevars
   }
-
+ */
   //All variables written by this stage
-  def getWriteVarsC(c: Command): Set[EVar] = c match {
-    case CSeq(c1, c2) => getWriteVarsC(c1) ++ getWriteVarsC(c2)
-    case CIf(_, cons, alt) => getWriteVarsC(cons) ++ getWriteVarsC(alt)
-    case CAssign(lhs, _) => getWriteVarsE(lhs)
-    case CRecv(lhs, _) => getWriteVarsE(lhs) //TODO include this?
-    case _ => Set()
+  //including variables that won't be available until the next time stage
+  //Does NOT support control commands (if, seq, tbar, etc.)
+  def getWriteVarsC(cs: List[StageCommand]): Set[EVar] = {
+    cs.foldLeft[Set[EVar]](Set()) ((s, c) => {
+      c match {
+        case SAssign(lhs, _) => getWriteVarsE(lhs)
+        case SReceive(_, into, _) => Set(into)
+        case _ => s
+      }
+    })
   }
 
   //All variables referenced in these expressions

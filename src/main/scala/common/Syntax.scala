@@ -138,6 +138,7 @@ object Syntax {
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
+  case class CDecl(id: Id, typ: Type, thisCycle: Boolean) extends Command
   case object CEmpty extends Command
 
   sealed trait Definition extends Positional

@@ -42,6 +42,7 @@ object TimingTypeChecker extends TypeChecks {
       val (v2, nv2) = checkCommand(c1, vars, nextVars)
       checkCommand(c2, v2 ++ nv2, NoneAvailable)
     }
+    case CDecl(id,_,n) => if (n) { (vars, nextVars + id) } else { (vars, nextVars) }
     case CIf(cond, cons, alt) => {
       if(checkExpr(cond, vars)) {
         throw UnexpectedAsyncReference(cond.pos, cond.toString)

@@ -1,6 +1,8 @@
 package pipedsl.common
 
 import pipedsl.common.Syntax._
+import scala.reflect.api.Position
+import scala.util.parsing.input.Positional
 
 //TODO better name
 /*
@@ -24,8 +26,34 @@ object DAGSyntax {
     val name: Id = n
   }
 
+  sealed trait StageCommand extends Positional
 
-  class PStage(n:Id, var preds:List[Receive], var body: List[Command], var succs: List[Send]) extends Process(n)
+  case class SAssign(lhs: Expr, rhs: Expr) extends StageCommand
+  case class SCall(id: Id, args: List[Expr]) extends StageCommand
+  case class SReceive(g: Option[EVar], into: EVar, s: Channel) extends StageCommand
+  case class SSend(g: Option[EVar], from: EVar, d: Channel) extends StageCommand
+  case class SOutput(exp: Expr) extends StageCommand
+  case class SReturn(exp: Expr) extends StageCommand
+  case class SExpr(exp: Expr) extends StageCommand
+  case object SEmpty extends StageCommand
+
+  /**
+   * Convert the commands, which have no
+   * control or timing structure into our IR.
+   * These are all essentially No-Ops
+   * @param c The Command to convert
+   * @return The new StageCommand representation.
+   */
+  def toStageCmd(c: Command): StageCommand = c match {
+    case CAssign(lhs, rhs) => SAssign(lhs, rhs)
+    case CCall(id, args) => SCall(id, args)
+    case COutput(exp) => SOutput(exp)
+    case CReturn(exp) => SReturn(exp)
+    case CExpr(exp) => SExpr(exp)
+    case Syntax.CEmpty => SEmpty
+  }
+
+  class PStage(n:Id, var preds:List[SReceive], var body: List[StageCommand], var succs: List[SSend]) extends Process(n)
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t
@@ -33,9 +61,6 @@ object DAGSyntax {
   class PBlackBox(n: Id, t: TModType) extends Process(n) {
     val mtyp: TModType = t
   }
-
-  case class Receive(g: Option[Id], into: EVar, s: Channel)
-  case class Send(g: Option[Id], from: EVar, d: Channel)
 
   sealed trait Message
   case class MRead(src: EVar) extends Message

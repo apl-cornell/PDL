@@ -150,6 +150,10 @@ object BaseTypeChecker extends TypeChecks {
       val e2 = checkCommand(c1, tenv)
       checkCommand(c2, e2)
     }
+    case CDecl(id, typ,_) => typ match {
+      case TMemType(_,_) | TModType(_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)
+      case _ => tenv.add(id, typ)
+    }
     case CIf(cond, cons, alt) => {
       val (condTyp, cenv) = checkExpression(cond, tenv)
       condTyp.matchOrError(cond.pos, "if condition", "boolean") { case _: TBool => () }
