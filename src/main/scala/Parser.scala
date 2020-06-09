@@ -42,7 +42,7 @@ class Parser extends RegexParsers with PackratParsers {
     braces(repsep(recLiteralField, ",")) ^^ { case fieldList => ERecLiteral(fieldList.toMap) }
   }
 
-  lazy val variable: P[Expr] = positioned {
+  lazy val variable: P[EVar] = positioned {
     iden ^^ { case id => EVar(id) }
   }
 
@@ -134,8 +134,8 @@ class Parser extends RegexParsers with PackratParsers {
     "return" ~> expr ^^ { case e => CReturn(e) } |
     "output" ~> expr ^^ { case e => COutput(e) } |
       "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => CCall(i, args) } |
-      typ.? ~ expr ~ "=" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
-        CAssign(l, r) } |
+      typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t
+        CAssign(n, r) } |
       typ.? ~ expr ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r) } |
        "next".? ~ typ ~ iden ^^ { case n ~ t ~ i => CDecl(i, t, n.isDefined) } |

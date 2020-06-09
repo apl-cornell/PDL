@@ -68,7 +68,7 @@ object TimingTypeChecker extends TypeChecks {
         case _ => (vars, nextVars)
       }
     }
-    case CCall(id, args) => {
+    case CCall(_, args) => {
       args.foreach(a => if(checkExpr(a, vars)) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })

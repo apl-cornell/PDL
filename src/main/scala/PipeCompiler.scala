@@ -37,25 +37,122 @@ object PipeCompiler {
       }))
     })
     val stageList = splitToStages(m.body)
-    stageList(0)
+    stageList.foreach( p => {
+      p.cmd = mergeIfCommands(p.cmd)
+    })
+    stageList.head
   }
 
   def splitToStages(c: Command): List[PStage] = c match {
-    case CTBar(c1, c2) =>{
+    case CTBar(c1, c2) => {
       val firstStages = splitToStages(c1)
       val secondStages = splitToStages(c2)
       //sequential pipeline, last stage in c1 sends to first in c2
       val lastc1 = firstStages.last
       val firstc2 = secondStages.head
-      //TODO sendPipelineVariables(lastc1, firstc2)
+      lastc1.succs = lastc1.succs :+ firstc2
+      firstc2.preds = firstc2.preds :+ lastc1
       firstStages ++ secondStages
     }
       //TODO once we add other control structures (like split+join) update this
     case _ => {
-      List(new PStage(nextStageId(), List(), splitCommands(c), List()))
+      List(new PStage(nextStageId(), c, List(), List(), List(), List(), List()))
     }
   }
 
+  /**
+   * Expect no time-control commands (tbar, split, join)
+   *
+   * @param c
+   * @return
+   */
+  private def mergeIfCommands(c: Command): Command = c match {
+    case CSeq(c1, c2) => CSeq(mergeIfCommands(c1), mergeIfCommands(c2))
+    case CIf(cond, cons, alt) => {
+      val tbr = mergeIfCommands(cons)
+      val fbr = mergeIfCommands(alt)
+      val renameMap: Map[Id,EVar] = Map[Id, EVar]()
+      val tcmds = flattenCommands(tbr)
+      val (renameTcmds, tmap) = renameAssignees(tcmds, renameMap, "_t")
+      val fcmds = flattenCommands(fbr)
+      val (renameFCmds, fmap) = renameAssignees(fcmds, renameMap, "_f")
+      val sharedAssign = tmap.keySet.intersect(fmap.keySet)
+      val condAssigns = sharedAssign.foldLeft[List[CAssign]](List())( (l, id) => {
+        l :+ CAssign(EVar(id), ETernary(cond, tmap(id), fmap(id)))
+      })
+      sequenceCommands(renameTcmds ++ renameFCmds ++ condAssigns)
+    }
+    case _ => c
+  }
+
+  /**
+   *
+   * @param cs
+   * @param renameMap
+   * @return
+   */
+  def renameAssignees(cs: List[Command], renameMap: Map[Id, EVar], suffix: String): (List[Command], Map[Id, EVar]) = {
+    var nmap = renameMap
+    val ncs = cs.foldLeft[List[Command]](List()) ((l, c) => c match {
+      case CAssign(lhs, rhs) => {
+      val nrhs = renameVars(rhs, nmap)
+      val nlhs = lhs match {
+        case ev@EVar(id) if !nmap.contains(id) => {
+          val tmp = ev.copy(freshVar(id.toString + suffix))
+          tmp.copyMeta(ev)
+          nmap = nmap + (id -> tmp)
+          tmp
+        }
+      }
+      l :+ CAssign(nlhs, nrhs).setPos(c.pos)
+      }
+      case Syntax.CEmpty => l
+      case CExpr(exp) => l :+ CExpr(renameVars(exp, nmap)).setPos(c.pos)
+      case COutput(exp) => l :+ COutput(renameVars(exp, nmap)).setPos(c.pos)
+      case CReturn(exp) => l :+ CReturn(renameVars(exp, nmap)).setPos(c.pos)
+      case CCall(id, args) => l :+ CCall(id, args.map[Expr](a => renameVars(a, nmap))).setPos(c.pos)
+      case CRecv(lhs, rhs) => l :+ CRecv(renameVars(lhs, nmap), renameVars(rhs, nmap)).setPos(c.pos)
+      case CIf(cond, cons, alt) => l :+ CIf(renameVars(cond, nmap), cons, alt).setPos(c.pos)
+      case CDecl(id, typ, thisCycle) => l :+ c
+    })
+    (ncs, nmap)
+  }
+  /**
+   *
+   * @param e
+   * @param renameMap
+   * @return
+   */
+  def renameVars(e: Expr, renameMap: Map[Id, EVar]): Expr = e match {
+    case eb@EBinop(_, e1, e2) => eb.copy(e1 = renameVars(e1, renameMap), e2 = renameVars(e2, renameMap)).copyMeta(e)
+    case er@ERecAccess(rec, _) => er.copy(rec = renameVars(rec, renameMap)).copyMeta(e)
+    case em@EMemAccess(_, index) => em.copy(index = renameVars(index, renameMap)).copyMeta(e)
+    case ex@EBitExtract(num, _, _) => ex.copy(num = renameVars(num, renameMap)).copyMeta(e)
+    case et@ETernary(cond, tval, fval) => et.copy(renameVars(cond, renameMap), renameVars(tval, renameMap), renameVars(fval, renameMap)).copyMeta(e)
+    case ef@EApp(_, args) => ef.copy(args = args.map[Expr](a => renameVars(a,renameMap))).copyMeta(e)
+    case ev@EVar(id) => {
+      if (renameMap.contains(id)) {
+        renameMap(id)
+      } else {
+        ev
+      }
+    }
+    case _ => e
+  }
+  /**
+   * This only flattens away CSeq commands, not ifs or other control flow.
+   * It also assumes there are not time-control commands (tbar, split, join)
+   */
+  private def flattenCommands(c: Command): List[Command] = c match {
+    case CSeq(c1, c2) => flattenCommands(c1) ++ flattenCommands(c2)
+    case _ => List(c)
+  }
+
+  private def sequenceCommands(cs: List[Command]): Command = {
+    cs.foldRight[Command](CEmpty)( (c , ce) => {
+      CSeq(c, ce).setPos(c.pos)
+    })
+  }
   /*
    * Turns the recursive definition of commands into a list
    * of non-control commands. This assumes there are no TBar

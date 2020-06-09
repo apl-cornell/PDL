@@ -53,7 +53,18 @@ object DAGSyntax {
     case Syntax.CEmpty => SEmpty
   }
 
-  class PStage(n:Id, var preds:List[SReceive], var body: List[StageCommand], var succs: List[SSend]) extends Process(n)
+  /**
+   * Abstract representation of a pipeline stage
+   * @param n - Unique stage identifier
+   * @param cmd - The original Command that the stage executes from the input language
+   * @param preds - The list (could be set?) of stages that directly precede this one in the pipeline
+   * @param succs - The list (could be set?) of stages that directly follow this one in the pipeline
+   * @param recvs - The set of receive statements which conditionally receive data from preds or external modules
+   * @param body - The set of combinational logic that executes during this stage
+   * @param sends - The set of conditional send operations to succs and/or external modules
+   */
+  class PStage(n:Id, var cmd: Command, var preds: List[PStage], var succs: List[PStage],
+    var recvs:List[SReceive], var body: List[StageCommand], var sends: List[SSend]) extends Process(n)
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t

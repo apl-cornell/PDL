@@ -112,6 +112,11 @@ object Syntax {
       case _:EMemAccess => true
       case _ => false
     }
+    def copyMeta(from: Expr): Expr = {
+      setPos(from.pos)
+      typ = from.typ
+      this
+    }
   }
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class EBool(v: Boolean) extends Expr
@@ -128,7 +133,7 @@ object Syntax {
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: Expr, rhs: Expr) extends Command {
+  case class CAssign(lhs: EVar, rhs: Expr) extends Command {
     if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
