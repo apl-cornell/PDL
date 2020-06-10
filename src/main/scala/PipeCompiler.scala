@@ -6,59 +6,44 @@ import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 
 object PipeCompiler {
+//
+//  var stgCounter = 0
+//  var varCounter = 0
+//  val usedNames: scala.collection.mutable.Set[String] = scala.collection.mutable.Set[String]()
+//
+//  def freshVar(baseName: String): Id = {
+//    var n = baseName
+//    while (usedNames(n)) {
+//      n = baseName + "_" + varCounter
+//      varCounter += 1
+//    }
+//    usedNames.add(n)
+//    Id(n)
+//  }
+//
+//  def nextStageId(): Id = {
+//    val s = s"Stage__$stgCounter"
+//    stgCounter += 1
+//    Id(s)
+//  }
+//
+//
+//  def compileToDag(m: ModuleDef): PStage = {
+//    val extMems: Map[Id, Process] = m.modules.foldLeft[Map[Id,Process]](Map()) ((l, m) => {
+//      l + (m.name -> (m.typ match {
+//        case memt: TMemType => new PMemory(m.name, memt)
+//        case modt: TModType => new PBlackBox(m.name, modt)
+//        case _ => throw UnexpectedType(m.pos, m.name.toString, "Module or Memory", m.typ)
+//      }))
+//    })
+//    val stageList = splitToStages(m.body)
+//    //stageList.foreach( p => {
+//    //  p.cmd = mergeIfCommands(p.cmd)
+//   // })
+//    stageList.head
+//  }
+//
 
-  var stgCounter = 0
-  var varCounter = 0
-  val usedNames: scala.collection.mutable.Set[String] = scala.collection.mutable.Set[String]()
-
-  def freshVar(baseName: String): Id = {
-    var n = baseName
-    while (usedNames(n)) {
-      n = baseName + "_" + varCounter
-      varCounter += 1
-    }
-    usedNames.add(n)
-    Id(n)
-  }
-
-  def nextStageId(): Id = {
-    val s = s"Stage__$stgCounter"
-    stgCounter += 1
-    Id(s)
-  }
-
-
-  def compileToDag(m: ModuleDef): PStage = {
-    val extMems: Map[Id, Process] = m.modules.foldLeft[Map[Id,Process]](Map()) ((l, m) => {
-      l + (m.name -> (m.typ match {
-        case memt: TMemType => new PMemory(m.name, memt)
-        case modt: TModType => new PBlackBox(m.name, modt)
-        case _ => throw UnexpectedType(m.pos, m.name.toString, "Module or Memory", m.typ)
-      }))
-    })
-    val stageList = splitToStages(m.body)
-    //stageList.foreach( p => {
-    //  p.cmd = mergeIfCommands(p.cmd)
-   // })
-    stageList.head
-  }
-
-  def splitToStages(c: Command): List[PStage] = c match {
-    case CTBar(c1, c2) => {
-      val firstStages = splitToStages(c1)
-      val secondStages = splitToStages(c2)
-      //sequential pipeline, last stage in c1 sends to first in c2
-      val lastc1 = firstStages.last
-      val firstc2 = secondStages.head
-      lastc1.succs = lastc1.succs :+ firstc2
-      firstc2.preds = firstc2.preds :+ lastc1
-      firstStages ++ secondStages
-    }
-      //TODO once we add other control structures (like split+join) update this
-    case _ => {
-      List(new PStage(nextStageId(), c, List(), List(), List(), List(), List()))
-    }
-  }
 //
 //  /**
 //   * Convert the commands, which have no

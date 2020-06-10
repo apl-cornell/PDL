@@ -12,14 +12,14 @@ import scala.util.parsing.input.Positional
  */
 object DAGSyntax {
 
-  private def channelName(from:Process, to:Process): Id = {
-    Id(s"${from.name}_to_${to.name}")
+  private def channelName(from:Id, to:Id): Id = {
+    Id(s"${from.v}_to_${to.v}")
   }
 
-  case class Channel(s: Process, r: Process) {
+  case class Channel(s: Id, r: Id) {
     val name: Id = channelName(s, r)
-    val sender: Process = s
-    val receiver: Process = r
+    val sender: Id = s
+    val receiver: Id = r
   }
 
   sealed abstract class Process(n: Id) {
@@ -38,6 +38,8 @@ object DAGSyntax {
   case class SExpr(exp: Expr) extends StageCommand
   case object SEmpty extends StageCommand
 
+  type PipelineEdge = (Option[Expr], PStage)
+
   /**
    * Abstract representation of a pipeline stage
    * @param n - Unique stage identifier
@@ -48,8 +50,8 @@ object DAGSyntax {
    * @param body - The set of combinational logic that executes during this stage
    * @param sends - The set of conditional send operations to succs and/or external modules
    */
-  class PStage(n:Id, var cmd: Command, var preds: List[PStage], var succs: List[PStage],
-    var recvs:List[SReceive], var body: List[StageCommand], var sends: List[SSend]) extends Process(n)
+  class PStage(n:Id, var cmd: Command, var preds: List[PipelineEdge] = List(), var succs: List[PipelineEdge] = List(),
+    var recvs:List[SReceive] = List(), var body: List[StageCommand] = List(), var sends: List[SSend] = List()) extends Process(n)
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t
