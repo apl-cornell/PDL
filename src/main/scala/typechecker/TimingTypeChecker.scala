@@ -3,14 +3,16 @@ package pipedsl.typechecker
 import pipedsl.common.Syntax._
 import Environments.TypeEnvironment
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedLVal}
+import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedLVal, UnexpectedPipelineStatement}
 import pipedsl.common.Syntax
 
-/*
+/**
  * Currently this checks that variables set by receive statements
- * are not used until after a `---` separator. It also checks that
- * any access to memory or an external module happens as part of a
+ * are not used until after a `---` separator (additionally checking
+ * that any reference to a variable happens after it has been assigned.
+ * It also checks that any access to memory or an external module happens as part of a
  * "receive" statement rather than a normal assign.
+ * - Ensures that no pipeline splitting operations are conducted inside an if statement
  * This checker should maybe check more timing related behavior in the future
  * (such as lock acquisition)
  */
@@ -29,42 +31,41 @@ object TimingTypeChecker extends TypeChecks {
     val allAvailable = m.modules.foldLeft[Available](inputs)((av, m) => {
       av + m.name
     })
-    checkCommand(m.body, allAvailable, NoneAvailable)
+    checkCommand(m.body, allAvailable, NoneAvailable, insideCond = false)
     env
   }
 
-  def checkCommand(c: Command, vars: Available, nextVars: Available): (Available, Available) = c match {
+  def checkCommand(c: Command, vars: Available, nextVars: Available, insideCond: Boolean): (Available, Available) = c match {
     case CSeq(c1, c2) => {
-      val (v2, nv2) = checkCommand(c1, vars, nextVars)
-      checkCommand(c2, v2, nv2)
+      val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
+      checkCommand(c2, v2, nv2, insideCond)
     }
-    case CTBar(c1, c2) =>{
-      val (v2, nv2) = checkCommand(c1, vars, nextVars)
-      checkCommand(c2, v2 ++ nv2, NoneAvailable)
+    case CTBar(c1, c2) => {
+      if (insideCond) { throw UnexpectedPipelineStatement(c.pos, "time barrier") }
+      val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
+      checkCommand(c2, v2 ++ nv2, NoneAvailable, insideCond)
     }
     case CDecl(id,_,n) => if (n) { (vars, nextVars + id) } else { (vars, nextVars) }
     case CIf(cond, cons, alt) => {
       if(checkExpr(cond, vars)) {
         throw UnexpectedAsyncReference(cond.pos, cond.toString)
       }
-      val (vt, nvt) = checkCommand(cons, vars, nextVars)
-      val (vf, nvf) = checkCommand(alt, vars, nextVars)
+      val (vt, nvt) = checkCommand(cons, vars, nextVars, insideCond = true)
+      val (vf, nvf) = checkCommand(alt, vars, nextVars, insideCond = true)
       (vt.intersect(vf), nvt.intersect(nvf))
     }
     case CAssign(lhs, rhs) => {
       if (checkExpr(rhs, vars)) {
         throw UnexpectedAsyncReference(rhs.pos, rhs.toString)
       }
-      lhs match {
-        case EVar(id) => (vars + id, nextVars)
-        case _: EMemAccess => throw UnexpectedAsyncReference(lhs.pos, lhs.toString)
-        case _ => (vars, nextVars)
-      }
+      (vars + lhs.id, nextVars)
     }
     case CRecv(lhs, rhs) =>{
       checkExpr(rhs, vars)
-      lhs match {
-        case EVar(id) => (vars, nextVars + id)
+      (lhs, rhs) match {
+        case (EVar(id), EMemAccess(_, _)) => (vars, nextVars + id)
+        case (EVar(id), _) => throw UnexpectedAsyncReference(lhs.pos, s"rhs of '$id <-' but be a memory or module reference")
+        case (EMemAccess(_,_), EMemAccess(_,_)) => throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
         case _ => (vars, nextVars)
       }
     }
@@ -97,7 +98,8 @@ object TimingTypeChecker extends TypeChecks {
 
   //Returns true if any subexpression references memory or an external module
   def checkExpr(e: Expr, vars: Available): Boolean = e match {
-    case EBinop(op, e1, e2) => {
+    case EUop(_, e) => checkExpr(e, vars)
+    case EBinop(_, e1, e2) => {
       checkExpr(e1, vars) || checkExpr(e2, vars)
     }
     case ERecAccess(rec, _) => checkExpr(rec, vars)
@@ -109,7 +111,7 @@ object TimingTypeChecker extends TypeChecks {
     case ETernary(cond, tval, fval) => {
       checkExpr(cond, vars) || checkExpr(tval, vars) || checkExpr(fval, vars)
     }
-    case EApp(func, args) => args.foldLeft[Boolean](false)((usesMem, a) => checkExpr(a, vars) || usesMem)
+    case EApp(_, args) => args.foldLeft[Boolean](false)((usesMem, a) => checkExpr(a, vars) || usesMem)
     case EVar(id) => if(!vars(id)) { throw UnavailableArgUse(e.pos, id.toString)} else { false }
     case _ => false
   }

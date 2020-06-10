@@ -31,8 +31,23 @@ object Errors {
     withPos(s"Bad Function Definition: $msg", pos)
   )
 
+  case class UnexpectedPipelineStatement(pos: Position, msg: String) extends RuntimeException(
+    withPos(s"Tried to execute a $msg statement inside of a conditional block", pos)
+  )
+
   case class UnexpectedCall(pos: Position) extends RuntimeException(
     withPos(s"Module should have at most 1 call statement through execution path", pos)
+  )
+
+  case class UnexpectedReturn(pos: Position) extends RuntimeException(
+    withPos(s"Only function bodies should contain return statements", pos)
+  )
+
+  case class MismatchedAssigns(pos: Position, vars: Set[Id]) extends RuntimeException(
+    withPos(s"Both branches of if statement did not assign to ${vars.mkString(",")}", pos)
+  )
+  case class UnexpectedAssignment(pos: Position, id: Id) extends RuntimeException(
+    withPos(s"Variable $id has already been assigned", pos)
   )
 
   case class AlreadyBoundType(pos: Position, node: String, oldT: Type, newT: Type) extends TypeError(

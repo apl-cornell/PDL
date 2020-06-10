@@ -63,7 +63,11 @@ class Parser extends RegexParsers with PackratParsers {
     parens(expr) ~ "?" ~ expr ~ ":" ~ expr ^^ { case c ~ _ ~ t ~ _ ~ v => ETernary(c, t, v) }
   }
 
+  //UOps
+  lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
+
   lazy val simpleAtom: P[Expr] = positioned {
+    not ~ expr ^^ { case n ~ e => EUop(n, e) } |
     memAccess |
       bitAccess |
       recAccess |
@@ -109,11 +113,7 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val concat: P[BOp] = positioned("++" ^^ { op => BitOp(op, OC.concat) })
 
-  /** Expressions
-   * The bin* parsers implement the precedence order of operators described
-   * for C/C++: https://en.cppreference.com/w/c/language/operator_precedence
-   * The tower-like structure is required to implement precedence correctly.
-   */
+
   def parseOp(base: P[Expr], op: P[BOp]): P[Expr] = positioned {
     chainl1[Expr](base, op ^^ { case op => EBinop(op, _, _) })
   }

@@ -75,6 +75,17 @@ object Syntax {
     }
   }
 
+  sealed trait UOp extends Positional {
+    val op: String;
+    override def toString = this.op
+  }
+  case class BoolUOp(op: String) extends UOp
+  case class NumUOp(op: String) extends UOp
+  case class BitUOp(op: String) extends UOp
+
+  def NotOp(): BoolUOp = BoolUOp("!")
+  def AndOp(e1: Expr,e2: Expr) = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
+
   sealed trait BOp extends Positional {
     val op: String;
     override def toString = this.op
@@ -118,8 +129,10 @@ object Syntax {
       this
     }
   }
+
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class EBool(v: Boolean) extends Expr
+  case class EUop(op: UOp, ex: Expr) extends Expr
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
@@ -129,15 +142,18 @@ object Syntax {
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
 
+  def MemoryWrite(index: Expr, value: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index), (Id("value"),value)))
+  def MemoryRead(index: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index)))
+
   sealed trait Command extends Positional
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
   case class CAssign(lhs: EVar, rhs: Expr) extends Command {
-    if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
+    if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
-    if (lhs.isLVal == false) throw UnexpectedLVal(lhs, "assignment")
+    if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CCall(id: Id, args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command

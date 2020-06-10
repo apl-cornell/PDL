@@ -34,7 +34,7 @@ object BaseTypeChecker extends TypeChecks {
     val ftyp = TFun(typList, f.ret)
     val e1 = checkCommand(f.body, fenv)
     val rt = checkFuncWellFormed(f.body, e1)
-    if (!rt.isDefined) {
+    if (rt.isEmpty) {
       throw MalformedFunction(f.pos, "Missing return statement")
     } else if (!areEqual(ftyp.ret, rt.get)) {
       throw UnexpectedType(f.pos, s"${f.name} return type", ftyp.toString(), rt.get)
@@ -65,34 +65,50 @@ object BaseTypeChecker extends TypeChecks {
     case _ => None
   }
 
-  def checkModule(m: ModuleDef, tenv: TypeEnvironment) = {
+  def checkModule(m: ModuleDef, tenv: TypeEnvironment): TypeEnvironment = {
     val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
     val inEnv = m.inputs.foldLeft[TypeEnvironment](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[TypeEnvironment](inEnv)((env, p) => { env.add(p.name, p.typ) })
     val modTyp = TModType(inputTyps, modTyps)
     val finalEnv = pipeEnv.add(m.name, modTyp)
-    checkModuleBodyWellFormed(m.body, false)
+    checkModuleBodyWellFormed(m.body, hascall = false, Set())
     checkCommand(m.body, finalEnv)
     finalEnv
   }
-  //checks that all paths have at most 1 call statement
-  def checkModuleBodyWellFormed(c: Command, hascall: Boolean): Boolean = c match {
+  /**
+   * Checks that all paths have at most 1 call statement
+   * Checks that every variable is *assigned* exactly once in each path.
+   * Receives may be conditional (and therefore occur only in some paths)
+   * @param c
+   * @param hascall
+   * @return
+   */
+  def checkModuleBodyWellFormed(c: Command, hascall: Boolean, assignees: Set[Id]): (Boolean, Set[Id]) = c match {
     case CSeq(c1, c2) => {
-      val hc2 = checkModuleBodyWellFormed(c1, hascall)
-      checkModuleBodyWellFormed(c2, hc2)
+      val (hc2, as2) = checkModuleBodyWellFormed(c1, hascall, assignees)
+      checkModuleBodyWellFormed(c2, hc2, as2)
     }
     case CTBar(c1, c2) => {
-      val hc2 = checkModuleBodyWellFormed(c1, hascall)
-      checkModuleBodyWellFormed(c2, hc2)
+      val (hc2, as2) = checkModuleBodyWellFormed(c1, hascall, assignees)
+      checkModuleBodyWellFormed(c2, hc2, as2)
     }
-    case CIf(cond, cons, alt) => {
-      val hct = checkModuleBodyWellFormed(cons, hascall)
-      val hcf = checkModuleBodyWellFormed(alt, hascall)
-      hct || hcf
+    case CIf(_, cons, alt) => {
+      val (hct, ast) = checkModuleBodyWellFormed(cons, hascall, assignees)
+      val (hcf, asf) = checkModuleBodyWellFormed(alt, hascall, assignees)
+      if (!asf.equals(ast)) {
+        throw MismatchedAssigns(c.pos, ast.diff(asf))
+      }
+      (hct || hcf, asf)
     }
-    case CCall(id, args) => if (hascall) { throw UnexpectedCall(c.pos) } else { true }
-    case _ => hascall
+    case CCall(_, _) => if (hascall) { throw UnexpectedCall(c.pos) } else { (true, assignees) }
+    case CAssign(lhs@EVar(id), _) => {
+        if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
+          (hascall, assignees + id)
+      }
+    }
+    case CReturn(_) => throw UnexpectedReturn(c.pos)
+    case _ => (hascall, assignees)
   }
 
   def checkCircuit(c: Circuit, tenv: TypeEnvironment): TypeEnvironment = c match {
@@ -179,13 +195,13 @@ object BaseTypeChecker extends TypeChecks {
           if (args.length != ityps.length) {
             throw ArgLengthMismatch(c.pos, args.length, ityps.length)
           }
-          ityps.zip(args).foreach(t => t match {
+          ityps.zip(args).foreach {
             case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv)
+              val (atyp, _) = checkExpression(a, tenv)
               if (!isSubtype(atyp, expectedT)) {
-                throw UnexpectedSubtype(a.pos, a.toString(), expectedT, atyp)
+                throw UnexpectedSubtype(a.pos, a.toString, expectedT, atyp)
               }
-          })
+          }
           tenv
         }
         case _ => throw UnexpectedType(c.pos, id.toString, "Module type", tenv(id))
@@ -209,9 +225,9 @@ object BaseTypeChecker extends TypeChecks {
     val (typ, nenv) = _checkE(e, tenv);
     if (e.typ.isDefined) {
       if (e.isLVal) {
-        if (!areEqual(e.typ.get, typ)) throw UnexpectedType(e.pos, e.toString(), typ.toString(), e.typ.get)
+        if (!areEqual(e.typ.get, typ)) throw UnexpectedType(e.pos, e.toString, typ.toString(), e.typ.get)
       } else {
-        throw AlreadyBoundType(e.pos, e.toString(), e.typ.get, typ)
+        throw AlreadyBoundType(e.pos, e.toString, e.typ.get, typ)
       }
     }
     e.typ = Some(typ)
@@ -219,8 +235,16 @@ object BaseTypeChecker extends TypeChecks {
   }
 
   private def _checkE(e: Expr, tenv: TypeEnvironment): (Type, TypeEnvironment) = e match {
-    case EInt(v, base, bits) => (TSizedInt(bits, true), tenv)
+    case EInt(v, base, bits) => (TSizedInt(bits, unsigned = true), tenv)
     case EBool(v) => (TBool(), tenv)
+    case EUop(op, e) => {
+      val (t1, env1) = checkExpression(e, tenv)
+      op match {
+        case BoolUOp(op) => t1.matchOrError(e.pos, "boolean op", "boolean") { case _: TBool => (TBool(), env1) }
+        case NumUOp(op) => t1.matchOrError(e.pos, "number op", "number") { case t: TSizedInt => (t, env1) }
+        case BitUOp(op) => t1.matchOrError(e.pos, "bit op", "sized integer") { case t: TSizedInt => (t, env1) }
+      }
+    }
     case EBinop(op, e1, e2) => {
       val (t1, env1) = checkExpression(e1, tenv)
       val (t2, env2) = checkExpression(e2, env1)
@@ -230,7 +254,7 @@ object BaseTypeChecker extends TypeChecks {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
           case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
         }
-        case _ => if (!areEqual(t1, t2)) { throw UnexpectedType(e2.pos, e2.toString(), t1.toString(), t2) } else {
+        case _ => if (!areEqual(t1, t2)) { throw UnexpectedType(e2.pos, e2.toString, t1.toString(), t2) } else {
           op match {
             case EqOp(_) => (TBool(), env2)
             case CmpOp(_) => (TBool(), env2)
@@ -287,20 +311,20 @@ object BaseTypeChecker extends TypeChecks {
           if (targs.length != args.length) {
             throw ArgLengthMismatch(e.pos, targs.length, args.length)
           }
-          targs.zip(args).foreach(t => t match {
+          targs.zip(args).foreach {
             case (expectedT, a) =>
-                  val (atyp, aenv) = checkExpression(a, tenv)
-                  if (!isSubtype(atyp, expectedT)) {
-                    throw UnexpectedSubtype(e.pos, a.toString(), expectedT, atyp)
-                  }
-          })
+              val (atyp, aenv) = checkExpression(a, tenv)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+              }
+          }
           (tret, tenv) //TODO check return env
         }
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }
     }
     case EVar(id) => e.typ match {
-      case Some(t) if !tenv.get(id).isDefined => (t, tenv.add(id, t))
+      case Some(t) if tenv.get(id).isEmpty => (t, tenv.add(id, t))
       case Some(t) => if (areEqual(t,tenv(id))) {
         (t, tenv)
       } else {

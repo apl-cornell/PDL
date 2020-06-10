@@ -1,8 +1,10 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
+import common.PrettyPrinter
 import java.io.File
 import java.nio.file.Files
+import pipedsl.passes.SimplifyRecvPass
 import typechecker.{BaseTypeChecker, Environments, TimingTypeChecker}
 
 object Main {
@@ -23,8 +25,10 @@ object Main {
     logger.info(r.toString());
     val basetypes = BaseTypeChecker.check(r.get, None)
     TimingTypeChecker.check(r.get, Some(basetypes))
-    val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
-    logger.info(stages.toString())
+    val c = SimplifyRecvPass.run(r.get.moddefs(0).body)
+    PrettyPrinter.printCmd(c)
+    //val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
+    //logger.info(stages.toString())
   }
 
 }

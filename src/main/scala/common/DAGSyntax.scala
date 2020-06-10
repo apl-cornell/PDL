@@ -29,29 +29,14 @@ object DAGSyntax {
   sealed trait StageCommand extends Positional
 
   case class SAssign(lhs: Expr, rhs: Expr) extends StageCommand
+  case class SIf(cond: Expr, cons: List[StageCommand], alt: List[StageCommand]) extends StageCommand
   case class SCall(id: Id, args: List[Expr]) extends StageCommand
-  case class SReceive(g: Option[EVar], into: EVar, s: Channel) extends StageCommand
-  case class SSend(g: Option[EVar], from: EVar, d: Channel) extends StageCommand
+  case class SReceive(g: Option[Expr], into: EVar, s: Channel) extends StageCommand
+  case class SSend(g: Option[Expr], from: EVar, d: Channel) extends StageCommand
   case class SOutput(exp: Expr) extends StageCommand
   case class SReturn(exp: Expr) extends StageCommand
   case class SExpr(exp: Expr) extends StageCommand
   case object SEmpty extends StageCommand
-
-  /**
-   * Convert the commands, which have no
-   * control or timing structure into our IR.
-   * These are all essentially No-Ops
-   * @param c The Command to convert
-   * @return The new StageCommand representation.
-   */
-  def toStageCmd(c: Command): StageCommand = c match {
-    case CAssign(lhs, rhs) => SAssign(lhs, rhs)
-    case CCall(id, args) => SCall(id, args)
-    case COutput(exp) => SOutput(exp)
-    case CReturn(exp) => SReturn(exp)
-    case CExpr(exp) => SExpr(exp)
-    case Syntax.CEmpty => SEmpty
-  }
 
   /**
    * Abstract representation of a pipeline stage
