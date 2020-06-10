@@ -41,8 +41,13 @@ object SimplifyRecvPass extends CommandPass[Command] {
           .setPos(c.pos)
       }
     }
+    //calls also get translated to send statements later
     case CCall(id, args) => {
-      
+      val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty, List()))((cs, a) => {
+        val argAssn = CAssign(newVar("carg", a.pos), a).setPos(a.pos)
+        (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
+      })
+      CSeq(argAssgns._1, CCall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)
     }
     case _ => c
   }
