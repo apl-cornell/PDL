@@ -1,10 +1,10 @@
 package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
-import Environments.TypeEnvironment
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedLVal, UnexpectedPipelineStatement}
+import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedPipelineStatement}
 import pipedsl.common.Syntax
+import Environments.Environment
 
 /**
  * Currently this checks that variables set by receive statements
@@ -16,15 +16,17 @@ import pipedsl.common.Syntax
  * This checker should maybe check more timing related behavior in the future
  * (such as lock acquisition)
  */
-object TimingTypeChecker extends TypeChecks {
+object TimingTypeChecker extends TypeChecks[Type] {
 
   type Available = Set[Id]
   val NoneAvailable: Available = Set[Id]()
 
-  //Functions are combinational, this is checked in their well-formedness check
-  override def checkFunc(f: FuncDef, env: TypeEnvironment): TypeEnvironment = env
+  override def emptyEnv(): Environment[Type] = Environments.EmptyTypeEnv
 
-  override def checkModule(m: ModuleDef, env: TypeEnvironment): TypeEnvironment = {
+  //Functions are combinational, this is checked in their well-formedness check
+  override def checkFunc(f: FuncDef, env: Environment[Type]): Environment[Type] = env
+
+  override def checkModule(m: ModuleDef, env: Environment[Type]): Environment[Type] = {
     val inputs = m.inputs.foldLeft[Available](NoneAvailable)((av,p) => {
       av + p.name
     })
@@ -60,7 +62,7 @@ object TimingTypeChecker extends TypeChecks {
       }
       (vars + lhs.id, nextVars)
     }
-    case CRecv(lhs, rhs) =>{
+    case CRecv(lhs, rhs) => {
       checkExpr(rhs, vars)
       (lhs, rhs) match {
         case (EVar(id), EMemAccess(_, _)) => (vars, nextVars + id)
@@ -69,6 +71,7 @@ object TimingTypeChecker extends TypeChecks {
         case _ => (vars, nextVars)
       }
     }
+    case CLockOp(_, _) => (vars, nextVars)
     case CCall(_, args) => {
       args.foreach(a => if(checkExpr(a, vars)) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
@@ -116,5 +119,6 @@ object TimingTypeChecker extends TypeChecks {
     case _ => false
   }
   //No timing in the circuit, just connections
-  override def checkCircuit(c: Circuit, env: TypeEnvironment): TypeEnvironment = env
+  override def checkCircuit(c: Circuit, env: Environment[Type]): Environment[Type] = env
+
 }

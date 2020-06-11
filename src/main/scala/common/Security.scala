@@ -1,4 +1,4 @@
-package common
+package pipedsl.common
 
 import scala.util.parsing.input.Positional
 

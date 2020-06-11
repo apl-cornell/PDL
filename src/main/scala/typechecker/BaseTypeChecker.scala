@@ -2,10 +2,9 @@ package pipedsl.typechecker
 
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax._
-import Environments.TypeEnvironment
 import Subtypes._
 import TypeChecker.TypeChecks
-import pipedsl.common.Syntax
+import Environments.Environment
 
 
 //TODO kinds of typechecking we need to do:
@@ -25,12 +24,13 @@ import pipedsl.common.Syntax
 //  Normal IFC
 //  How to Check "call"s
 //  Speculation Labels
-object BaseTypeChecker extends TypeChecks {
+object BaseTypeChecker extends TypeChecks[Type] {
 
-
-  def checkFunc(f: FuncDef, tenv: TypeEnvironment): TypeEnvironment = {
+  override def emptyEnv(): Environment[Type] = Environments.EmptyTypeEnv
+  
+  def checkFunc(f: FuncDef, tenv: Environment[Type]): Environment[Type] = {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
-    val fenv = f.args.foldLeft[TypeEnvironment](tenv)((env, p) => { env.add(p.name, p.typ)})
+    val fenv = f.args.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
     val ftyp = TFun(typList, f.ret)
     val e1 = checkCommand(f.body, fenv)
     val rt = checkFuncWellFormed(f.body, e1)
@@ -42,7 +42,7 @@ object BaseTypeChecker extends TypeChecks {
     tenv.add(f.name, ftyp)
   }
 
-  private def checkFuncWellFormed(c: Command, tenv: TypeEnvironment): Option[Type] = c match {
+  private def checkFuncWellFormed(c: Command, tenv: Environment[Type]): Option[Type] = c match {
     case CSeq(c1, c2) => {
       val r1 = checkFuncWellFormed(c1, tenv)
       if (r1.isDefined) { throw MalformedFunction(c2.pos, "Unexpected command following return") }
@@ -65,11 +65,11 @@ object BaseTypeChecker extends TypeChecks {
     case _ => None
   }
 
-  def checkModule(m: ModuleDef, tenv: TypeEnvironment): TypeEnvironment = {
+  def checkModule(m: ModuleDef, tenv: Environment[Type]): Environment[Type] = {
     val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
-    val inEnv = m.inputs.foldLeft[TypeEnvironment](tenv)((env, p) => { env.add(p.name, p.typ) })
-    val pipeEnv = m.modules.foldLeft[TypeEnvironment](inEnv)((env, p) => { env.add(p.name, p.typ) })
+    val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
+    val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
     val modTyp = TModType(inputTyps, modTyps)
     val finalEnv = pipeEnv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, hascall = false, Set())
@@ -111,7 +111,7 @@ object BaseTypeChecker extends TypeChecks {
     case _ => (hascall, assignees)
   }
 
-  def checkCircuit(c: Circuit, tenv: TypeEnvironment): TypeEnvironment = c match {
+  def checkCircuit(c: Circuit, tenv: Environment[Type]): Environment[Type] = c match {
     case CirSeq(c1, c2) => {
       val e1 = checkCircuit(c1, tenv)
       checkCircuit(c2, e1)
@@ -122,7 +122,7 @@ object BaseTypeChecker extends TypeChecks {
     }
   }
 
-  private def checkCirExpr(c: CirExpr, tenv: TypeEnvironment): (Type, TypeEnvironment) = c match {
+  private def checkCirExpr(c: CirExpr, tenv: Environment[Type]): (Type, Environment[Type]) = c match {
     case CirMem(elemTyp, addrSize) => {
       val mtyp = TMemType(elemTyp, addrSize)
       c.typ = Some(mtyp)
@@ -157,7 +157,7 @@ object BaseTypeChecker extends TypeChecks {
     }
   }
 
-  def checkCommand(c: Command, tenv: TypeEnvironment): TypeEnvironment = c match {
+  def checkCommand(c: Command, tenv: Environment[Type]): Environment[Type] = c match {
     case CSeq(c1, c2) => {
       val e2 = checkCommand(c1, tenv)
       checkCommand(c2, e2)
@@ -188,6 +188,12 @@ object BaseTypeChecker extends TypeChecks {
       val (lTyp, lenv) = checkExpression(lhs, renv)
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
+    }
+    case CLockOp(mem, op) => {
+      tenv(mem).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
+      { case _: TModType => tenv
+        case _: TMemType => tenv
+      }
     }
     case CCall(id, args) => {
       tenv(id) match {
@@ -221,7 +227,7 @@ object BaseTypeChecker extends TypeChecks {
     case CEmpty => tenv
   }
 
-  def checkExpression(e: Expr, tenv: TypeEnvironment): (Type, TypeEnvironment) = {
+  def checkExpression(e: Expr, tenv: Environment[Type]): (Type, Environment[Type]) = {
     val (typ, nenv) = _checkE(e, tenv);
     if (e.typ.isDefined) {
       if (e.isLVal) {
@@ -234,7 +240,7 @@ object BaseTypeChecker extends TypeChecks {
     (typ, nenv)
   }
 
-  private def _checkE(e: Expr, tenv: TypeEnvironment): (Type, TypeEnvironment) = e match {
+  private def _checkE(e: Expr, tenv: Environment[Type]): (Type, Environment[Type]) = e match {
     case EInt(v, base, bits) => (TSizedInt(bits, unsigned = true), tenv)
     case EBool(v) => (TBool(), tenv)
     case EUop(op, e) => {

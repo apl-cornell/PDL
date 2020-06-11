@@ -2,6 +2,8 @@ package pipedsl
 import scala.util.parsing.combinator._
 import common.Syntax._
 import common.Utilities._
+import common.Locks._
+
 class Parser extends RegexParsers with PackratParsers {
   type P[T] = PackratParser[T]
 
@@ -131,6 +133,9 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val expr = positioned(binConcat)
 
   lazy val simpleCmd: P[Command] = positioned {
+    "acquire" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Acquired)} |
+    "reserve" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Reserved)} |
+      "release" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Released)} |
     "return" ~> expr ^^ { case e => CReturn(e) } |
     "output" ~> expr ^^ { case e => COutput(e) } |
       "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => CCall(i, args) } |

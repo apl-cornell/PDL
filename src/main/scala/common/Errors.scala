@@ -2,6 +2,7 @@ package pipedsl.common
 
 import scala.util.parsing.input.Position
 import Syntax._
+import pipedsl.common.Locks.LockState.LockState
 object Errors {
   def withPos(s: String, pos: Position, postMsg: String = "") =
     s"[${pos.line}.${pos.column}] $s\n${pos.longString}\n${postMsg}"
@@ -49,6 +50,18 @@ object Errors {
   case class UnexpectedAssignment(pos: Position, id: Id) extends RuntimeException(
     withPos(s"Variable $id has already been assigned", pos)
   )
+
+
+  case class IllegalLockModification(pos: Position, n: String,
+    oldstate: LockState, newstate: LockState) extends TypeError(
+    s"Tried to illegally modify state of lock $n from $oldstate to $newstate", pos)
+
+  case class IllegalLockMerge(pos: Position, n: String, l: LockState, r:LockState) extends TypeError(
+    s"Cannot merge lock states {$l, $r} across branch for variable $n", pos)
+
+  case class InvalidLockState(pos: Position, l: LockState, exp: LockState) extends TypeError(
+    s"Invalid lock state for memory access operation, was $l, expected $exp", pos)
+
 
   case class AlreadyBoundType(pos: Position, node: String, oldT: Type, newT: Type) extends TypeError(
     s"Tried to bind type: $newT to $node but already has type: $oldT", pos)

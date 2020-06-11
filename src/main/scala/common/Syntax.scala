@@ -1,7 +1,8 @@
 package pipedsl.common
-import scala.util.parsing.input.{Positional, Position}
+import scala.util.parsing.input.{Position, Positional}
 import Errors._
-import common.Security._
+import Security._
+import Locks.LockState._
 
 object Syntax {
   /**
@@ -160,6 +161,7 @@ object Syntax {
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case class CDecl(id: Id, typ: Type, thisCycle: Boolean) extends Command
+  case class CLockOp(mem: Id, op: LockState) extends Command
   case object CEmpty extends Command
 
   sealed trait Definition extends Positional

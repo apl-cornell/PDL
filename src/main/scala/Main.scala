@@ -5,7 +5,7 @@ import common.PrettyPrinter
 import java.io.File
 import java.nio.file.Files
 import pipedsl.passes.SimplifyRecvPass
-import typechecker.{BaseTypeChecker, Environments, TimingTypeChecker}
+import typechecker.{BaseTypeChecker, TimingTypeChecker, LockChecker}
 
 object Main {
   val logger: Logger = Logger("main")
@@ -22,11 +22,13 @@ object Main {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
+    val prog = r.get
     logger.info(r.toString());
-    val basetypes = BaseTypeChecker.check(r.get, None)
-    TimingTypeChecker.check(r.get, Some(basetypes))
-    val c = SimplifyRecvPass.run(r.get.moddefs(0).body)
-    PrettyPrinter.printCmd(c)
+    val basetypes = BaseTypeChecker.check(prog, None)
+    TimingTypeChecker.check(prog, Some(basetypes))
+    val prog_recv = SimplifyRecvPass.run(prog)
+    LockChecker.check(prog_recv, None)
+    //PrettyPrinter.printCmd(c)
     //val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
     //logger.info(stages.toString())
   }

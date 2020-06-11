@@ -1,14 +1,22 @@
 package pipedsl.passes
 
-import Passes.CommandPass
+import Passes.{CommandPass, ModulePass, ProgPass}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
 import scala.util.parsing.input.Position
 
-object SimplifyRecvPass extends CommandPass[Command] {
+object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
 
   var usedVars: Set[Id] = Set()
   var counter: Int = 0
+
+  override def run(p: Prog): Prog = {
+    p.copy(moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
+  }
+
+  override def run(m: ModuleDef): ModuleDef = {
+    m.copy(body = run(m.body)).setPos(m.pos)
+  }
 
   override def run(c: Command): Command = {
     usedVars = getAllVarNames(c)
@@ -51,4 +59,5 @@ object SimplifyRecvPass extends CommandPass[Command] {
     }
     case _ => c
   }
+
 }

@@ -10,7 +10,9 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
     }
 }
 pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
+    acquire(imem);
     int<32> insn <- imem[pc];
+    release(imem);
     ---
     int<2> op_type = insn{1:0};
     int<2> op = insn{3:2};
@@ -18,6 +20,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     int<5> rs2 = insn{13:9};
     int<5> rd = insn{18:14};
     int<13> imm = insn{31:19};
+    acquire(rf);
     int<32> arg1 <- rf[rs1];
     int<32> arg2 <- rf[rs2];
     ---
@@ -42,13 +45,15 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     ---
     next int<32> mem_res;
     if (op_type == 0b10) {
+        acquire(dmem);
         //LD
         mem_res <- dmem[alu_res];
-    } else {
-        if (op_type == 0b11) {
+        release(dmem);
+    } else if (op_type == 0b11) {
+        acquire(dmem);
         //ST
-            dmem[alu_res] <- arg2;
-        }
+        dmem[alu_res] <- arg2;
+        release(dmem);
     }
     ---
     if (op_type == 0b1<2>) {
@@ -56,6 +61,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     } else if (op_type == 0b10) {
         rf[rd] <- mem_res;
     }
+    release(rf);
     call cpu(npc);
 }
 
