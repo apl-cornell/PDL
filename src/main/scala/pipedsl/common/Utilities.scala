@@ -33,6 +33,10 @@ object Utilities {
     case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockOp(mem, _) => Set(mem)
+    case CSpeculate(predVar, predVal, body) =>
+     getUsedVars(predVal) ++ getAllVarNames(body) + predVar.id
+    case CCheck(predVar, realVal) => getUsedVars(realVal) + predVar
+    case CResolve(predVar) => Set(predVar)
     case CCall(id, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)

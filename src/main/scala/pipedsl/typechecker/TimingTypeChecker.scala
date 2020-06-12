@@ -7,14 +7,14 @@ import pipedsl.common.Syntax
 import Environments.Environment
 
 /**
- * Currently this checks that variables set by receive statements
- * are not used until after a `---` separator (additionally checking
- * that any reference to a variable happens after it has been assigned.
- * It also checks that any access to memory or an external module happens as part of a
- * "receive" statement rather than a normal assign.
+ * - Checks that variables set by receive statements
+ *   are not used until after a `---` separator (additionally checking
+ *   that any reference to a variable happens after it has been assigned).
+ * - Variables introduced via speculation can only be used inside the body
+ *   of speculate blocks and as LHS references for Check and Resolve statements
+ * - Checks that any access to memory or an external module happens as part of a
+ *   "receive" statement rather than a normal assign or other combinational expression.
  * - Ensures that no pipeline splitting operations are conducted inside an if statement
- * This checker should maybe check more timing related behavior in the future
- * (such as lock acquisition)
  */
 object TimingTypeChecker extends TypeChecks[Type] {
 
@@ -72,6 +72,21 @@ object TimingTypeChecker extends TypeChecks[Type] {
       }
     }
     case CLockOp(_, _) => (vars, nextVars)
+    case CSpeculate(predVar, predVal, body) => {
+      if(checkExpr(predVal, vars)) {
+        throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")
+      }
+      //Only allow speculative variable to be referenced in speculative body
+      val (vars2, nvars2) = checkCommand(body, vars + predVar.id, nextVars, insideCond)
+      (vars2 - predVar.id, nvars2)
+    }
+    case CCheck(_, realVal) => {
+      if (checkExpr(realVal, vars)) {
+        throw UnexpectedAsyncReference(realVal.pos, "Check clause must be combinational")
+      }
+      (vars, nextVars)
+    }
+    case CResolve(_) => (vars, nextVars)
     case CCall(_, args) => {
       args.foreach(a => if(checkExpr(a, vars)) {
         throw UnexpectedAsyncReference(a.pos, a.toString)

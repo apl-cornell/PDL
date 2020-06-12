@@ -9,7 +9,6 @@ object Syntax {
    * Annotations added by the various passes of the type checker.
    */
   object Annotations {
-
     sealed trait TypeAnnotation {
       var typ: Option[Type] = None;
     }
@@ -48,7 +47,7 @@ object Syntax {
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size) => s"${elem.toString}[${size}]"
-      case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")}"
+      case TModType(ins, refs, specs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")} :: speVars(${specs.mkString(",")})"
     }
   }
   // Types that can be upcast to Ints
@@ -61,7 +60,7 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int) extends Type
-  case class TModType(inputs: List[Type], refs: List[Type]) extends Type
+  case class TModType(inputs: List[Type], refs: List[Type], speculativeVars: List[Id]) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -162,6 +161,9 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CDecl(id: Id, typ: Type, thisCycle: Boolean) extends Command
   case class CLockOp(mem: Id, op: LockState) extends Command
+  case class CSpeculate(predVar: EVar, predVal: Expr, body: Command) extends Command
+  case class CCheck(predVar: Id, realVal: Expr) extends Command
+  case class CResolve(predVar: Id) extends Command
   case object CEmpty extends Command
 
   sealed trait Definition extends Positional

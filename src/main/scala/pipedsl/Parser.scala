@@ -133,6 +133,8 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val expr = positioned(binConcat)
 
   lazy val simpleCmd: P[Command] = positioned {
+    check |
+    resolve |
     "acquire" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Acquired)} |
     "reserve" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Reserved)} |
       "release" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Released)} |
@@ -148,7 +150,22 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val blockCmd: P[Command] = positioned {
-    block | conditional
+    block | conditional | speculate
+  }
+
+  lazy val speculate: P[Command] = positioned {
+    "speculate" ~> parens(typ ~ variable ~ "=" ~ expr) ~ block ^^ { case t ~ v ~ _ ~ ev ~ c => {
+      v.typ = Some(t)
+      CSpeculate(v, ev, c)
+    }}
+  }
+
+  lazy val check: P[Command] = positioned {
+    "check" ~> parens(iden ~ "==" ~ expr) ^^ { case id ~ _ ~ e =>  CCheck(id, e) }
+  }
+
+  lazy val resolve: P[Command] = positioned {
+    "resolve" ~> parens(iden) ^^ { case id => CResolve(id) }
   }
 
   lazy val block: P[Command] = {

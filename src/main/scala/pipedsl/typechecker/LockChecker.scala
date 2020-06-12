@@ -16,9 +16,14 @@ object LockChecker extends TypeChecks[LockState] {
   override def checkModule(m: ModuleDef, env: Environment[LockState]): Environment[LockState] = {
     val nenv = m.modules.foldLeft[Environment[LockState]](env)( (e, m) => m.typ match {
       case TMemType(_, _) => e.add(m.name, Free)
-      case TModType(_, _) => e.add(m.name, Free)
+      case TModType(_, _, _) => e.add(m.name, Free)
     })
-    checkCommand(m.body, nenv)
+    val finalenv = checkCommand(m.body, nenv)
+    //At end of execution all acquired or reserved locks must be released
+    finalenv.getMappedIds().foreach(id => {
+      finalenv(id).matchOrError(m.pos, id.v, Released) { case Free | Released => () }
+    })
+    finalenv
   }
 
   //This assumes that memory access only occur in recv statements
@@ -39,8 +44,8 @@ object LockChecker extends TypeChecks[LockState] {
       lt.intersect(lf)
     }
     case CRecv(lhs, rhs) => (lhs, rhs) match {
-        case (EMemAccess(mem,_), _) => env(mem).matchOrError(lhs.pos, Acquired) { case Acquired => env }
-        case (_, EMemAccess(mem,_)) => env(mem).matchOrError(rhs.pos, Acquired) { case Acquired => env }
+        case (EMemAccess(mem,_), _) => env(mem).matchOrError(lhs.pos, mem.v, Acquired) { case Acquired => env }
+        case (_, EMemAccess(mem,_)) => env(mem).matchOrError(rhs.pos, mem.v, Acquired) { case Acquired => env }
       }
     case CLockOp(mem, op) => env.add(mem, op)
     case _ => env

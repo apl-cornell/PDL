@@ -16,10 +16,10 @@ object Locks {
    * Define common helper methods implicit classes.
    */
   implicit class RichLock(l: LockState) {
-    def matchOrError[A](pos: Position, exp: LockState)
+    def matchOrError[A](pos: Position, name: String, exp: LockState)
       (andThen: PartialFunction[LockState, A]): A = {
       val mismatchError: PartialFunction[LockState, A] = {
-        case _ => throw InvalidLockState(pos, l, exp)
+        case _ => throw InvalidLockState(pos, name, l, exp)
       }
       andThen.orElse(mismatchError)(l)
     }

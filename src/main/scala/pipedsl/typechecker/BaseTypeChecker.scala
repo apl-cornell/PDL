@@ -70,16 +70,16 @@ object BaseTypeChecker extends TypeChecks[Type] {
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
     val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
-    val modTyp = TModType(inputTyps, modTyps)
+    val modTyp = TModType(inputTyps, modTyps, List())
     val finalEnv = pipeEnv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, hascall = false, Set())
     checkCommand(m.body, finalEnv)
     finalEnv
   }
   /**
-   * Checks that all paths have at most 1 call statement
-   * Checks that every variable is *assigned* exactly once in each path.
-   * Receives may be conditional (and therefore occur only in some paths)
+   * - Checks that all paths have at most 1 call statement
+   * - Checks that every variable is *assigned* exactly once in each path.
+   *   Receives may be conditional (and therefore occur only in some paths)
    * @param c
    * @param hascall
    * @return
@@ -107,6 +107,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
           (hascall, assignees + id)
       }
     }
+    case CSpeculate(_, _, body) => checkModuleBodyWellFormed(body, hascall, assignees)
     case CReturn(_) => throw UnexpectedReturn(c.pos)
     case _ => (hascall, assignees)
   }
@@ -131,7 +132,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CirNew(mod, inits, mods) => {
       val mtyp = tenv(mod)
       mtyp match {
-        case TModType(ityps, refs) => {
+        case TModType(ityps, refs, _) => {
           if(ityps.length != inits.length) {
             throw ArgLengthMismatch(c.pos, ityps.length, inits.length)
           }
@@ -167,7 +168,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       checkCommand(c2, e2)
     }
     case CDecl(id, typ,_) => typ match {
-      case TMemType(_,_) | TModType(_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)
+      case TMemType(_,_) | TModType(_,_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)
       case _ => tenv.add(id, typ)
     }
     case CIf(cond, cons, alt) => {
@@ -189,15 +190,32 @@ object BaseTypeChecker extends TypeChecks[Type] {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
-    case CLockOp(mem, op) => {
+    case CLockOp(mem, _) => {
       tenv(mem).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case _: TModType => tenv
         case _: TMemType => tenv
       }
     }
+    case CSpeculate(nvar, predval, body) => {
+      val (predtyp, env1) = checkExpression(predval, tenv)
+      val ltyp = nvar.typ.get //parser ensures type is defined
+      val nenv = env1.add(nvar.id, ltyp)
+      if (isSubtype(predtyp, ltyp)) checkCommand(body, nenv)
+      else throw UnexpectedSubtype(predval.pos, "speculate", ltyp, predtyp)
+    }
+    case CCheck(predVar, realVal) => {
+      val predtyp = tenv(predVar)
+      val (rtyp, nenv) = checkExpression(realVal, tenv)
+      if (isSubtype(rtyp, predtyp)) nenv
+      else throw UnexpectedSubtype(realVal.pos, "check speculation", predtyp, rtyp)
+    }
+    case CResolve(predVar) => {
+      tenv(predVar)
+      tenv
+    }
     case CCall(id, args) => {
       tenv(id) match {
-        case TModType(ityps, _) => {
+        case TModType(ityps, _, _) => {
           if (args.length != ityps.length) {
             throw ArgLengthMismatch(c.pos, args.length, ityps.length)
           }
