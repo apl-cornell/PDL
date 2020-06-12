@@ -9,6 +9,7 @@ object Environments {
 
     val EmptyTypeEnv: Environment[Type] = TypeEnv()
     val EmptyLockEnv: Environment[LockState] = LockEnv()
+    val EmptyBoolEnv: Environment[Boolean] = BoolEnv()
 
     sealed trait Environment[T] {
         /**
@@ -82,5 +83,13 @@ object Environments {
                   case (l@_, r@_) => throw IllegalLockMerge(id.pos, id.v, l, r)
             }))
         }
+    }
+    case class BoolEnv(boolSet: Set[Id] = Set()) extends Environment[Boolean] {
+        override def add(name: Id, b: Boolean): Environment[Boolean] =
+            if (b) BoolEnv(boolSet + name) else BoolEnv(boolSet - name)
+        override def get(name: Id): Option[Boolean] = Some(boolSet(name))
+        override def getMappedIds(): Set[Id] = boolSet
+        override def intersect(other: Environment[Boolean]): Environment[Boolean] =
+            BoolEnv(boolSet.intersect(other.getMappedIds()))
     }
 }

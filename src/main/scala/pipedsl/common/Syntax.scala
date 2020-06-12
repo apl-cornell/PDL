@@ -60,7 +60,7 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int) extends Type
-  case class TModType(inputs: List[Type], refs: List[Type], speculativeVars: List[Id]) extends Type
+  case class TModType(inputs: List[Type], refs: List[Type], speculativeVars: Set[Id]) extends Type
 
   /**
    * Define common helper methods implicit classes.

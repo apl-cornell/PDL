@@ -5,6 +5,12 @@ import TypeChecker.TypeChecks
 import pipedsl.common.Locks.LockState._
 import pipedsl.common.Syntax._
 
+/**
+ * This checks that all reads and writes to memories
+ * only happen when appropriate.
+ * - Checks: Whenever a memory is read or written, the lock for that memory has been acquired
+ * - Checks: That all locks are released (or never acquired) by the end of the program
+ */
 object LockChecker extends TypeChecks[LockState] {
 
   override def emptyEnv(): Environment[LockState] = Environments.EmptyLockEnv

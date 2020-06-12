@@ -5,6 +5,7 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
+import pipedsl.common.Syntax
 
 
 //TODO kinds of typechecking we need to do:
@@ -48,10 +49,10 @@ object BaseTypeChecker extends TypeChecks[Type] {
       if (r1.isDefined) { throw MalformedFunction(c2.pos, "Unexpected command following return") }
       checkFuncWellFormed(c2, tenv)
     }
-    case CTBar(c1, c2) => {
-      throw MalformedFunction(c.pos, "Time steps are not allowed in combinational functions")
+    case _: CTBar | _: CSpeculate | _: CResolve | _: CCheck => {
+      throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     }
-    case CIf(cond, cons, alt) => {
+    case CIf(_, cons, alt) => {
       val rt = checkFuncWellFormed(cons, tenv)
       val rf = checkFuncWellFormed(alt, tenv)
       (rt, rf) match {
@@ -70,7 +71,8 @@ object BaseTypeChecker extends TypeChecks[Type] {
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
     val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
-    val modTyp = TModType(inputTyps, modTyps, List())
+    val specVars = getSpeculativeVariables(m.body)
+    val modTyp = TModType(inputTyps, modTyps, specVars)
     val finalEnv = pipeEnv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, hascall = false, Set())
     checkCommand(m.body, finalEnv)
@@ -356,5 +358,15 @@ object BaseTypeChecker extends TypeChecks[Type] {
       }
       case None => (tenv(id), tenv)
     }
+  }
+
+  //Returns all variables which could cause the first pipeline stage
+  //to start speculatively
+  def getSpeculativeVariables(c: Command): Set[Id] = c match {
+    case CSeq(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
+    case CTBar(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
+    case CIf(_, cons, alt) => getSpeculativeVariables(cons) ++ getSpeculativeVariables(alt)
+    case CSpeculate(predVar, _, _) => Set(predVar.id)
+    case _ => Set()
   }
 }

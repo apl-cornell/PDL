@@ -76,15 +76,16 @@ object TimingTypeChecker extends TypeChecks[Type] {
       if(checkExpr(predVal, vars)) {
         throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")
       }
-      //Only allow speculative variable to be referenced in speculative body
+      //Only allow speculative variables to be referenced in speculative body
       val (vars2, nvars2) = checkCommand(body, vars + predVar.id, nextVars, insideCond)
       (vars2 - predVar.id, nvars2)
     }
-    case CCheck(_, realVal) => {
+    case CCheck(predVar, realVal) => {
       if (checkExpr(realVal, vars)) {
         throw UnexpectedAsyncReference(realVal.pos, "Check clause must be combinational")
       }
-      (vars, nextVars)
+      //now that the variable is *not* speculative it can be used
+      (vars + predVar, nextVars)
     }
     case CResolve(_) => (vars, nextVars)
     case CCall(_, args) => {
