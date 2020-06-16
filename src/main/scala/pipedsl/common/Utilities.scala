@@ -54,6 +54,7 @@ object Utilities {
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(func, args) => args.foldLeft[Set[Id]](Set(func))((s, a) => { s ++ getUsedVars(a) })
     case EVar(id) => Set(id)
+    case ECast(_, exp) => getUsedVars(exp)
     case _ => Set()
   }
 

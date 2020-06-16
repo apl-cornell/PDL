@@ -49,7 +49,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       if (r1.isDefined) { throw MalformedFunction(c2.pos, "Unexpected command following return") }
       checkFuncWellFormed(c2, tenv)
     }
-    case _: CTBar | _: CSpeculate | _: CResolve | _: CCheck => {
+    case _: CTBar | _: CSpeculate | _: CResolve | _: CCheck | _:COutput => {
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     }
     case CIf(_, cons, alt) => {
@@ -103,7 +103,11 @@ object BaseTypeChecker extends TypeChecks[Type] {
       }
       (hct || hcf, asf)
     }
-    case CCall(_, _) => if (hascall) { throw UnexpectedCall(c.pos) } else { (true, assignees) }
+    case CCall(_, _) => if (hascall) {
+      //throw UnexpectedCall(c.pos)
+      //TODO maybe we don't bother with this. trust programmer to not call multiple times
+      (hascall, assignees)
+      } else { (true, assignees) }
     case CAssign(lhs@EVar(id), _) => {
         if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
           (hascall, assignees + id)
@@ -358,6 +362,14 @@ object BaseTypeChecker extends TypeChecks[Type] {
       }
       case None => (tenv(id), tenv)
     }
+    //TODO some other rules for casting
+    case ECast(ctyp, exp) =>
+      val (etyp, tenv2) = checkExpression(exp, tenv)
+      (ctyp, etyp) match {
+        case (t1, t2) if !areEqual(t1, t2) => throw IllegalCast(e.pos, t1, t2)
+        case _ => ()
+      }
+      (ctyp, tenv2)
   }
 
   //Returns all variables which could cause the first pipeline stage

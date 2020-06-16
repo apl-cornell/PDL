@@ -65,11 +65,15 @@ class Parser extends RegexParsers with PackratParsers {
     parens(expr) ~ "?" ~ expr ~ ":" ~ expr ^^ { case c ~ _ ~ t ~ _ ~ v => ETernary(c, t, v) }
   }
 
+  lazy val cast: P[Expr] = positioned {
+    "cast" ~> parens(expr ~ "," ~ typ) ^^ {  case e ~ _ ~ t => ECast(t, e) }
+  }
   //UOps
   lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
 
   lazy val simpleAtom: P[Expr] = positioned {
     not ~ expr ^^ { case n ~ e => EUop(n, e) } |
+    cast |
     memAccess |
       bitAccess |
       recAccess |
@@ -194,7 +198,10 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val memory: P[Type] = sizedInt ~ brackets(posint) ^^ { case elem ~ size => TMemType(elem, size) }
 
-  lazy val typ: P[Type] = memory | sizedInt
+  lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
+
+
+  lazy val typ: P[Type] = memory | sizedInt | bool
 
   lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t => Param(i, t) }
 

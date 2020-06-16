@@ -5,7 +5,7 @@ import common.PrettyPrinter
 import java.io.File
 import java.nio.file.Files
 import pipedsl.passes.SimplifyRecvPass
-import typechecker.{BaseTypeChecker, TimingTypeChecker, LockChecker}
+import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 
 object Main {
   val logger: Logger = Logger("main")
@@ -17,17 +17,18 @@ object Main {
     if (args.length < 1) {
       throw new RuntimeException(s"Need to pass a file path as an argument")
     }
-    val inputFile = new File(args(0)).toPath()
+    val inputFile = new File(args(0)).toPath
     if (!Files.exists(inputFile)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
     val prog = r.get
-    logger.info(r.toString());
+    logger.info(r.toString)
     val basetypes = BaseTypeChecker.check(prog, None)
     TimingTypeChecker.check(prog, Some(basetypes))
     val prog_recv = SimplifyRecvPass.run(prog)
     LockChecker.check(prog_recv, None)
+    SpeculationChecker.check(prog_recv, Some(basetypes))
     //PrettyPrinter.printCmd(c)
     //val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
     //logger.info(stages.toString())

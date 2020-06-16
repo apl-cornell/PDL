@@ -1,0 +1,114 @@
+def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
+    if (op == 1<2>) {
+        return arg1 + arg2;
+    } else if (op == 2<2>) {
+        return arg1 >> arg2;
+    } else if (op == 3<2>) {
+        return arg1 - arg2;
+    } else {
+        return arg1 * arg2;
+    }
+}
+
+def btb(curpc: int<32>): int<32> {
+    if (curpc{31:31} == 1<1>) {
+        return curpc + 4<32>;
+    } else {
+        return curpc + 8<32>;
+    }
+}
+
+def bht(curpc: int<32>, optyp: int<2>): int<32> {
+    if (optyp == 0b0<2>) {
+        return curpc + 12<32>;
+    } else {
+        return curpc + 4<32>;
+    }
+}
+
+def isbrpred(curpc: int<32>): int<1> {
+    if (curpc > 0b11110<32>) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+//what can be executed speculatively?
+//lock acquisition? should be OK
+//memory reads? YES
+//memory write? NO
+//call stmts? Need for Nested speculation
+//speculate stmts? Need for nested speculation
+
+pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
+    // isBR and npc are speculative here
+    acquire(imem);
+    int<32> insn <- imem[pc];
+    release(imem);
+    //this creates nested speculation since we haven't resolved anything
+    speculate (int<1> isBR = isbrpred(pc)) {
+        if (cast(isBR,bool)) { call cpu(pc + 4<32>) }
+        //maybe this only contains sends? i.e. can only speculatively trigger stages, not do actual compute
+    }
+    ---
+    int<2> op_type = insn{1:0};
+    int<2> op = insn{3:2};
+    //we shouldn't be able to resolve our nested speculation before ourselves, right?
+    resolve(isBR); //iff thread is speculative (tracked dynamically in reg) then wait for head of spec queue to be committed or aborted
+    check( isBR == (op == 0b0<2>) );
+    speculate (int<32> npc = bht(pc, op)) {
+        if (! cast(isBR, bool)) {
+            call cpu(npc);
+        }
+    }
+    int<5> rs1 = insn{8:4};
+    int<5> rs2 = insn{13:9};
+    int<5> rd = insn{18:14};
+    int<13> imm = insn{31:19};
+    acquire(rf);
+    int<32> arg1 <- rf[rs1];
+    int<32> arg2 <- rf[rs2];
+    ---
+    int<32> offset = ((op_type == 0b0<2>) && (arg1 == arg2)) ? 0b0<19> ++ imm : 4<32>;
+    check(npc == pc + offset);
+    int<32> add_arg2;
+    if (op_type == 0b1<2>) {
+      //op_type == ALU;
+      add_arg2 = arg2;
+      int<32> arg3 = add_arg2 - 1<32>
+    } else {
+      //LD/ST
+      add_arg2 = 0x0<19> ++ imm;
+      int<32> arg3 = add_arg2 + 1<32>
+    }
+    int<32> alu_res = alu(arg1, add_arg2, op);
+    ---
+    next int<32> mem_res;
+    if (op_type == 0b10) {
+        acquire(dmem);
+        //LD
+        mem_res <- dmem[alu_res];
+        release(dmem);
+    } else {
+        if (op_type == 0b11) {
+            //ST
+            acquire(dmem);
+            dmem[alu_res] <- arg2;
+            release(dmem);
+        }
+    }
+    ---
+    if (op_type == 0b1<2>) {
+        rf[rd] <- alu_res;
+    } else if (op_type == 0b10) {
+        rf[rd] <- mem_res;
+    }
+    release(rf);
+}
+
+circuit {
+    i = memory(int<32>, 32);
+    d = memory(int<32>, 32);
+    r = memory(int<32>, 5);
+    c = new cpu(0<32>)[r, i, d];
+}

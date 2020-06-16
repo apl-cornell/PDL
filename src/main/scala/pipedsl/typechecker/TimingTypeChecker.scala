@@ -132,6 +132,7 @@ object TimingTypeChecker extends TypeChecks[Type] {
     }
     case EApp(_, args) => args.foldLeft[Boolean](false)((usesMem, a) => checkExpr(a, vars) || usesMem)
     case EVar(id) => if(!vars(id)) { throw UnavailableArgUse(e.pos, id.toString)} else { false }
+    case ECast(_, exp) => checkExpr(exp, vars)
     case _ => false
   }
   //No timing in the circuit, just connections

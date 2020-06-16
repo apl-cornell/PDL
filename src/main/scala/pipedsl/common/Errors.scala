@@ -62,6 +62,9 @@ object Errors {
   case class InvalidLockState(pos: Position, name: String, l: LockState, exp: LockState) extends TypeError(
     s"Invalid lock state for $name, was $l, expected $exp", pos)
 
+  case class IllegalCast(pos: Position, rtyp: Type, ctyp: Type) extends TypeError(
+    s"Cannot cast type $rtyp to $ctyp", pos)
+
   case class AlreadyBoundType(pos: Position, node: String, oldT: Type, newT: Type) extends TypeError(
     s"Tried to bind type: $newT to $node but already has type: $oldT", pos)
 
@@ -83,4 +86,9 @@ object Errors {
   case class UnexpectedAsyncReference(pos: Position, node: String) extends TypeError (
     s"$node references memory in a synchronous statement", pos)
 
+  case class UnresolvedSpeculation(pos: Position, operation: String) extends TypeError (
+    s"Tried to perform $operation while in a potentially speculative state", pos)
+
+  case class AlreadyResolvedSpeculation(pos: Position) extends TypeError(
+    s"Reduntant resolve operation, not possible to be speculative here", pos)
 }

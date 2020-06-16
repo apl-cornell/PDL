@@ -141,6 +141,7 @@ object Syntax {
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
+  case class ECast(ctyp: Type, exp: Expr) extends Expr
 
   def MemoryWrite(index: Expr, value: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index), (Id("value"),value)))
   def MemoryRead(index: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index)))
