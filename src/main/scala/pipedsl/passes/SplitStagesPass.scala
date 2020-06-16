@@ -5,7 +5,7 @@ import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.CommandPass
 
-object SplitStagesPass extends CommandPass[PStage] {
+object SplitStagesPass extends CommandPass[List[PStage]] {
 
   var stgCounter: Int = 0
 
@@ -15,7 +15,7 @@ object SplitStagesPass extends CommandPass[PStage] {
     Id(s)
   }
 
-  override def run(c: Command): PStage = {
+  override def run(c: Command): List[PStage] = {
     val termStage = new PStage(Id("Terminate"), CEmpty)
     var stageList: List[PStage] = splitToStages(c)
     //Add the terminator stage
@@ -26,9 +26,10 @@ object SplitStagesPass extends CommandPass[PStage] {
       }
       p
     })
+    stageList = stageList :+ termStage
     //Add the backedges to each stage that sends data to the beginning of the pipeline
     stageList.foreach(p => addCallSuccs(p, stageList.head))
-    stageList.head
+    stageList
   }
 
   /**

@@ -11,15 +11,17 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   var counter: Int = 0
 
   override def run(p: Prog): Prog = {
+    usedVars = p.fdefs.foldLeft[Set[Id]](usedVars)((s,f) => s + f.name)
     p.copy(moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
   }
 
   override def run(m: ModuleDef): ModuleDef = {
+    usedVars = m.modules.foldLeft[Set[Id]](usedVars)((s,p) => s + p.name)
     m.copy(body = run(m.body)).setPos(m.pos)
   }
 
   override def run(c: Command): Command = {
-    usedVars = getAllVarNames(c)
+    usedVars = usedVars ++ getAllVarNames(c)
     runHelper(c)
   }
 

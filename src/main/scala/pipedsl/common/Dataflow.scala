@@ -62,13 +62,15 @@ object Dataflow {
    * Transfer function that accumulates all variables which will
    * be used in later stages. Meant for a backwards analysis where
    * "used" contains variables which will definitely be used in
-   * later stages.
+   * later stages. This adds any variables which were used in this
+   * stage but not written in this stage.
    * @param p The stage to check
    * @param used The set of variables used later in the pipeline,
    * @return The set of variables used in *p* and later in the pipeline.
    */
   def transferUsedVars(p: PStage, used: Set[Id]): Set[Id] = {
-    getUsedVars(p.cmd) ++ used
+    getUsedVars(p.cmd) ++ used -- getWrittenVars(p.cmd)
+    //if a var was written this stage, then we don't need to send it from the prior stage
   }
 
   /**

@@ -2,9 +2,10 @@ package pipedsl
 
 import com.typesafe.scalalogging.Logger
 import common.PrettyPrinter
+import common.Dataflow._
 import java.io.File
 import java.nio.file.Files
-import pipedsl.passes.{SimplifyRecvPass, SplitStagesPass}
+import passes.{SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 
 object Main {
@@ -29,9 +30,15 @@ object Main {
     val prog_recv = SimplifyRecvPass.run(prog)
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
-    val stage1 = SplitStagesPass.run(prog_recv.moddefs(0).body)
-    logger.info("hello")
-    //PrettyPrinter.printCmd(c)
+    val stages = SplitStagesPass.run(prog_recv.moddefs.head.body)
+    val (df_ins, df_outs) = worklist(stages, UsedInLaterStages)
+    PrettyPrinter.printCmd(prog_recv.moddefs.head.body)
+    stages.foreach(s => {
+      logger.info("Stage: " + s.name)
+      logger.info("Variables Needed After This Stages: ")
+      logger.info(df_outs(s.name).mkString(","))
+    })
+
     //val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
     //logger.info(stages.toString())
   }

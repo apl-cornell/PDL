@@ -45,6 +45,15 @@ object Utilities {
     case Syntax.CEmpty => Set()
   }
 
+  //Get variables written this cycle combinationally
+  def getWrittenVars(c: Command): Set[Id] = c match {
+    case CSeq(c1, c2) => getWrittenVars(c1) ++ getWrittenVars(c2)
+    case CTBar(c1, c2) => getWrittenVars(c1) ++ getWrittenVars(c2)
+    case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
+    case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
+    case CSpeculate(_, _, body) => getWrittenVars(body)
+    case _ => Set()
+  }
   def getUsedVars(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
     case CTBar(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
@@ -65,10 +74,10 @@ object Utilities {
     case EUop(op, ex) => getUsedVars(ex)
     case EBinop(op, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, fieldName) => getUsedVars(rec)
-    case EMemAccess(mem, index) => Set(mem) ++ getUsedVars(index)
+    case EMemAccess(mem, index) => getUsedVars(index) //memories aren't variables, they're externally defined
     case EBitExtract(num, start, end) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
-    case EApp(func, args) => args.foldLeft[Set[Id]](Set(func))((s, a) => { s ++ getUsedVars(a) })
+    case EApp(func, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) }) //functions are also externally defined
     case EVar(id) => Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case _ => Set()
