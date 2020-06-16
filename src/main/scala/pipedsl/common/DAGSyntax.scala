@@ -50,7 +50,7 @@ object DAGSyntax {
    * @param body - The set of combinational logic that executes during this stage
    * @param sends - The set of conditional send operations to succs and/or external modules
    */
-  class PStage(n:Id, var cmd: Command, var preds: List[PipelineEdge] = List(), var succs: List[PipelineEdge] = List(),
+  class PStage(n:Id, var cmd: Command, var preds: List[PStage] = List(), var succs: List[PStage] = List(),
     var recvs:List[SReceive] = List(), var body: List[StageCommand] = List(), var sends: List[SSend] = List()) extends Process(n)
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {

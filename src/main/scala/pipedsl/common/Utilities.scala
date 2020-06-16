@@ -45,6 +45,22 @@ object Utilities {
     case Syntax.CEmpty => Set()
   }
 
+  def getUsedVars(c: Command): Set[Id] = c match {
+    case CSeq(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
+    case CTBar(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
+    case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
+    case CAssign(lhs, rhs) => getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(rhs)
+    case CCall(id, args) => args.foldLeft[Set[Id]](Set())( (s, a) => s ++ getUsedVars(a) )
+    case COutput(exp) => getUsedVars(exp)
+    case CReturn(exp) => getUsedVars(exp)
+    case CExpr(exp) => getUsedVars(exp)
+    case CSpeculate(predVar, predVal, body) => getUsedVars(predVal) ++ getUsedVars(body)
+    case CCheck(predVar, realVal) => getUsedVars(realVal) + predVar
+    case CResolve(predVar) => Set(predVar)
+    case _ => Set()
+  }
+
   def getUsedVars(e: Expr): Set[Id] = e match {
     case EUop(op, ex) => getUsedVars(ex)
     case EBinop(op, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
