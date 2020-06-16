@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.Logger
 import common.PrettyPrinter
 import java.io.File
 import java.nio.file.Files
-import pipedsl.passes.SimplifyRecvPass
+import pipedsl.passes.{SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 
 object Main {
@@ -29,6 +29,8 @@ object Main {
     val prog_recv = SimplifyRecvPass.run(prog)
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
+    val stage1 = SplitStagesPass.run(prog_recv.moddefs(0).body)
+    logger.info("hello")
     //PrettyPrinter.printCmd(c)
     //val stages = PipeCompiler.compileToDag(r.get.moddefs(0))
     //logger.info(stages.toString())

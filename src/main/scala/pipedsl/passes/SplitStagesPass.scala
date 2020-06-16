@@ -1,6 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.{PStage, SReceive, SSend}
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.CommandPass
 
@@ -15,9 +16,41 @@ object SplitStagesPass extends CommandPass[PStage] {
   }
 
   override def run(c: Command): PStage = {
-    splitToStages(c).head
+    val termStage = new PStage(Id("Terminate"), CEmpty)
+    var stageList: List[PStage] = splitToStages(c)
+    //Add the terminator stage
+    stageList = stageList.map[PStage](p => {
+      if (p.succs.isEmpty) {
+        p.succs = p.succs :+ termStage
+        termStage.preds = termStage.preds :+ p
+      }
+      p
+    })
+    //Add the backedges to each stage that sends data to the beginning of the pipeline
+    stageList.foreach(p => addCallSuccs(p, stageList.head))
+    stageList.head
   }
 
+  /**
+   * If p may execute a 'call' command,
+   * add an edge from p to the first stage in the pipeline
+   * @param p - Stage to check for call statements
+   * @param firstStage - First pipeline stage
+   */
+  private def addCallSuccs(p: PStage, firstStage: PStage): Unit = {
+    callSuccsHelper(p.cmd, p, firstStage)
+  }
+
+  private def callSuccsHelper(c: Command, p:PStage, firstStage: PStage): Unit = c match {
+    case CSeq(c1, c2) => callSuccsHelper(c1, p, firstStage); callSuccsHelper(c2, p, firstStage)
+    case CIf(_, cons, alt) => callSuccsHelper(cons, p, firstStage); callSuccsHelper(alt, p, firstStage)
+    case CCall(_, _) => {
+      p.succs = p.succs :+ firstStage
+      firstStage.preds = firstStage.preds :+ p
+    }
+    case CSpeculate(_, _, body) => callSuccsHelper(body, p, firstStage)
+    case _ => ()
+  }
   /**
    *
    * @param c
@@ -30,8 +63,8 @@ object SplitStagesPass extends CommandPass[PStage] {
       //sequential pipeline, last stage in c1 sends to first in c2
       val lastc1 = firstStages.last
       val firstc2 = secondStages.head
-      lastc1.succs = lastc1.succs :+ (None, firstc2)
-      firstc2.preds = firstc2.preds :+ (None, lastc1) //these are unconditional edges
+      lastc1.succs = lastc1.succs :+ firstc2
+      firstc2.preds = firstc2.preds :+ lastc1
       firstStages ++ secondStages
     }
     //TODO once we add other control structures (like split+join) update this
@@ -42,7 +75,7 @@ object SplitStagesPass extends CommandPass[PStage] {
 
   /**
    * Extracts all of the statements which correspond to communication
-   * with another pipeline stage or memory.
+   * with memory or external modules.
    * @param c The command to modify
    * @param nextStg The next stage in the pipeline
    * @return (the modified command, the set of send statements generated, the receive statements corresponding to those sends)
