@@ -1,9 +1,10 @@
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.{PStage, SReceive, SSend}
-import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
-import pipedsl.passes.Passes.CommandPass
+import pipedsl.common.Dataflow._
+import Passes.CommandPass
+import scala.jdk.CollectionConverters._
 
 object SplitStagesPass extends CommandPass[List[PStage]] {
 
@@ -29,6 +30,8 @@ object SplitStagesPass extends CommandPass[List[PStage]] {
     stageList = stageList :+ termStage
     //Add the backedges to each stage that sends data to the beginning of the pipeline
     stageList.foreach(p => addCallSuccs(p, stageList.head))
+    //Get variable lifetime information:
+    val (vars_used_in, vars_used_out) = worklist(stageList, UsedInLaterStages)
     stageList
   }
 
@@ -84,4 +87,5 @@ object SplitStagesPass extends CommandPass[List[PStage]] {
   private def extractReceives(c: Command, nextStg: Id): (Command, List[SSend], List[SReceive]) = c match {
     case _ => (c, List(), List())
   }
+  
 }
