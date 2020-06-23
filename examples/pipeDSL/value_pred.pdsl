@@ -10,22 +10,6 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
     }
 }
 
-def btb(curpc: int<32>): int<32> {
-    if (curpc{31:31} == 1<1>) {
-        return curpc + 4<32>;
-    } else {
-        return curpc + 8<32>;
-    }
-}
-
-def bht(curpc: int<32>, optyp: int<2>): int<32> {
-    if (optyp == 0b0<2>) {
-        return curpc + 12<32>;
-    } else {
-        return curpc + 4<32>;
-    }
-}
-
 //what can be executed speculatively?
 //lock acquisition? should be OK
 //memory reads? YES
@@ -37,10 +21,6 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     acquire(imem);
     int<32> insn <- imem[pc];
     release(imem);
-    speculate (int<32> npc = btb(pc)) {
-       call cpu(npc); //stuff in here is executing speculatively
-                  // AND any (reachable) successors inside the specualte block execute speculatively as well
-    }
     ---
     int<2> op_type = insn{1:0};
     int<2> op = insn{3:2};
@@ -53,8 +33,6 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     int<32> arg2 <- rf[rs2];
     ---
     int<32> offset = ((op_type == 0b0<2>) && (arg1 == arg2)) ? 0b0<19> ++ imm : 4<32>;
-    resolve();
-    check(npc == pc + offset); //resolves prior speculation on npc
     int<32> add_arg2;
     if (op_type == 0b1<2>) {
       //op_type == ALU;
