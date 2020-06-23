@@ -32,7 +32,7 @@ object Main {
     SpeculationChecker.check(prog_recv, Some(basetypes))
     val stages = SplitStagesPass.run(prog_recv.moddefs.head.body)
     val (df_ins, df_outs) = worklist(stages, UsedInLaterStages)
-    PrettyPrinter.printCmd(prog_recv.moddefs.head.body)
+    PrettyPrinter.printProgram(prog_recv)
     stages.foreach(s => {
       logger.info("Stage: " + s.name)
       logger.info("Variables Needed After This Stages: ")

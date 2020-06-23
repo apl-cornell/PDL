@@ -370,6 +370,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
         case _ => ()
       }
       (ctyp, tenv2)
+    case _ => throw UnexpectedCase(e.pos)
   }
 
   //Returns all variables which could cause the first pipeline stage

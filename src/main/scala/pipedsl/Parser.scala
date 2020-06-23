@@ -41,11 +41,11 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
   lazy val recLiteral = positioned {
-    braces(repsep(recLiteralField, ",")) ^^ { case fieldList => ERecLiteral(fieldList.toMap) }
+    braces(repsep(recLiteralField, ",")) ^^ (fieldList => ERecLiteral(fieldList.toMap))
   }
 
   lazy val variable: P[EVar] = positioned {
-    iden ^^ { case id => EVar(id) }
+    iden ^^ (id => EVar(id))
   }
 
   lazy val recAccess: P[Expr] = positioned {

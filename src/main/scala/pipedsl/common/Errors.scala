@@ -32,6 +32,10 @@ object Errors {
     withPos(s"Bad Function Definition: $msg", pos)
   )
 
+  case class UnexpectedCase(pos: Position) extends RuntimeException(
+    withPos(s"Analysis found unexpected case", pos)
+  )
+
   case class UnexpectedPipelineStatement(pos: Position, msg: String) extends RuntimeException(
     withPos(s"Tried to execute a $msg statement inside of a conditional block", pos)
   )

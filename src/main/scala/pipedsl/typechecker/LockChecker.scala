@@ -2,6 +2,7 @@ package pipedsl.typechecker
 
 import Environments._
 import TypeChecker.TypeChecks
+import pipedsl.common.Errors.UnexpectedCase
 import pipedsl.common.Locks.LockState._
 import pipedsl.common.Syntax._
 
@@ -23,6 +24,7 @@ object LockChecker extends TypeChecks[LockState] {
     val nenv = m.modules.foldLeft[Environment[LockState]](env)( (e, m) => m.typ match {
       case TMemType(_, _) => e.add(m.name, Free)
       case TModType(_, _, _) => e.add(m.name, Free)
+      case _ => throw UnexpectedCase(m.pos)
     })
     val finalenv = checkCommand(m.body, nenv)
     //At end of execution all acquired or reserved locks must be released
@@ -52,6 +54,7 @@ object LockChecker extends TypeChecks[LockState] {
     case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem,_), _) => env(mem).matchOrError(lhs.pos, mem.v, Acquired) { case Acquired => env }
         case (_, EMemAccess(mem,_)) => env(mem).matchOrError(rhs.pos, mem.v, Acquired) { case Acquired => env }
+        case _ => throw UnexpectedCase(c.pos)
       }
     case CLockOp(mem, op) => env.add(mem, op)
     case _ => env
