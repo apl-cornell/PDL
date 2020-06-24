@@ -154,7 +154,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val blockCmd: P[Command] = positioned {
-    block | conditional | speculate
+    block | split | conditional | speculate
   }
 
   lazy val speculate: P[Command] = positioned {
@@ -163,17 +163,26 @@ class Parser extends RegexParsers with PackratParsers {
       CSpeculate(v, ev, c)
     }}
   }
-
   lazy val check: P[Command] = positioned {
     "check" ~> parens(iden ~ "==" ~ expr) ^^ { case id ~ _ ~ e =>  CCheck(id, e) }
   }
-
   lazy val resolve: P[Command] = positioned {
-    "resolve" ~> parens(iden) ^^ { case id => CResolve(id) }
+    "resolve" ~> parens(iden) ^^ (id => CResolve(id))
+  }
+
+
+  lazy val casestmt: P[CaseObj] = positioned {
+    "case:" ~> expr ~ block ^^ { case e ~ b => CaseObj(e, b) }
+  }
+  lazy val defaultcase: P[Command] = positioned {
+    "default:" ~> block
+  }
+  lazy val split: P[Command] = positioned {
+    "split" ~> braces(rep(casestmt) ~ defaultcase.?) ^^ { case cl ~ dc => CSplit(cl, if (dc.isDefined) dc.get else CEmpty) }
   }
 
   lazy val block: P[Command] = {
-    braces(cmd.?) ^^ { case c => c.getOrElse(CEmpty) }
+    braces(cmd.?) ^^ (c => c.getOrElse(CEmpty))
   }
 
   lazy val conditional: P[Command] = positioned {
@@ -181,7 +190,6 @@ class Parser extends RegexParsers with PackratParsers {
       case cond ~ cons ~ alt => CIf(cond, cons, if (alt.isDefined) alt.get else CEmpty)
     }
   }
-
 
   lazy val seqCmd: P[Command] = {
     simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
@@ -191,17 +199,14 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val cmd: P[Command] = positioned {
     seqCmd ~ "---" ~ cmd ^^ { case c1 ~ _ ~ c2 => CTBar(c1, c2) } |
-      seqCmd
+    "---" ~> cmd ^^ { c => CTBar(CEmpty, c)} | seqCmd
   }
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, true) }
-
+  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
   lazy val memory: P[Type] = sizedInt ~ brackets(posint) ^^ { case elem ~ size => TMemType(elem, size) }
-
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
-
-
   lazy val typ: P[Type] = memory | sizedInt | bool
+
 
   lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t => Param(i, t) }
 

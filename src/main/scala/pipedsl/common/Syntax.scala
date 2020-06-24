@@ -10,10 +10,10 @@ object Syntax {
    */
   object Annotations {
     sealed trait TypeAnnotation {
-      var typ: Option[Type] = None;
+      var typ: Option[Type] = None
     }
     sealed trait LabelAnnotation {
-      var lbl: Option[Label] = None;
+      var lbl: Option[Label] = None
     }
   }
 
@@ -40,7 +40,7 @@ object Syntax {
   }
 
   sealed trait Type extends Positional {
-    override def toString = this match {
+    override def toString: String = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
@@ -165,7 +165,10 @@ object Syntax {
   case class CSpeculate(predVar: EVar, predVal: Expr, body: Command) extends Command
   case class CCheck(predVar: Id, realVal: Expr) extends Command
   case class CResolve(predVar: Id) extends Command
+  case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case object CEmpty extends Command
+
+  case class CaseObj(cond: Expr, body: Command) extends Positional
 
   sealed trait Definition extends Positional
 

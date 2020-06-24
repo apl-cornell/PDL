@@ -46,7 +46,6 @@ object BaseTypeChecker extends TypeChecks[Type] {
   private def checkFuncWellFormed(c: Command, tenv: Environment[Type]): Option[Type] = c match {
     case CSeq(c1, c2) => {
       val r1 = checkFuncWellFormed(c1, tenv)
-      if (r1.isDefined) { throw MalformedFunction(c2.pos, "Unexpected command following return") }
       checkFuncWellFormed(c2, tenv)
     }
     case _: CTBar | _: CSpeculate | _: CResolve | _: CCheck | _:COutput => {
