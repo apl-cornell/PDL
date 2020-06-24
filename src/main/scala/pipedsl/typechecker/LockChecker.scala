@@ -42,9 +42,15 @@ object LockChecker extends TypeChecks[LockState] {
       val l1 = checkCommand(c1, env)
       checkCommand(c2, l1)
     }
-    case CTBar(c1, c2) =>{
+    case CTBar(c1, c2) => {
       val l1 = checkCommand(c1, env)
       checkCommand(c2, l1)
+    }
+    case CSplit(cases, default) => {
+      val df = checkCommand(default, env)
+      cases.foldLeft(df)((fenv, cs) => {
+        fenv.intersect(checkCommand(cs.body, env))
+      })
     }
     case CIf(_, cons, alt) => {
       val lt = checkCommand(cons, env)

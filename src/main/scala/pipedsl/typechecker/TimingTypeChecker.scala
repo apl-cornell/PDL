@@ -47,6 +47,19 @@ object TimingTypeChecker extends TypeChecks[Type] {
       val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
       checkCommand(c2, v2 ++ nv2, NoneAvailable, insideCond)
     }
+    case CSplit(cases, default) => {
+      if (insideCond) { throw UnexpectedPipelineStatement(c.pos, "pipeline split")}
+      var (endv, endnv) = checkCommand(default, vars, nextVars, insideCond)
+      for (c <- cases) {
+        if(checkExpr(c.cond, vars)) {
+          throw UnexpectedAsyncReference(c.cond.pos, c.cond.toString)
+        }
+        val (v2, nv2) = checkCommand(c.body, vars, nextVars, insideCond)
+        endv = endv.intersect(v2)
+        endnv = endnv.intersect(nv2)
+      }
+      (endv, endnv)
+    }
     case CDecl(id,_,n) => if (n) { (vars, nextVars + id) } else { (vars, nextVars) }
     case CIf(cond, cons, alt) => {
       if(checkExpr(cond, vars)) {

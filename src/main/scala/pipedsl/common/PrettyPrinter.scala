@@ -52,6 +52,15 @@ object PrettyPrinter {
       case Syntax.CTBar(c1, c2) =>
         printCmdToString(c1, indent) + "\n" + ins + "---\n" +
           printCmdToString(c2, indent)
+      case Syntax.CSplit(cases, default) =>
+        val cins = ins + (" " * 2)
+        val res = ins + "split {\n"
+        val casestr = cases.foldLeft(res)((str, cs) => {
+          str + cins + "case: " + printExprToString(cs.cond) + " {\n" +
+          printCmdToString(cs.body, indent + 6) + "\n" + cins + "}\n"
+        })
+        casestr + cins + "default: {\n" + printCmdToString(default, indent + 6) +
+        "\n" + cins + "}\n" + ins + "}"
       case Syntax.CIf(cond, cons, alt) =>
         ins + "if ( " + printExprToString(cond) + " ) {\n" +
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +

@@ -21,7 +21,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     int<5> rd = insn{18:14};
     int<13> imm = insn{31:19};
     acquire(rf);
-    int<32> arg1 <- rf[rs1];
+    int<32> arg1 <- rf[insn{8:4}];
     int<32> arg2 <- rf[rs2];
     split {
         //op_type == BR
@@ -56,7 +56,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
                     split {
                         //LD
                         case: op_type == 0b10 {
-                            mem_res <- dmem[alu_res];
+                            int<32> mem_res <- dmem[alu_res];
                             release(dmem);
                             ---
                             rf[rd] <- mem_res;
@@ -65,6 +65,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
                         default: {
                             dmem[alu_res] <- arg2;
                             release(dmem);
+                            release(rf);
                         }
                     }
                 }

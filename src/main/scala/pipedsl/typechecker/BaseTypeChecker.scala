@@ -48,7 +48,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       val r1 = checkFuncWellFormed(c1, tenv)
       checkFuncWellFormed(c2, tenv)
     }
-    case _: CTBar | _: CSpeculate | _: CResolve | _: CCheck | _:COutput => {
+    case _: CTBar | _: CSplit | _: CSpeculate | _: CResolve | _: CCheck | _:COutput => {
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     }
     case CIf(_, cons, alt) => {
@@ -83,7 +83,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
    *   Receives may be conditional (and therefore occur only in some paths)
    * @param c
    * @param hascall
-   * @return
+   * @return (command may execute a call, set of assigned variables)
    */
   def checkModuleBodyWellFormed(c: Command, hascall: Boolean, assignees: Set[Id]): (Boolean, Set[Id]) = c match {
     case CSeq(c1, c2) => {
@@ -93,6 +93,14 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CTBar(c1, c2) => {
       val (hc2, as2) = checkModuleBodyWellFormed(c1, hascall, assignees)
       checkModuleBodyWellFormed(c2, hc2, as2)
+    }
+    case CSplit(cs, d) => {
+      val branches = cs.map(c => c.body) :+ d
+      //check all branches in same context
+      branches.foldLeft((hascall, assignees))((res, c) => {
+        val (hasc, cassgns) = checkModuleBodyWellFormed(c, hascall, assignees)
+        (res._1 || hasc, res._2 ++ cassgns)
+      })
     }
     case CIf(_, cons, alt) => {
       val (hct, ast) = checkModuleBodyWellFormed(cons, hascall, assignees)
@@ -163,6 +171,12 @@ object BaseTypeChecker extends TypeChecks[Type] {
     }
   }
 
+  /**
+   *
+   * @param c
+   * @param tenv
+   * @return
+   */
   def checkCommand(c: Command, tenv: Environment[Type]): Environment[Type] = c match {
     case CSeq(c1, c2) => {
       val e2 = checkCommand(c1, tenv)
@@ -171,6 +185,16 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CTBar(c1, c2) => {
       val e2 = checkCommand(c1, tenv)
       checkCommand(c2, e2)
+    }
+    case CSplit(cases, default) => {
+      var endEnv = checkCommand(default, tenv)
+      for (c <- cases) {
+        val (condTyp, cenv) = checkExpression(c.cond, tenv)
+        condTyp.matchOrError(c.cond.pos, "case condition", "boolean") { case _: TBool => () }
+        val benv = checkCommand(c.body, cenv)
+        endEnv = endEnv.intersect(benv)
+      }
+      endEnv
     }
     case CDecl(id, typ,_) => typ match {
       case TMemType(_,_) | TModType(_,_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)

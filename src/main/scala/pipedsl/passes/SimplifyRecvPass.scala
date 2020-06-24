@@ -39,6 +39,14 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   private def runHelper(c:Command): Command = c match {
     case CSeq(c1, c2) => CSeq(runHelper(c1), runHelper(c2)).setPos(c.pos)
     case CTBar(c1, c2) => CTBar(runHelper(c1), runHelper(c2)).setPos(c.pos)
+    case CSplit(cases, default) => {
+      val newcases: List[CaseObj] = cases.foldLeft(List[CaseObj]())((l, cs) => {
+        val nc = CaseObj(cs.cond, runHelper(cs.body))
+        nc.setPos(cs.pos)
+        l :+ nc
+      })
+      CSplit(newcases, runHelper(default).setPos(default.pos)).setPos(c.pos)
+    }
     case CIf(cond, cons, alt) => CIf(cond, runHelper(cons), runHelper(alt)).setPos(c.pos)
     case CRecv(lhs, rhs) => (lhs, rhs) match {
       case (EVar(_), EMemAccess(_, EVar(_))) => c //leave it alone, already in the form we want

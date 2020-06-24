@@ -26,9 +26,20 @@ object Utilities {
     (res, usedNames + res, newcount)
   }
 
+  /**
+   *
+   * @param c
+   * @return
+   */
   def getAllVarNames(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getAllVarNames(c1) ++ getAllVarNames(c2)
     case CTBar(c1, c2) => getAllVarNames(c1) ++ getAllVarNames(c2)
+    case CSplit(cases, default) => {
+      val names = getAllVarNames(default)
+      cases.foldLeft(names)((v, c) => {
+        v ++ getUsedVars(c.cond) ++ getAllVarNames(c.body)
+      })
+    }
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
     case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
@@ -49,14 +60,28 @@ object Utilities {
   def getWrittenVars(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getWrittenVars(c1) ++ getWrittenVars(c2)
     case CTBar(c1, c2) => getWrittenVars(c1) ++ getWrittenVars(c2)
+    case CSplit(cases, default) =>
+      cases.foldLeft(getWrittenVars(default))((v, c) => {
+        v ++ getWrittenVars(c.body)
+      })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
     case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case CSpeculate(_, _, body) => getWrittenVars(body)
     case _ => Set()
   }
+
+  /**
+   *
+   * @param c
+   * @return
+   */
   def getUsedVars(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
     case CTBar(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
+    case CSplit(cases, default) =>
+      cases.foldLeft(getUsedVars(default))((v, c) => {
+        v ++ getUsedVars(c.cond) ++ getUsedVars(c.body)
+      })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
     case CAssign(lhs, rhs) => getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(rhs)
@@ -70,6 +95,11 @@ object Utilities {
     case _ => Set()
   }
 
+  /**
+   *
+   * @param e
+   * @return
+   */
   def getUsedVars(e: Expr): Set[Id] = e match {
     case EUop(op, ex) => getUsedVars(ex)
     case EBinop(op, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
