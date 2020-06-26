@@ -153,7 +153,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val blockCmd: P[Command] = positioned {
-    block | split | conditional | speculate
+    block | conditional | speculate
   }
 
   lazy val speculate: P[Command] = positioned {
@@ -164,7 +164,7 @@ class Parser extends RegexParsers with PackratParsers {
     }}
   }
   lazy val check: P[Command] = positioned {
-    "check" ~> parens(iden ~ "==" ~ expr) ^^ { case id ~ _ ~ e =>  CCheck(id, e) }
+    "check" ~> parens(iden) ^^ { id => CCheck(id) }
   }
 
   lazy val casestmt: P[CaseObj] = positioned {

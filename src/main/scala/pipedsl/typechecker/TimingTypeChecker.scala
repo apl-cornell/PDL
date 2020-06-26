@@ -37,6 +37,14 @@ object TimingTypeChecker extends TypeChecks[Type] {
     env
   }
 
+  /**
+   *
+   * @param c
+   * @param vars
+   * @param nextVars
+   * @param insideCond
+   * @return
+   */
   def checkCommand(c: Command, vars: Available, nextVars: Available, insideCond: Boolean): (Available, Available) = c match {
     case CSeq(c1, c2) => {
       val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
@@ -85,22 +93,17 @@ object TimingTypeChecker extends TypeChecks[Type] {
       }
     }
     case CLockOp(_, _) => (vars, nextVars)
-    case CSpeculate(predVar, predVal, body) => {
+    case CSpeculate(predVar, predVal, verify, body) => {
       if(checkExpr(predVal, vars)) {
         throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")
       }
-      //Only allow speculative variables to be referenced in speculative body
+      val (varsv, nvarsv) = checkCommand(verify, vars, nextVars, insideCond)
       val (vars2, nvars2) = checkCommand(body, vars + predVar.id, nextVars, insideCond)
-      (vars2 - predVar.id, nvars2)
+      (varsv ++ vars2, nvarsv ++ nvars2)
     }
-    case CCheck(predVar, realVal) => {
-      if (checkExpr(realVal, vars)) {
-        throw UnexpectedAsyncReference(realVal.pos, "Check clause must be combinational")
-      }
-      //now that the variable is *not* speculative it can be used
-      (vars + predVar, nextVars)
+    case CCheck(predVar) => {
+      (vars, nextVars)
     }
-    case CResolve(_) => (vars, nextVars)
     case CCall(_, args) => {
       args.foreach(a => if(checkExpr(a, vars)) {
         throw UnexpectedAsyncReference(a.pos, a.toString)

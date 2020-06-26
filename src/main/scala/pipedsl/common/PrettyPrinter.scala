@@ -79,9 +79,8 @@ object PrettyPrinter {
         case pipedsl.common.Locks.LockState.Acquired => "acquire"
         case pipedsl.common.Locks.LockState.Released => "release"
       }) + "(" + mem.v + ")"
-      case Syntax.CSpeculate(predVar, predVal, body) => ins + "TODO SPECULATE"
-      case Syntax.CCheck(predVar, realVal) => ins + "TODO CHECK"
-      case Syntax.CResolve(predVar) => ins + "TODO RESOLVE"
+      case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "TODO SPECULATE"
+      case Syntax.CCheck(predVar) => ins + "TODO CHECK"
       case Syntax.CEmpty => ins
     }
   }

@@ -1,6 +1,6 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.{AlreadyBoundType, IllegalLockMerge, IllegalLockModification, MissingType}
+import pipedsl.common.Errors.{AlreadyBoundType, IllegalLockMerge, IllegalLockModification, IllegalTypeMerge, MissingType}
 import pipedsl.common.Locks.LockState._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
@@ -31,6 +31,7 @@ object Environments {
             binds.foldLeft[Environment[T]](this)({ case (e, b) => e.add(b._1, b._2) })
 
         def intersect(other: Environment[T]): Environment[T]
+        def union(other: Environment[T]): Environment[T]
     }
 
     case class TypeEnv(
@@ -49,6 +50,17 @@ object Environments {
                         .map(k => { k -> this(k) } )
                         .toMap
             )
+        }
+        override def union(other: Environment[Type]): Environment[Type] = {
+            TypeEnv(other.getMappedIds().foldLeft(typeMap)((m, id) => {
+                val otherval = other(id)
+                if (m.contains(id)) {
+                    if (otherval != m(id)) throw IllegalTypeMerge(id.pos, id, m(id), otherval)
+                    typeMap
+                } else {
+                    typeMap + (id -> otherval)
+                }
+            }))
         }
     }
 
@@ -83,6 +95,17 @@ object Environments {
                   case (l@_, r@_) => throw IllegalLockMerge(id.pos, id.v, l, r)
             }))
         }
+        override def union(other: Environment[LockState]): Environment[LockState] = {
+            LockEnv(other.getMappedIds().foldLeft(lockMap)((m, id) => {
+                val otherval = other(id)
+                if (m.contains(id)) {
+                    if (otherval != m(id) && otherval != Free) throw IllegalLockMerge(id.pos, id.v, m(id), otherval)
+                    lockMap
+                } else {
+                    lockMap + (id -> otherval)
+                }
+            }))
+        }
     }
     case class BoolEnv(boolSet: Set[Id] = Set()) extends Environment[Boolean] {
         override def add(name: Id, b: Boolean): Environment[Boolean] =
@@ -91,5 +114,7 @@ object Environments {
         override def getMappedIds(): Set[Id] = boolSet
         override def intersect(other: Environment[Boolean]): Environment[Boolean] =
             BoolEnv(boolSet.intersect(other.getMappedIds()))
+        override def union(other: Environment[Boolean]): Environment[Boolean] =
+            BoolEnv(boolSet.union(other.getMappedIds()))
     }
 }

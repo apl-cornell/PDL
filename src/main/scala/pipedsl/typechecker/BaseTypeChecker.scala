@@ -48,7 +48,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       val r1 = checkFuncWellFormed(c1, tenv)
       checkFuncWellFormed(c2, tenv)
     }
-    case _: CTBar | _: CSplit | _: CSpeculate | _: CResolve | _: CCheck | _:COutput => {
+    case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput => {
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     }
     case CIf(_, cons, alt) => {
@@ -120,7 +120,12 @@ object BaseTypeChecker extends TypeChecks[Type] {
           (hascall, assignees + id)
       }
     }
-    case CSpeculate(_, _, body) => checkModuleBodyWellFormed(body, hascall, assignees)
+    case CSpeculate(_, _, verify, body) => {
+      val (hascallv, assgnv) = checkModuleBodyWellFormed(verify, hascall, assignees)
+      val (hascalls, assgns) = checkModuleBodyWellFormed(body, hascall, assignees)
+      if (hascallv && hascalls) throw UnexpectedCall(c.pos)
+      (hascallv || hascalls, assgnv ++ assgns) //variables from both branches are available after
+    }
     case CReturn(_) => throw UnexpectedReturn(c.pos)
     case _ => (hascall, assignees)
   }
@@ -149,21 +154,21 @@ object BaseTypeChecker extends TypeChecks[Type] {
           if(ityps.length != inits.length) {
             throw ArgLengthMismatch(c.pos, ityps.length, inits.length)
           }
-          ityps.zip(inits).foreach( t => t match {
+          ityps.zip(inits).foreach {
             case (expectedT, arg) => {
               val (atyp, aenv) = checkExpression(arg, tenv)
               if (!isSubtype(atyp, expectedT)) {
                 throw UnexpectedSubtype(arg.pos, arg.toString, expectedT, atyp)
               }
             }
-          })
-          refs.zip(mods).foreach( t => t match {
+          }
+          refs.zip(mods).foreach {
             case (reftyp, mname) => {
               if (!(isSubtype(tenv(mname), reftyp))) {
                 throw UnexpectedSubtype(mname.pos, mname.toString, reftyp, tenv(mname))
               }
             }
-          })
+          }
           (mtyp, tenv)
         }
         case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
@@ -225,21 +230,18 @@ object BaseTypeChecker extends TypeChecks[Type] {
         case _: TMemType => tenv
       }
     }
-    case CSpeculate(nvar, predval, body) => {
+    case CSpeculate(nvar, predval, verify, body) => {
       val (predtyp, env1) = checkExpression(predval, tenv)
       val ltyp = nvar.typ.get //parser ensures type is defined
       val nenv = env1.add(nvar.id, ltyp)
-      if (isSubtype(predtyp, ltyp)) checkCommand(body, nenv)
+      if (isSubtype(predtyp, ltyp)) {
+        val venv = checkCommand(verify, nenv)
+        val senv = checkCommand(body, nenv)
+        venv.union(senv)
+      }
       else throw UnexpectedSubtype(predval.pos, "speculate", ltyp, predtyp)
     }
-    case CCheck(predVar, realVal) => {
-      val predtyp = tenv(predVar)
-      val (rtyp, nenv) = checkExpression(realVal, tenv)
-      if (isSubtype(rtyp, predtyp)) nenv
-      else throw UnexpectedSubtype(realVal.pos, "check speculation", predtyp, rtyp)
-    }
-    case CResolve(predVar) => {
-      tenv(predVar)
+    case CCheck(predVar) => {
       tenv
     }
     case CCall(id, args) => {
@@ -402,7 +404,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CSeq(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
     case CTBar(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
     case CIf(_, cons, alt) => getSpeculativeVariables(cons) ++ getSpeculativeVariables(alt)
-    case CSpeculate(predVar, _, _) => Set(predVar.id)
+    case CSpeculate(predVar, _, _, _) => Set(predVar.id)
     case _ => Set()
   }
 }

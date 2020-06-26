@@ -166,7 +166,7 @@ object Syntax {
   case class CDecl(id: Id, typ: Type, thisCycle: Boolean) extends Command
   case class CLockOp(mem: Id, op: LockState) extends Command
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
-  case class CCheck(predVar: Id, realVal: Expr) extends Command
+  case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case object CEmpty extends Command
 

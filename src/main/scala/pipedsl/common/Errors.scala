@@ -56,6 +56,9 @@ object Errors {
     withPos(s"Variable $id has already been assigned", pos)
   )
 
+  case class IllegalTypeMerge(pos: Position, id: Id, ltyp: Type, rtyp: Type) extends TypeError(
+    s"Type of $id cannot be both $ltyp and $rtyp", pos)
+
   case class IllegalLockModification(pos: Position, n: String,
     oldstate: LockState, newstate: LockState) extends TypeError(
     s"Tried to illegally modify state of lock $n from $oldstate to $newstate", pos)

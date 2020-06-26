@@ -52,7 +52,7 @@ object SplitStagesPass extends CommandPass[List[PStage]] {
       p.succs = p.succs :+ firstStage
       firstStage.preds = firstStage.preds :+ p
     }
-    case CSpeculate(_, _, body) => callSuccsHelper(body, p, firstStage)
+    case CSpeculate(_, _, verify, body) => callSuccsHelper(body, p, firstStage)
     case _ => ()
   }
   /**

@@ -44,10 +44,9 @@ object Utilities {
     case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockOp(mem, _) => Set(mem)
-    case CSpeculate(predVar, predVal, body) =>
-     getUsedVars(predVal) ++ getAllVarNames(body) + predVar.id
-    case CCheck(predVar, realVal) => getUsedVars(realVal) + predVar
-    case CResolve(predVar) => Set(predVar)
+    case CSpeculate(predVar, predVal, verify, body) =>
+     getUsedVars(predVal) ++ getAllVarNames(verify) ++ getAllVarNames(body) + predVar.id
+    case CCheck(predVar) => Set(predVar)
     case CCall(id, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
@@ -66,7 +65,7 @@ object Utilities {
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
     case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
-    case CSpeculate(_, _, body) => getWrittenVars(body)
+    case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
     case _ => Set()
   }
 
@@ -89,9 +88,8 @@ object Utilities {
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case CSpeculate(predVar, predVal, body) => getUsedVars(predVal) ++ getUsedVars(body)
-    case CCheck(predVar, realVal) => getUsedVars(realVal) + predVar
-    case CResolve(predVar) => Set(predVar)
+    case CSpeculate(predVar, predVal, verify, body) => getUsedVars(predVal) ++ getUsedVars(verify) ++ getUsedVars(body)
+    case CCheck(predVar) => Set(predVar)
     case _ => Set()
   }
 

@@ -46,11 +46,14 @@ object SpeculationChecker extends TypeChecks[Type] {
     }
     case COutput(_) => throw UnresolvedSpeculation(c.pos, "Module Output")
     case CLockOp(_, _) => isSpec //TODO can you reserve a lock while speculative?
-    case CSpeculate(_, _, body) => checkCommand(body, true); isSpec
-    case CCheck(_, _) =>
-      if (isSpec) throw UnresolvedSpeculation(c.pos, "Check Speculation Result")
-      else isSpec
-    case CResolve(_) => if (!isSpec) throw AlreadyResolvedSpeculation(c.pos) else false
+    case CSpeculate(_, _, verify, body) => { //TODO limit check statements to only happen on one path
+      val isSpecAfterVerify = checkCommand(verify, isSpec)
+      val isSpecAfterSpec = checkCommand(body, true)
+      isSpecAfterVerify && isSpecAfterSpec
+    }
+    case CCheck(predVar) =>
+      if (!isSpec) throw AlreadyResolvedSpeculation(c.pos)
+      else false
     case _ => isSpec
   }
 
