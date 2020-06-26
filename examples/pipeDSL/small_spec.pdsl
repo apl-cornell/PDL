@@ -1,0 +1,118 @@
+pipe test(in: int<32>)[mem: int<32>[32]] {
+    int<32> val1 <- mem[in];
+    ---
+    int<32> val2 <- mem[val1];
+    ---
+    int<32> val3 = val2 + in;
+    ---
+    mem[in] <- val3;
+    call test(val3);
+}
+
+pipe testSpec(in: int<32>)[mem: int<32>[32]] {
+    predict(val2 = 0<32> in SPEC_1);
+    int<32> val1 <- mem[in];
+    ---
+    int<32> val2 <- mem[val1];
+    ---
+SPEC_1:
+    int<32> val3 = val2 + in;
+    ---
+    check(val2);
+    mem[in] <- val3;
+    call test(val3);
+}
+
+pipe testSpecNest(in: int<32>)[mem: int<32>[32]] {
+    predict(val1 = 0<32> in SPEC_1);
+    int<32> val1 <- mem[in];
+    ---
+SPEC_1:
+    predict(val2 = 1<32> in SPEC_2);
+    int<32> val2 <- mem[val1];
+    ---
+SPEC_2:
+    int<32> val3 = val2 + in;
+    ---
+    check(val1); //allows for arbitrary checking order
+    check(val2);
+    mem[in] <- val3;
+    call test(val3);
+}
+
+
+pipe testSpec2(in: int<32>)[mem: int<32>[32]] {
+    predict val2 = 0<32> in {
+        int<32> val3 = val2 + in;
+    } check {
+        int<32> val1 <- mem[in];
+        ---
+        int<32> val2 <- mem[val1];
+    }
+    mem[in] <- val3;
+    call test(val3);
+}
+
+pipe testSpec3(in: int<32>)[mem: int<32>[32]] {
+    predict (val2 = 0<32>, {
+        int<32> val1 <- mem[in];
+        ---
+        int<32> val2 <- mem[val1];
+    }, {
+        int<32> val3 = val2 + in;
+    })
+    mem[in] <- val3;
+    call test(val3);
+}
+
+pipe testSpec3Nest(in: int<32>)[mem: int<32>[32]] {
+    predict (int<32> val1 = 0<32>, {
+        val1 <- mem[in];
+    }, { predict (val2 = 1<32>, {
+        int<32> val2 <- mem[val1];
+    }, {
+        int<32> val3 = val2 + in;
+    }))
+    mem[in] <- val3;
+    call test(val3);
+}
+
+pipe testCall(in: int<32>)[mem: int<32>[32]] {
+    int<32> val <- mem[in];
+    ---
+    int<32> nval = (val{0:0} == 1) ? val + 1<32> : val + 4<32>;
+    call testCall(nval);
+    ---
+    mem[in] <- nval;
+}
+
+pipe testSpecCall(in: spec<int<32>>)[mem: int<32>[32]] {
+    int<32> val <- mem[in];
+    predict (int<32> nval = in + 1<32>, {
+        ---
+        nval = (val{0:0} == 1) ? val + 1<32> : val + 4<32>;
+    }, {
+        call testSpecCall(nval);
+    })
+    ---
+    check(in);
+    mem[in] <- nval;
+}
+
+pipe testSpecCall2(in: spec<int<32>>)[mem: int<32>[32]] {
+    int<32> val <- mem[in];
+    predict (int<32> nval = in + 1<32> in SPEC);
+    ---
+SPEC:
+    int<32> nval = (val{0:0} == 1) ? val + 1<32> : val + 4<32>;
+    call testCall(nval);
+    ---
+    check(nval); //arbitrary order allowed
+    check(in);
+    mem[in] <- nval;
+}
+
+circuit {
+    i = memory(int<32>, 32);
+    c = new test(0<32>)[r, i, d];
+}
