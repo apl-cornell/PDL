@@ -138,7 +138,6 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val simpleCmd: P[Command] = positioned {
     check |
-    resolve |
     "acquire" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Acquired)} |
     "reserve" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Reserved)} |
       "release" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Released)} |
@@ -158,18 +157,15 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val speculate: P[Command] = positioned {
-    "speculate" ~> parens(typ ~ variable ~ "=" ~ expr) ~ block ^^ { case t ~ v ~ _ ~ ev ~ c => {
-      v.typ = Some(t)
-      CSpeculate(v, ev, c)
+    "speculate" ~> parens(typ ~ variable ~ "=" ~ expr ~ "," ~ block ~ "," ~ block) ^^ {
+      case t ~ v ~ _ ~ ev ~ _ ~ cv ~ _ ~ cs => {
+        v.typ = Some(t)
+        CSpeculate(v, ev, cv, cs)
     }}
   }
   lazy val check: P[Command] = positioned {
     "check" ~> parens(iden ~ "==" ~ expr) ^^ { case id ~ _ ~ e =>  CCheck(id, e) }
   }
-  lazy val resolve: P[Command] = positioned {
-    "resolve" ~> parens(iden) ^^ (id => CResolve(id))
-  }
-
 
   lazy val casestmt: P[CaseObj] = positioned {
     "case:" ~> expr ~ block ^^ { case e ~ b => CaseObj(e, b) }
@@ -205,8 +201,10 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
   lazy val memory: P[Type] = sizedInt ~ brackets(posint) ^^ { case elem ~ size => TMemType(elem, size) }
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
-  lazy val typ: P[Type] = memory | sizedInt | bool
+  lazy val baseTyp: P[Type] = memory | sizedInt | bool
 
+  lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
+    baseTyp
 
   lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t => Param(i, t) }
 

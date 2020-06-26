@@ -15,6 +15,9 @@ object Syntax {
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
+    sealed trait SpeculativeAnnotation {
+      var maybeSpec: Boolean = false
+    }
   }
 
   object OpConstructor {
@@ -35,11 +38,11 @@ object Syntax {
 
   import Annotations._
 
-  case class Id(v: String) extends Positional with TypeAnnotation with LabelAnnotation {
+  case class Id(v: String) extends Positional with TypeAnnotation {
     override def toString = s"$v"
   }
 
-  sealed trait Type extends Positional {
+  sealed trait Type extends Positional with LabelAnnotation with SpeculativeAnnotation {
     override def toString: String = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
@@ -77,7 +80,7 @@ object Syntax {
 
   sealed trait UOp extends Positional {
     val op: String;
-    override def toString = this.op
+    override def toString: String = this.op
   }
   case class BoolUOp(op: String) extends UOp
   case class NumUOp(op: String) extends UOp
@@ -162,9 +165,8 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CDecl(id: Id, typ: Type, thisCycle: Boolean) extends Command
   case class CLockOp(mem: Id, op: LockState) extends Command
-  case class CSpeculate(predVar: EVar, predVal: Expr, body: Command) extends Command
+  case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id, realVal: Expr) extends Command
-  case class CResolve(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case object CEmpty extends Command
 

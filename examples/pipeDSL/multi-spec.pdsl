@@ -40,27 +40,21 @@ def isbrpred(curpc: int<32>): int<1> {
 //call stmts? Need for Nested speculation
 //speculate stmts? Need for nested speculation
 
-pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
+pipe cpu(pc: spec<int<32>>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     // isBR and npc are speculative here
     acquire(imem);
     int<32> insn <- imem[pc];
     release(imem);
     //this creates nested speculation since we haven't resolved anything
-    speculate (int<1> isBR = isbrpred(pc)) {
+    speculate (int<1> isBR = isbrpred(pc), {
+        ---
+        int<2> op_type = insn{1:0};
+        int<2> op = insn{3:2};
+        isBR = (op == 0b0<2>);
+        check(pc);
+    }, {
         if (cast(isBR,bool)) { call cpu(pc + 4<32>) }
-        //maybe this only contains sends? i.e. can only speculatively trigger stages, not do actual compute
-    }
-    ---
-    int<2> op_type = insn{1:0};
-    int<2> op = insn{3:2};
-    //we shouldn't be able to resolve our nested speculation before ourselves, right?
-    resolve(isBR); //iff thread is speculative (tracked dynamically in reg) then wait for head of spec queue to be committed or aborted
-    check( isBR == (op == 0b0<2>) );
-    speculate (int<32> npc = bht(pc, op)) {
-        if (! cast(isBR, bool)) {
-            call cpu(npc);
-        }
-    }
+    })
     int<5> rs1 = insn{8:4};
     int<5> rs2 = insn{13:9};
     int<5> rd = insn{18:14};
@@ -68,18 +62,24 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     acquire(rf);
     int<32> arg1 <- rf[rs1];
     int<32> arg2 <- rf[rs2];
-    ---
-    int<32> offset = ((op_type == 0b0<2>) && (arg1 == arg2)) ? 0b0<19> ++ imm : 4<32>;
-    check(npc == pc + offset);
+    if (!cast(isBR, bool)) {
+        speculate (int<32> npc = bht(pc, op), {
+            ---
+            int<32> offset = ((op_type == 0b0<2>) && (arg1 == arg2)) ? 0b0<19> ++ imm : 4<32>;
+            npc = pc + offset;
+        }, {
+            call cpu(npc);
+        })
+    }
     int<32> add_arg2;
     if (op_type == 0b1<2>) {
-      //op_type == ALU;
-      add_arg2 = arg2;
-      int<32> arg3 = add_arg2 - 1<32>
+        //op_type == ALU;
+        add_arg2 = arg2;
+        int<32> arg3 = add_arg2 - 1<32>
     } else {
-      //LD/ST
-      add_arg2 = 0x0<19> ++ imm;
-      int<32> arg3 = add_arg2 + 1<32>
+        //LD/ST
+        add_arg2 = 0x0<19> ++ imm;
+        int<32> arg3 = add_arg2 + 1<32>
     }
     int<32> alu_res = alu(arg1, add_arg2, op);
     ---
