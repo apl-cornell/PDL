@@ -2,6 +2,7 @@
 \usepackage{amsmath}
 \usepackage{mathpartir}
 \usepackage{ttquot}
+\usepackage{pl-syntax}
 
 \newcommand{\step}[0]{\ensuremath{\rightarrow}}
 \newcommand{\bstep}[0]{\ensuremath{\Downarrow}}
@@ -13,6 +14,7 @@
 \newcommand{\bypass}[0]{~\textsf{bypass}~}
 \newcommand{\bop}{~\textsf{bop}~}
 \newcommand{\uop}{~\textsf{uop}~}
+\newcommand{\tdash}{\ensuremath{---}}
 \makeatletter
 \newcommand{\conf}[1]{\langle #1\@confx}
 \newcommand\@confx{\@ifnextchar\stopconf{\@confend}{\@confi}}
@@ -38,6 +40,104 @@
   \end{array}
 \end{align*}
 
+\section{Type System}
+
+The type system is used to enforce a number of constraints
+that will ensure compilation of the program to a concurrent
+system maintains correctness. This involves typechecking
+a few different sets of rules:
+
+\begin{itemize}
+\item Base Types - Normal types for circuits like sized integers and booleans.
+  We have a very limited notion of base types, like a subset of FIRRTL. This is mostly
+  uninteresting.
+\item Operation Timing - We have both synchronous (combinational) and asynchronous
+  assignment. The latter is used to access arrays and external modules and the results
+  of such operations take time to become available. We ensure that all variable
+  accesses occur once their data has been made available (via logical the time-step operation '---').
+  This is also relatively uninteresting.
+\item Lock Acquisition - A key mechanism for ensuring correctness is ensuring
+  that stateful operations (like writing to memories) happen in order. We ensure
+  this order by forcing memory-accessing operations to happen only after the associated
+  lock has been acquired. A secondary requirement of this check is that locks are
+  acquired in-order; we enforce this by ensuring that there is exactly one point
+  in the pipeline at which locks are acquired. This requirement can be relaxed with
+  non-blocking acquisition (which we call reservation) that can happen in-order without
+  forcing early pipeline stalls waiting for a lock that won't be needed until later.
+\item Speculation - Speculation introduces some complexity and we must also
+  prevent speculative code from executing any irreversible operations (such as
+  modifying memory). However, speculative code *can* acquire and free locks,
+  in certain cases. This checker ensures that all of those happen appropriately.
+\end{itemize}
+
+\begin{figure}[h]
+  \begin{syntax}
+    \abstractCategory[Variables]{v, x, z}
+    \abstractCategory[Command]{c}
+    \abstractCategory[Memory]{m}
+    \category[LockState]{s}
+    \alternative{"free"}
+    \alternative{"reserved"}
+    \alternative{"acquired"}
+    \alternative{"released"}
+    \category[LockMap]{L}
+    \alternative{ m \mapsto s }
+  \end{syntax}
+\end{figure}
+
+\subsection{Lock Acquisition}
+
+\begin{mathpar}
+  L_{x} = \{l | L(l) = "x"\}\\
+  L_1 " merge " L_2 = \{ m \mapsto s | s =
+  \begin{cases}
+    L_1(m) & L_1(m) = L_2(m)\\
+    "released" & L_1(m) \neq L_2(m)\\
+  \end{cases}\}\\
+  \boxed{L \vdash c \dashv L'}\\
+  \inferrule*[Left=MemRead]{ L(m) = "acquired"}
+             { L \vdash m[idx] \leftarrow v \dashv L }\\
+  \inferrule*[Left=MemWrite]{ L(m) = "acquired"}
+             { L \vdash v \leftarrow m[idx] \dashv L }\\
+  \inferrule*[Left=Acquire]{ L(m) \in \{"reserved","free"\}}
+             {L \vdash "acquire"(m) \dashv L[m \mapsto "acquired"] }\\
+  \inferrule*[Left=Free]{ L(m) = "acquired" }
+             {L \vdash "free"(m) \dashv L[m \mapsto "released"] }\\
+  \inferrule*[Left=Reserve]{ L(m) = "free"}
+             {L \vdash "reserve"(m) \dashv L[m \mapsto "reserved"]}\\
+  \inferrule*[Left=Seq]{ L \vdash c_1 \dashv L'' \\ L'' \vdash c_2 \dashv L'}
+             {L \vdash c_1;c_2 \dashv L'}\\
+  \inferrule*[Left=T-Seq]{ L \vdash c_1 \dashv L'' \\ L'' \vdash c_2 \dashv L'}
+             {L \vdash c_1 \tdash c_2 \dashv L'}\\
+  \inferrule*[Left=If]{L \vdash c_t \dashv L^t \\ L \vdash c_f \dashv L^f \\
+    L^{tac} = L_{free} - L^t_{free} \\ L^{fac} = L_{free} - L^f_{free} \\
+    "dom"(L^{tac}) \cap "dom"(L^{fac}) = \emptyset \\
+    \forall (m \mapsto s) \in L^{tac}. s = "released" \\
+    \forall (m \mapsto s) \in L^{fac}. s = "released" \\ L' = L^t " merge " L^f }
+             {L \vdash "if " e " then " c_t " else " c_v \dashv L'}\\
+  \inferrule*[Left=Speculate]{ L = L^1 \uplus L^2 \\ L^1 \vdash c_v \dashv L'' \\
+    L^2 \vdash c_s \dashv L''' \\ L' = L'' \uplus L''' \\ L'''_{released} = \emptyset}
+             {L \vdash "predict"(v = e, c_v, c_s) \dashv L'}
+\end{mathpar}
+
+Locks must be "acquired" to access the associated memory. Once a lock
+is "free"ed, it cannot be acquired again since it is in the "released" state.
+
+Locks cannot be acquired or reserved in multiple places; therefore both
+branches of an if statement must acquire or reserve a disjoint set of locks.
+The $L^{tac}$ and $L^{fac}$ lock maps represent any locks which have gone from
+"free" before the if to released. Essentially locks can be acquired and released in
+either of these branches but not both *and* they cannot be left in any other state.
+_N.B. there is probably a better way to check this_
+
+Additionally, the branches of an if statement must agree on the state of a lock
+after execution, with the exception of locks that are now in the "released" state
+(which must be "free" in the other branch).
+
+When speculating, the set of locks must be splittable into two sets of lock mappings.
+This makes some subset of locks available to the speculative and non-speculative statements.
+As a further restriction, the speculative statement cannot release any locks, since this would
+potentially invalidate some operations that it executes during re-execution.
 \section{Operational Semantics}
 Expression Semantics
 \begin{mathpar}
