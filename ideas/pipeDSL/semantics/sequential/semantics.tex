@@ -75,6 +75,7 @@ a few different sets of rules:
     \abstractCategory[Variables]{v, x, z}
     \abstractCategory[Command]{c}
     \abstractCategory[Memory]{m}
+    \abstractCategory[Pipeline]{\mathcal{P}}
     \category[LockState]{s}
     \alternative{"free"}
     \alternative{"reserved"}
@@ -82,6 +83,8 @@ a few different sets of rules:
     \alternative{"released"}
     \category[LockMap]{L}
     \alternative{ m \mapsto s }
+    \category[Speculation List]{S}
+    \alternative{ v_1; v_2...;v_n }
   \end{syntax}
 \end{figure}
 
@@ -118,8 +121,8 @@ a few different sets of rules:
     L' = L^t " merge " L^f }
              {L \vdash "if " e " then " c_t " else " c_v \dashv L'}\\
   \inferrule*[Left=Speculate]{ L \vdash v \leftarrow e \dashv L \\
-    L \vdash c_v \dashv L^v \\ L \vdash c_s \dashv L^s \\ L^v \vdash c_s \dashv L^{s'} \\
-    L^v_{released} = L^{s'}_{released}}
+    L \vdash c_v \dashv L^v \\ L \vdash c_s \dashv L^s \\ L^v \vdash c_s \dashv L' \\
+    L^v_{released} = L'_{released}}
              {L \vdash "predict"(v \leftarrow e, c_v, c_s) \dashv L'}
 \end{mathpar}
 
@@ -146,6 +149,76 @@ As a further restriction, the speculative statement
 cannot release any locks, since this would potentially invalidate
 some of its memory access operations during re-execution.
 
+\begin{mathpar}
+  \boxed{ L \vdash \mathcal{P} \dashv L' }\\
+  \inferrule*[Left={Deadlock-Free}]
+             {\forall m. L(m) = "free" \\
+             \forall m. L'(m) = "free" || "released"}
+             {L \vdash \mathcal{P} \dashv L'}
+\end{mathpar}
+Lastly, to avoid deadlock, pipeline modules must type check with the assumption
+that no locks have been acquired, and after execution all locks must either be
+"free" or "released"
+
+\subsection{Extensions to Locks}
+In the above formalizations there is exactly _one_ lock associated with every memory object.
+We will extend this to support more fine-grained notions of locking, such as locks associated
+with locations within a memory. None of the above changes with
+these additions, with the exception of _how_ we look up lockstates.
+For instance, we may need some evaluation of the index expressions in memory access operations
+to determine the lock associated with the location.
+\subsection{Speculation Checking}
+
+\begin{mathpar}
+  \boxed{S \vdash c \dashv S'}\\
+  \inferrule*[Left={MemWrite}]{ S = () }
+             {S \vdash m[x] \leftarrow v \dashv S}\\
+  \inferrule*[Left={Check}]{ S = (v;...) \\ S' = (...)}
+             {S \vdash "check " v \dashv S'}\\
+  \inferrule*[Left={Speculate}]{S \vdash v \leftarrow e \dashv S\\
+    S \vdash c_v \dashv S' \\ v;S \vdash c_s \dashv v;S }
+             {S \vdash "predict"(v \leftarrow e, c_v, c_s) \dashv S'}\\
+  \inferrule*[Left={Speculative-Call},Right={$\Gamma(\mathcal{P}$) = "specpipe"}]
+             {S = (v;...))}
+             {S \vdash "call " \mathcal{P}(...) \dashv S}\\
+  \inferrule*[Left={If}]
+             {i \in \{t,f\} \\ S \vdash c_i \dashv S'}
+             {S \vdash "if " e " then " c_t " else " c_v \dashv S'}
+\end{mathpar}
+
+Currently, the only disallowed operations while speculative are: (1)
+writing to memory; and (2) "call"ing back to the beginning of the pipeline,
+iff it was not declared with a potentially speculative type.
+Furthermore, we restrict speculation resolution orders to ensure that the
+speculative blocks can be correctly replayed. This means that nested
+speculative blocks will be resolved with a LIFO discipline.
+Speculation induced by speculative calls can be resolved at any point
+that is not nested inside further speculation.
+
+Semantically, each stage of the pipeline will be associated with up
+to 2 speculation IDs: the speculation that caused it (parent), and the speculation
+that it is in charge of resolving (child). The stages which follow "predict" blocks
+will be associated with NO child speculation and with the parent speculation that
+the verfication block produces. This allows us to track all of the ``nesting'' speculation
+while each stage only needs to dynamically track a constant amount of data.
+
+We could relax these restrictions in the future to allow for more flexible
+use of the "check" statements; once we have built more of the dynamic mechanisms
+this will be easier to understand.
+
+Lastly, pipelines which accept speculative "call"s have a speculative type.
+This means their body must be typechecked in a context that starts speculative.
+Furthermore, they do not need to resolve this speculation; it is very possible
+a speculative value flows through the pipeline, induces only a no-op and never
+tries to modify permanent state. In that case it never needs to "check" the result
+of the speculation that caused it.
+
+\begin{mathpar}
+  \boxed{ \Gamma \vdash \mathcal{P} }\\
+  \inferrule*[Left={SpecPipe}]
+             {\Gamma(\mathcal{P}) = "specpipe" \\ ("self") \vdash \mathcal{P}.body \dashv S}
+             {\vdash \mathcal{P}}
+\end{mathpar}
 \section{Operational Semantics}
 Expression Semantics
 \begin{mathpar}
