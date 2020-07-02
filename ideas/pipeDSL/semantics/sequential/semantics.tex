@@ -92,7 +92,8 @@ a few different sets of rules:
   L_1 " merge " L_2 = \{ m \mapsto s | s =
   \begin{cases}
     L_1(m) & L_1(m) = L_2(m)\\
-    "released" & L_1(m) \neq L_2(m)\\
+    "released" & L_1(m) = "free" || L_2(m) = "free"\\
+    UNDEFINED &
   \end{cases}\}\\
   \boxed{L \vdash c \dashv L'}\\
   \inferrule*[Left=MemRead]{ L(m) = "acquired"}
@@ -109,35 +110,42 @@ a few different sets of rules:
              {L \vdash c_1;c_2 \dashv L'}\\
   \inferrule*[Left=T-Seq]{ L \vdash c_1 \dashv L'' \\ L'' \vdash c_2 \dashv L'}
              {L \vdash c_1 \tdash c_2 \dashv L'}\\
-  \inferrule*[Left=If]{L \vdash c_t \dashv L^t \\ L \vdash c_f \dashv L^f \\
-    L^{tac} = L_{free} - L^t_{free} \\ L^{fac} = L_{free} - L^f_{free} \\
+  \inferrule*[Left=If]{i \in \{t,f\} \\ L \vdash c_i \dashv L^i \\
+    L^{iac} = L_{free} - L^i_{free} \\
     "dom"(L^{tac}) \cap "dom"(L^{fac}) = \emptyset \\
-    \forall (m \mapsto s) \in L^{tac}. s = "released" \\
-    \forall (m \mapsto s) \in L^{fac}. s = "released" \\ L' = L^t " merge " L^f }
+    L^i_{acq|res} \subseteq L_{acq|res} \\
+    L^t_{acq|res} = L^f_{acq|res} \\
+    L' = L^t " merge " L^f }
              {L \vdash "if " e " then " c_t " else " c_v \dashv L'}\\
-  \inferrule*[Left=Speculate]{ L = L^1 \uplus L^2 \\ L^1 \vdash c_v \dashv L'' \\
-    L^2 \vdash c_s \dashv L''' \\ L' = L'' \uplus L''' \\ L'''_{released} = \emptyset}
-             {L \vdash "predict"(v = e, c_v, c_s) \dashv L'}
+  \inferrule*[Left=Speculate]{ L \vdash v \leftarrow e \dashv L \\
+    L \vdash c_v \dashv L^v \\ L \vdash c_s \dashv L^s \\ L^v \vdash c_s \dashv L^{s'} \\
+    L^v_{released} = L^{s'}_{released}}
+             {L \vdash "predict"(v \leftarrow e, c_v, c_s) \dashv L'}
 \end{mathpar}
 
 Locks must be "acquired" to access the associated memory. Once a lock
 is "free"ed, it cannot be acquired again since it is in the "released" state.
+Locks may be "reserved" before being acquired as well; this is basically non-blocking
+acquire. A later "acquire" is necessary to block until the lock is available.
 
 Locks cannot be acquired or reserved in multiple places; therefore both
 branches of an if statement must acquire or reserve a disjoint set of locks.
 The $L^{tac}$ and $L^{fac}$ lock maps represent any locks which have gone from
-"free" before the if to released. Essentially locks can be acquired and released in
-either of these branches but not both *and* they cannot be left in any other state.
-_N.B. there is probably a better way to check this_
+"free" before the if to released. Essentially each lock may be acquired in at most
+one of the branches. After the if, both branches must agree on the set of still
+acquired/reserved locks. Any locks only used in one branch are no longer available
+for use after the if (i.e. they are in the "released" state).
+_N.B. there is probably a better way to check this using some affine logic_
 
-Additionally, the branches of an if statement must agree on the state of a lock
-after execution, with the exception of locks that are now in the "released" state
-(which must be "free" in the other branch).
+During speculation, both branches will execute (potentially in parallel). Therefore,
+lock acquisitions made in one branch are not available to the other but already acquired/reserved
+locks can be used in either branch. Essentially, the speculative code must be able
+to typecheck with or without the lockstates changed by the non-speculative branch.
+The final lock states are those set after executing both branches in serial.
+As a further restriction, the speculative statement
+cannot release any locks, since this would potentially invalidate
+some of its memory access operations during re-execution.
 
-When speculating, the set of locks must be splittable into two sets of lock mappings.
-This makes some subset of locks available to the speculative and non-speculative statements.
-As a further restriction, the speculative statement cannot release any locks, since this would
-potentially invalidate some operations that it executes during re-execution.
 \section{Operational Semantics}
 Expression Semantics
 \begin{mathpar}
