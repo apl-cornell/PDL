@@ -72,6 +72,9 @@ object Errors {
   case class IllegalLockAcquisition(pos: Position) extends TypeError(
     s"Cannot acquire or reserve locks inside multiple branches", pos)
 
+  case class IllegalLockRelease(pos: Position) extends TypeError(
+    s"Cannot release locks inside of a speculative block", pos)
+
   case class IllegalCast(pos: Position, rtyp: Type, ctyp: Type) extends TypeError(
     s"Cannot cast type $rtyp to $ctyp", pos)
 

@@ -75,6 +75,7 @@ pipe test8(input: int<32>)[rf: int<32>[5]] {
         release(rf);
     }
 }
+//Expected success
 pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     reserve(dmem);
     if (input{0:0} == 1) {
@@ -84,6 +85,57 @@ pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     acquire(dmem);
     release(dmem);
 }
+//Expected success
+pipe test10(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+  speculate(int<1> x = 1, {
+    x = 1;
+  }, {
+    acquire(rf);
+  })
+  ---
+  release(rf);
+}
+/* Expected failure since speculation may happen before acquire
+pipe test11(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+  speculate(int<1> x = 1, {
+   acquire(rf);
+    x = 1;
+  }, {
+    int<32> y <- rf[x ++ 0<4>];
+  })
+  ---
+  release(rf);
+} */
+// Expect success
+pipe test12(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    acquire(rf);
+    speculate(int<1> x = 1, {
+        x = 1;
+    }, {
+        int<32> y <- rf[x ++ 0<4>];
+    })
+    ---
+    release(rf);
+}
+/* Expected failure since speculation may happen after release
+pipe test13(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    acquire(rf);
+    speculate(int<1> x = 1, {
+        release(rf);
+        x = 1;
+    }, {
+        int<32> y <- rf[x ++ 0<4>];
+    })
+} */
+/* Expected failure since release operations aren't allowed in speculation
+pipe test14(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    acquire(rf);
+    speculate(int<1> x = 1, {
+        x = 1;
+    }, {
+        release(rf);
+    })
+} */
 circuit {
     r = memory(int<32>, 5);
     t = new test2(0<32>)[r];

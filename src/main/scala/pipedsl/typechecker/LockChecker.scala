@@ -2,7 +2,7 @@ package pipedsl.typechecker
 
 import Environments._
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockModification, UnexpectedCase}
+import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockModification, IllegalLockRelease, UnexpectedCase}
 import pipedsl.common.Locks.LockState._
 import pipedsl.common.Syntax._
 
@@ -53,8 +53,6 @@ object LockChecker extends TypeChecks[LockState] {
       })
     }
     case CIf(_, cons, alt) => {
-      //TODO don't allow acquire statements for the same lock
-      //in both branches (such an acquire must happen before the branch)
       val lt = checkCommand(cons, env)
       val lf = checkCommand(alt, env)
       val envfree = env.filter(Free)
@@ -68,14 +66,20 @@ object LockChecker extends TypeChecks[LockState] {
       if (ltacq.getMappedIds().intersect(lfacq.getMappedIds()).nonEmpty) {
         throw IllegalLockAcquisition(c.pos)
       }
-      //Merge matching states, like Free|Released states to Released, error others
+      //Merge matching states, merge Free|Released states to Released, error others
       lt.intersect(lf) //real merge logic lives inside Envrionments.LockState
     }
     case CSpeculate(predVar, predVal, verify, body) => {
       //TODO same thing as CIF todo - this one's probably wrong
-      val lt = checkCommand(verify, env)
-      val lf = checkCommand(body, env)
-      lt.union(lf) //real logic lives inside Envrionments.LockState
+      val lverif = checkCommand(verify, env)
+      val lvrel = lverif.filter(Released)
+      checkCommand(body, env) //speculative body must check in the original env
+      val lfinal = checkCommand(body, lverif) //but final is as if executing in serial
+      val lfinalrel = lfinal.filter(Released)
+      if (lvrel.getMappedIds() != lfinalrel.getMappedIds()) {
+        throw IllegalLockRelease(body.pos);
+      }
+      lfinal
     }
     case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem,_), _) => env(mem).matchOrError(lhs.pos, mem.v, Acquired) { case Acquired => env }
