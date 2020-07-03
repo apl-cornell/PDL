@@ -30,8 +30,19 @@ object Environments {
         def ++(binds: Map[Id, T]): Environment[T] =
             binds.foldLeft[Environment[T]](this)({ case (e, b) => e.add(b._1, b._2) })
 
+        def --(binds: Set[Id]): Environment[T] =
+            binds.foldLeft[Environment[T]](this)({ case (e, b) => e.remove(b) })
+
+        def remove(id: Id): Environment[T]
+
         def intersect(other: Environment[T]): Environment[T]
         def union(other: Environment[T]): Environment[T]
+
+        def filter(value: T): Environment[T] = {
+            this.getMappedIds().filter(id => this(id) != value).foldLeft(this)((env, id) => {
+                env.remove(id)
+            })
+        }
     }
 
     case class TypeEnv(
@@ -40,6 +51,9 @@ object Environments {
         override def add(name: Id, typ: Type): Environment[Type] = typeMap.get(name) match {
             case Some(t) => throw AlreadyBoundType(name.pos, name.v, t, typ)
             case None => this.copy(typeMap = typeMap + (name -> typ))
+        }
+        override def remove(name: Id): Environment[Type] = {
+            TypeEnv(this.typeMap - name)
         }
         override def get(name: Id): Option[Type] = typeMap.get(name)
         override def getMappedIds(): Set[Id] = typeMap.keySet
@@ -74,13 +88,16 @@ object Environments {
             (lockMap(name), ns) match {
                 case (Free, Acquired | Reserved) => updateMapping(name, ns)
                 case (Reserved, Acquired) => updateMapping(name, ns)
-                case (Acquired | Reserved, Released) => updateMapping(name, ns)
+                case (Acquired, Released) => updateMapping(name, ns)
                 case (_, _) => throw IllegalLockModification(name.pos, name.v, lockMap(name), ns)
             }
         } else {
             updateMapping(name, ns)
         }
 
+        override def remove(name: Id): Environment[LockState] = {
+            LockEnv(this.lockMap - name)
+        }
         override def get(name: Id): Option[LockState] = lockMap.get(name)
         override def getMappedIds(): Set[Id] = lockMap.keySet
         //ensure that all "Acquired" or "Reserved" locks are in same state
@@ -95,6 +112,8 @@ object Environments {
                   case (l@_, r@_) => throw IllegalLockMerge(id.pos, id.v, l, r)
             }))
         }
+        //Combine changes to Free locks, but otherwise
+        //require all entries to match exactly
         override def union(other: Environment[LockState]): Environment[LockState] = {
             LockEnv(other.getMappedIds().foldLeft(lockMap)((m, id) => {
                 val otherval = other(id)
@@ -110,6 +129,8 @@ object Environments {
     case class BoolEnv(boolSet: Set[Id] = Set()) extends Environment[Boolean] {
         override def add(name: Id, b: Boolean): Environment[Boolean] =
             if (b) BoolEnv(boolSet + name) else BoolEnv(boolSet - name)
+        override def remove(name: Id): Environment[Boolean] =
+            BoolEnv(boolSet - name)
         override def get(name: Id): Option[Boolean] = Some(boolSet(name))
         override def getMappedIds(): Set[Id] = boolSet
         override def intersect(other: Environment[Boolean]): Environment[Boolean] =

@@ -51,7 +51,8 @@ object TimingTypeChecker extends TypeChecks[Type] {
       checkCommand(c2, v2, nv2, insideCond)
     }
     case CTBar(c1, c2) => {
-      if (insideCond) { throw UnexpectedPipelineStatement(c.pos, "time barrier") }
+      //TODO refactor to just always allow this
+      //if (insideCond) { throw UnexpectedPipelineStatement(c.pos, "time barrier") }
       val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
       checkCommand(c2, v2 ++ nv2, NoneAvailable, insideCond)
     }

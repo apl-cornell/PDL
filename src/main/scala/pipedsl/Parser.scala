@@ -243,7 +243,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val prog: P[Prog] = positioned {
-    fdef.+ ~ moddef.+ ~ circuit ^^ {
+    fdef.* ~ moddef.* ~ circuit ^^ {
       case f ~ p ~ c => Prog(f, p, c)
     }
   }

@@ -72,10 +72,11 @@ object BaseTypeChecker extends TypeChecks[Type] {
     val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
     val specVars = getSpeculativeVariables(m.body)
     val modTyp = TModType(inputTyps, modTyps, specVars)
-    val finalEnv = pipeEnv.add(m.name, modTyp)
+    val bodyEnv = pipeEnv.add(m.name, modTyp)
+    val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, hascall = false, Set())
-    checkCommand(m.body, finalEnv)
-    finalEnv
+    checkCommand(m.body, bodyEnv)
+    outEnv
   }
   /**
    * - Checks that all paths have at most 1 call statement

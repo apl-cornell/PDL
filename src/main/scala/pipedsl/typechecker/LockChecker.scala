@@ -2,7 +2,7 @@ package pipedsl.typechecker
 
 import Environments._
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.UnexpectedCase
+import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockModification, UnexpectedCase}
 import pipedsl.common.Locks.LockState._
 import pipedsl.common.Syntax._
 
@@ -31,7 +31,7 @@ object LockChecker extends TypeChecks[LockState] {
     finalenv.getMappedIds().foreach(id => {
       finalenv(id).matchOrError(m.pos, id.v, Released) { case Free | Released => () }
     })
-    finalenv
+    env //no change to lock map after checking module
   }
 
   //This assumes that memory access only occur in recv statements
@@ -57,7 +57,19 @@ object LockChecker extends TypeChecks[LockState] {
       //in both branches (such an acquire must happen before the branch)
       val lt = checkCommand(cons, env)
       val lf = checkCommand(alt, env)
-      lt.intersect(lf) //real logic lives inside Envrionments.LockState
+      val envfree = env.filter(Free)
+      val ltfree = lt.filter(Free)
+      //All locks that were Free before T branch but aren't anymore
+      val ltacq = envfree -- ltfree.getMappedIds()
+      val lffree = lf.filter(Free)
+      //All locks that were Free before F branch but aren't anymore
+      val lfacq = envfree -- lffree.getMappedIds()
+      //If any locks were newly acquired/reserved in both branches, error
+      if (ltacq.getMappedIds().intersect(lfacq.getMappedIds()).nonEmpty) {
+        throw IllegalLockAcquisition(c.pos)
+      }
+      //Merge matching states, like Free|Released states to Released, error others
+      lt.intersect(lf) //real merge logic lives inside Envrionments.LockState
     }
     case CSpeculate(predVar, predVal, verify, body) => {
       //TODO same thing as CIF todo - this one's probably wrong
@@ -70,7 +82,7 @@ object LockChecker extends TypeChecks[LockState] {
         case (_, EMemAccess(mem,_)) => env(mem).matchOrError(rhs.pos, mem.v, Acquired) { case Acquired => env }
         case _ => throw UnexpectedCase(c.pos)
       }
-    case CLockOp(mem, op) => env.add(mem, op)
+    case CLockOp(mem, op) => env.add(mem, op) //logic inside the lock environment class
     case _ => env
   }
   override def checkCircuit(c: Circuit, env: Environment[LockState]): Environment[LockState] = env

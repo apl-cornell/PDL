@@ -69,6 +69,9 @@ object Errors {
   case class InvalidLockState(pos: Position, name: String, l: LockState, exp: LockState) extends TypeError(
     s"Invalid lock state for $name, was $l, expected $exp", pos)
 
+  case class IllegalLockAcquisition(pos: Position) extends TypeError(
+    s"Cannot acquire or reserve locks inside multiple branches", pos)
+
   case class IllegalCast(pos: Position, rtyp: Type, ctyp: Type) extends TypeError(
     s"Cannot cast type $rtyp to $ctyp", pos)
 
