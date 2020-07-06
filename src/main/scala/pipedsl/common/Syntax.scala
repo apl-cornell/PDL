@@ -50,7 +50,7 @@ object Syntax {
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size) => s"${elem.toString}[${size}]"
-      case TModType(ins, refs, specs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")} :: speVars(${specs.mkString(",")})"
+      case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
     }
   }
   // Types that can be upcast to Ints
@@ -63,7 +63,7 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int) extends Type
-  case class TModType(inputs: List[Type], refs: List[Type], speculativeVars: Set[Id]) extends Type
+  case class TModType(inputs: List[Type], refs: List[Type]) extends Type
 
   /**
    * Define common helper methods implicit classes.

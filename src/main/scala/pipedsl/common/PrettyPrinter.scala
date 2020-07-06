@@ -32,10 +32,10 @@ object PrettyPrinter {
     val ins = " " * indent;
     c match {
       case CirSeq(c1, c2) =>
-        printCircuitToString(c1, indent) + ";\n" +
+        printCircuitToString(c1, indent) + "\n" +
          printCircuitToString(c2, indent)
       case CirConnect(name, c) =>
-        ins + name.v + " = " + printExprToString(c)
+        ins + name.v + " = " + printExprToString(c) + ";"
     }
   }
 
@@ -47,7 +47,7 @@ object PrettyPrinter {
     val ins: String = " " * indent
     c match {
       case Syntax.CSeq(c1, c2) =>
-        printCmdToString(c1, indent) + ";\n" +
+        printCmdToString(c1, indent) + "\n" +
           printCmdToString(c2, indent)
       case Syntax.CTBar(c1, c2) =>
         printCmdToString(c1, indent) + "\n" + ins + "---\n" +
@@ -65,22 +65,25 @@ object PrettyPrinter {
         ins + "if ( " + printExprToString(cond) + " ) {\n" +
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
-      case Syntax.CAssign(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " = " + printExprToString(rhs)
-      case Syntax.CRecv(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " <- " + printExprToString(rhs)
+      case Syntax.CAssign(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
+      case Syntax.CRecv(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
       case Syntax.CCall(id, args) => ins + "call " + id + "(" +
-        args.map(a => printExprToString(a)).mkString(",") + ")"
-      case Syntax.COutput(exp) => ins + "output " + printExprToString(exp)
-      case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp)
-      case Syntax.CExpr(exp) => ins + printExprToString(exp)
+        args.map(a => printExprToString(a)).mkString(",") + ");"
+      case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
+      case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
+      case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
       case Syntax.CDecl(id, typ, thisCycle) => ins + (if(thisCycle) "next " else "")  + printTypeToString(typ) + " " + id
       case Syntax.CLockOp(mem, op) => ins + (op match {
         case pipedsl.common.Locks.LockState.Free => "free"
         case pipedsl.common.Locks.LockState.Reserved => "reserve"
         case pipedsl.common.Locks.LockState.Acquired => "acquire"
         case pipedsl.common.Locks.LockState.Released => "release"
-      }) + "(" + mem.v + ")"
-      case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "TODO SPECULATE"
-      case Syntax.CCheck(predVar) => ins + "TODO CHECK"
+      }) + "(" + mem.v + ");"
+      case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
+        printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + printExprToString(predVal) + ", {\n" +
+        printCmdToString(verify, indent + 4) + "\n" + ins + "}, {\n" +
+        printCmdToString(body, indent + 4) + "\n" + ins + "}"
+      case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CEmpty => ins
     }
   }
@@ -121,6 +124,6 @@ object PrettyPrinter {
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
     case TMemType(elem, addrSize) =>printTypeToString(elem) + "[" + addrSize.toString + "]"
-    case TModType(inputs, refs, speculativeVars) => "TODO MOD TYPE"
+    case TModType(inputs, refs) => "TODO MOD TYPE"
   }
 }

@@ -4,6 +4,12 @@ import pipedsl.common.Syntax._
 
 object Subtypes {
 
+    def isSpeculativeSubtype(t1: Type, t2:Type): Boolean = {
+        val isSub = isSubtype(t1, t2)
+        //if t2 is maybe speculative then t1 can be anything. else both must be nonspeculative
+        val okSpec = t2.maybeSpec || !t1.maybeSpec
+        isSub && okSpec
+    }
     def isSubtype(t1: Type, t2: Type): Boolean =  (t1, t2) match {
         case (TSizedInt(l1, u1), TSizedInt(l2, u2)) => l1 == l2 && u1 == u2
         case (TRecType(n, f1), TRecType(n2, f2)) => {

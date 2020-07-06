@@ -2,10 +2,12 @@ package pipedsl
 
 import com.typesafe.scalalogging.Logger
 import common.PrettyPrinter
+import pprint.pprintln
 import common.Dataflow._
 import java.io.File
 import java.nio.file.Files
-import passes.{SimplifyRecvPass, SplitStagesPass}
+
+import passes.{CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 
 object Main {
@@ -23,8 +25,8 @@ object Main {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
-    val prog = r.get
-    logger.info(r.toString)
+    val prog = CanonicalizePass.run(r.get)
+    logger.info(prog.toString)
     val basetypes = BaseTypeChecker.check(prog, None)
     TimingTypeChecker.check(prog, Some(basetypes))
     val prog_recv = SimplifyRecvPass.run(prog)

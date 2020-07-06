@@ -46,7 +46,12 @@ object BaseTypeChecker extends TypeChecks[Type] {
   private def checkFuncWellFormed(c: Command, tenv: Environment[Type]): Option[Type] = c match {
     case CSeq(c1, c2) => {
       val r1 = checkFuncWellFormed(c1, tenv)
-      checkFuncWellFormed(c2, tenv)
+      val r2 = checkFuncWellFormed(c2, tenv)
+      (r1, r2) match {
+        case (Some(_), Some(_)) => throw MalformedFunction(c.pos, "Multiple return statements in execution")
+        case (Some(_), _) => r1
+        case (_, Some(_)) => r2
+      }
     }
     case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput => {
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
@@ -70,8 +75,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
     val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
-    val specVars = getSpeculativeVariables(m.body)
-    val modTyp = TModType(inputTyps, modTyps, specVars)
+    val modTyp = TModType(inputTyps, modTyps)
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, hascall = false, Set())
@@ -106,10 +110,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CIf(_, cons, alt) => {
       val (hct, ast) = checkModuleBodyWellFormed(cons, hascall, assignees)
       val (hcf, asf) = checkModuleBodyWellFormed(alt, hascall, assignees)
-      if (!asf.equals(ast)) {
-        throw MismatchedAssigns(c.pos, ast.diff(asf))
-      }
-      (hct || hcf, asf)
+      (hct || hcf, ast.intersect(asf))
     }
     case CCall(_, _) => if (hascall) {
       //throw UnexpectedCall(c.pos)
@@ -124,7 +125,8 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CSpeculate(_, _, verify, body) => {
       val (hascallv, assgnv) = checkModuleBodyWellFormed(verify, hascall, assignees)
       val (hascalls, assgns) = checkModuleBodyWellFormed(body, hascall, assignees)
-      if (hascallv && hascalls) throw UnexpectedCall(c.pos)
+      //TODO maybe we don't bother with this. trust programmer to not call multiple times
+      //if (hascallv && hascalls) throw UnexpectedCall(c.pos)
       (hascallv || hascalls, assgnv ++ assgns) //variables from both branches are available after
     }
     case CReturn(_) => throw UnexpectedReturn(c.pos)
@@ -151,7 +153,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CirNew(mod, inits, mods) => {
       val mtyp = tenv(mod)
       mtyp match {
-        case TModType(ityps, refs, _) => {
+        case TModType(ityps, refs) => {
           if(ityps.length != inits.length) {
             throw ArgLengthMismatch(c.pos, ityps.length, inits.length)
           }
@@ -203,7 +205,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       endEnv
     }
     case CDecl(id, typ,_) => typ match {
-      case TMemType(_,_) | TModType(_,_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)
+      case TMemType(_,_) | TModType(_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)
       case _ => tenv.add(id, typ)
     }
     case CIf(cond, cons, alt) => {
@@ -247,14 +249,14 @@ object BaseTypeChecker extends TypeChecks[Type] {
     }
     case CCall(id, args) => {
       tenv(id) match {
-        case TModType(ityps, _, _) => {
+        case TModType(ityps, _) => {
           if (args.length != ityps.length) {
             throw ArgLengthMismatch(c.pos, args.length, ityps.length)
           }
           ityps.zip(args).foreach {
             case (expectedT, a) =>
               val (atyp, _) = checkExpression(a, tenv)
-              if (!isSubtype(atyp, expectedT)) {
+              if (!isSpeculativeSubtype(atyp, expectedT)) {
                 throw UnexpectedSubtype(a.pos, a.toString, expectedT, atyp)
               }
           }

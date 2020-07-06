@@ -70,9 +70,9 @@ object Environments {
                 val otherval = other(id)
                 if (m.contains(id)) {
                     if (otherval != m(id)) throw IllegalTypeMerge(id.pos, id, m(id), otherval)
-                    typeMap
+                    m
                 } else {
-                    typeMap + (id -> otherval)
+                    m + (id -> otherval)
                 }
             }))
         }
@@ -119,9 +119,9 @@ object Environments {
                 val otherval = other(id)
                 if (m.contains(id)) {
                     if (otherval != m(id) && otherval != Free) throw IllegalLockMerge(id.pos, id.v, m(id), otherval)
-                    lockMap
+                    m
                 } else {
-                    lockMap + (id -> otherval)
+                    m + (id -> otherval)
                 }
             }))
         }

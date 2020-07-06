@@ -190,12 +190,12 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val seqCmd: P[Command] = {
     simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
     blockCmd ~ seqCmd ^^ { case c1 ~ c2 => CSeq(c1, c2) } |
-      simpleCmd <~ ";" | blockCmd | simpleCmd
+      simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty }
   }
 
   lazy val cmd: P[Command] = positioned {
     seqCmd ~ "---" ~ cmd ^^ { case c1 ~ _ ~ c2 => CTBar(c1, c2) } |
-    "---" ~> cmd ^^ { c => CTBar(CEmpty, c)} | seqCmd
+    seqCmd
   }
 
   lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }

@@ -105,7 +105,8 @@ object Utilities {
     case EMemAccess(mem, index) => getUsedVars(index) //memories aren't variables, they're externally defined
     case EBitExtract(num, start, end) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
-    case EApp(func, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) }) //functions are also externally defined
+    case EApp(func, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
+      //functions are also externally defined
     case EVar(id) => Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case _ => Set()

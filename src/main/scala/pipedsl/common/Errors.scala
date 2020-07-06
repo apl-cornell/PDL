@@ -104,4 +104,8 @@ object Errors {
 
   case class AlreadyResolvedSpeculation(pos: Position) extends TypeError(
     s"Reduntant resolve operation, not possible to be speculative here", pos)
+
+  case class MismatchedSpeculationState(pos: Position) extends TypeError(
+    s"All execution branches must resolve in the same speculation state", pos)
+
 }

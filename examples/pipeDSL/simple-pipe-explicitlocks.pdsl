@@ -25,7 +25,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     int<32> arg2 <- rf[rs2];
     ---
     //do some long operation here that doesn't use arg1 or arg2
-    int<7> x = imm{6:0}
+    int<7> x = imm{6:0};
     //hello
     ---
     //op_type == BR;
@@ -35,24 +35,25 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     int<32> add_arg2;
     if (op_type == 0b1<2>) {
       add_arg2 = arg2;
-      int<32> arg3 = add_arg2 - 1<32>
+      int<32> arg3 = add_arg2 - 1<32>;
     } else {
     //LD/ST
       add_arg2 = 0x0<19> ++ imm;
-      int<32> arg3 = add_arg2 + 1<32>
+      int<32> arg3 = add_arg2 + 1<32>;
     }
     int<32> alu_res = alu(arg1, add_arg2, op);
     ---
     next int<32> mem_res;
-    if (op_type == 0b10) {
+    if (op_type{1:1} == 0b1) {
         acquire(dmem);
-        //LD
-        mem_res <- dmem[alu_res];
-        release(dmem);
-    } else if (op_type == 0b11) {
-        acquire(dmem);
-        //ST
-        dmem[alu_res] <- arg2;
+        if (op_type == 0b10) {
+            //LD
+            mem_res <- dmem[alu_res];
+        } else {
+            //ST
+            dmem[alu_res] <- arg2;
+
+        }
         release(dmem);
     }
     ---
