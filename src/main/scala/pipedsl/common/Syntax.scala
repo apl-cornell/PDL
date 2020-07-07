@@ -170,6 +170,10 @@ object Syntax {
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case object CEmpty extends Command
 
+  sealed trait InternalCommand extends Command
+
+  case class ICondCommand(cond: Expr, c: Command) extends InternalCommand
+
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
   sealed trait Definition extends Positional

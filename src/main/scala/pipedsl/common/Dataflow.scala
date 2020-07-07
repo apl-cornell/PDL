@@ -11,6 +11,11 @@ object Dataflow {
   case class Analysis[T](isForward: Boolean, init: Set[T],
                          merge: DFMap[T] => Set[T], transfer: (PStage, Set[T]) => Set[T])
 
+  def worklist[T](firstStage: PStage, analysis: Analysis[T]): (DFMap[T], DFMap[T]) = {
+    val stages = getReachableStages(firstStage)
+    worklist(stages, analysis)
+  }
+
   /**
    * This is the worklist algorithm for dataflow analysis, which only operates on sets of
    * values at the moment.
@@ -20,10 +25,10 @@ object Dataflow {
    * @return A tuple whose left element contains the map of "IN" values
    *         for each stage and whose right contains the map of "OUT" values for each stage.
    */
-  def worklist[T](stages: List[PStage], analysis: Analysis[T]): (DFMap[T], DFMap[T]) = {
+  def worklist[T](stages: Set[PStage], analysis: Analysis[T]): (DFMap[T], DFMap[T]) = {
     var firstBlock = stages.head
-    var inEdges: PStage => List[PStage] = (p: PStage) => p.preds
-    var outEdges: PStage => List[PStage] = (p: PStage) => p.succs
+    var inEdges: PStage => Set[PStage] = (p: PStage) => p.preds
+    var outEdges: PStage => Set[PStage] = (p: PStage) => p.succs
     //Flip for backwards analysis
     if (!analysis.isForward) {
       firstBlock = stages.last
@@ -69,7 +74,7 @@ object Dataflow {
    * @return The set of variables used in *p* and later in the pipeline.
    */
   def transferUsedVars(p: PStage, used: Set[Id]): Set[Id] = {
-    getUsedVars(p.cmd) ++ used -- getWrittenVars(p.cmd)
+    getUsedVars(p.cmds) ++ used -- getWrittenVars(p.cmds)
     //if a var was written this stage, then we don't need to send it from the prior stage
   }
 

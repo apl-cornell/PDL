@@ -33,6 +33,7 @@ object DAGSyntax {
   case class SCall(id: Id, args: List[Expr]) extends StageCommand
   case class SReceive(g: Option[Expr], into: EVar, s: Channel) extends StageCommand
   case class SSend(g: Option[Expr], from: EVar, d: Channel) extends StageCommand
+  case class STermStage(g: Option[Expr], vals: List[EVar], dest: List[PStage]) extends StageCommand
   case class SOutput(exp: Expr) extends StageCommand
   case class SReturn(exp: Expr) extends StageCommand
   case class SExpr(exp: Expr) extends StageCommand
@@ -43,15 +44,28 @@ object DAGSyntax {
   /**
    * Abstract representation of a pipeline stage
    * @param n - Unique stage identifier
-   * @param cmd - The original Command that the stage executes from the input language
-   * @param preds - The list (could be set?) of stages that directly precede this one in the pipeline
-   * @param succs - The list (could be set?) of stages that directly follow this one in the pipeline
+   * @param cmds - The original Command that the stage executes from the input language
+   * @param preds - The set of stages that directly precede this one in the pipeline
+   * @param succs - The set of stages that directly follow this one in the pipeline
    * @param recvs - The set of receive statements which conditionally receive data from preds or external modules
    * @param body - The set of combinational logic that executes during this stage
    * @param sends - The set of conditional send operations to succs and/or external modules
    */
-  class PStage(n:Id, var cmd: Command, var preds: List[PStage] = List(), var succs: List[PStage] = List(),
-    var recvs:List[SReceive] = List(), var body: List[StageCommand] = List(), var sends: List[SSend] = List()) extends Process(n)
+  class PStage(n:Id, var cmds: List[Command] = List(), var preds: Set[PStage] = Set(), var succs: Set[PStage] = Set(),
+    var recvs:List[SReceive] = List(), var body: List[StageCommand] = List(), var sends: List[SSend] = List()) extends Process(n) {
+
+    def addEdgeTo(other: PStage): Unit = {
+      this.succs = this.succs + other
+      other.preds = other.preds + this
+    }
+    def removeEdgeTo(other: PStage): Unit = {
+      this.succs = this.succs - other
+      other.preds = other.preds - this
+    }
+    def addCmd(cmd: Command): Unit = {
+      this.cmds = this.cmds :+ cmd
+    }
+  }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t

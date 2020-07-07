@@ -1,6 +1,7 @@
 package pipedsl.common
 
 import Syntax._
+import pipedsl.common.DAGSyntax.PStage
 
 object Utilities {
 
@@ -69,6 +70,10 @@ object Utilities {
     case _ => Set()
   }
 
+  def getWrittenVars(cs: List[Command]): Set[Id] = {
+    cs.foldLeft(Set[Id]())((s, c) => s ++ getWrittenVars(c))
+  }
+
   /**
    *
    * @param c
@@ -110,6 +115,48 @@ object Utilities {
     case EVar(id) => Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case _ => Set()
+  }
+
+  /**
+   *
+   * @param cs
+   * @return
+   */
+  def getUsedVars(cs: List[Command]): Set[Id] = {
+    cs.foldLeft(Set[Id]())((s,c) => s ++ getUsedVars(c))
+  }
+
+  /**
+   *
+   * @param stg
+   * @return
+   */
+  def getReachableStages(stg: PStage): Set[PStage] = {
+    visit[Set[PStage]](stg, Set(stg), (s, stgs) => stgs + s);
+  }
+
+  /**
+   *
+   * @param stg
+   * @param start
+   * @param visitor
+   * @tparam T
+   * @return
+   */
+  def visit[T](stg: PStage, start: T, visitor: (PStage, T) => T): T = {
+    var result = visitor(stg, start)
+    var visited = Set(stg);
+    var fringe: Set[PStage] = stg.succs
+    while (fringe.nonEmpty) {
+      val next = fringe.head
+      fringe = fringe.tail
+      if (!visited.contains(next)) {
+        result = visitor(next, result)
+        visited = visited + next
+        fringe = fringe ++ next.succs
+      }
+    }
+    result
   }
 
   implicit class RichOption[A](opt: Option[A]) {

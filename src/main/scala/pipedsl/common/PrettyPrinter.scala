@@ -1,6 +1,8 @@
 package pipedsl.common
 
+import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities._
 import pprint.pprintln
 
 object PrettyPrinter {
@@ -85,6 +87,7 @@ object PrettyPrinter {
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CEmpty => ins
+      case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " + printCmdToString(cmd) + "\n;"
     }
   }
 
@@ -103,7 +106,7 @@ object PrettyPrinter {
     case Syntax.ERecLiteral(fields) => "{" + fields.keySet.map(i => i.v + printExprToString(fields(i))).mkString(",") + "}"
     case Syntax.EMemAccess(mem, index) => mem.v + "[" + printExprToString(index) + "]"
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"
-    case Syntax.ETernary(cond, tval, fval) => print(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
+    case Syntax.ETernary(cond, tval, fval) => printExprToString(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.EVar(id) => id.v
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
@@ -125,5 +128,18 @@ object PrettyPrinter {
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
     case TMemType(elem, addrSize) =>printTypeToString(elem) + "[" + addrSize.toString + "]"
     case TModType(inputs, refs) => "TODO MOD TYPE"
+  }
+
+  def printStageGraph(name: String, startStage: PStage): Unit = {
+    println("digraph " + name + " {")
+    visit[Unit](startStage, (), printStage)
+    println("}")
+  }
+
+  def printStage(stg: PStage, ignore: Unit): Unit = {
+    stg.succs.foreach(p => {
+      println("  " + stg.name + " -> " + p.name + ";")
+    })
+    println("  " + stg.name + " [xlabel = \"" + printCmdToString(stg.cmds.head) + "\"];")
   }
 }

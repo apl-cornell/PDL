@@ -3,10 +3,10 @@ package pipedsl.passes
 import pipedsl.common.DAGSyntax.{PStage, SReceive, SSend}
 import pipedsl.common.Syntax._
 import pipedsl.common.Dataflow._
+import pipedsl.common.Utilities._
 import Passes.CommandPass
-import scala.jdk.CollectionConverters._
 
-object SplitStagesPass extends CommandPass[List[PStage]] {
+object SplitStagesPass extends CommandPass[PStage] {
 
   var stgCounter: Int = 0
 
@@ -16,23 +16,15 @@ object SplitStagesPass extends CommandPass[List[PStage]] {
     Id(s)
   }
 
-  override def run(c: Command): List[PStage] = {
-    val termStage = new PStage(Id("Terminate"), CEmpty)
-    var stageList: List[PStage] = splitToStages(c)
-    //Add the terminator stage
-    stageList = stageList.map[PStage](p => {
-      if (p.succs.isEmpty) {
-        p.succs = p.succs :+ termStage
-        termStage.preds = termStage.preds :+ p
-      }
-      p
-    })
-    stageList = stageList :+ termStage
+  override def run(c: Command): PStage = {
+    val startStage = new PStage(Id("Start"))
+    val termStage = splitToStages(c, startStage)
+    val stages = getReachableStages(startStage)
     //Add the backedges to each stage that sends data to the beginning of the pipeline
-    stageList.foreach(p => addCallSuccs(p, stageList.head))
+    stages.foreach(p => addCallSuccs(p, startStage))
     //Get variable lifetime information:
-    val (vars_used_in, vars_used_out) = worklist(stageList, UsedInLaterStages)
-    stageList
+    val (vars_used_in, vars_used_out) = worklist(stages, UsedInLaterStages)
+    startStage
   }
 
   /**
@@ -42,17 +34,16 @@ object SplitStagesPass extends CommandPass[List[PStage]] {
    * @param firstStage - First pipeline stage
    */
   private def addCallSuccs(p: PStage, firstStage: PStage): Unit = {
-    callSuccsHelper(p.cmd, p, firstStage)
+    p.cmds.foreach(c => callSuccsHelper(c, p, firstStage))
   }
 
   private def callSuccsHelper(c: Command, p:PStage, firstStage: PStage): Unit = c match {
     case CSeq(c1, c2) => callSuccsHelper(c1, p, firstStage); callSuccsHelper(c2, p, firstStage)
     case CIf(_, cons, alt) => callSuccsHelper(cons, p, firstStage); callSuccsHelper(alt, p, firstStage)
     case CCall(_, _) => {
-      p.succs = p.succs :+ firstStage
-      firstStage.preds = firstStage.preds :+ p
+      p.addEdgeTo(firstStage)
     }
-    case CSpeculate(_, _, verify, body) => callSuccsHelper(body, p, firstStage)
+    case CSpeculate(_, _, verify, body) => callSuccsHelper(verify, p, firstStage); callSuccsHelper(body, p, firstStage)
     case _ => ()
   }
   /**
@@ -60,21 +51,77 @@ object SplitStagesPass extends CommandPass[List[PStage]] {
    * @param c
    * @return
    */
-  private def splitToStages(c: Command): List[PStage] = c match {
+  private def splitToStages(c: Command, curStage: PStage): PStage = c match {
     case CTBar(c1, c2) => {
-      val firstStages = splitToStages(c1)
-      val secondStages = splitToStages(c2)
-      //sequential pipeline, last stage in c1 sends to first in c2
-      val lastc1 = firstStages.last
-      val firstc2 = secondStages.head
-      lastc1.succs = lastc1.succs :+ firstc2
-      firstc2.preds = firstc2.preds :+ lastc1
-      firstStages ++ secondStages
+      val lastLeftStage = splitToStages(c1, curStage)
+      val nextStage = new PStage(nextStageId())
+      val lastRightStage = splitToStages(c2, nextStage)
+      //sequential pipeline, end of left sends to beginning of right
+      lastLeftStage.addEdgeTo(nextStage)
+      lastRightStage
     }
-    //TODO once we add other control structures (like split+join) update this
-    case _ => {
-      List(new PStage(nextStageId(), c))
+    case CSpeculate(predVar, predVal, verify, body) => {
+      //speculation doesn't imply stage splitting although
+      //in practice it will create two parallel successors
+      curStage.addCmd(CAssign(predVar, predVal).setPos(c.pos))
+      val lastVerif = splitToStages(verify, curStage)
+      val lastSpec = splitToStages(body, curStage)
+      val joinStage = if (lastVerif == lastSpec) lastVerif else new PStage(nextStageId())
+      joinStage
     }
+    case CIf(cond, cons, alt) => {
+      val firstTrueStage = new PStage(nextStageId())
+      val lastTrueStage = splitToStages(cons, firstTrueStage)
+      val firstFalseStage = new PStage(nextStageId())
+      val lastFalseStage = splitToStages(cons, firstFalseStage)
+      addConditionalExecution(cond, firstTrueStage)
+      mergeStages(curStage, firstTrueStage)
+      addConditionalExecution(EUop(NotOp(), cond), firstFalseStage)
+      mergeStages(curStage, firstFalseStage)
+      (firstTrueStage == lastTrueStage, firstFalseStage == lastFalseStage) match {
+          //both branches are combinational
+        case (true, true) => curStage
+          //only true branch is comb, false end is join point
+        case (true, false) => curStage.addEdgeTo(lastFalseStage); lastFalseStage
+        case (false, true) => curStage.addEdgeTo(lastTrueStage); lastTrueStage
+          //merge the end stages for both into a join point
+        case (false, false) => {
+          mergeStages(lastTrueStage, lastFalseStage)
+          lastTrueStage
+        }
+      }
+    }
+    case CSeq(c1, c2) => {
+      val nstage = splitToStages(c1, curStage)
+      splitToStages(c2, nstage)
+    }
+    case _ => curStage.addCmd(c); curStage
+  }
+
+  /**
+   *
+   * @param cond
+   * @param stg
+   */
+  private def addConditionalExecution(cond: Expr, stg: PStage): Unit = {
+    val oldCmds = stg.cmds
+    val newCmds = oldCmds.map(c => ICondCommand(cond, c))
+    stg.cmds = newCmds
+    stg.succs.foreach(s => addConditionalExecution(cond, s))
+  }
+
+  /**
+   *
+   * @param left
+   * @param right
+   */
+  private def mergeStages(left: PStage, right: PStage): Unit = {
+    left.cmds = left.cmds ++ right.cmds
+    val succs = right.succs
+    succs.foreach(s => {
+      left.addEdgeTo(s)
+      right.removeEdgeTo(s)
+    })
   }
 
   /**
