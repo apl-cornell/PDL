@@ -33,9 +33,10 @@ object Main {
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
     val firstStage = SplitStagesPass.run(prog_recv.moddefs.head.body)
+    PrettyPrinter.printStages(firstStage)
     PrettyPrinter.printStageGraph(prog_recv.moddefs.head.name.v, firstStage)
-    val (df_ins, df_outs) = worklist(firstStage, UsedInLaterStages)
-    PrettyPrinter.printProgram(prog_recv)
+   // val (df_ins, df_outs) = worklist(firstStage, UsedInLaterStages)
+   // PrettyPrinter.printProgram(prog_recv)
   }
 
 }

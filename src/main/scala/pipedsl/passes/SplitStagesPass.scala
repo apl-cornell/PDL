@@ -61,19 +61,23 @@ object SplitStagesPass extends CommandPass[PStage] {
       lastRightStage
     }
     case CSpeculate(predVar, predVal, verify, body) => {
-      //speculation doesn't imply stage splitting although
-      //in practice it will create two parallel successors
+      //For now throw this part in current stage, maybe can move it to speculative side
       curStage.addCmd(CAssign(predVar, predVal).setPos(c.pos))
+      //speculation doesn't imply stage splitting on the verify side.
       val lastVerif = splitToStages(verify, curStage)
-      val lastSpec = splitToStages(body, curStage)
-      val joinStage = if (lastVerif == lastSpec) lastVerif else new PStage(nextStageId())
+      val firstSpec = new PStage(nextStageId())
+      val lastSpec = splitToStages(body, firstSpec)
+      val joinStage = new PStage(nextStageId())
+      curStage.addEdgeTo(firstSpec)
+      lastVerif.addEdgeTo(joinStage)
+      lastSpec.addEdgeTo(joinStage)
       joinStage
     }
     case CIf(cond, cons, alt) => {
       val firstTrueStage = new PStage(nextStageId())
       val lastTrueStage = splitToStages(cons, firstTrueStage)
       val firstFalseStage = new PStage(nextStageId())
-      val lastFalseStage = splitToStages(cons, firstFalseStage)
+      val lastFalseStage = splitToStages(alt, firstFalseStage)
       addConditionalExecution(cond, firstTrueStage)
       mergeStages(curStage, firstTrueStage)
       addConditionalExecution(EUop(NotOp(), cond), firstFalseStage)
@@ -105,7 +109,10 @@ object SplitStagesPass extends CommandPass[PStage] {
    */
   private def addConditionalExecution(cond: Expr, stg: PStage): Unit = {
     val oldCmds = stg.cmds
-    val newCmds = oldCmds.map(c => ICondCommand(cond, c))
+    val newCmds = oldCmds.foldLeft(List[Command]())((l,c)  => c match {
+      case CEmpty => l
+      case _ => l :+ ICondCommand(cond, c)
+    })
     stg.cmds = newCmds
     stg.succs.foreach(s => addConditionalExecution(cond, s))
   }

@@ -87,7 +87,7 @@ object PrettyPrinter {
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CEmpty => ins
-      case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " + printCmdToString(cmd) + "\n;"
+      case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " + printCmdToString(cmd)
     }
   }
 
@@ -132,14 +132,26 @@ object PrettyPrinter {
 
   def printStageGraph(name: String, startStage: PStage): Unit = {
     println("digraph " + name + " {")
-    visit[Unit](startStage, (), printStage)
+    visit[Unit](startStage, (), printStageForDot)
     println("}")
   }
 
-  def printStage(stg: PStage, ignore: Unit): Unit = {
+  def printStageForDot(stg: PStage, ignore: Unit): Unit = {
     stg.succs.foreach(p => {
       println("  " + stg.name + " -> " + p.name + ";")
     })
     println("  " + stg.name + " [xlabel = \"" + printCmdToString(stg.cmds.head) + "\"];")
+  }
+
+  def printStages(start: PStage): Unit = {
+    visit[Unit](start, (), printStage)
+  }
+
+  def printStage(stg: PStage, ignore: Unit): Unit = {
+    println("Stage " + stg.name.v + ":\n")
+    stg.cmds.foreach(c => {
+      println(printCmdToString(c, 2));
+    })
+    println("Successors = " + stg.succs.foldLeft("")((str, stg) => str + "," + stg.name.v))
   }
 }
