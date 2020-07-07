@@ -131,6 +131,11 @@ object SplitStagesPass extends CommandPass[PStage] {
       left.addEdgeTo(s)
       right.removeEdgeTo(s)
     })
+    val preds = right.preds
+    preds.foreach(s => {
+      s.addEdgeTo(left)
+      s.removeEdgeTo(right)
+    })
   }
 
   /**

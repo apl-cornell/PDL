@@ -70,8 +70,9 @@ pipe cpu(pc: spec<int<32>>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]
         }, {
             call cpu(npc);
         })
+    } else {
+        ---
     }
-    ---
     int<32> add_arg2;
     if (op_type == 0b1<2>) {
         //op_type == ALU
