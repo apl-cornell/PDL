@@ -44,6 +44,7 @@ object SplitStagesPass extends CommandPass[PStage] {
       p.addEdgeTo(firstStage)
     }
     case CSpeculate(_, _, verify, body) => callSuccsHelper(verify, p, firstStage); callSuccsHelper(body, p, firstStage)
+    case ICondCommand(_, c) => callSuccsHelper(c, p, firstStage);
     case _ => ()
   }
   /**
@@ -99,6 +100,7 @@ object SplitStagesPass extends CommandPass[PStage] {
       val nstage = splitToStages(c1, curStage)
       splitToStages(c2, nstage)
     }
+    case CEmpty => curStage
     case _ => curStage.addCmd(c); curStage
   }
 

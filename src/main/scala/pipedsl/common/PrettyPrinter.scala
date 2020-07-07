@@ -140,7 +140,8 @@ object PrettyPrinter {
     stg.succs.foreach(p => {
       println("  " + stg.name + " -> " + p.name + ";")
     })
-    println("  " + stg.name + " [xlabel = \"" + printCmdToString(stg.cmds.head) + "\"];")
+    val cmdString = if(stg.cmds.nonEmpty) printCmdToString(stg.cmds.head) else ""
+    println("  " + stg.name + " [xlabel = \"" + cmdString + "\"];")
   }
 
   def printStages(start: PStage): Unit = {
