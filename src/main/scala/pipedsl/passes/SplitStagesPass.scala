@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.{PStage, SReceive, SSend}
+import pipedsl.common.DAGSyntax.{PStage, PipelineEdge, SReceive, SSend}
 import pipedsl.common.Syntax._
 import pipedsl.common.Dataflow._
 import pipedsl.common.Utilities._
@@ -140,14 +140,14 @@ object SplitStagesPass extends CommandPass[PStage] {
   private def mergeStages(left: PStage, right: PStage): Unit = {
     left.cmds = left.cmds ++ right.cmds
     val succs = right.succs
-    succs.foreach(s => {
-      left.addEdgeTo(s)
-      right.removeEdgeTo(s)
-    })
     val preds = right.preds
+    succs.foreach(s => {
+      val removed = right.removeEdgesTo(s)
+      removed.foreach(r => left.addEdge(r))
+    })
     preds.foreach(s => {
-      s.addEdgeTo(left)
-      s.removeEdgeTo(right)
+      val removed = s.removeEdgesTo(right)
+      removed.map(e => PipelineEdge(e.cond, left)).foreach(r => s.addEdge(r))
     })
   }
 

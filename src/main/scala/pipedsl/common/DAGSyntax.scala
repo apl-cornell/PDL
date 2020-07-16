@@ -40,33 +40,52 @@ object DAGSyntax {
   case class SExpr(exp: Expr) extends StageCommand
   case object SEmpty extends StageCommand
 
-  type PipelineEdge = (Option[Expr], PStage)
-
-  sealed trait RecvType
-  case object RoundRobin extends RecvType
-  case object All extends RecvType
-  case object Ordered extends RecvType
+  case class PipelineEdge(cond: Option[Expr], to:PStage)
 
   /**
-   * Abstract representation of a pipeline stage
-   * @param n - Unique stage identifier
-   * @param cmds - The original Command that the stage executes from the input language
-   * @param preds - The set of stages that directly precede this one in the pipeline
-   * @param succs - The set of stages that directly follow this one in the pipeline
-   * @param recvs - The set of receive statements which conditionally receive data from preds or external modules
-   * @param body - The set of combinational logic that executes during this stage
-   * @param sends - The set of conditional send operations to succs and/or external modules
+   *
+   * @param n
    */
-  class PStage(n:Id, var cmds: List[Command] = List(), var preds: Set[PStage] = Set(), var succs: Set[PStage] = Set(),
-    var recvs:List[SReceive] = List(), var body: List[StageCommand] = List(), var sends: List[SSend] = List()) extends Process(n) {
+  class PStage(n:Id) extends Process(n) {
 
-    def addEdgeTo(other: PStage): Unit = {
+    var outEdges: Set[PipelineEdge] = Set()
+    var inEdges: Set[PipelineEdge] = Set()
+    var cmds: List[Command] = List()
+    var succs: Set[PStage] = Set()
+    var preds: Set[PStage] = inEdges.map(e => e.to)
+
+    /**
+     *
+     * @param other
+     * @param cond
+     */
+    def addEdgeTo(other: PStage, cond: Option[Expr] = None): Unit = {
+      val edge = PipelineEdge(cond, other)
+      addEdge(edge)
+    }
+
+    /**
+     *
+     * @param edge
+     */
+    def addEdge(edge: PipelineEdge): Unit = {
+      val other = edge.to
+      this.outEdges = this.outEdges + edge
       this.succs = this.succs + other
       other.preds = other.preds + this
     }
-    def removeEdgeTo(other: PStage): Unit = {
+
+    /**
+     *
+     * @param other
+     * @return
+     */
+    def removeEdgesTo(other: PStage): Set[PipelineEdge] = {
+      val (otherEdges, notOther) = this.outEdges.partition(e => e.to == other)
+      this.outEdges = notOther
       this.succs = this.succs - other
       other.preds = other.preds - this
+      otherEdges
     }
     def addCmd(cmd: Command): Unit = {
       this.cmds = this.cmds :+ cmd
