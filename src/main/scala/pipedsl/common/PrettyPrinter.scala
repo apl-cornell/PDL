@@ -88,6 +88,8 @@ object PrettyPrinter {
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CEmpty => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " + printCmdToString(cmd)
+      case Syntax.IUpdate(specId, value) => ins + "update(" + specId + ", " + printExprToString(value) + ");"
+      case Syntax.ISpeculate(specId, value) => ins + "speculate(" + specId + ", " + printExprToString(value) + ");"
     }
   }
 

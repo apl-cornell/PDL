@@ -22,6 +22,7 @@ object DAGSyntax {
     val receiver: Id = r
   }
 
+
   sealed abstract class Process(n: Id) {
     val name: Id = n
   }
@@ -40,6 +41,11 @@ object DAGSyntax {
   case object SEmpty extends StageCommand
 
   type PipelineEdge = (Option[Expr], PStage)
+
+  sealed trait RecvType
+  case object RoundRobin extends RecvType
+  case object All extends RecvType
+  case object Ordered extends RecvType
 
   /**
    * Abstract representation of a pipeline stage

@@ -51,8 +51,6 @@ object TimingTypeChecker extends TypeChecks[Type] {
       checkCommand(c2, v2, nv2, insideCond)
     }
     case CTBar(c1, c2) => {
-      //TODO refactor to just always allow this
-      //if (insideCond) { throw UnexpectedPipelineStatement(c.pos, "time barrier") }
       val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
       checkCommand(c2, v2 ++ nv2, NoneAvailable, insideCond)
     }
@@ -98,8 +96,8 @@ object TimingTypeChecker extends TypeChecks[Type] {
       if(checkExpr(predVal, vars)) {
         throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")
       }
-      val (varsv, nvarsv) = checkCommand(verify, vars, nextVars, insideCond)
-      val (vars2, nvars2) = checkCommand(body, vars + predVar.id, nextVars, insideCond)
+      val (varsv, nvarsv) = checkCommand(verify, vars ++ nextVars, NoneAvailable, insideCond)
+      val (vars2, nvars2) = checkCommand(body, vars + predVar.id ++ nextVars, NoneAvailable, insideCond)
       (varsv ++ vars2, nvarsv ++ nvars2)
     }
     case CCheck(predVar) => {

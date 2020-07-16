@@ -108,4 +108,7 @@ object Errors {
   case class MismatchedSpeculationState(pos: Position) extends TypeError(
     s"All execution branches must resolve in the same speculation state", pos)
 
+  case class IllegalSpeculationBlock(pos: Position) extends RuntimeException(
+    withPos("Speculation initiation and verification must be in separate stages", pos)
+  )
 }

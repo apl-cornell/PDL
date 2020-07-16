@@ -116,3 +116,20 @@ circuit {
     i = memory(int<32>, 32);
     c = new test(0<32>)[r, i, d];
 }
+
+
+spec(x = y, {
+  c1
+}, {
+  c2
+})
+==
+speculate(x, y);
+{
+ c1
+ update(x, real value of x);
+}
+{
+ c2
+ check(x);
+}

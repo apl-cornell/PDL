@@ -5,6 +5,7 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Dataflow._
 import pipedsl.common.Utilities._
 import Passes.CommandPass
+import pipedsl.common.Locks.LockState
 
 object SplitStagesPass extends CommandPass[PStage] {
 
@@ -20,10 +21,10 @@ object SplitStagesPass extends CommandPass[PStage] {
     val startStage = new PStage(Id("Start"))
     val termStage = splitToStages(c, startStage)
     val stages = getReachableStages(startStage)
-    //Add the backedges to each stage that sends data to the beginning of the pipeline
-    stages.foreach(p => addCallSuccs(p, startStage))
     //Get variable lifetime information:
     val (vars_used_in, vars_used_out) = worklist(stages, UsedInLaterStages)
+    //TODO maybe do this later? Add the backedges to each stage that sends data to the beginning of the pipeline
+    stages.foreach(p => addCallSuccs(p, startStage))
     startStage
   }
 
@@ -64,12 +65,24 @@ object SplitStagesPass extends CommandPass[PStage] {
     case CSpeculate(predVar, predVal, verify, body) => {
       //For now throw this part in current stage, maybe can move it to speculative side
       curStage.addCmd(CAssign(predVar, predVal).setPos(c.pos))
-      //speculation doesn't imply stage splitting on the verify side.
-      val lastVerif = splitToStages(verify, curStage)
+      val specId = Id("__spec_" + predVar.id)
+      //lock this speculative region and start speculation
+      curStage.addCmd(CLockOp(specId, LockState.Acquired))
+      curStage.addCmd(ISpeculate(specId, predVar).setPos(c.pos))
+      //speculation must imply stage splitting on both sides
+      val firstVerif = new PStage(nextStageId())
+      val lastVerif = splitToStages(verify, firstVerif)
+      //TODO need to check that this set of commands actually assigns to predVar
+      lastVerif.addCmd(IUpdate(specId, predVar).setPos(c.pos))
       val firstSpec = new PStage(nextStageId())
       val lastSpec = splitToStages(body, firstSpec)
+      lastSpec.addCmd(CCheck(specId))
       val joinStage = new PStage(nextStageId())
+      //release speculative lock once both branches arrive
+      joinStage.addCmd(CLockOp(specId, LockState.Released))
+      curStage.addEdgeTo(firstVerif)
       curStage.addEdgeTo(firstSpec)
+      //lastVerif.addEdgeTo(firstSpec) how and where to do this?
       lastVerif.addEdgeTo(joinStage)
       lastSpec.addEdgeTo(joinStage)
       joinStage

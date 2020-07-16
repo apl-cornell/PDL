@@ -38,7 +38,6 @@ pipe cpu(pc: spec<int<32>>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]
     int<32> insn <- imem[pc];
     release(imem);
     speculate (int<32> npc = btb(pc), {
-        ---
         int<2> op_type = insn{1:0};
         int<2> op = insn{3:2};
         int<5> rs1 = insn{8:4};

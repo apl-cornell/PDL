@@ -47,7 +47,6 @@ pipe cpu(pc: spec<int<32>>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]
     release(imem);
     //this creates nested speculation since we haven't resolved anything
     speculate (int<1> isBR = isbrpred(pc), {
-        ---
         int<2> op_type = insn{1:0};
         int<2> op = insn{3:2};
         isBR = (op == 0b0<2>);
@@ -64,7 +63,6 @@ pipe cpu(pc: spec<int<32>>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]
     int<32> arg2 <- rf[rs2];
     if (!cast(isBR, bool)) {
         speculate (int<32> npc = bht(pc, op), {
-            ---
             int<32> offset = ((op_type == 0b0<2>) && (arg1 == arg2)) ? 0b0<19> ++ imm : 4<32>;
             npc = pc + offset;
         }, {
