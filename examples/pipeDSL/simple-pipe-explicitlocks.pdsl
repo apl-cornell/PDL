@@ -52,7 +52,6 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
         } else {
             //ST
             dmem[alu_res] <- arg2;
-
         }
         release(dmem);
     }

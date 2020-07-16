@@ -74,7 +74,7 @@ object PrettyPrinter {
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
-      case Syntax.CDecl(id, typ, thisCycle) => ins + (if(thisCycle) "next " else "")  + printTypeToString(typ) + " " + id
+      case Syntax.CDecl(id, typ, thisCycle) => ins + (if(thisCycle) "next " else "")  + printTypeToString(typ) + " " + id + ";"
       case Syntax.CLockOp(mem, op) => ins + (op match {
         case pipedsl.common.Locks.LockState.Free => "free"
         case pipedsl.common.Locks.LockState.Reserved => "reserve"
@@ -155,6 +155,9 @@ object PrettyPrinter {
     stg.cmds.foreach(c => {
       println(printCmdToString(c, 2));
     })
-    println("Successors = " + stg.succs.foldLeft("")((str, stg) => str + "," + stg.name.v))
+    println("Out Edges = " + stg.outEdges.foldLeft("")((str, edge) => {
+      val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
+      str + condStr + edge.to.name + ", "
+    }))
   }
 }

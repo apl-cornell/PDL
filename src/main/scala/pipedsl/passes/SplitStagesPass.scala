@@ -23,8 +23,6 @@ object SplitStagesPass extends CommandPass[PStage] {
     val stages = getReachableStages(startStage)
     //Get variable lifetime information:
     val (vars_used_in, vars_used_out) = worklist(stages, UsedInLaterStages)
-    //TODO maybe do this later? Add the backedges to each stage that sends data to the beginning of the pipeline
-    stages.foreach(p => addCallSuccs(p, startStage))
     startStage
   }
 
@@ -94,16 +92,19 @@ object SplitStagesPass extends CommandPass[PStage] {
       val lastFalseStage = splitToStages(alt, firstFalseStage)
       addConditionalExecution(cond, firstTrueStage)
       mergeStages(curStage, firstTrueStage)
-      addConditionalExecution(EUop(NotOp(), cond), firstFalseStage)
+      val notCond = EUop(NotOp(), cond)
+      addConditionalExecution(notCond, firstFalseStage)
       mergeStages(curStage, firstFalseStage)
       (firstTrueStage == lastTrueStage, firstFalseStage == lastFalseStage) match {
           //both branches are combinational
         case (true, true) => curStage
           //only true branch is comb, false end is join point
-        case (true, false) => curStage.addEdgeTo(lastFalseStage); lastFalseStage
-        case (false, true) => curStage.addEdgeTo(lastTrueStage); lastTrueStage
+        case (true, false) => curStage.addEdgeTo(lastFalseStage); addConditionalExecution(notCond, lastFalseStage); lastFalseStage
+        case (false, true) => curStage.addEdgeTo(lastTrueStage); addConditionalExecution(cond, lastTrueStage); lastTrueStage
           //merge the end stages for both into a join point
         case (false, false) => {
+          addConditionalExecution(cond, lastTrueStage)
+          addConditionalExecution(notCond, lastFalseStage)
           mergeStages(lastTrueStage, lastFalseStage)
           lastTrueStage
         }
@@ -129,7 +130,8 @@ object SplitStagesPass extends CommandPass[PStage] {
       case _ => l :+ ICondCommand(cond, c)
     })
     stg.cmds = newCmds
-    stg.succs.foreach(s => addConditionalExecution(cond, s))
+    stg.outEdges = stg.outEdges.map(e => PipelineEdge(andExpr(Some(cond), e.cond), e.to))
+    //stg.succs.foreach(s => addConditionalExecution(cond, s))
   }
 
   /**

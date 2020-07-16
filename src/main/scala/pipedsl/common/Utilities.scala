@@ -159,6 +159,19 @@ object Utilities {
     result
   }
 
+  /**
+   *
+   * @param condL
+   * @param condR
+   * @return
+   */
+  def andExpr(condL: Option[Expr], condR: Option[Expr]): Option[Expr] = (condL, condR) match {
+    case (None, None) => None
+    case (Some(e1), Some(e2)) => Some(AndOp(e1, e2))
+    case (Some(_), None) => condL
+    case (None, Some(_)) => condR
+  }
+
   implicit class RichOption[A](opt: Option[A]) {
     def getOrThrow[T <: Throwable](except: T) = opt match {
       case Some(v) => v

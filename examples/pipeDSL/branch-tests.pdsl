@@ -1,0 +1,17 @@
+pipe test1(input: int<32>)[rf: int<32>[5]] {
+    acquire(rf);
+    if (input{0:0} == 1) {
+        rf[input{4:0}] <- input;
+        ---
+        int<32> y = input;
+        ---
+        int<32> z = input;
+    } else {
+        int<32> x = input;
+    }
+    release(rf);
+}
+circuit {
+    r = memory(int<32>, 5);
+    t = new test1(0<32>)[r];
+}
