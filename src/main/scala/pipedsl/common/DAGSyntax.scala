@@ -48,10 +48,15 @@ object DAGSyntax {
    */
   class PStage(n:Id) extends Process(n) {
 
+    //Any outgoing communication edge, including normal pipeline flow, calls and communication with memories
     var outEdges: Set[PipelineEdge] = Set()
+    //Ditto, but incoming
     var inEdges: Set[PipelineEdge] = Set()
+    //Set of combinational commands
     var cmds: List[Command] = List()
+    //Pipeline stages which may succeed this one
     var succs: Set[PStage] = Set()
+    //Pipeline stages which may precede this one
     var preds: Set[PStage] = inEdges.map(e => e.to)
 
     /**
@@ -91,6 +96,7 @@ object DAGSyntax {
       this.cmds = this.cmds :+ cmd
     }
   }
+
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t

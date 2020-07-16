@@ -46,6 +46,7 @@ object SplitStagesPass extends CommandPass[PStage] {
     case ICondCommand(_, c) => callSuccsHelper(c, p, firstStage);
     case _ => ()
   }
+
   /**
    *
    * @param c
@@ -71,16 +72,19 @@ object SplitStagesPass extends CommandPass[PStage] {
       val firstVerif = new PStage(nextStageId())
       val lastVerif = splitToStages(verify, firstVerif)
       //TODO need to check that this set of commands actually assigns to predVar
-      lastVerif.addCmd(IUpdate(specId, predVar).setPos(c.pos))
+      val originalSpecVar = EVar(specId)
+      originalSpecVar.typ = predVar.typ
+      lastVerif.addCmd(IUpdate(specId, predVar, originalSpecVar).setPos(c.pos))
       val firstSpec = new PStage(nextStageId())
       val lastSpec = splitToStages(body, firstSpec)
       lastSpec.addCmd(CCheck(specId))
+      //Need an edge to resend data on failure
+      lastVerif.addEdgeTo(firstSpec, Some(EBinop(EqOp("=="), originalSpecVar, predVar)));
       val joinStage = new PStage(nextStageId())
       //release speculative lock once both branches arrive
       joinStage.addCmd(CLockOp(specId, LockState.Released))
       curStage.addEdgeTo(firstVerif)
       curStage.addEdgeTo(firstSpec)
-      //lastVerif.addEdgeTo(firstSpec) how and where to do this?
       lastVerif.addEdgeTo(joinStage)
       lastSpec.addEdgeTo(joinStage)
       joinStage
@@ -99,13 +103,22 @@ object SplitStagesPass extends CommandPass[PStage] {
           //both branches are combinational
         case (true, true) => curStage
           //only true branch is comb, false end is join point
-        case (true, false) => curStage.addEdgeTo(lastFalseStage); addConditionalExecution(notCond, lastFalseStage); lastFalseStage
-        case (false, true) => curStage.addEdgeTo(lastTrueStage); addConditionalExecution(cond, lastTrueStage); lastTrueStage
+        case (true, false) => {
+          curStage.addEdgeTo(lastFalseStage)
+          addConditionalExecution(notCond, lastFalseStage)
+          lastFalseStage
+        }
+        case (false, true) => {
+          curStage.addEdgeTo(lastTrueStage)
+          addConditionalExecution(cond, lastTrueStage)
+          lastTrueStage
+        }
           //merge the end stages for both into a join point
         case (false, false) => {
           addConditionalExecution(cond, lastTrueStage)
           addConditionalExecution(notCond, lastFalseStage)
           mergeStages(lastTrueStage, lastFalseStage)
+          curStage.addEdgeTo(lastTrueStage) //need to send info on which branch was taken
           lastTrueStage
         }
       }

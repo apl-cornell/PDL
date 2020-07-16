@@ -174,7 +174,7 @@ object Syntax {
 
   case class ICondCommand(cond: Expr, c: Command) extends InternalCommand
   case class ISpeculate(specId: Id, value: EVar) extends InternalCommand
-  case class IUpdate(specId: Id, value: EVar) extends InternalCommand
+  case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
