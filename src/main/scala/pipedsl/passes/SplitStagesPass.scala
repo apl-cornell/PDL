@@ -1,14 +1,12 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SReceive, SSend}
+import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SReceive, SSend, SpecStage}
 import pipedsl.common.Syntax._
-import pipedsl.common.Dataflow._
 import pipedsl.common.Utilities._
-import Passes.CommandPass
+import Passes.{CommandPass, ModulePass, ProgPass}
 import pipedsl.common.{Dataflow, Syntax}
-import pipedsl.common.Locks.LockState
 
-object SplitStagesPass extends CommandPass[PStage] {
+object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with ProgPass[Map[Id, PStage]] {
 
   var stgCounter: Int = 0
 
@@ -18,12 +16,19 @@ object SplitStagesPass extends CommandPass[PStage] {
     Id(s)
   }
 
+
+  override def run(p: Prog): Map[Id,PStage] = {
+    p.moddefs.foldLeft(Map[Id,PStage]())((m, mod) => {
+      m + (mod.name -> run(mod))
+    })
+  }
+
+  override def run(m: ModuleDef): PStage = run(m.body)
+
   override def run(c: Command): PStage = {
     val startStage = new PStage(Id("Start"))
     val termStage = splitToStages(c, startStage)
     val stages = getReachableStages(startStage)
-    //Get variable lifetime information:
-    //visit(startStage, (), addEdgeValues(vars_used_in, vars_used_out)(_,_))
     startStage
   }
 
@@ -69,32 +74,16 @@ object SplitStagesPass extends CommandPass[PStage] {
       lastRightStage
     }
     case CSpeculate(predVar, predVal, verify, body) => {
-      //For now throw this part in current stage, maybe can move it to speculative side
-      curStage.addCmd(CAssign(predVar, predVal).setPos(c.pos))
-      val specId = Id("__spec_" + predVar.id)
-      //lock this speculative region and start speculation
-      curStage.addCmd(CLockOp(specId, LockState.Acquired))
-      curStage.addCmd(ISpeculate(specId, predVar).setPos(c.pos))
-      //speculation must imply stage splitting on both sides
+
       val firstVerif = new PStage(nextStageId())
       val lastVerif = splitToStages(verify, firstVerif)
-      //TODO need to check that this set of commands actually assigns to predVar
-      val originalSpecVar = EVar(specId)
-      originalSpecVar.typ = predVar.typ
-      lastVerif.addCmd(IUpdate(specId, predVar, originalSpecVar).setPos(c.pos))
+
       val firstSpec = new PStage(nextStageId())
       val lastSpec = splitToStages(body, firstSpec)
-      lastSpec.addCmd(CCheck(specId))
-      //Need an edge to resend data on failure
-      lastVerif.addEdgeTo(firstSpec, Some(EBinop(EqOp("=="), originalSpecVar, predVar)));
-      val joinStage = new PStage(nextStageId())
-      //release speculative lock once both branches arrive
-      joinStage.addCmd(CLockOp(specId, LockState.Released))
-      curStage.addEdgeTo(firstVerif)
-      curStage.addEdgeTo(firstSpec)
-      lastVerif.addEdgeTo(joinStage)
-      lastSpec.addEdgeTo(joinStage)
-      joinStage
+
+      val specStage = new SpecStage(nextStageId(), predVar, predVal, firstVerif, lastVerif, firstSpec, lastSpec)
+      curStage.addEdgeTo(specStage)
+      specStage
     }
     case CIf(cond, cons, alt) => {
       val firstTrueStage = new PStage(nextStageId())
@@ -156,5 +145,5 @@ object SplitStagesPass extends CommandPass[PStage] {
   private def extractReceives(c: Command, nextStg: Id): (Command, List[SSend], List[SReceive]) = c match {
     case _ => (c, List(), List())
   }
-  
+
 }

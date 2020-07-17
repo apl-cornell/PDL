@@ -139,7 +139,37 @@ object PrettyPrinter {
     println("}")
   }
 
+  def printStageGraphInterior(startStage: PStage): Unit = {
+    visit[Unit](startStage, (), printStageForDot)
+  }
   def printStageForDot(stg: PStage, ignore: Unit): Unit = {
+    stg match {
+      case s:IfStage => {
+        println("  subgraph cluster__" + s.name + " {")
+        println("style=filled;")
+        println("color=lightgrey;")
+        println("node [style=filled,color=white];")
+        println("label = \"IF(" + printExprToString(s.cond) + ")\";")
+        println("    " + s.name + " -> " + s.tblock.name + ";")
+        println("    " + s.name + " -> " + s.fblock.name + ";")
+        printStageGraphInterior(s.tblock)
+        printStageGraphInterior(s.fblock)
+        println("}")
+      }
+      case s:SpecStage => {
+        println("  subgraph cluster__" + s.name + " {")
+        println("style=filled;")
+        println("color=pink;")
+        println("node [style=filled,color=white];")
+        println("label = \"Spec(" + printExprToString(s.specVar) + " = " + printExprToString(s.specVal) + ")\";")
+        println("    " + s.name + " -> " + s.verfiy.name + ";")
+        println("    " + s.name + " -> " + s.spec.name + ";")
+        printStageGraphInterior(s.verfiy)
+        printStageGraphInterior(s.spec)
+        println("}")
+      }
+      case _ => ()
+    }
     stg.outEdges.foreach(edge => {
       println("  " + stg.name + " -> " + edge.to.name + "[label = \"" + edge.values.mkString(",") + "\"];")
     })
@@ -163,6 +193,11 @@ object PrettyPrinter {
         println("condition = " + printExprToString(s.cond))
         println("True block:"); printStages(s.tblock)
         println("False block:"); printStages(s.fblock)
+      }
+      case s:SpecStage => {
+        println("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
+        println("Verify Block: "); printStages(s.verfiy)
+        println("Speculate Block: "); printStages(s.spec)
       }
       case _ => ()
     }

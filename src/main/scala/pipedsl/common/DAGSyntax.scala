@@ -98,8 +98,30 @@ object DAGSyntax {
   }
 
 
-  class SpecStage(n: Id, verfiy: PStage, spec: PStage, join: PStage) extends PStage(n) {
+  class SpecStage(n: Id, val specVar: EVar, val specVal: Expr,
+    val verfiy: PStage, val lastVerify: PStage, val spec: PStage, val lastSpec: PStage) extends PStage(n) {
+    //Commands added to the SpecStage are meant to occur *after* the speculation resolution point
 
+    /*
+     //For now throw this part in current stage, maybe can move it to speculative side
+      curStage.addCmd(CAssign(predVar, predVal).setPos(c.pos))
+      val specId = Id("__spec_" + predVar.id)
+      //lock this speculative region and start speculation
+      curStage.addCmd(CLockOp(specId, LockState.Acquired))
+      curStage.addCmd(ISpeculate(specId, predVar).setPos(c.pos))
+
+       //TODO need to check that this set of commands actually assigns to predVar
+      val originalSpecVar = EVar(specId)
+      originalSpecVar.typ = predVar.typ
+      lastVerif.addCmd(IUpdate(specId, predVar, originalSpecVar).setPos(c.pos))
+
+       lastSpec.addCmd(CCheck(specId))
+      //Need an edge to resend data on failure
+      lastVerif.addEdgeTo(firstSpec, Some(EBinop(EqOp("=="), originalSpecVar, predVar)));
+
+        //release speculative lock once both branches arrive
+      joinStage.addCmd(CLockOp(specId, LockState.Released))
+     */
   }
 
   /**
