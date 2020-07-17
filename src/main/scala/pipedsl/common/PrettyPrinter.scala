@@ -142,6 +142,7 @@ object PrettyPrinter {
   def printStageGraphInterior(startStage: PStage): Unit = {
     visit[Unit](startStage, (), printStageForDot)
   }
+
   def printStageForDot(stg: PStage, ignore: Unit): Unit = {
     stg match {
       case s:IfStage => {
@@ -162,15 +163,15 @@ object PrettyPrinter {
         println("color=pink;")
         println("node [style=filled,color=white];")
         println("label = \"Spec(" + printExprToString(s.specVar) + " = " + printExprToString(s.specVal) + ")\";")
-        println("    " + s.name + " -> " + s.verfiy.name + ";")
+        println("    " + s.name + " -> " + s.verify.name + ";")
         println("    " + s.name + " -> " + s.spec.name + ";")
-        printStageGraphInterior(s.verfiy)
+        printStageGraphInterior(s.verify)
         printStageGraphInterior(s.spec)
         println("}")
       }
       case _ => ()
     }
-    stg.outEdges.foreach(edge => {
+    stg.edges.filter(e => e.from == stg).foreach(edge => {
       println("  " + stg.name + " -> " + edge.to.name + "[label = \"" + edge.values.mkString(",") + "\"];")
     })
     //val cmdString = if(stg.cmds.nonEmpty) printCmdToString(stg.cmds.head) else ""
@@ -196,7 +197,7 @@ object PrettyPrinter {
       }
       case s:SpecStage => {
         println("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
-        println("Verify Block: "); printStages(s.verfiy)
+        println("Verify Block: "); printStages(s.verify)
         println("Speculate Block: "); printStages(s.spec)
       }
       case _ => ()

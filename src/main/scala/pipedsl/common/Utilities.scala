@@ -53,6 +53,9 @@ object Utilities {
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
     case CDecl(id, _, _) => Set(id)
+    case ICondCommand(cond, c2) => getUsedVars(cond) ++ getAllVarNames(c2)
+    case ISpeculate(specId, value) => getUsedVars(value) + specId
+    case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty => Set()
   }
 
@@ -67,6 +70,7 @@ object Utilities {
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
     case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
+    case ICondCommand(_, c2) => getWrittenVars(c2)
     case _ => Set()
   }
 
@@ -146,14 +150,14 @@ object Utilities {
   def visit[T](stg: PStage, start: T, visitor: (PStage, T) => T): T = {
     var result = visitor(stg, start)
     var visited = Set(stg);
-    var fringe: Set[PStage] = stg.succs
+    var fringe: Set[PStage] = stg.children
     while (fringe.nonEmpty) {
       val next = fringe.head
       fringe = fringe.tail
       if (!visited.contains(next)) {
         result = visitor(next, result)
         visited = visited + next
-        fringe = fringe ++ next.succs
+        fringe = fringe ++ next.children
       }
     }
     result

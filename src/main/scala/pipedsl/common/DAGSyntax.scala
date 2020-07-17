@@ -40,7 +40,7 @@ object DAGSyntax {
   case class SExpr(exp: Expr) extends StageCommand
   case object SEmpty extends StageCommand
 
-  case class PipelineEdge(cond: Option[Expr], to:PStage, values: Set[Id] = Set())
+  case class PipelineEdge(cond: Option[Expr], from: PStage, to:PStage, values: Set[Id] = Set())
 
   /**
    *
@@ -49,15 +49,28 @@ object DAGSyntax {
   class PStage(n:Id) extends Process(n) {
 
     //Any outgoing communication edge, including normal pipeline flow, calls and communication with memories
-    var outEdges: Set[PipelineEdge] = Set()
-    //Ditto, but incoming
-    var inEdges: Set[PipelineEdge] = Set()
+    var edges: Set[PipelineEdge] = Set()
+
+    def outEdges: Set[PipelineEdge] = {
+      edges.filter(e => e.from == this)
+    }
+    def inEdges: Set[PipelineEdge] = {
+      edges.filter(e => e.to == this)
+    }
+
     //Set of combinational commands
     var cmds: List[Command] = List()
-    //Pipeline stages which may succeed this one
-    var succs: Set[PStage] = Set()
-    //Pipeline stages which may precede this one
-    var preds: Set[PStage] = inEdges.map(e => e.to)
+    //Successors for dataflow based computation. This encodes all dataflow dependencies.
+    def succs: Set[PStage] = {
+      edges.filter(e => e.from == this).map(e => e.to)
+    }
+    //Successors for dataflow based computation. This encodes all dataflow dependencies.
+    def preds: Set[PStage] = {
+      edges.filter(e => e.to == this).map(e => e.to)
+    }
+    //Used for visitor style traversals that allow types to
+    //control how their children are visited
+    def children: Set[PStage] = succs
 
     /**
      *
@@ -65,7 +78,7 @@ object DAGSyntax {
      * @param cond
      */
     def addEdgeTo(other: PStage, cond: Option[Expr] = None): Unit = {
-      val edge = PipelineEdge(cond, other)
+      val edge = PipelineEdge(cond, this, other)
       addEdge(edge)
     }
 
@@ -75,9 +88,8 @@ object DAGSyntax {
      */
     def addEdge(edge: PipelineEdge): Unit = {
       val other = edge.to
-      this.outEdges = this.outEdges + edge
-      this.succs = this.succs + other
-      other.preds = other.preds + this
+      this.edges = this.edges + edge
+      other.edges = other.edges + edge
     }
 
     /**
@@ -86,12 +98,16 @@ object DAGSyntax {
      * @return
      */
     def removeEdgesTo(other: PStage): Set[PipelineEdge] = {
-      val (otherEdges, notOther) = this.outEdges.partition(e => e.to == other)
-      this.outEdges = notOther
-      this.succs = this.succs - other
-      other.preds = other.preds - this
+      other.edges = other.edges.filter(e => e.from != this)
+      val (otherEdges, notOther) = this.edges.partition(e => e.to == other)
+      this.edges = notOther
       otherEdges
     }
+
+    /**
+     *
+     * @param cmd
+     */
     def addCmd(cmd: Command): Unit = {
       this.cmds = this.cmds :+ cmd
     }
@@ -99,29 +115,10 @@ object DAGSyntax {
 
 
   class SpecStage(n: Id, val specVar: EVar, val specVal: Expr,
-    val verfiy: PStage, val lastVerify: PStage, val spec: PStage, val lastSpec: PStage) extends PStage(n) {
-    //Commands added to the SpecStage are meant to occur *after* the speculation resolution point
+    val verify: PStage, val lastVerify: PStage,
+    val spec: PStage, val lastSpec: PStage, val joinStage: PStage) extends PStage(n) {
 
-    /*
-     //For now throw this part in current stage, maybe can move it to speculative side
-      curStage.addCmd(CAssign(predVar, predVal).setPos(c.pos))
-      val specId = Id("__spec_" + predVar.id)
-      //lock this speculative region and start speculation
-      curStage.addCmd(CLockOp(specId, LockState.Acquired))
-      curStage.addCmd(ISpeculate(specId, predVar).setPos(c.pos))
-
-       //TODO need to check that this set of commands actually assigns to predVar
-      val originalSpecVar = EVar(specId)
-      originalSpecVar.typ = predVar.typ
-      lastVerif.addCmd(IUpdate(specId, predVar, originalSpecVar).setPos(c.pos))
-
-       lastSpec.addCmd(CCheck(specId))
-      //Need an edge to resend data on failure
-      lastVerif.addEdgeTo(firstSpec, Some(EBinop(EqOp("=="), originalSpecVar, predVar)));
-
-        //release speculative lock once both branches arrive
-      joinStage.addCmd(CLockOp(specId, LockState.Released))
-     */
+    override def children: Set[PStage] = Set(joinStage)
   }
 
   /**
@@ -129,8 +126,9 @@ object DAGSyntax {
    * @param tblock
    * @param fblock
    */
-  class IfStage(n: Id, val cond: Expr, val tblock: PStage, val tend: PStage, val fblock: PStage, val fend: PStage) extends PStage(n) {
-  //Commands added to the Ifstage are meant to occur *after* the end of the if block join
+  class IfStage(n: Id, val cond: Expr, val tblock: PStage, val tend: PStage,
+    val fblock: PStage, val fend: PStage, val joinStage: PStage) extends PStage(n) {
+    override def children: Set[PStage] = Set(joinStage)
   }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {

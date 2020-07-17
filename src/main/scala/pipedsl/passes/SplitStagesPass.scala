@@ -32,11 +32,6 @@ object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with 
     startStage
   }
 
-  private def addEdgeValues(varsUsedIn: Dataflow.DFMap[Syntax.Id], varsUsedOut: Dataflow.DFMap[Syntax.Id])(stg: PStage, ignore: Unit) = {
-    stg.outEdges = stg.outEdges.map(edge => {
-      PipelineEdge(edge.cond, edge.to, varsUsedIn(edge.to.name))
-    })
-  }
 
   /**
    * If p may execute a 'call' command,
@@ -77,22 +72,24 @@ object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with 
 
       val firstVerif = new PStage(nextStageId())
       val lastVerif = splitToStages(verify, firstVerif)
-
       val firstSpec = new PStage(nextStageId())
       val lastSpec = splitToStages(body, firstSpec)
-
-      val specStage = new SpecStage(nextStageId(), predVar, predVal, firstVerif, lastVerif, firstSpec, lastSpec)
+      val joinStage = new PStage(nextStageId())
+      val specStage = new SpecStage(nextStageId(), predVar, predVal, firstVerif, lastVerif, firstSpec, lastSpec, joinStage)
       curStage.addEdgeTo(specStage)
-      specStage
+      specStage.addEdgeTo(joinStage)
+      joinStage
     }
     case CIf(cond, cons, alt) => {
       val firstTrueStage = new PStage(nextStageId())
       val lastTrueStage = splitToStages(cons, firstTrueStage)
       val firstFalseStage = new PStage(nextStageId())
       val lastFalseStage = splitToStages(alt, firstFalseStage)
-      val ifStage = new IfStage(nextStageId(), cond, firstTrueStage, lastTrueStage, firstFalseStage, lastFalseStage)
+      val joinStage = new PStage(nextStageId())
+      val ifStage = new IfStage(nextStageId(), cond, firstTrueStage, lastTrueStage, firstFalseStage, lastFalseStage, joinStage)
       curStage.addEdgeTo(ifStage)
-      ifStage
+      ifStage.addEdgeTo(joinStage)
+      joinStage
     }
     case CSeq(c1, c2) => {
       val nstage = splitToStages(c1, curStage)
@@ -131,7 +128,7 @@ object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with 
     })
     preds.foreach(s => {
       val removed = s.removeEdgesTo(right)
-      removed.map(e => PipelineEdge(e.cond, left)).foreach(r => s.addEdge(r))
+      removed.map(e => PipelineEdge(e.cond, left, right)).foreach(r => s.addEdge(r))
     })
   }
 
