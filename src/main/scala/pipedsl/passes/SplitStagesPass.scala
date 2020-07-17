@@ -1,10 +1,11 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.{PStage, PipelineEdge, SReceive, SSend}
+import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SReceive, SSend}
 import pipedsl.common.Syntax._
 import pipedsl.common.Dataflow._
 import pipedsl.common.Utilities._
 import Passes.CommandPass
+import pipedsl.common.{Dataflow, Syntax}
 import pipedsl.common.Locks.LockState
 
 object SplitStagesPass extends CommandPass[PStage] {
@@ -22,8 +23,14 @@ object SplitStagesPass extends CommandPass[PStage] {
     val termStage = splitToStages(c, startStage)
     val stages = getReachableStages(startStage)
     //Get variable lifetime information:
-    val (vars_used_in, vars_used_out) = worklist(stages, UsedInLaterStages)
+    //visit(startStage, (), addEdgeValues(vars_used_in, vars_used_out)(_,_))
     startStage
+  }
+
+  private def addEdgeValues(varsUsedIn: Dataflow.DFMap[Syntax.Id], varsUsedOut: Dataflow.DFMap[Syntax.Id])(stg: PStage, ignore: Unit) = {
+    stg.outEdges = stg.outEdges.map(edge => {
+      PipelineEdge(edge.cond, edge.to, varsUsedIn(edge.to.name))
+    })
   }
 
   /**
@@ -94,34 +101,9 @@ object SplitStagesPass extends CommandPass[PStage] {
       val lastTrueStage = splitToStages(cons, firstTrueStage)
       val firstFalseStage = new PStage(nextStageId())
       val lastFalseStage = splitToStages(alt, firstFalseStage)
-      addConditionalExecution(cond, firstTrueStage)
-      mergeStages(curStage, firstTrueStage)
-      val notCond = EUop(NotOp(), cond)
-      addConditionalExecution(notCond, firstFalseStage)
-      mergeStages(curStage, firstFalseStage)
-      (firstTrueStage == lastTrueStage, firstFalseStage == lastFalseStage) match {
-          //both branches are combinational
-        case (true, true) => curStage
-          //only true branch is comb, false end is join point
-        case (true, false) => {
-          curStage.addEdgeTo(lastFalseStage)
-          addConditionalExecution(notCond, lastFalseStage)
-          lastFalseStage
-        }
-        case (false, true) => {
-          curStage.addEdgeTo(lastTrueStage)
-          addConditionalExecution(cond, lastTrueStage)
-          lastTrueStage
-        }
-          //merge the end stages for both into a join point
-        case (false, false) => {
-          addConditionalExecution(cond, lastTrueStage)
-          addConditionalExecution(notCond, lastFalseStage)
-          mergeStages(lastTrueStage, lastFalseStage)
-          curStage.addEdgeTo(lastTrueStage) //need to send info on which branch was taken
-          lastTrueStage
-        }
-      }
+      val ifStage = new IfStage(nextStageId(), cond, firstTrueStage, lastTrueStage, firstFalseStage, lastFalseStage)
+      curStage.addEdgeTo(ifStage)
+      ifStage
     }
     case CSeq(c1, c2) => {
       val nstage = splitToStages(c1, curStage)
@@ -143,8 +125,6 @@ object SplitStagesPass extends CommandPass[PStage] {
       case _ => l :+ ICondCommand(cond, c)
     })
     stg.cmds = newCmds
-    stg.outEdges = stg.outEdges.map(e => PipelineEdge(andExpr(Some(cond), e.cond), e.to))
-    //stg.succs.foreach(s => addConditionalExecution(cond, s))
   }
 
   /**

@@ -40,7 +40,7 @@ object DAGSyntax {
   case class SExpr(exp: Expr) extends StageCommand
   case object SEmpty extends StageCommand
 
-  case class PipelineEdge(cond: Option[Expr], to:PStage)
+  case class PipelineEdge(cond: Option[Expr], to:PStage, values: Set[Id] = Set())
 
   /**
    *
@@ -97,6 +97,19 @@ object DAGSyntax {
     }
   }
 
+
+  class SpecStage(n: Id, verfiy: PStage, spec: PStage, join: PStage) extends PStage(n) {
+
+  }
+
+  /**
+   * @param n
+   * @param tblock
+   * @param fblock
+   */
+  class IfStage(n: Id, val cond: Expr, val tblock: PStage, val tend: PStage, val fblock: PStage, val fend: PStage) extends PStage(n) {
+  //Commands added to the Ifstage are meant to occur *after* the end of the if block join
+  }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
     val mtyp: TMemType = t

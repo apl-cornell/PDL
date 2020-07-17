@@ -35,7 +35,7 @@ object Main {
     val firstStage = SplitStagesPass.run(prog_recv.moddefs.head.body)
     PrettyPrinter.printStages(firstStage)
     PrettyPrinter.printStageGraph(prog_recv.moddefs.head.name.v, firstStage)
-   // val (df_ins, df_outs) = worklist(firstStage, UsedInLaterStages)
+    val (df_ins, df_outs) = worklist(firstStage, UsedInLaterStages)
    // PrettyPrinter.printProgram(prog_recv)
   }
 

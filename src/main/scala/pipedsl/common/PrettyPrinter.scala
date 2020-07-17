@@ -1,6 +1,6 @@
 package pipedsl.common
 
-import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.DAGSyntax.{IfStage, PStage, SpecStage}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
 import pprint.pprintln
@@ -140,11 +140,11 @@ object PrettyPrinter {
   }
 
   def printStageForDot(stg: PStage, ignore: Unit): Unit = {
-    stg.succs.foreach(p => {
-      println("  " + stg.name + " -> " + p.name + ";")
+    stg.outEdges.foreach(edge => {
+      println("  " + stg.name + " -> " + edge.to.name + "[label = \"" + edge.values.mkString(",") + "\"];")
     })
-    val cmdString = if(stg.cmds.nonEmpty) printCmdToString(stg.cmds.head) else ""
-    println("  " + stg.name + " [xlabel = \"" + cmdString + "\"];")
+    //val cmdString = if(stg.cmds.nonEmpty) printCmdToString(stg.cmds.head) else ""
+    //println("  " + stg.name + " [xlabel = \"" + cmdString + "\"];")
   }
 
   def printStages(start: PStage): Unit = {
@@ -152,7 +152,20 @@ object PrettyPrinter {
   }
 
   def printStage(stg: PStage, ignore: Unit): Unit = {
-    println("Stage " + stg.name.v + ":\n")
+    val stagetyp = stg match {
+      case _:IfStage => "If Stage"
+      case _:SpecStage => "Speculation Stage"
+      case _ => "Stage"
+    }
+    println(stagetyp + ": " + stg.name.v + ":\n")
+    stg match {
+      case s:IfStage => {
+        println("condition = " + printExprToString(s.cond))
+        println("True block:"); printStages(s.tblock)
+        println("False block:"); printStages(s.fblock)
+      }
+      case _ => ()
+    }
     stg.cmds.foreach(c => {
       println(printCmdToString(c, 2));
     })

@@ -10,6 +10,8 @@ pipe test1(input: int<32>)[rf: int<32>[5]] {
         int<32> x = input;
     }
     release(rf);
+    ---
+    call test1(input);
 }
 circuit {
     r = memory(int<32>, 5);
