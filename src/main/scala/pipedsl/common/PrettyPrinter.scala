@@ -1,6 +1,6 @@
 package pipedsl.common
 
-import pipedsl.common.DAGSyntax.{IfStage, PStage, SpecStage}
+import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
 import pprint.pprintln
@@ -133,28 +133,23 @@ object PrettyPrinter {
     case TModType(inputs, refs) => "TODO MOD TYPE"
   }
 
-  def printStageGraph(name: String, startStage: PStage): Unit = {
+  def printStageGraph(name: String, stages: List[PStage]): Unit = {
     println("digraph " + name + " {")
-    visit[Unit](startStage, (), printStageForDot)
+    printStagesForDot(stages)
     println("}")
   }
 
-  def printStageGraphInterior(startStage: PStage): Unit = {
-    visit[Unit](startStage, (), printStageForDot)
-  }
-
-  def printStageForDot(stg: PStage, ignore: Unit): Unit = {
-    stg match {
+  def printStagesForDot(stgs: List[PStage]): Unit = {
+    stgs.foreach( stg => stg match {
       case s:IfStage => {
         println("  subgraph cluster__" + s.name + " {")
         println("style=filled;")
         println("color=lightgrey;")
         println("node [style=filled,color=white];")
         println("label = \"IF(" + printExprToString(s.cond) + ")\";")
-        println("    " + s.name + " -> " + s.tblock.name + ";")
-        println("    " + s.name + " -> " + s.fblock.name + ";")
-        printStageGraphInterior(s.tblock)
-        printStageGraphInterior(s.fblock)
+        s.outEdges.foreach(e => printEdge(e))
+        printStagesForDot(s.trueStages)
+        printStagesForDot(s.falseStages)
         println("}")
       }
       case s:SpecStage => {
@@ -163,51 +158,98 @@ object PrettyPrinter {
         println("color=pink;")
         println("node [style=filled,color=white];")
         println("label = \"Spec(" + printExprToString(s.specVar) + " = " + printExprToString(s.specVal) + ")\";")
-        println("    " + s.name + " -> " + s.verify.name + ";")
-        println("    " + s.name + " -> " + s.spec.name + ";")
-        printStageGraphInterior(s.verify)
-        printStageGraphInterior(s.spec)
+        s.outEdges.foreach(e => printEdge(e))
+        printStagesForDot(s.verifyStages)
+        printStagesForDot(s.specStages)
         println("}")
       }
-      case _ => ()
-    }
-    stg.edges.filter(e => e.from == stg).foreach(edge => {
-      println("  " + stg.name + " -> " + edge.to.name + "[label = \"" + edge.values.mkString(",") + "\"];")
+      case _ => {
+        stg.outEdges.foreach(edge => {
+          printEdge(edge)
+        })
+      }
     })
-    //val cmdString = if(stg.cmds.nonEmpty) printCmdToString(stg.cmds.head) else ""
-    //println("  " + stg.name + " [xlabel = \"" + cmdString + "\"];")
   }
 
-  def printStages(start: PStage): Unit = {
-    visit[Unit](start, (), printStage)
-  }
-
-  def printStage(stg: PStage, ignore: Unit): Unit = {
-    val stagetyp = stg match {
-      case _:IfStage => "If Stage"
-      case _:SpecStage => "Speculation Stage"
-      case _ => "Stage"
-    }
-    println(stagetyp + ": " + stg.name.v + ":\n")
+/*  def printStageForDot(stg: PStage): List[PStage] = {
     stg match {
       case s:IfStage => {
-        println("condition = " + printExprToString(s.cond))
-        println("True block:"); printStages(s.tblock)
-        println("False block:"); printStages(s.fblock)
+        println("  subgraph cluster__" + s.name + " {")
+        println("style=filled;")
+        println("color=lightgrey;")
+        println("node [style=filled,color=white];")
+        println("label = \"IF(" + printExprToString(s.cond) + ")\";")
+        var nexts: List[PStage] = printStageForDot(s.tblock) ++ printStageForDot(s.fblock)
+        while (nexts.nonEmpty) {
+          val n = nexts.head
+          nexts = nexts.tail
+          if (n != s.joinStage) {
+            nexts = nexts ++ printStageForDot(n)
+          }
+        }
+        println("}")
+        List(s.joinStage)
       }
       case s:SpecStage => {
-        println("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
-        println("Verify Block: "); printStages(s.verify)
-        println("Speculate Block: "); printStages(s.spec)
+        println("  subgraph cluster__" + s.name + " {")
+        println("style=filled;")
+        println("color=pink;")
+        println("node [style=filled,color=white];")
+        println("label = \"Spec(" + printExprToString(s.specVar) + " = " + printExprToString(s.specVal) + ")\";")
+        s.outEdges.foreach(e => printEdge(e))
+        var nexts: List[PStage] =  printStageForDot(s.verify) ++ printStageForDot(s.spec)
+        while (nexts.nonEmpty) {
+          val n = nexts.head
+          nexts = nexts.tail
+          if (n != s.joinStage) {
+            nexts = nexts ++ printStageForDot(n)
+          }
+        }
+        println("}")
+        List(s.joinStage)
       }
-      case _ => ()
+      case _ => {
+        stg.outEdges.foreach(edge => {
+          printEdge(edge)
+        })
+        stg.succs.toList
+      }
     }
-    stg.cmds.foreach(c => {
-      println(printCmdToString(c, 2));
+  }*/
+
+  private def printEdge(edge: PipelineEdge) = {
+    val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
+    println("  " + edge.from.name + " -> " + edge.to.name + "[label = \"" + edge.values.mkString(",") + "\"];")
+  }
+
+  def printStages(stgs: List[PStage]): Unit = {
+    stgs.foreach( stg => {
+      val stagetyp = stg match {
+        case _:IfStage => "If Stage"
+        case _:SpecStage => "Speculation Stage"
+        case _ => "Stage"
+      }
+      println(stagetyp + ": " + stg.name.v + ":\n")
+      stg match {
+        case s:IfStage => {
+          println("condition = " + printExprToString(s.cond))
+          println("True block:"); printStages(s.trueStages)
+          println("False block:"); printStages(s.falseStages)
+        }
+        case s:SpecStage => {
+          println("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
+          println("Verify Block: "); printStages(s.verifyStages)
+          println("Speculate Block: "); printStages(s.specStages)
+        }
+        case _ => ()
+      }
+      stg.cmds.foreach(c => {
+        println(printCmdToString(c, 2));
+      })
+      println("Out Edges = " + stg.outEdges.foldLeft("")((str, edge) => {
+        val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
+        str + condStr + edge.to.name + ", "
+      }))
     })
-    println("Out Edges = " + stg.outEdges.foldLeft("")((str, edge) => {
-      val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
-      str + condStr + edge.to.name + ", "
-    }))
   }
 }

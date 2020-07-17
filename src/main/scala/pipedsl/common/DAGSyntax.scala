@@ -68,9 +68,6 @@ object DAGSyntax {
     def preds: Set[PStage] = {
       edges.filter(e => e.to == this).map(e => e.to)
     }
-    //Used for visitor style traversals that allow types to
-    //control how their children are visited
-    def children: Set[PStage] = succs
 
     /**
      *
@@ -115,20 +112,32 @@ object DAGSyntax {
 
 
   class SpecStage(n: Id, val specVar: EVar, val specVal: Expr,
-    val verify: PStage, val lastVerify: PStage,
-    val spec: PStage, val lastSpec: PStage, val joinStage: PStage) extends PStage(n) {
+    val verifyStages: List[PStage],
+    val specStages: List[PStage],
+    val joinStage: PStage) extends PStage(n) {
 
-    override def children: Set[PStage] = Set(joinStage)
+    this.addEdgeTo(verifyStages.head)
+    this.addEdgeTo(specStages.head)
+    specStages.last.addEdgeTo(joinStage)
+    verifyStages.last.addEdgeTo(joinStage)
   }
 
   /**
+   *
    * @param n
-   * @param tblock
-   * @param fblock
+   * @param cond
+   * @param trueStages
+   * @param falseStages
+   * @param joinStage
    */
-  class IfStage(n: Id, val cond: Expr, val tblock: PStage, val tend: PStage,
-    val fblock: PStage, val fend: PStage, val joinStage: PStage) extends PStage(n) {
-    override def children: Set[PStage] = Set(joinStage)
+  class IfStage(n: Id, val cond: Expr, val trueStages: List[PStage],
+    val falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
+
+    val condId = Id("__cond" + n.v)
+    this.addEdgeTo(trueStages.head)
+    this.addEdgeTo(falseStages.head)
+    trueStages.last.addEdgeTo(joinStage)
+    falseStages.last.addEdgeTo(joinStage)
   }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {

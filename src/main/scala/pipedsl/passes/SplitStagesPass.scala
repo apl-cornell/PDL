@@ -6,7 +6,8 @@ import pipedsl.common.Utilities._
 import Passes.{CommandPass, ModulePass, ProgPass}
 import pipedsl.common.{Dataflow, Syntax}
 
-object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with ProgPass[Map[Id, PStage]] {
+
+object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
 
   var stgCounter: Int = 0
 
@@ -17,20 +18,62 @@ object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with 
   }
 
 
-  override def run(p: Prog): Map[Id,PStage] = {
-    p.moddefs.foldLeft(Map[Id,PStage]())((m, mod) => {
+  override def run(p: Prog): Map[Id,List[PStage]] = {
+    p.moddefs.foldLeft(Map[Id,List[PStage]]())((m, mod) => {
       m + (mod.name -> run(mod))
     })
   }
 
-  override def run(m: ModuleDef): PStage = run(m.body)
+  override def run(m: ModuleDef): List[PStage] = run(m.body)
 
-  override def run(c: Command): PStage = {
+  override def run(c: Command): List[PStage] = {
     val startStage = new PStage(Id("Start"))
-    val termStage = splitToStages(c, startStage)
-    val stages = getReachableStages(startStage)
-    startStage
+    val stages = splitToStages(c, startStage)
+    stages
   }
+
+  /**
+   *
+   * @param c
+   * @return
+   */
+  private def splitToStages(c: Command, curStage: PStage): List[PStage] = c match {
+    case CTBar(c1, c2) => {
+      val leftStages = splitToStages(c1, curStage)
+      val nextStage = new PStage(nextStageId())
+      val rightStages = splitToStages(c2, nextStage)
+      //sequential pipeline, end of left sends to beginning of right
+      leftStages.last.addEdgeTo(nextStage)
+      leftStages ++ rightStages
+    }
+    case CSpeculate(predVar, predVal, verify, body) => {
+      val firstVerif = new PStage(nextStageId())
+      val verifStages = splitToStages(verify, firstVerif)
+      val firstSpec = new PStage(nextStageId())
+      val specStages = splitToStages(body, firstSpec)
+      val joinStage = new PStage(nextStageId())
+      val specStage = new SpecStage(nextStageId(), predVar, predVal, verifStages, specStages, joinStage)
+      curStage.addEdgeTo(specStage)
+      List(curStage, specStage, joinStage)
+    }
+    case CIf(cond, cons, alt) => {
+      val firstTrueStage = new PStage(nextStageId())
+      val trueStages = splitToStages(cons, firstTrueStage)
+      val firstFalseStage = new PStage(nextStageId())
+      val falseStages = splitToStages(alt, firstFalseStage)
+      val joinStage = new PStage(nextStageId())
+      val ifStage = new IfStage(nextStageId(), cond, trueStages, falseStages, joinStage)
+      curStage.addEdgeTo(ifStage)
+      List(curStage, ifStage, joinStage)
+    }
+    case CSeq(c1, c2) => {
+      val nstage = splitToStages(c1, curStage)
+      nstage.init ++ splitToStages(c2, nstage.last)
+    }
+    case CEmpty => List(curStage)
+    case _ => curStage.addCmd(c); List(curStage)
+  }
+
 
 
   /**
@@ -52,51 +95,6 @@ object SplitStagesPass extends CommandPass[PStage] with ModulePass[PStage] with 
     case CSpeculate(_, _, verify, body) => callSuccsHelper(verify, p, firstStage); callSuccsHelper(body, p, firstStage)
     case ICondCommand(_, c) => callSuccsHelper(c, p, firstStage);
     case _ => ()
-  }
-
-  /**
-   *
-   * @param c
-   * @return
-   */
-  private def splitToStages(c: Command, curStage: PStage): PStage = c match {
-    case CTBar(c1, c2) => {
-      val lastLeftStage = splitToStages(c1, curStage)
-      val nextStage = new PStage(nextStageId())
-      val lastRightStage = splitToStages(c2, nextStage)
-      //sequential pipeline, end of left sends to beginning of right
-      lastLeftStage.addEdgeTo(nextStage)
-      lastRightStage
-    }
-    case CSpeculate(predVar, predVal, verify, body) => {
-
-      val firstVerif = new PStage(nextStageId())
-      val lastVerif = splitToStages(verify, firstVerif)
-      val firstSpec = new PStage(nextStageId())
-      val lastSpec = splitToStages(body, firstSpec)
-      val joinStage = new PStage(nextStageId())
-      val specStage = new SpecStage(nextStageId(), predVar, predVal, firstVerif, lastVerif, firstSpec, lastSpec, joinStage)
-      curStage.addEdgeTo(specStage)
-      specStage.addEdgeTo(joinStage)
-      joinStage
-    }
-    case CIf(cond, cons, alt) => {
-      val firstTrueStage = new PStage(nextStageId())
-      val lastTrueStage = splitToStages(cons, firstTrueStage)
-      val firstFalseStage = new PStage(nextStageId())
-      val lastFalseStage = splitToStages(alt, firstFalseStage)
-      val joinStage = new PStage(nextStageId())
-      val ifStage = new IfStage(nextStageId(), cond, firstTrueStage, lastTrueStage, firstFalseStage, lastFalseStage, joinStage)
-      curStage.addEdgeTo(ifStage)
-      ifStage.addEdgeTo(joinStage)
-      joinStage
-    }
-    case CSeq(c1, c2) => {
-      val nstage = splitToStages(c1, curStage)
-      splitToStages(c2, nstage)
-    }
-    case CEmpty => curStage
-    case _ => curStage.addCmd(c); curStage
   }
 
   /**

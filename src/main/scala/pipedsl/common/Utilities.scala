@@ -69,6 +69,7 @@ object Utilities {
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
     case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
+    case CRecv(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case _ => Set()
@@ -92,13 +93,14 @@ object Utilities {
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
     case CAssign(lhs, rhs) => getUsedVars(rhs)
-    case CRecv(lhs, rhs) => getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CCall(id, args) => args.foldLeft[Set[Id]](Set())( (s, a) => s ++ getUsedVars(a) )
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
     case CSpeculate(predVar, predVal, verify, body) => getUsedVars(predVal) ++ getUsedVars(verify) ++ getUsedVars(body)
     case CCheck(predVar) => Set(predVar)
+    case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case _ => Set()
   }
 
@@ -150,19 +152,26 @@ object Utilities {
   def visit[T](stg: PStage, start: T, visitor: (PStage, T) => T): T = {
     var result = visitor(stg, start)
     var visited = Set(stg);
-    var fringe: Set[PStage] = stg.children
+    var fringe: Set[PStage] = stg.succs
     while (fringe.nonEmpty) {
       val next = fringe.head
       fringe = fringe.tail
       if (!visited.contains(next)) {
         result = visitor(next, result)
         visited = visited + next
-        fringe = fringe ++ next.children
+        fringe = fringe ++ next.succs
       }
     }
     result
   }
 
+  def flattenStageList(stgs: List[PStage]): List[PStage] = {
+    stgs.foldLeft(List[PStage]())((l, stg) => stg match {
+      case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
+      case s: DAGSyntax.SpecStage => (l :+ s) ++ flattenStageList(s.verifyStages) ++ flattenStageList(s.specStages)
+      case _ => l :+ stg
+    })
+  }
   /**
    *
    * @param condL

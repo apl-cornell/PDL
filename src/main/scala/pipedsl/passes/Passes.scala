@@ -1,5 +1,6 @@
 package pipedsl.passes
 
+import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax._
 
 object Passes {
@@ -14,6 +15,10 @@ object Passes {
 
   trait CommandPass[T] {
     def run(c: Command): T
+  }
+
+  trait StagePass[T] {
+    def run(s: List[PStage]): T
   }
 
 }
