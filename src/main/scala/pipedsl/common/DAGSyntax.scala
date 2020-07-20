@@ -66,7 +66,7 @@ object DAGSyntax {
     }
     //Successors for dataflow based computation. This encodes all dataflow dependencies.
     def preds: Set[PStage] = {
-      edges.filter(e => e.to == this).map(e => e.to)
+      edges.filter(e => e.to == this).map(e => e.from)
     }
 
     /**
