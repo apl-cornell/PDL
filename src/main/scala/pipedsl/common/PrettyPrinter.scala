@@ -89,7 +89,8 @@ object PrettyPrinter {
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " + printCmdToString(cmd)
       case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
-      case Syntax.ISpeculate(specId, value) => ins + "speculate(" + specId + ", " + printExprToString(value) + ");"
+      case Syntax.ISpeculate(specId, specVar, value) => ins + specId + "= speculate(" + printExprToString(specVar) + ", " + printExprToString(value) + ");"
+      case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
     }
   }
 
@@ -229,6 +230,9 @@ object PrettyPrinter {
         case _ => "Stage"
       }
       println(stagetyp + ": " + stg.name.v + ":\n")
+      stg.cmds.foreach(c => {
+        println(printCmdToString(c, 2));
+      })
       stg match {
         case s:IfStage => {
           println("condition = " + printExprToString(s.cond))
@@ -242,9 +246,6 @@ object PrettyPrinter {
         }
         case _ => ()
       }
-      stg.cmds.foreach(c => {
-        println(printCmdToString(c, 2));
-      })
       println("Out Edges = " + stg.outEdges.foldLeft("")((str, edge) => {
         val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
         str + condStr + edge.to.name + ", "

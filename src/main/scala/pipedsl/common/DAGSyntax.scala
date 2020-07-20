@@ -49,7 +49,7 @@ object DAGSyntax {
   class PStage(n:Id) extends Process(n) {
 
     //Any outgoing communication edge, including normal pipeline flow, calls and communication with memories
-    var edges: Set[PipelineEdge] = Set()
+    private var edges: Set[PipelineEdge] = Set()
 
     def outEdges: Set[PipelineEdge] = {
       edges.filter(e => e.from == this)
@@ -74,8 +74,8 @@ object DAGSyntax {
      * @param other
      * @param cond
      */
-    def addEdgeTo(other: PStage, cond: Option[Expr] = None): Unit = {
-      val edge = PipelineEdge(cond, this, other)
+    def addEdgeTo(other: PStage, cond: Option[Expr] = None, vals: Set[Id] = Set()): Unit = {
+      val edge = PipelineEdge(cond, this, other, vals)
       addEdge(edge)
     }
 
@@ -84,9 +84,21 @@ object DAGSyntax {
      * @param edge
      */
     def addEdge(edge: PipelineEdge): Unit = {
-      val other = edge.to
+      val other = if (edge.to == this) { edge.from } else { edge.to }
       this.edges = this.edges + edge
       other.edges = other.edges + edge
+    }
+
+    def setEdges(edges: Set[PipelineEdge]): Unit = {
+      val toRemove = this.edges
+      toRemove.foreach(e => this.removeEdge(e))
+      edges.foreach(e => this.addEdge(e))
+    }
+
+    private def removeEdge(edge: PipelineEdge): Unit = {
+      val other = if (edge.to == this) { edge.from } else { edge.to }
+      this.edges = this.edges - edge
+      other.edges = other.edges - edge
     }
 
     /**
@@ -120,6 +132,23 @@ object DAGSyntax {
     this.addEdgeTo(specStages.head)
     specStages.last.addEdgeTo(joinStage)
     verifyStages.last.addEdgeTo(joinStage)
+    //used only for computing dataflow merge function
+    //does not get synthesized
+    this.addEdgeTo(joinStage)
+
+    def predId = Id("__pred__" + specVar.id.v)
+    def specId = Id("__spec__" + specVar.id.v)
+
+    val predVar = EVar(predId)
+    predVar.typ = specVar.typ
+    //extract prediction to variable
+    this.addCmd(CAssign(predVar, specVal))
+    //set pred(specId) = prediction
+    this.addCmd(ISpeculate(specId, specVar, predVar))
+    //At end of verification update the predction success
+    verifyStages.last.addCmd(IUpdate(specId, specVar, predVar))
+    //At end of speculation side check whether or not pred(specId) == specVar
+    specStages.last.addCmd(ICheck(specId, specVar))
   }
 
   /**
@@ -133,7 +162,9 @@ object DAGSyntax {
   class IfStage(n: Id, val cond: Expr, val trueStages: List[PStage],
     val falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
 
-    val condId = Id("__cond" + n.v)
+    val condVar = EVar(Id("__cond" + n.v))
+    condVar.typ = cond.typ
+    this.addCmd(CAssign(condVar, cond))
     this.addEdgeTo(trueStages.head)
     this.addEdgeTo(falseStages.head)
     trueStages.last.addEdgeTo(joinStage)

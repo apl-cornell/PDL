@@ -53,7 +53,7 @@ object Utilities {
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getAllVarNames(c2)
-    case ISpeculate(specId, value) => getUsedVars(value) + specId
+    case ISpeculate(specId, specVar, value) => getUsedVars(value) + specId ++ getUsedVars(specVar)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty => Set()
   }
@@ -71,6 +71,7 @@ object Utilities {
     case CRecv(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
     case ICondCommand(_, c2) => getWrittenVars(c2)
+    case ISpeculate(s, svar, _) => Set(s, svar.id)
     case _ => Set()
   }
 
@@ -103,6 +104,9 @@ object Utilities {
     case CSpeculate(predVar, predVal, verify, body) => getUsedVars(predVal) ++ getUsedVars(verify) ++ getUsedVars(body)
     case CCheck(predVar) => Set(predVar)
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
+    case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
+    case ICheck(specId, value) => getUsedVars(value) + specId
+    case ISpeculate(_,_, value) => getUsedVars(value)
     case _ => Set()
   }
 
@@ -171,6 +175,12 @@ object Utilities {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
       case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
       case s: DAGSyntax.SpecStage => (l :+ s) ++ flattenStageList(s.verifyStages) ++ flattenStageList(s.specStages)
+      case _ => l :+ stg
+    })
+  }
+  def flattenIfStages(stgs: List[PStage]): List[PStage] = {
+    stgs.foldLeft(List[PStage]())((l, stg) => stg match {
+      case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
       case _ => l :+ stg
     })
   }

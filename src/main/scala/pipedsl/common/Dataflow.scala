@@ -9,7 +9,7 @@ object Dataflow {
   type DFMap[T] = Map[Id, Set[T]]
 
   case class Analysis[T](isForward: Boolean, init: Set[T],
-                         merge: DFMap[T] => Set[T], transfer: (PStage, Set[T]) => Set[T])
+                         merge: (PStage, DFMap[T]) => Set[T], transfer: (PStage, Set[T]) => Set[T])
 
   /**
    * This is the worklist algorithm for dataflow analysis, which only operates on sets of
@@ -42,7 +42,7 @@ object Dataflow {
     while (worklist.nonEmpty) {
       val node: PStage = worklist.head
       worklist = worklist.tail
-      val inVal: Set[T] = analysis.merge(inEdges(node).foldLeft[DFMap[T]](Map())((m, s) => {
+      val inVal: Set[T] = analysis.merge(node, inEdges(node).foldLeft[DFMap[T]](Map())((m, s) => {
         m + (s.name -> outResult(s.name))
       }))
       inResult = inResult.updated(node.name, inVal)
@@ -83,11 +83,23 @@ object Dataflow {
   /**
    * Merge function that accumulates all variables used
    * in all later stages together.
+   * @param node The node for whom these are incoming edges.
+   *             Used primarily for varying behavior based on type.
    * @param used Variables used in later stages.
    * @return All variables unioned together
    */
-  def mergeUsedVars(used: DFMap[Id]): Set[Id] = {
-    used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
+  def mergeUsedVars(node: PStage, used: DFMap[Id]): Set[Id] = node match {
+    case stg: SpecStage => {
+      //only add the variables that are used in the join
+      //but not written in *either* branch
+      val joinNeeds = used(stg.joinStage.name)
+      val verifNeeds = used(stg.verifyStages.head.name)
+      val verifWritten = joinNeeds -- joinNeeds.intersect(verifNeeds)
+      val specNeeds = used(stg.specStages.head.name)
+      val specWritten = joinNeeds -- joinNeeds.intersect(specNeeds)
+      specNeeds.union(verifNeeds) -- specWritten -- verifWritten
+    }
+    case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
   }
 
   val UsedInLaterStages = Analysis(isForward = false, Set(), mergeUsedVars, transferUsedVars)
