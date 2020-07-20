@@ -14,6 +14,8 @@ object Dataflow {
   /**
    * This is the worklist algorithm for dataflow analysis, which only operates on sets of
    * values at the moment.
+   * A key features is that it only follows edges to stages listed in the input.
+   * If a "pred" or "succ" isn't in *stages* then it won't follow that edge.
    * @param stages - The stages that make up the pipeline (similar to basic blocks in normal DF)
    * @param analysis - The object containing all of the analysis functions and parameters.
    * @tparam T - The type of information we're tracking in the DF sets.
@@ -22,6 +24,7 @@ object Dataflow {
    */
   def worklist[T](stages: List[PStage], analysis: Analysis[T]): (DFMap[T], DFMap[T]) = {
     var firstBlock = stages.head
+    val stgSet: Set[PStage] = stages.toSet
     var inEdges: PStage => Set[PStage] = (p: PStage) => p.preds
     var outEdges: PStage => Set[PStage] = (p: PStage) => p.succs
     //Flip for backwards analysis
@@ -32,9 +35,8 @@ object Dataflow {
     }
     //Init
     var inResult: DFMap[T] = Map(firstBlock.name -> analysis.init)
-    var outResult: DFMap[T] = stages.foldLeft[DFMap[T]](Map())((m, s) => {
-      m + (s.name -> analysis.init)
-    })
+    var outResult: DFMap[T] = Map().withDefaultValue(analysis.init)
+
     //Iterate
     var worklist = stages
     while (worklist.nonEmpty) {
@@ -47,7 +49,12 @@ object Dataflow {
       val outVal: Set[T] = analysis.transfer(node, inVal)
       if (outVal != outResult(node.name)) {
         outResult = outResult.updated(node.name, outVal)
-        worklist = worklist ++ outEdges(node)
+        worklist = outEdges(node).foldLeft(worklist)((wl, n) => {
+          stgSet.contains(n) match {
+            case true => wl :+ n
+            case false => wl
+          }
+        })
       }
     }
     //Result
