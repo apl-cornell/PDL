@@ -67,7 +67,6 @@ object TimingTypeChecker extends TypeChecks[Type] {
       }
       (endv, endnv)
     }
-    case CDecl(id,_,n) => if (n) { (vars, nextVars + id) } else { (vars, nextVars) }
     case CIf(cond, cons, alt) => {
       if(checkExpr(cond, vars)) {
         throw UnexpectedAsyncReference(cond.pos, cond.toString)

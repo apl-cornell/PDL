@@ -163,7 +163,6 @@ object Syntax {
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
-  case class CDecl(id: Id, typ: Type, thisCycle: Boolean) extends Command
   case class CLockOp(mem: Id, op: LockState) extends Command
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command

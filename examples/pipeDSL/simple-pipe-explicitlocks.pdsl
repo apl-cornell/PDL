@@ -32,28 +32,31 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<32>[32], dmem: int<32>[32]] {
     int<32> offset = ((op_type == 0b0<2>) && (arg1 == arg2)) ? 0b0<19> ++ imm : 4<32>;
     int<32> npc = pc + offset;
     //op_type == ALU;
-    int<32> add_arg2;
     if (op_type == 0b1<2>) {
-      add_arg2 = arg2;
+      int<32> add_arg2 = arg2;
       int<32> arg3 = add_arg2 - 1<32>;
     } else {
     //LD/ST
-      add_arg2 = 0x0<19> ++ imm;
+      int<32> add_arg2 = 0x0<19> ++ imm;
       int<32> arg3 = add_arg2 + 1<32>;
     }
     int<32> alu_res = alu(arg1, add_arg2, op);
     ---
-    next int<32> mem_res;
     if (op_type{1:1} == 0b1) {
         acquire(dmem);
         if (op_type == 0b10) {
             //LD
-            mem_res <- dmem[alu_res];
+            int<32> dmem_out <- dmem[alu_res];
+            ---
+            int<32> mem_res = dmem_out;
         } else {
             //ST
             dmem[alu_res] <- arg2;
+            int<32> mem_res = 0<32>;
         }
         release(dmem);
+    } else {
+        int<32> mem_res = 0<32>;
     }
     ---
     if (op_type == 0b1<2>) {

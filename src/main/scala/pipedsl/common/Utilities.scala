@@ -52,7 +52,6 @@ object Utilities {
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case CDecl(id, _, _) => Set(id)
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getAllVarNames(c2)
     case ISpeculate(specId, value) => getUsedVars(value) + specId
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
@@ -93,7 +92,10 @@ object Utilities {
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
     case CAssign(lhs, rhs) => getUsedVars(rhs)
-    case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
+      case e:EMemAccess => getUsedVars(e)
+      case _ => Set()
+    })
     case CCall(id, args) => args.foldLeft[Set[Id]](Set())( (s, a) => s ++ getUsedVars(a) )
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)

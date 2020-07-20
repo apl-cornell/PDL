@@ -51,6 +51,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
         case (Some(_), Some(_)) => throw MalformedFunction(c.pos, "Multiple return statements in execution")
         case (Some(_), _) => r1
         case (_, Some(_)) => r2
+        case (None, None) => None
       }
     }
     case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput => {
@@ -203,10 +204,6 @@ object BaseTypeChecker extends TypeChecks[Type] {
         endEnv = endEnv.intersect(benv)
       }
       endEnv
-    }
-    case CDecl(id, typ,_) => typ match {
-      case TMemType(_,_) | TModType(_,_) => throw UnexpectedType(id.pos, id.toString, "Non memory/module type", typ)
-      case _ => tenv.add(id, typ)
     }
     case CIf(cond, cons, alt) => {
       val (condTyp, cenv) = checkExpression(cond, tenv)

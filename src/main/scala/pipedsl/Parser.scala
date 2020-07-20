@@ -148,7 +148,6 @@ class Parser extends RegexParsers with PackratParsers {
         CAssign(n, r) } |
       typ.? ~ expr ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r) } |
-       "next".? ~ typ ~ iden ^^ { case n ~ t ~ i => CDecl(i, t, n.isDefined) } |
       expr ^^ { case e => CExpr(e) }
   }
 
