@@ -24,6 +24,13 @@
 \author{Drew Zagieboylo}
 \maketitle
 
+It may be better to not define a new semantics - how about
+we just use CHP (communicating sequential processes - https://avlsi.csl.yale.edu/act/doku.php?id=language:langs:chp).
+
+The main features we care about in CHP are parallel composition ($\parallel$), sequential composition ($;$),
+send ($C!V$), receive ($C?V$) and guarded execution ($@[G_1 \implies B_1 ... G_N \implies B_N]$)
+where $G$ are guards and $B$ are programs.
+
 \section{MetaVariables}
 \begin{align*}
   \begin{array}{lc}
