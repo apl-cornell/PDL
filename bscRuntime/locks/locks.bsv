@@ -3,8 +3,9 @@ import FIFOF :: * ;
 typedef Bit#(4) ID;
 
 interface Lock;
+   method Bool check(ID tid);
    method ActionValue#(Bool) acq(ID tid);
-   method Action rel();
+   method Action rel(ID tid);
    method Action res(ID tid);
 endinterface
 
@@ -15,6 +16,13 @@ module mkLock(Lock);
    
    Bool lockFree = !held.notEmpty;
    ID owner = held.first;
+
+   //Returns True if thread `tid` may acquire the lock right now
+   method Bool check(ID tid);
+      return lockFree || owner == tid;
+   endmethod
+   
+   //Returns True if the lock was acquired, else False
    method ActionValue#(Bool) acq(ID tid);
       if (lockFree || owner == tid)
 	 begin
@@ -25,10 +33,15 @@ module mkLock(Lock);
 	 return False;
    endmethod
    
-   method Action rel();
-      held.deq();
+   //Releases the lock iff thread `tid` owns it already
+   method Action rel(ID tid);
+   if (held.notEmpty && owner == tid)
+      begin
+	 held.deq();
+      end
    endmethod
    
+   //Puts `tid` on the queue to reserve the lock
    method Action res(ID tid);
       held.enq(tid);
    endmethod
