@@ -5,7 +5,7 @@ import common.PrettyPrinter
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, BluespecGeneration, CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 
 object Main {
@@ -33,8 +33,9 @@ object Main {
     val stageInfo = SplitStagesPass.run(prog_recv)
     stageInfo.foreachEntry( (n, s) => {
       AddEdgeValuePass.run(s)
-      PrettyPrinter.printStages(s)
-      PrettyPrinter.printStageGraph(n.v, s)
+      BluespecGeneration.run(s)
+      //PrettyPrinter.printStages(s)
+      //PrettyPrinter.printStageGraph(n.v, s)
     })
   }
 

@@ -163,7 +163,8 @@ object DAGSyntax {
     val falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
 
     val condVar = EVar(Id("__cond" + n.v))
-    condVar.typ = cond.typ
+    condVar.typ = Some(TBool())
+    condVar.id.typ = condVar.typ
     this.addCmd(CAssign(condVar, cond))
     this.addEdgeTo(trueStages.head)
     this.addEdgeTo(falseStages.head)

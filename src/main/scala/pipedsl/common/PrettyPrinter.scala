@@ -2,7 +2,6 @@ package pipedsl.common
 
 import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities._
 import pprint.pprintln
 
 object PrettyPrinter {

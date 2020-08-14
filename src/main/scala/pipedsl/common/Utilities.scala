@@ -124,7 +124,7 @@ object Utilities {
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(func, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
       //functions are also externally defined
-    case EVar(id) => Set(id)
+    case EVar(id) => id.typ = e.typ; Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case _ => Set()
   }
@@ -203,5 +203,6 @@ object Utilities {
       case None => throw except
     }
   }
+
 
 }
