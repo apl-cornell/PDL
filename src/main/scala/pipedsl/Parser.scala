@@ -205,7 +205,10 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp
 
-  lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t => Param(i, t) }
+  lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t =>
+    i.typ = Some(t)
+    Param(i, t)
+  }
 
   lazy val fdef: P[FuncDef] = positioned {
     "def" ~> iden ~ parens(repsep(param, ",")) ~ ":" ~ typ ~ braces(cmd) ^^ {

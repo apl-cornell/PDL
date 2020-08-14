@@ -7,6 +7,7 @@ import java.nio.file.Files
 
 import passes.{AddEdgeValuePass, BluespecGeneration, CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
+import common.Utilities._
 
 object Main {
   val logger: Logger = Logger("main")
@@ -32,8 +33,9 @@ object Main {
     SpeculationChecker.check(prog_recv, Some(basetypes))
     val stageInfo = SplitStagesPass.run(prog_recv)
     stageInfo.foreachEntry( (n, s) => {
+      val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
       AddEdgeValuePass.run(s)
-      BluespecGeneration.run(s)
+      BluespecGeneration.run(s.head, mod.inputs, s.tail)
       //PrettyPrinter.printStages(s)
       //PrettyPrinter.printStageGraph(n.v, s)
     })
