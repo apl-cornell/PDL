@@ -1,4 +1,5 @@
-import FIFOF :: * ;
+import FIFO :: *;
+import SpecialFIFOs :: * ;
 
 typedef struct { Bit#(10) y; } InputN deriving(Bits, Eq);
 typedef struct { Bool cond; } InputJoin deriving(Bits, Eq);
@@ -23,21 +24,19 @@ endinterface
 
 module mkStageIf (StageLeft left, StageLeft right, StageJoin joinstg, StageIf stg);
  
-   FIFOF #(InputN) inputF <- mkFIFOF;
+   FIFO #(InputN) inputF <- mkPipelineFIFO;
    
    rule execute;
       InputN first = inputF.first;
       Bit#(10) outvar = first.y;
       inputF.deq();
-      if (outvar[0:0] == 1'b1)
+      if (outvar > 10'd100)
 	 begin
-	    $display("if stage true, %d", $time());
 	    left.recv(first);
 	    joinstg.recvBool(InputJoin{ cond: True });
 	 end
       else
 	 begin
-	    $display("if stage false, %d", $time());
 	    right.recv(first);
 	    joinstg.recvBool(InputJoin{ cond: False });
 	 end
@@ -50,12 +49,11 @@ module mkStageIf (StageLeft left, StageLeft right, StageJoin joinstg, StageIf st
 endmodule
 
 module mkStageLeft (StageJoin joinstg, StageLeft stg);
-   FIFOF #(InputN) inputF <- mkFIFOF;
+   FIFO #(InputN) inputF <- mkPipelineFIFO;
    
    rule execute;
       InputN first = inputF.first;
       inputF.deq();
-      $display("Value on Left %d", first.y);
       joinstg.recvLeft(first);
    endrule
    
@@ -66,12 +64,11 @@ module mkStageLeft (StageJoin joinstg, StageLeft stg);
 endmodule
 
 module mkStageRight (StageJoin joinstg, StageLeft stg);
-   FIFOF #(InputN) inputF <- mkFIFOF;
+   FIFO #(InputN) inputF <- mkPipelineFIFO;
    
    rule execute;
       InputN first = inputF.first;
       inputF.deq();
-      $display("Value on Right %d", first.y);
       joinstg.recvRight(first);
    endrule
    
@@ -83,9 +80,9 @@ endmodule
 
 module mkStageJoin (StageJoin stg);
    
-   FIFOF #(InputN) inputLeft <- mkFIFOF;
-   FIFOF #(InputN) inputRight <- mkFIFOF;
-   FIFOF #(Bool) inputBool <- mkFIFOF;
+   FIFO #(InputN) inputLeft <- mkPipelineFIFO;
+   FIFO #(InputN) inputRight <- mkPipelineFIFO;
+   FIFO #(Bool) inputBool <- mkSizedFIFO(3);
 
    Bool cond = inputBool.first;
    
@@ -102,14 +99,11 @@ module mkStageJoin (StageJoin stg);
       inputBool.deq();
       val <= inputRight.first;
       inputRight.deq();
-      $display("deq right");
    endrule
    
    (* fire_when_enabled *)
    rule execute(!fv);
-      $display("Time: %d", $time());
-      $display("val is %d", val.y);
-      fv <= True;
+      $display("val is %d; %d", val.y, $time());
    endrule
    
    rule reset(fv);
