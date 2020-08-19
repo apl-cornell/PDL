@@ -40,7 +40,12 @@ object DAGSyntax {
   case class SExpr(exp: Expr) extends StageCommand
   case object SEmpty extends StageCommand
 
-  case class PipelineEdge(cond: Option[Expr], from: PStage, to:PStage, values: Set[Id] = Set())
+  case class PipelineEdge(condSend: Option[Expr], condRecv: Option[Expr],
+    from: PStage, to:PStage, values: Set[Id] = Set())
+
+  def addValues(vals: Set[Id], e: PipelineEdge): PipelineEdge = {
+    PipelineEdge(e.condSend, e.condRecv, e.from, e.to, e.values ++ vals)
+  }
 
   /**
    *
@@ -72,10 +77,11 @@ object DAGSyntax {
     /**
      *
      * @param other
-     * @param cond
+     * @param condSend
      */
-    def addEdgeTo(other: PStage, cond: Option[Expr] = None, vals: Set[Id] = Set()): Unit = {
-      val edge = PipelineEdge(cond, this, other, vals)
+    def addEdgeTo(other: PStage, condSend: Option[Expr] = None, condRecv: Option[Expr] = None,
+        vals: Set[Id] = Set()): Unit = {
+      val edge = PipelineEdge(condSend, condRecv, this, other, vals)
       addEdge(edge)
     }
 
@@ -165,11 +171,12 @@ object DAGSyntax {
     val condVar = EVar(Id("__cond" + n.v))
     condVar.typ = Some(TBool())
     condVar.id.typ = condVar.typ
+    val notCond = EUop(NotOp(), condVar)
     this.addCmd(CAssign(condVar, cond))
-    this.addEdgeTo(trueStages.head)
-    this.addEdgeTo(falseStages.head)
-    trueStages.last.addEdgeTo(joinStage)
-    falseStages.last.addEdgeTo(joinStage)
+    this.addEdgeTo(trueStages.head, condSend = Some(condVar))
+    this.addEdgeTo(falseStages.head, condSend = Some(notCond))
+    trueStages.last.addEdgeTo(joinStage, condRecv =  Some(condVar))
+    falseStages.last.addEdgeTo(joinStage, condRecv = Some(notCond))
   }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {

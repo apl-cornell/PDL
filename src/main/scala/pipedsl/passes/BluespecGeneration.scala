@@ -129,18 +129,70 @@ object BluespecGeneration {
       result += "  " + getFifoType(getEdgeName(e)) + " " + getInputParam(e) +
         " <- " + fifoModuleName + ";\n"
     })
+    result += genStageRules(s, "  ")
     s.inEdges.foreach(e => {
       result += genRecieve(e, "  ")
     })
-    result += genStageRules(s, "  ")
     result += "\nendmodule\n"
     result
   }
 
   def genStageRules(s: PStage, indent: String = ""): String = {
-    var result = indent + "rule execute;\n"
+    var result = ""
+    val (condIn, uncondIn) = s.inEdges.partition(e => e.condRecv.isDefined)
+    //Do unconditional reads
+    var doUncondReads = ""
+    uncondIn.foreach(e => {
+      val ein = getInputParam(e) + ".first"
+      e.values.foreach(id => {
+        result += indent + printBSVType(id.typ.get) + " " + id.v + " = " +
+          ein + "." + id.v + ";\n"
+      })
+      doUncondReads += indent*2 + getInputParam(e) + ".deq();\n";
+    })
+
+    //Declare conditionally read variables as wires
+    condIn.foldLeft(Set[Id]())((s, e) => {
+      s ++ e.values
+    }).foreach(id => {
+      result += indent + "Wire #(" + printBSVType(id.typ.get) + ") " +
+        id.v + " <- mkWire;\n"
+    })
+
+    //Do conditional Reads
+    //TODO add rule condition which is !execute_blocked
+    condIn.foreach(e => {
+      result += indent + "rule read" + e.from.name +
+        "(" + printBSVExpr(e.condRecv.get) + ");\n"
+      result += doUncondReads
+      val ein = getInputParam(e) + ".first"
+      e.values.foreach(id => {
+        result += indent*2 + id.v + " <= " + ein + "." + id.v + ";\n"
+      })
+      result += indent + "endrule;\n\n"
+    })
+
+
+    //Do Real Execution
+    //TODO break into multiple rules for each set of conditional successors
+    result += indent + "(* fire_when_enabled *)\n" + indent + "rule execute;\n"
+    //print commands
+    //TODO lift the combinational ones out to the module body
     s.cmds.foreach(c => {
-      result += printBSVCommand(c, indent + "  ") + "\n"
+      result += printBSVCommand(c, indent + "  ") + ";\n"
+    })
+    //send data out on output queues
+    s.outEdges.foreach(e => {
+      val condStr = e.condSend match {
+        case Some(v) => "if (" + printBSVExpr(v, indent*2) + ") "
+        case None => ""
+      }
+      val nstage = getParamName(e.to)
+      val arg = getEdgeName(e) + "{" + e.values.map(id => {
+        id.v + ":" + id.v
+      }).mkString(",") + "}"
+      result += indent*2 + condStr +
+        nstage + "." + getSendName(e) + "(" + arg + ");\n"
     })
     result += indent + "endrule\n"
     result

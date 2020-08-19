@@ -126,7 +126,7 @@ object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PS
     })
     preds.foreach(s => {
       val removed = s.removeEdgesTo(right)
-      removed.map(e => PipelineEdge(e.cond, left, right)).foreach(r => s.addEdge(r))
+      removed.map(e => PipelineEdge(e.condSend, e.condRecv, left, right)).foreach(r => s.addEdge(r))
     })
   }
 

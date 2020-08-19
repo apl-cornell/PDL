@@ -1,7 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.Dataflow._
-import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage}
+import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage, addValues}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
 import pipedsl.passes.Passes.StagePass
@@ -17,11 +17,11 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
   def addEdgeValues(stg: PStage, usedIns: DFMap[Id]): Unit = {
     stg match {
       case s: IfStage => {
-        val trueEdge = PipelineEdge(Some(s.cond), s, s.trueStages.head, usedIns(s.trueStages.head.name))
-        val notCond = EUop(NotOp(), s.cond)
-        val falseEdge = PipelineEdge(Some(notCond), s, s.falseStages.head, usedIns(s.falseStages.head.name))
-        val choiceEdge = PipelineEdge(None, s, s.joinStage, Set(s.condVar.id))
-        stg.setEdges(stg.inEdges + trueEdge + falseEdge + choiceEdge)
+        val choiceEdge = PipelineEdge(None, None, s, s.joinStage, Set(s.condVar.id))
+        val newOutEdges = s.outEdges.map(e => {
+          addValues(usedIns(e.to.name), e)
+        })
+        s.setEdges(s.inEdges ++ newOutEdges + choiceEdge)
         s.trueStages.foreach(st => addEdgeValues(st, usedIns))
         s.falseStages.foreach(sf => addEdgeValues(sf, usedIns))
       }
@@ -43,13 +43,13 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
         s.verifyStages.foreach(st => addEdgeValues(st, verifUsedInsJoin))
 
         //add edges to beginning of spec section
-        val specEdge = PipelineEdge(None, s, s.specStages.head, specUsedIns(s.specStages.head.name))
-        val verifEdge = PipelineEdge(None, s, s.verifyStages.head, verifUsedIns(s.verifyStages.head.name))
+        val specEdge = PipelineEdge(None, None, s, s.specStages.head, specUsedIns(s.specStages.head.name))
+        val verifEdge = PipelineEdge(None, None,  s, s.verifyStages.head, verifUsedIns(s.verifyStages.head.name))
         s.setEdges(s.inEdges + specEdge + verifEdge)
       }
       case _ => {
         stg.setEdges(stg.outEdges.map(edge => {
-          PipelineEdge(edge.cond, edge.from, edge.to, usedIns(edge.to.name))
+          PipelineEdge(edge.condSend, edge.condRecv, edge.from, edge.to, usedIns(edge.to.name))
         }) ++ stg.inEdges)
       }
     }

@@ -217,7 +217,7 @@ object PrettyPrinter {
   }*/
 
   private def printEdge(edge: PipelineEdge) = {
-    val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
+    val condStr = if (edge.condSend.isDefined) printExprToString(edge.condSend.get) + " ? " else ""
     println("  " + edge.from.name + " -> " + edge.to.name + "[label = \"" + edge.values.mkString(",") + "\"];")
   }
 
@@ -246,7 +246,7 @@ object PrettyPrinter {
         case _ => ()
       }
       println("Out Edges = " + stg.outEdges.foldLeft("")((str, edge) => {
-        val condStr = if (edge.cond.isDefined) printExprToString(edge.cond.get) + " ? " else ""
+        val condStr = if (edge.condSend.isDefined) printExprToString(edge.condSend.get) + " ? " else ""
         str + condStr + edge.to.name + ", "
       }))
     })
