@@ -1,6 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.BSVPrettyPrinter._
+import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax._
 import pipedsl.common.Errors.MissingType
 import pipedsl.common.Syntax._
@@ -11,9 +12,69 @@ object BluespecGeneration {
 
   val fifoType = "FIFOF"
   val fifoModuleName = "mkFIFOF"
+  val firstStageIntName = "S_start"
+  val firstStageStructName = "E_start"
+  val firstStageName = "start"
+
+  type EdgeTypes = Map[PipelineEdge, BStructDef]
+  type StageTypes = Map[PStage, BInterfaceDef]
 
   def getFifoType(t: String): String = {
     fifoType + " #(" + t +")"
+  }
+
+  def getBSV(firstStage: PStage, inputs: List[Id], rest: List[PStage]): Option[BProgram] = {
+    val edgeStructMap = getEdgeStructMap(rest)
+    val firstStageStruct = getFirstStageStruct(inputs)
+    val firstStageInterface = getFirstStageInterface(firstStageStruct.typ)
+    val stageInterfacemap = getStageIntMap(rest, edgeStructMap)
+
+    val structDefs = firstStageStruct +: edgeStructMap.values.toList
+    val intDefs = firstStageInterface +: stageInterfacemap.values.toList
+    None
+  }
+
+  def getFirstStageStruct(inputs: List[Id]): BStructDef = {
+    val styp = BStruct(firstStageStructName, getBsvStructFields(inputs))
+    BStructDef(styp, List("Bits", "Eq"))
+  }
+
+  def getFirstStageInterface(struct: BSVType): BInterfaceDef = {
+    BInterfaceDef(firstStageIntName,
+      List(BMethodSig(firstStageName, MethodType.Action, List(BParam("d_in",struct)))))
+  }
+
+
+  def getEdgeStructMap(stgs: List[PStage]): Map[PipelineEdge, BStructDef] = {
+    stgs.foldLeft[Map[PipelineEdge, BStructDef]](Map())((m, s) => {
+      s.inEdges.foldLeft[Map[PipelineEdge, BStructDef]](m)((ms, e) => {
+        ms + (e -> getEdgeStruct(e))
+      })
+    })
+  }
+
+  def getEdgeStruct(e: PipelineEdge): BStructDef = {
+    val styp = BStruct(firstStageStructName, getBsvStructFields(e.values))
+    BStructDef(styp, List("Bits", "Eq"))
+  }
+
+  def getBsvStructFields(inputs: Iterable[Id]): List[BParam] = {
+    inputs.foldLeft(List[BParam]())((l, id) => {
+      l :+ BParam(id.v, toBSVType(id.typ.get))
+    })
+  }
+
+  def getStageIntMap(stgs: List[PStage], edgeTypes: EdgeTypes): StageTypes = {
+    stgs.foldLeft[StageTypes](Map())((m, s) => {
+      m + (s -> getStageInterface(s, edgeTypes))
+    })
+  }
+
+  def getStageInterface(stg: PStage, edgeTypes: EdgeTypes): BInterfaceDef = {
+    val methodSigs = stg.inEdges.foldLeft[List[BMethodSig]](List())((l, e) => {
+      l :+ BMethodSig(getSendName(e), MethodType.Action, List(BParam("d_in", edgeTypes(e).typ)))
+    })
+    BInterfaceDef("S_" + stg.name.v, methodSigs)
   }
 
   def run(firstStage: PStage, inputs: List[Param], rest: List[PStage]): String = {
