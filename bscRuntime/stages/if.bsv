@@ -25,21 +25,20 @@ endinterface
 module mkStageIf (StageLeft left, StageLeft right, StageJoin joinstg, StageIf stg);
  
    FIFO #(InputN) inputF <- mkPipelineFIFO;
-   
-   rule execute;
-      InputN first = inputF.first;
-      Bit#(10) outvar = first.y;
+   InputN first = inputF.first();
+   Bit#(10) outvar = first.y;   
+   Bool cond = outvar > 10'd100;
+
+   rule executeLeft(cond);
       inputF.deq();
-      if (outvar > 10'd100)
-	 begin
-	    left.recv(first);
-	    joinstg.recvBool(InputJoin{ cond: True });
-	 end
-      else
-	 begin
-	    right.recv(first);
-	    joinstg.recvBool(InputJoin{ cond: False });
-	 end
+      left.recv(first);
+      joinstg.recvBool(InputJoin{ cond: cond });
+   endrule
+
+   rule executeRight(!cond);
+      inputF.deq();
+      right.recv(first);
+      joinstg.recvBool(InputJoin{ cond: cond });
    endrule
 
    method Action recv(InputN d_in);
