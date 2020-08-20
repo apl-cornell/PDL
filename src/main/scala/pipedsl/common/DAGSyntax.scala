@@ -56,6 +56,8 @@ object DAGSyntax {
     //Any outgoing communication edge, including normal pipeline flow, calls and communication with memories
     private var edges: Set[PipelineEdge] = Set()
 
+    def allEdges: Set[PipelineEdge] = edges
+
     def outEdges: Set[PipelineEdge] = {
       edges.filter(e => e.from == this)
     }

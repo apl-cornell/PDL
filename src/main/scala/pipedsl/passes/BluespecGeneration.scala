@@ -3,35 +3,68 @@ package pipedsl.passes
 import pipedsl.common.BSVPrettyPrinter._
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax._
-import pipedsl.common.Errors.MissingType
+import pipedsl.common.Errors.{MissingType, UnexpectedCommand, UnexpectedExpr}
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
 import pprint.pprintln
 
+
 object BluespecGeneration {
 
+  val wireType = "Wire"
+  val wireModuleName = "mkWire"
   val fifoType = "FIFOF"
   val fifoModuleName = "mkFIFOF"
   val firstStageIntName = "S_start"
   val firstStageStructName = "E_start"
   val firstStageName = "start"
 
-  type EdgeTypes = Map[PipelineEdge, BStructDef]
+  type EdgeInfo = Map[PipelineEdge, BStructDef]
+  class EdgeMap(firstStage: PStage, firstStageInput: BStruct, edges: EdgeInfo) {
+
+    private val realMap: Map[PipelineEdge, BStruct] = edges map { case (k, v) => (k, v.typ) }
+
+    def apply(e: PipelineEdge): BStruct = {
+      realMap.get(e) match {
+        case Some(b) => b
+        case None if e.to == firstStage => firstStageInput
+        case _ => throw new RuntimeException("Missing edge struct type")
+      }
+    }
+
+  }
   type StageTypes = Map[PStage, BInterfaceDef]
+
+  def getFifoType(typ: BSVType): BInterface = {
+    BInterface(fifoType, List(BVar("elemtyp", typ)))
+  }
+
+  def getWireType(typ: BSVType): BInterface = {
+    BInterface(wireType, List(BVar("elemtyp", typ)))
+  }
 
   def getFifoType(t: String): String = {
     fifoType + " #(" + t +")"
   }
 
-  def getBSV(firstStage: PStage, inputs: List[Id], rest: List[PStage]): Option[BProgram] = {
-    val edgeStructMap = getEdgeStructMap(rest)
+  def getBSV(firstStage: PStage, inputs: List[Id], rest: List[PStage]): BProgram = {
+    //Data types for passing between stages
     val firstStageStruct = getFirstStageStruct(inputs)
-    val firstStageInterface = getFirstStageInterface(firstStageStruct.typ)
-    val stageInterfacemap = getStageIntMap(rest, edgeStructMap)
+    val edgeStructInfo = getEdgeStructInfo(rest)
+    val completeEdgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
 
-    val structDefs = firstStageStruct +: edgeStructMap.values.toList
-    val intDefs = firstStageInterface +: stageInterfacemap.values.toList
-    None
+    //Interfaces exposed by each stage
+    val firstStageInterface = getFirstStageInterface(firstStageStruct.typ)
+    val stageInterfacemap = getStageIntMap(rest, edgeStructInfo) + (firstStage -> firstStageInterface)
+
+    //Module for each stage
+    val otherModules = rest.foldLeft(List[BModuleDef]())((l, s) => {
+      l :+ getStageModule(s, stageInterfacemap, completeEdgeMap)
+    })
+    val structDefs = firstStageStruct +: edgeStructInfo.values.toList
+    val intDefs = stageInterfacemap.values.toList
+    BProgram(topModule = "mkTop", imports = List(), structs = structDefs, interfaces = intDefs, modules = otherModules)
   }
 
   def getFirstStageStruct(inputs: List[Id]): BStructDef = {
@@ -40,12 +73,11 @@ object BluespecGeneration {
   }
 
   def getFirstStageInterface(struct: BSVType): BInterfaceDef = {
-    BInterfaceDef(firstStageIntName,
-      List(BMethodSig(firstStageName, MethodType.Action, List(BParam("d_in",struct)))))
+    BInterfaceDef(BInterface(firstStageIntName),
+      List(BMethodSig(firstStageName, MethodType.Action, List(BVar("d_in",struct)))))
   }
 
-
-  def getEdgeStructMap(stgs: List[PStage]): Map[PipelineEdge, BStructDef] = {
+  def getEdgeStructInfo(stgs: List[PStage]): Map[PipelineEdge, BStructDef] = {
     stgs.foldLeft[Map[PipelineEdge, BStructDef]](Map())((m, s) => {
       s.inEdges.foldLeft[Map[PipelineEdge, BStructDef]](m)((ms, e) => {
         ms + (e -> getEdgeStruct(e))
@@ -54,27 +86,112 @@ object BluespecGeneration {
   }
 
   def getEdgeStruct(e: PipelineEdge): BStructDef = {
-    val styp = BStruct(firstStageStructName, getBsvStructFields(e.values))
+    val styp = BStruct("E_" + e.from.name.v + "-" + e.to.name.v, getBsvStructFields(e.values))
     BStructDef(styp, List("Bits", "Eq"))
   }
 
-  def getBsvStructFields(inputs: Iterable[Id]): List[BParam] = {
-    inputs.foldLeft(List[BParam]())((l, id) => {
-      l :+ BParam(id.v, toBSVType(id.typ.get))
+  def getBsvStructFields(inputs: Iterable[Id]): List[BVar] = {
+    inputs.foldLeft(List[BVar]())((l, id) => {
+      l :+ BVar(id.v, toBSVType(id.typ.get))
     })
   }
 
-  def getStageIntMap(stgs: List[PStage], edgeTypes: EdgeTypes): StageTypes = {
+  def getStageIntMap(stgs: List[PStage], edgeTypes: EdgeInfo): StageTypes = {
     stgs.foldLeft[StageTypes](Map())((m, s) => {
       m + (s -> getStageInterface(s, edgeTypes))
     })
   }
 
-  def getStageInterface(stg: PStage, edgeTypes: EdgeTypes): BInterfaceDef = {
+  def getStageInterface(stg: PStage, edgeTypes: EdgeInfo): BInterfaceDef = {
     val methodSigs = stg.inEdges.foldLeft[List[BMethodSig]](List())((l, e) => {
-      l :+ BMethodSig(getSendName(e), MethodType.Action, List(BParam("d_in", edgeTypes(e).typ)))
+      l :+ BMethodSig(getSendName(e), MethodType.Action, List(BVar("d_in", edgeTypes(e).typ)))
     })
-    BInterfaceDef("S_" + stg.name.v, methodSigs)
+    BInterfaceDef(BInterface("S_" + stg.name.v), methodSigs)
+  }
+
+  def getParamName(s: PStage): String = {
+    "s_" + s.name
+  }
+
+  def getModuleName(s: PStage): String = {
+    "mk" + s.name.v
+  }
+
+  def getStageModule(stg: PStage, stageTypes: StageTypes, edgeMap: EdgeMap): BModuleDef = {
+    //Define params (fifos which transmit data to and from this stage)
+    val outMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
+      val edgeStructType = edgeMap(e)
+      m + (e -> BVar(getParamName(e.to), getFifoType(edgeStructType)))
+    })
+    val paramMap = outMap ++ stg.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
+      val edgeStructType = edgeMap(e)
+      m + (e -> BVar(getParamName(e.from), getFifoType(edgeStructType)))
+    })
+    //TODO handle the first stage too since it doesn't have any incoming edges
+    //and should only have 1 input FIFO
+
+    val sBody = getStageBody(stg, paramMap, edgeMap)
+
+    BModuleDef(name = getModuleName(stg), typ = stageTypes(stg).typ,
+      params = paramMap.values.toList, body = sBody, rules = List(), methods = List())
+  }
+
+  def getStageBody(stg: PStage, pmap: Map[PipelineEdge, BVar], edgeMap: EdgeMap): List[BStatement] = {
+    //First define all of the variables read by some edge
+    val (condIn, uncondIn) = stg.inEdges.partition(e => e.condRecv.isDefined)
+    var body: List[BStatement] = List()
+    //unconditional reads are just variable declarations w/ values
+    uncondIn.foreach(e => {
+      //First element in read queue
+      val paramExpr = BMethodInvoke(pmap(e), "first", List())
+      e.values.foreach(v => {
+        body = body :+ BAssign(BVar(v.v, toBSVType(v.typ.get)),
+          BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))))
+      })
+    })
+    //conditional reads are Wires
+    condIn.foreach(e => {
+      //First element in read queue
+      val paramExpr = BMethodInvoke(pmap(e), "first", List())
+      e.values.foreach(v => {
+        body = body :+ BModInst(lhs = BVar(v.v, getWireType(toBSVType(v.typ.get))),
+          rhs = BModule(wireModuleName, List()))
+      })
+    })
+    body = body ++ getCombinationalCommands(stg.cmds)
+    body
+  }
+
+  def getCombinationalCommands(cmds: List[Command]): List[BStatement] = {
+    cmds.foldLeft(List[BStatement]())((l, c) => {
+      getCombinationalCommand(c) match {
+        case Some(bs) => l :+ bs
+        case None => l
+      }
+    })
+  }
+
+  def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
+    case CAssign(lhs, rhs) =>
+      Some(BAssign(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))
+    case ICondCommand(cond: Expr, c: Command) =>
+      Some(BIf(toBSVExpr(cond), List(getCombinationalCommand(c).get), List()))
+    case CRecv(lhs, rhs) => None
+    case CCall(id, args) => None
+    case CLockOp(mem, op) => None
+    case CCheck(predVar) => None
+    case Syntax.CEmpty => None
+    case v: ISpeculate => None
+    case v: IUpdate => None
+    case v: ICheck => None
+    case CIf(cond, cons, alt) => throw UnexpectedCommand(cmd)
+    case CSeq(c1, c2) => throw UnexpectedCommand(cmd)
+    case CTBar(c1, c2) => throw UnexpectedCommand(cmd)
+    case COutput(exp) => throw UnexpectedCommand(cmd)
+    case CReturn(exp) => throw UnexpectedCommand(cmd)
+    case CExpr(exp) =>  throw UnexpectedCommand(cmd)
+    case CSpeculate(predVar, predVal, verify, body) => throw UnexpectedCommand(cmd)
+    case CSplit(cases, default) => throw UnexpectedCommand(cmd)
   }
 
   def run(firstStage: PStage, inputs: List[Param], rest: List[PStage]): String = {
@@ -139,10 +256,6 @@ object BluespecGeneration {
     "S_" + s.name
   }
 
-  def getParamName(s: PStage): String = {
-    "s_" + s.name
-  }
-
   def getInputParam(e: PipelineEdge): String = {
     "input_" + e.from.name
   }
@@ -160,12 +273,8 @@ object BluespecGeneration {
     result
   }
 
-  def getModuleName(s: PStage): String = {
-    "module mk" + s.name
-  }
-
   def genFirstStageModule(s: PStage, inputs: List[Param]): String = {
-    var result = getModuleName(s) + "("
+    var result = "module " + getModuleName(s) + "("
     result +=  s.succs.map(stg => getInterfaceName(stg) + " " +
       getParamName(stg) ).mkString(", ")
     result += ");\n\n"

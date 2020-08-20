@@ -22,6 +22,9 @@ object Errors {
   case class UnexpectedExpr(e: Expr) extends RuntimeException(
     withPos(s"Cannot interpret $e", e.pos)
   )
+  case class UnexpectedCommand(c: Command) extends RuntimeException(
+    withPos(s"Reached unexpected command $c", c.pos)
+  )
   case class InvalidBitExtraction(s: Int, e: Int) extends RuntimeException(
     s"Start: $s must be less than or equal to End: $e"
   )
