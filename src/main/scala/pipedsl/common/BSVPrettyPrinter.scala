@@ -1,9 +1,9 @@
 package pipedsl.common
 
-import java.io.Writer
+import java.io.{FileOutputStream, OutputStreamWriter, Writer}
 
 import pipedsl.common.BSVSyntax._
-import pipedsl.common.Syntax._
+import pipedsl.common.Errors.BaseError
 
 object BSVPrettyPrinter {
 
@@ -16,22 +16,64 @@ object BSVPrettyPrinter {
   }
 
   def toBSVTypeStr(t: BSVType): String = t match {
-    case BStruct(name, fields) => "struct {" +
-      fields.map(f => {
-        toDeclString(f)
-      }).mkString("; ") +
-      "} " + name
-    case BInterface(name, tparams) => "TODO print interface type"
+    case BStruct(name, fields) => name
+    case BInterface(name, tparams) =>
+      if (tparams.nonEmpty) {
+        val paramstring = tparams.map(v => toBSVTypeStr(v.typ)).mkString(", ")
+        name + "#( " + paramstring + " )"
+      } else {
+        name
+      }
     case BSizedInt(unsigned, size) =>
-      if (unsigned) {
+      (if (unsigned) {
         "U"
       } else {
         ""
-      } + "Int#(" + size + ")"
+      }) + "Int#(" + size + ")"
     case BBool() => "Bool"
   }
 
-  class BSVPretyPrinterImpl {
+  private def toIntString(base: Int, value: Int): String = base match {
+    case 16 => "h" + value.toHexString
+    case 10 => "d" + value.toString
+    case 8 => "o" + value.toOctalString
+    case 2 => "b" + value.toBinaryString
+    case default => throw BaseError(base)
+  }
+
+  private def toBSVExprStr(expr: BExpr): String = expr match {
+    case BCaseExpr(cond, cases) =>
+      val caseString = cases.map(c => {
+        toBSVExprStr(c._1) + ": return " + toBSVExprStr(c._2)
+      }).mkString(";")
+      mkExprString("case (", toBSVExprStr(cond), ")", caseString,"endcase")
+    case BBoolLit(v) => if (v) { "True" } else { "False" }
+    case BIntLit(v, base, bits) => bits.toString + toIntString(base, v)
+    case BStructLit(typ, fields) =>
+      val fieldStr = fields.keys.map(k => {
+        mkExprString(toBSVExprStr(k), ":", toBSVExprStr(fields(k)))
+      }).mkString(",")
+      mkExprString(typ.name, "{",  fieldStr, "}")
+    case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
+    case BVar(name, typ) => name
+    case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
+    case BBitExtract(expr, start, end) => mkExprString(
+      "(", toBSVExprStr(expr), "[", end.toString, ":", start.toString, "]" ,")"
+    )
+    case BModule(name, args) =>
+      val argstring = args.map(a => toBSVExprStr(a)).mkString(",")
+      mkExprString(name, "(", argstring, ")")
+    case BMethodInvoke(mod, method, args) =>
+      val argstring = args.map(a => toBSVExprStr(a)).mkString(",")
+      toBSVExprStr(mod) + "." + method + "(" + argstring + ")"
+  }
+
+  def getFilePrinter(name: String): BSVPretyPrinterImpl = {
+    new BSVPretyPrinterImpl(new OutputStreamWriter(new FileOutputStream(name)))
+  }
+
+  class BSVPretyPrinterImpl(w: Writer) {
 
     private val indentSize = 4
     private var curIndent = 0
@@ -50,88 +92,59 @@ object BSVPrettyPrinter {
       indent() + strs.mkString(" ")
     }
     private def mkStatementString(strs: String*): String = {
-      indent() + strs.mkString(" ") + "\n;"
+      indent() + strs.mkString(" ") + ";\n"
     }
 
-    def printBSVType(t: Type): String = t match {
-      case TSizedInt(len, unsigned) => (if (unsigned) "U" else "") + "Int#(" + len.toString + ")"
-      case TVoid() => "Void"
-      case TBool() => "Bool"
-      case TFun(args, ret) => "TODO FUNC"
-      case TRecType(name, fields) => "TODO REC TYPE"
-      case TMemType(elem, addrSize) => "TODO MEM TYPE"
-      case TModType(_, _) => "TODO MOD TYPE"
-    }
-
-    def printBSVCommand(c: Command, indent: String = ""): String = indent +
-      (c match {
-        case CSeq(c1, c2) => "SEQUENCE NOT EXPECTED"
-        case CTBar(c1, c2) => "SEQUENCE NOT EXPECTED"
-        case CIf(cond, cons, alt) => "IF NOT EXPECTED"
-        case CAssign(lhs, rhs) => printBSVType(lhs.typ.get) + " " +
-          printBSVExpr(lhs, indent) + " = " + printBSVExpr(rhs, indent);
-        case CRecv(lhs, rhs) => "RECV NOT EXPECTED"
-        case CCall(id, args) => "CALL NOT IMPLEMENTED"
-        case COutput(exp) => "OUTPUT NOT IMPLEMENTED"
-        case CReturn(exp) => "RETURN NOT IMPLEMENTED"
-        case CExpr(exp) => printBSVExpr(exp, indent)
-        case CLockOp(mem, op) => "LOCK NOT IMPLEMENTED"
-        case CSpeculate(predVar, predVal, verify, body) => "SPECULTED NOT EXPECTED"
-        case CCheck(predVar) => "CCHECK NOT EXPECTED"
-        case CSplit(cases, default) => "CSPLIT NOT EXPECTED"
-        case Syntax.CEmpty => "\n"
-        case _ => "TODO / Uncompilable command"
-      })
-
-    def printBSVExpr(e: Expr, indent: String = ""): String = e match {
-      case EInt(v, base, bits) => "TODO"
-      case EBool(v) => if (v) {
-        "True"
-      } else {
-        "False"
-      }
-      case EUop(op, ex) => "(" + op + printBSVExpr(ex) + ")"
-      case EBinop(op, e1, e2) => "(" + printBSVExpr(e1) +
-        " " + op + " " + printBSVExpr(e2) + ")"
-      case ERecAccess(rec, fieldName) => "TODO"
-      case ERecLiteral(fields) => "TODO"
-      case EMemAccess(mem, index) => "TODO"
-      case EBitExtract(num, start, end) => printBSVExpr(num) + "[" + end + ":" + start + "]"
-      case ETernary(cond, tval, fval) => "case(" + printBSVExpr(cond) + ")" +
-        "\n" + indent + indent + "True: return " + printBSVExpr(tval) + ";" +
-        "\n" + indent + indent + "False: return " + printBSVExpr(fval) + ";" +
-        "\n" + indent + "endcase;"
-      case EApp(func, args) => "TODO F-APP"
-      case EVar(id) => id.v
-      case ECast(ctyp, exp) => "TODO CAST"
-      case expr: CirExpr => "TODO"
-    }
-
-    def printImport(imp: BImport, w: Writer): Unit = {
+    def printImport(imp: BImport): Unit = {
       w.write(mkStatementString("import", imp.name, ":: *"))
     }
 
-    def printStructDef(sdef: BStructDef, w: Writer): Unit = {
+    def printStructDef(sdef: BStructDef): Unit = {
+      val structstring = mkExprString("struct {",
+        sdef.typ.fields.map(f => {
+          toDeclString(f)
+        }).mkString("; "),
+        "}", sdef.typ.name)
       w.write(
-        mkStatementString("typedef", toBSVTypeStr(sdef.typ),
+        mkStatementString("typedef", structstring,
           "deriving(", sdef.derives.mkString(","), ")"
         )
       )
     }
 
-    def printBSVStatement(stmt: BStatement, w: Writer): Unit = {
-
+    def printBSVStatement(stmt: BStatement): Unit = stmt match {
+      case BExprStmt(expr) => w.write(mkStatementString(toBSVExprStr(expr)))
+      case BModInst(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
+      case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
+      case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
+      case BDecl(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "=", toBSVExprStr(rhs)))
+      case BIf(cond, trueBranch, falseBranch) =>
+        w.write(mkStatementString("if", "(", toBSVExprStr(cond) + ")"))
+        w.write(mkIndentedExpr("begin\n"))
+        incIndent()
+        trueBranch.foreach(s => printBSVStatement(s))
+        decIndent()
+        w.write(mkIndentedExpr("else\n"))
+        incIndent()
+        falseBranch.foreach(s => printBSVStatement(s))
+        decIndent()
+        w.write(mkIndentedExpr("end\n"))
     }
 
-    def printBSVRule(rule: BRuleDef, w: Writer): Unit = {
-
+    def printBSVRule(rule: BRuleDef): Unit = {
+      val condString = rule.conds.map(c => toBSVExprStr(c)).mkString(" && ")
+      w.write(mkStatementString("rule", rule.name, "(", condString, ")"))
+      incIndent()
+      rule.body.foreach(b => printBSVStatement(b))
+      decIndent()
+      w.write(mkIndentedExpr("endrule\n"))
     }
 
     //TODO - we don't generate any methods atm
     def printBSVMethod(method: BMethodDef, w: Writer): Unit = {}
 
-    def printModule(mod: BModuleDef, w: Writer, synthesize: Boolean = false): Unit = {
-      val params = mod.params.map(p => toDeclString(p)).mkString(",")
+    def printModule(mod: BModuleDef, synthesize: Boolean = false): Unit = {
+      val params = mod.params.map(p => toDeclString(p)).mkString(", ")
       //this just defines the interface this module implements,
       // the variable is necessary but unused
       val interfaceParam = if (mod.typ.isDefined) {
@@ -145,23 +158,27 @@ object BSVPrettyPrinter {
       }
       w.write(mkStatementString("module", paramString))
       incIndent()
-      mod.body.foreach(s => printBSVStatement(s, w))
+      mod.body.foreach(s => printBSVStatement(s))
       mkStatementString("") //for readability only
-      mod.rules.foreach(r => printBSVRule(r, w))
+      mod.rules.foreach(r => printBSVRule(r))
       mkStatementString("")
       mod.methods.foreach(m => printBSVMethod(m, w))
       mkStatementString("")
       decIndent()
       //Doesn't end in semi-colon
-      w.write(mkIndentedExpr("endmodule"))
+      w.write(mkIndentedExpr("endmodule\n"))
     }
 
-    def printBSVProg(b: BProgram, writer: Writer): Unit = {
-      b.imports.foreach(i => printImport(i, writer))
-      b.structs.foreach(s => printStructDef(s, writer))
-      b.modules.foreach(m => printModule(m, writer))
+    def printBSVProg(b: BProgram): Unit = {
+      b.imports.foreach(i => printImport(i))
+      w.write("\n")
+      b.structs.foreach(s => printStructDef(s))
+      w.write("\n")
+      b.modules.foreach(m => printModule(m))
+      w.write("\n")
       //TODO change topmodule to an actual module def
-      writer.write(b.topModule)
+      w.write(b.topModule)
+      w.flush()
     }
   }
 }

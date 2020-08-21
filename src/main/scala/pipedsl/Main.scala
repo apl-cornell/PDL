@@ -1,13 +1,14 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-import common.PrettyPrinter
+import common.{BSVPrettyPrinter, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
 import passes.{AddEdgeValuePass, BluespecGeneration, CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
+import pipedsl.common.BSVPrettyPrinter.BSVPretyPrinterImpl
 
 object Main {
   val logger: Logger = Logger("main")
@@ -35,9 +36,9 @@ object Main {
     stageInfo.foreachEntry( (n, s) => {
       val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
       AddEdgeValuePass.run(s)
+      val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
       val bsvprog = BluespecGeneration.getBSV(s.head, mod.inputs.map(p => p.name), flattenStageList(s.tail))
-      pprint.pprintln(bsvprog.structs)
-      pprint.pprintln(bsvprog.modules)
+      bsvWriter.printBSVProg(bsvprog)
       //BluespecGeneration.run(s.head, mod.inputs, s.tail)
       //PrettyPrinter.printStages(s)
       //PrettyPrinter.printStageGraph(n.v, s)

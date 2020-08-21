@@ -13,6 +13,10 @@ object Errors {
     def this(msg: String, pos: Position) = this(msg, pos, "")
   }
 
+  case class BaseError(b: Int) extends RuntimeException(
+    s"Base $b is not supported"
+  )
+
   // Parsing errors
   case class ParserError(msg: String) extends RuntimeException(msg)
 

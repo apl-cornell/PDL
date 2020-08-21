@@ -25,7 +25,7 @@ module mkLock(Lock);
    //Returns True if the lock was acquired, else False
    method ActionValue#(Bool) acq(ID tid);
       if (lockFree || owner == tid)
-	 begin
+      begin
 	    held.enq(tid);
 	    return True;
 	 end

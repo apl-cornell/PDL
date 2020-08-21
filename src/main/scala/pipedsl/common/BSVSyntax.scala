@@ -72,6 +72,7 @@ object BSVSyntax {
   case class BModInst(lhs: BVar, rhs: BModule) extends BStatement
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
+  case class BDecl(lhs: BVar, rhs: BExpr) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
 
 

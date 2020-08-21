@@ -220,7 +220,7 @@ object BluespecGeneration {
       //First element in read queue
       val paramExpr = BMethodInvoke(pmap(e), "first", List())
       e.values.foreach(v => {
-        body = body :+ BAssign(BVar(v.v, toBSVType(v.typ.get)),
+        body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)),
           BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))))
       })
     })
@@ -247,7 +247,7 @@ object BluespecGeneration {
   }
   private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
     case CAssign(lhs, rhs) =>
-      Some(BAssign(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))
+      Some(BDecl(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))
     case ICondCommand(cond: Expr, c: Command) =>
       Some(BIf(toBSVExpr(cond), List(getCombinationalCommand(c).get), List()))
     case CExpr(exp) => Some(BExprStmt(toBSVExpr(exp)))
