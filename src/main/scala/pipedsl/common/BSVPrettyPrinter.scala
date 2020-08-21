@@ -48,7 +48,7 @@ object BSVPrettyPrinter {
       }).mkString(";")
       mkExprString("case (", toBSVExprStr(cond), ")", caseString,"endcase")
     case BBoolLit(v) => if (v) { "True" } else { "False" }
-    case BIntLit(v, base, bits) => bits.toString + toIntString(base, v)
+    case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
     case BStructLit(typ, fields) =>
       val fieldStr = fields.keys.map(k => {
         mkExprString(toBSVExprStr(k), ":", toBSVExprStr(fields(k)))
