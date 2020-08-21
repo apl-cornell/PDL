@@ -114,4 +114,6 @@ object Errors {
   case class IllegalSpeculationBlock(pos: Position) extends RuntimeException(
     withPos("Speculation initiation and verification must be in separate stages", pos)
   )
+
+  case class IllegalBSVStage(msg: String) extends RuntimeException(msg)
 }

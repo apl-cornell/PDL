@@ -45,11 +45,19 @@ object BSVSyntax {
     case expr: CirExpr =>throw new UnexpectedExpr(e)
   }
 
+  def getCanonicalStruct(typ: BStruct): BStructLit = {
+    val argmap = typ.fields.foldLeft(Map[BVar, BExpr]())((m, f) => {
+      m + (BVar(f.name, f.typ) -> BVar(f.name, f.typ))
+    })
+    BStructLit(typ, argmap)
+  }
+
   sealed trait BExpr
 
   case class BCaseExpr(cond: BExpr, cases: List[(BExpr, BExpr)]) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
+  case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
   case class BVar(name: String, typ: BSVType) extends BExpr
   case class BBOp(op: String, lhs: BExpr, rhs: BExpr) extends BExpr
@@ -60,13 +68,15 @@ object BSVSyntax {
 
   sealed trait BStatement
 
+  case class BExprStmt(expr: BExpr) extends BStatement
   case class BModInst(lhs: BVar, rhs: BModule) extends BStatement
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
 
+
   case class BStructDef(typ: BStruct, derives: List[String])
-  case class BRuleDef(name: String, cond: Option[BExpr] = None, body: List[BStatement])
+  case class BRuleDef(name: String, conds: List[BExpr], body: List[BStatement])
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
   case class BMethodDef(sig: BMethodSig, body: List[BStatement])
   case class BModuleDef(name: String, typ: BInterface,
