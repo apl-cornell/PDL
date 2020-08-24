@@ -17,11 +17,12 @@ object BSVSyntax {
   case class BStruct(name: String, fields: List[BVar]) extends BSVType
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
-  case class BBool() extends BSVType
+  case object BBool extends BSVType
+  case object BEmptyModule extends BSVType
 
   def toBSVType(t: Type): BSVType = t match {
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
-    case Syntax.TBool() => BBool()
+    case Syntax.TBool() => BBool
       //TODO others
   }
 
@@ -84,6 +85,6 @@ object BSVSyntax {
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])
   case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig])
   case class BImport(name: String)
-  case class BProgram(topModule: String, imports: List[BImport], structs: List[BStructDef],
+  case class BProgram(topModule: BModuleDef, imports: List[BImport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
 }

@@ -17,14 +17,21 @@ object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PS
     Id(s)
   }
 
-
   override def run(p: Prog): Map[Id,List[PStage]] = {
     p.moddefs.foldLeft(Map[Id,List[PStage]]())((m, mod) => {
       m + (mod.name -> run(mod))
     })
   }
 
-  override def run(m: ModuleDef): List[PStage] = run(m.body)
+  override def run(m: ModuleDef): List[PStage] = {
+    val stgs = run(m.body)
+    val emptyStage = new PStage(Id("_input_"))
+    //Add an edge to a not-real stage to simplify
+    //communication compilation later
+    val inputEdge = PipelineEdge(None, None, emptyStage, stgs.head, m.inputs.map(i => i.name).toSet)
+    stgs.head.addEdge(inputEdge)
+    stgs
+  }
 
   override def run(c: Command): List[PStage] = {
     val startStage = new PStage(Id("Start"))

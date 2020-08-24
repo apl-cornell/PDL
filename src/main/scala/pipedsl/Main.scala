@@ -37,7 +37,7 @@ object Main {
       val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
       AddEdgeValuePass.run(s)
       val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
-      val bsvprog = BluespecGeneration.getBSV(s.head, mod.inputs.map(p => p.name), flattenStageList(s.tail))
+      val bsvprog = BluespecGeneration.getBSV(s.head, flattenStageList(s.tail))
       bsvWriter.printBSVProg(bsvprog)
       //BluespecGeneration.run(s.head, mod.inputs, s.tail)
       //PrettyPrinter.printStages(s)

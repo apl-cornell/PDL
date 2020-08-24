@@ -16,7 +16,8 @@ object BSVPrettyPrinter {
   }
 
   def toBSVTypeStr(t: BSVType): String = t match {
-    case BStruct(name, fields) => name
+    case BStruct(name, _) => name
+    case BEmptyModule => "Empty"
     case BInterface(name, tparams) =>
       if (tparams.nonEmpty) {
         val paramstring = tparams.map(v => toBSVTypeStr(v.typ)).mkString(", ")
@@ -30,7 +31,7 @@ object BSVPrettyPrinter {
       } else {
         ""
       }) + "Int#(" + size + ")"
-    case BBool() => "Bool"
+    case BBool => "Bool"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -62,10 +63,10 @@ object BSVPrettyPrinter {
       "(", toBSVExprStr(expr), "[", end.toString, ":", start.toString, "]" ,")"
     )
     case BModule(name, args) =>
-      val argstring = args.map(a => toBSVExprStr(a)).mkString(",")
+      val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
     case BMethodInvoke(mod, method, args) =>
-      val argstring = args.map(a => toBSVExprStr(a)).mkString(",")
+      val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       toBSVExprStr(mod) + "." + method + "(" + argstring + ")"
   }
 
@@ -144,19 +145,19 @@ object BSVPrettyPrinter {
     def printBSVMethod(method: BMethodDef, w: Writer): Unit = {}
 
     def printModule(mod: BModuleDef, synthesize: Boolean = false): Unit = {
-      val params = mod.params.map(p => toDeclString(p)).mkString(", ")
       //this just defines the interface this module implements,
       // the variable is necessary but unused
       val interfaceParam = if (mod.typ.isDefined) {
-        mod.typ.get.name + " _unused_"
+        BVar("_unused_", mod.typ.get)
       } else {
-        "Empty" + " _unused_"
+        BVar("_unused_", BEmptyModule)
       }
-      val paramString = "(" + params + ", " + interfaceParam + ")"
+      val paramStr = (mod.params :+ interfaceParam).map(p => toDeclString(p)).mkString(", ")
+      val paramString = mkExprString("(", paramStr, ")")
       if (synthesize) {
         w.write("(* synthesize *)\n")
       }
-      w.write(mkStatementString("module", paramString))
+      w.write(mkStatementString("module", mod.name, paramString))
       incIndent()
       mod.body.foreach(s => printBSVStatement(s))
       mkStatementString("") //for readability only
@@ -176,8 +177,7 @@ object BSVPrettyPrinter {
       w.write("\n")
       b.modules.foreach(m => printModule(m))
       w.write("\n")
-      //TODO change topmodule to an actual module def
-      w.write(b.topModule)
+      printModule(b.topModule, synthesize = true)
       w.flush()
     }
   }

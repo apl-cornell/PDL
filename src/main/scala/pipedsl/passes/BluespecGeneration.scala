@@ -1,15 +1,13 @@
 package pipedsl.passes
 
-import pipedsl.common.BSVPrettyPrinter._
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax._
 import pipedsl.common.Errors.{IllegalBSVStage, UnexpectedCommand}
 import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities._
-import pprint.pprintln
 
 
+//TODO refactor so first stage generation is less unique compared to other stages
 object BluespecGeneration {
 
   private val wireType = "Wire"
@@ -46,18 +44,20 @@ object BluespecGeneration {
     BInterface(wireType, List(BVar("elemtyp", typ)))
   }
 
-  def getBSV(firstStage: PStage, inputs: Iterable[Id], rest: Iterable[PStage]): BProgram = {
+  def getBSV(firstStage: PStage, rest: List[PStage]): BProgram = {
     //Data types for passing between stages
-    val firstStageStruct = getFirstStageStruct(inputs)
-    val edgeStructInfo = getEdgeStructInfo(rest)
+    val edgeStructInfo = getEdgeStructInfo(firstStage +: rest)
+    //First stage should have exactly one input edge by definition
+    val firstStageStruct = edgeStructInfo(firstStage.inEdges.head)
     val completeEdgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
     //Module for each stage
-    val otherModules = rest.foldLeft(List[BModuleDef]())((l, s) => {
-      l :+ getStageModule(s, completeEdgeMap)
+    val stgMap = (firstStage +: rest).foldLeft(Map[PStage, BModuleDef]())((m, s) => {
+      m + (s -> getStageModule(s, completeEdgeMap))
     })
-    val structDefs = firstStageStruct +: edgeStructInfo.values.toList
-    //TODO make the top module
-    BProgram(topModule = "mkTop", imports = List(), structs = structDefs, interfaces = List(), modules = otherModules)
+    val structDefs = edgeStructInfo.values.toList
+    //TODO define the top level module interface
+    BProgram(topModule = getTopModule(firstStage, rest, completeEdgeMap, stgMap),
+      imports = List(), structs = structDefs, interfaces = List(), modules = stgMap.values.toList)
   }
 
   private def getFirstStageStruct(inputs: Iterable[Id]): BStructDef = {
@@ -79,7 +79,7 @@ object BluespecGeneration {
   }
 
   private def getEdgeStruct(e: PipelineEdge): BStructDef = {
-    val styp = BStruct("E_" + e.from.name.v + "-" + e.to.name.v, getBsvStructFields(e.values))
+    val styp = BStruct(genEdgeName(e), getBsvStructFields(e.values))
     BStructDef(styp, List("Bits", "Eq"))
   }
 
@@ -95,24 +95,28 @@ object BluespecGeneration {
     })
   }
 
+  private def genEdgeName(e: PipelineEdge) = {
+    "E_" + e.from.name.v + "_TO_" + e.to.name.v
+  }
   private def genSendName(e: PipelineEdge): String = {
     e.from.name + "To" + e.to.name
   }
+  private def genParamName(e: PipelineEdge): String = {
+    "fifo_" + e.from.name.v + "_" + e.to.name.v
+  }
+  private def genParamName(s: PStage): String = {
+    "s_" + s.name
+  }
+  private def genModuleName(s: PStage): String = {
+    "mk" + s.name.v
+  }
+
   private def getStageInterface(stg: PStage, edgeTypes: EdgeInfo): BInterfaceDef = {
     val methodSigs = stg.inEdges.foldLeft[List[BMethodSig]](List())((l, e) => {
       l :+ BMethodSig(genSendName(e), MethodType.Action, List(BVar("d_in", edgeTypes(e).typ)))
     })
     BInterfaceDef(BInterface("S_" + stg.name.v), methodSigs)
   }
-
-  private def genParamName(s: PStage): String = {
-    "s_" + s.name
-  }
-
-  private def genModuleName(s: PStage): String = {
-    "mk" + s.name.v
-  }
-
   private def getStageModule(stg: PStage, edgeMap: EdgeMap): BModuleDef = {
     //Define params (fifos which transmit data to and from this stage)
     val outMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
@@ -123,9 +127,6 @@ object BluespecGeneration {
       val edgeStructType = edgeMap(e)
       m + (e -> BVar(genParamName(e.from), getFifoType(edgeStructType)))
     })
-    //TODO handle the first stage differently since it doesn't have any incoming edges in the graph
-    //and should only have 1 input FIFO
-
     //Generate the combinational connections
     val sBody = getStageBody(stg, paramMap, edgeMap)
     //Generate the set of execution rules for reading args and writing outputs
@@ -134,6 +135,18 @@ object BluespecGeneration {
     // this will probably need to change eventually
     BModuleDef(name = genModuleName(stg), typ = None,
       params = paramMap.values.toList, body = sBody, rules = execRules, methods = List())
+  }
+
+  private def getFirstStageModule(stg: PStage, input: BStruct, edgeMap: EdgeMap): BModuleDef = {
+    val paramMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
+      val edgeStructType = edgeMap(e)
+      m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
+    })
+    val inputParam = BVar(genParamName(stg), input)
+    val sBody = getFirstStageBody(stg, inputParam, paramMap, edgeMap)
+    val execRules: List[BRuleDef] = getExecRules(stg, edgeMap, paramMap)
+    BModuleDef(name = genModuleName(stg), typ = None,
+      params = paramMap.values.toList :+ inputParam, body = sBody, rules = execRules, methods = List())
   }
 
   //TODO - conditional recv/sends assume mutual exclusion at the moment
@@ -237,6 +250,66 @@ object BluespecGeneration {
     body
   }
 
+  private def getFirstStageBody(stg: PStage, input: BVar, pmap: Map[PipelineEdge, BVar], edgeMap: EdgeMap): List[BStatement] = {
+    //First define all of the variables read by some edge
+    val condIn = List[BVar]()
+    val uncondIn = List[BVar](input)
+    var body: List[BStatement] = List()
+    //unconditional reads are just variable declarations w/ values
+    uncondIn.foreach(i => {
+      //First element in read queue
+      val paramExpr = BMethodInvoke(i, "first", List())
+      i.typ match {
+        case BStruct(_, fields) => {
+          fields.foreach(f => {
+            body = body :+ BDecl(BVar(f.name, f.typ),
+              BStructAccess(paramExpr, BVar(f.name, f.typ)))
+          })
+        }
+        case _ => ()
+      }
+    })
+    //conditional reads are Wires
+    condIn.foreach(i => {
+      //First element in read queue
+      val paramExpr = BMethodInvoke(i, "first", List())
+      i.typ match {
+        case BStruct(_, fields) => {
+          fields.foreach(f => {
+            body = body :+ BModInst(lhs = BVar(f.name, getWireType(f.typ)),
+              rhs = BModule(wireModuleName, List()))
+          })
+        }
+        case _ => ()
+      }
+    })
+    body = body ++ getCombinationalCommands(stg.cmds)
+    body
+  }
+
+  private def getTopModule(firstStg: PStage, otherStgs: List[PStage], edgeMap: EdgeMap, stgMap: Map[PStage, BModuleDef]): BModuleDef = {
+    //Body instantiates all of the params (fifos & memories) and then all of the stages
+    //One fifo per edge in the graph
+    val allEdges = (firstStg +: otherStgs).foldLeft(Set[PipelineEdge]())((es, s) => {
+      es ++ s.inEdges ++ s.outEdges
+    })
+    val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
+      m + (e -> BModInst(BVar(genParamName(e), edgeMap(e)), BModule(fifoModuleName, List())))
+    })
+    val mkStgs = (firstStg +: otherStgs).map(s => {
+      val moddef = stgMap(s)
+      val modtyp = moddef.typ match {
+        case Some(t) => t
+        case None => BInterface(moddef.name, List())
+      }
+      val args = s.allEdges.map(e => { edgeFifos(e).lhs }).toList
+      BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
+    })
+    val stmts = edgeFifos.values.toList ++ mkStgs
+    //TODO Execute rule is an unconditional send to the first stage
+    BModuleDef(name = "mkTop", typ = None, params = List(), body = stmts,
+      rules = List(), methods = List())
+  }
   private def getCombinationalCommands(cmds: Iterable[Command]): List[BStatement] = {
     cmds.foldLeft(List[BStatement]())((l, c) => {
       getCombinationalCommand(c) match {
