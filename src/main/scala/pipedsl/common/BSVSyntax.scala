@@ -26,11 +26,17 @@ object BSVSyntax {
       //TODO others
   }
 
+  //TODO a better way to translate operators
+  def toBSVBop(b: EBinop): BExpr = b.op match {
+    case BitOp("++", _) => BConcat(toBSVExpr(b.e1), List(toBSVExpr(b.e2)))
+    case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
+  }
+
   def toBSVExpr(e: Expr): BExpr = e match {
     case EInt(v, base, bits) => BIntLit(v, base, bits)
     case EBool(v) => BBoolLit(v)
     case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
-    case EBinop(op, e1, e2) => BBOp(op.op, toBSVExpr(e1), toBSVExpr(e2))
+    case eb@EBinop(_,_,_) => toBSVBop(eb)
     case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
     case ETernary(cond, tval, fval) => BCaseExpr(toBSVExpr(cond),
       List((BBoolLit(true), toBSVExpr(tval)),
@@ -64,6 +70,7 @@ object BSVSyntax {
   case class BBOp(op: String, lhs: BExpr, rhs: BExpr) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
   case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
+  case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BVar, method: String, args: List[BExpr]) extends BExpr
 

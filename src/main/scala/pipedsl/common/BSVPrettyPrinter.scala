@@ -62,6 +62,11 @@ object BSVPrettyPrinter {
     case BBitExtract(expr, start, end) => mkExprString(
       "(", toBSVExprStr(expr), "[", end.toString, ":", start.toString, "]" ,")"
     )
+    case BConcat(first, rest) =>
+      val exprstr = rest.foldLeft[String](toBSVExprStr(first))((s, e) => {
+        s + ", " + toBSVExprStr(e)
+      })
+      mkExprString( "{", exprstr, "}")
     case BModule(name, args) =>
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
