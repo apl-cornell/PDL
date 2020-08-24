@@ -57,7 +57,7 @@ object BluespecGeneration {
     val structDefs = edgeStructInfo.values.toList
     //TODO define the top level module interface
     BProgram(topModule = getTopModule(firstStage, rest, completeEdgeMap, stgMap),
-      imports = List(), structs = structDefs, interfaces = List(), modules = stgMap.values.toList)
+      imports = List(BImport(fifoType)), structs = structDefs, interfaces = List(), modules = stgMap.values.toList)
   }
 
   private def getFirstStageStruct(inputs: Iterable[Id]): BStructDef = {

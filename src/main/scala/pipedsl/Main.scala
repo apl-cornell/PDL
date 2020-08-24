@@ -1,14 +1,13 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-import common.{BSVPrettyPrinter, PrettyPrinter}
+import common.{BSVPrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
 import passes.{AddEdgeValuePass, BluespecGeneration, CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
-import pipedsl.common.BSVPrettyPrinter.BSVPretyPrinterImpl
 
 object Main {
   val logger: Logger = Logger("main")

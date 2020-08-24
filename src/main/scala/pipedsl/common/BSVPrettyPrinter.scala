@@ -105,7 +105,7 @@ object BSVPrettyPrinter {
         sdef.typ.fields.map(f => {
           toDeclString(f)
         }).mkString("; "),
-        "}", sdef.typ.name)
+        "; }", sdef.typ.name)
       w.write(
         mkStatementString("typedef", structstring,
           "deriving(", sdef.derives.mkString(","), ")"
