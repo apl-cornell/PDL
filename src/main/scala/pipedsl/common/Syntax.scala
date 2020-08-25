@@ -175,6 +175,10 @@ object Syntax {
   case class ISpeculate(specId: Id, specVar: EVar, value: EVar) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
+  case class ISend(handle: EVar, receiver: EVar, args: List[EVar]) extends InternalCommand
+  case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
+  case class IMemSend(isWrite: Boolean, handle: EVar, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
+  case class IMemRecv(handle: EVar, mem: Id, data: Option[EVar]) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 

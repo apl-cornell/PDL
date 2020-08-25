@@ -5,7 +5,7 @@ import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
 /**
  * This pass puts the program into a canonical form. For now all this does is clean
- * up unnecessary and semantically meaningly statements, but maybe it will do more later.
+ * up unnecessary and semantically meaningless statements, but maybe it will do more later.
  */
 object CanonicalizePass extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
 

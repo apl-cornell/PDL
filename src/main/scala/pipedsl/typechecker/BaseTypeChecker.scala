@@ -337,6 +337,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     }
     case EMemAccess(mem, index) => {
       val memt = tenv(mem)
+      mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv)
       (memt, idxt) match {
         case (TMemType(e, s), TSizedInt(l, true)) if l == s => (e, env1)

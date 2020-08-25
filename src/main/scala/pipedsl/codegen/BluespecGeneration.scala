@@ -1,11 +1,10 @@
-package pipedsl.passes
+package pipedsl.codegen
 
 import pipedsl.common.BSVSyntax._
-import pipedsl.common.DAGSyntax._
+import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{IllegalBSVStage, UnexpectedCommand}
 import pipedsl.common.Syntax
-import pipedsl.common.Syntax._
-
+import pipedsl.common.Syntax.{CAssign, CCall, CCheck, CExpr, CIf, CLockOp, COutput, CRecv, CReturn, CSeq, CSpeculate, CSplit, CTBar, Command, Expr, ICheck, ICondCommand, ISpeculate, IUpdate, Id}
 
 //TODO refactor so first stage generation is less unique compared to other stages
 object BluespecGeneration {
@@ -19,6 +18,7 @@ object BluespecGeneration {
   private val firstStageName = "start"
 
   type EdgeInfo = Map[PipelineEdge, BStructDef]
+
   //Normal Map that special cases when checking the first Stage as part of the key
   //Since The First stage only has 1 incoming 'edge'
   class EdgeMap(firstStage: PStage, firstStageInput: BStruct, edges: EdgeInfo) {
@@ -34,6 +34,7 @@ object BluespecGeneration {
     }
 
   }
+
   type StageTypes = Map[PStage, BInterfaceDef]
 
   def getFifoType(typ: BSVType): BInterface = {
@@ -67,7 +68,7 @@ object BluespecGeneration {
 
   private def getFirstStageInterface(struct: BSVType): BInterfaceDef = {
     BInterfaceDef(BInterface(firstStageIntName),
-      List(BMethodSig(firstStageName, MethodType.Action, List(BVar("d_in",struct)))))
+      List(BMethodSig(firstStageName, MethodType.Action, List(BVar("d_in", struct)))))
   }
 
   private def getEdgeStructInfo(stgs: Iterable[PStage]): Map[PipelineEdge, BStructDef] = {
@@ -98,15 +99,19 @@ object BluespecGeneration {
   private def genEdgeName(e: PipelineEdge) = {
     "E_" + e.from.name.v + "_TO_" + e.to.name.v
   }
+
   private def genSendName(e: PipelineEdge): String = {
     e.from.name + "To" + e.to.name
   }
+
   private def genParamName(e: PipelineEdge): String = {
     "fifo_" + e.from.name.v + "_" + e.to.name.v
   }
+
   private def genParamName(s: PStage): String = {
     "s_" + s.name
   }
+
   private def genModuleName(s: PStage): String = {
     "mk" + s.name.v
   }
@@ -117,6 +122,7 @@ object BluespecGeneration {
     })
     BInterfaceDef(BInterface("S_" + stg.name.v), methodSigs)
   }
+
   private def getStageModule(stg: PStage, edgeMap: EdgeMap): BModuleDef = {
     //Define params (fifos which transmit data to and from this stage)
     val outMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
@@ -302,7 +308,9 @@ object BluespecGeneration {
         case Some(t) => t
         case None => BInterface(moddef.name, List())
       }
-      val args = s.allEdges.map(e => { edgeFifos(e).lhs }).toList
+      val args = s.allEdges.map(e => {
+        edgeFifos(e).lhs
+      }).toList
       BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
     })
     val stmts = edgeFifos.values.toList ++ mkStgs
@@ -310,6 +318,7 @@ object BluespecGeneration {
     BModuleDef(name = "mkTop", typ = None, params = List(), body = stmts,
       rules = List(), methods = List())
   }
+
   private def getCombinationalCommands(cmds: Iterable[Command]): List[BStatement] = {
     cmds.foldLeft(List[BStatement]())((l, c) => {
       getCombinationalCommand(c) match {
@@ -318,6 +327,7 @@ object BluespecGeneration {
       }
     })
   }
+
   private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
     case CAssign(lhs, rhs) =>
       Some(BDecl(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))

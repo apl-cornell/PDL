@@ -6,6 +6,12 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
 import pipedsl.passes.Passes.StagePass
 
+/**
+ * This uses a live variable dataflow analysis to
+ * determine which values must be communicated from stage to stage.
+ * It also add special control values for special stages (like IF stages)
+ * that are used to conditionally activate later stages.
+ */
 object AddEdgeValuePass extends StagePass[List[PStage]] {
 
   override def run(stgs: List[PStage]): List[PStage] = {

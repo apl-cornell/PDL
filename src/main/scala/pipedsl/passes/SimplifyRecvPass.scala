@@ -7,6 +7,11 @@ import pipedsl.common.Utilities._
 
 import scala.util.parsing.input.Position
 
+/**
+ * This pass converts RECV statements into a canonical form,
+ * We convert the arguments to the operation into variables, instead of generic expressions.
+ * This includes index expressions on the LHS of memory assignments, not just RHS expressions.
+ */
 object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
 
   var usedVars: Set[Id] = Set()
