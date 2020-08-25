@@ -32,6 +32,8 @@ object BSVPrettyPrinter {
         ""
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
+    case BMemType(elem, addrSize) => "TODO MEM TYPE"
+    case BRespType(mtyp) => "TOTO RESP#(" + toBSVTypeStr(mtyp) + ")"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {

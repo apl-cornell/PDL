@@ -1,0 +1,29 @@
+pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<16>[32]] {
+    acquire(imem);
+    int<16> insn <- imem[pc];
+    release(imem);
+    ---
+    int<1> op_type = insn{0:0};
+    int<5> rs1 = insn{5:1};
+    int<5> rs2 = insn{10:6};
+    int<5> rd = insn{15:11};
+    acquire(rf);
+    int<32> arg1 <- rf[rs1];
+    int<32> arg2 <- rf[rs2];
+    ---
+    int<32> offset = ((op_type == 0b0<1>) && (arg1 == arg2)) ? 0b0<27> ++ rd : 4<32>;
+    int<32> npc = pc + offset;
+    int<32> alu_res = arg1 + arg2;
+    ---
+    if (op_type == 0b1<1>) {
+        rf[rd] <- alu_res;
+    }
+    release(rf);
+    call cpu(npc);
+}
+
+circuit {
+    i = memory(int<16>, 32);
+    r = memory(int<32>, 5);
+    c = new cpu(0<32>)[r, i, d];
+}

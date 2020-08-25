@@ -36,8 +36,8 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
       case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) => {
         val handle = EVar(Id("_req_" + mem.v + "_" + msgCount))
         msgCount += 1
-        handle.id.typ = mem.typ
-        handle.typ = mem.typ
+        handle.id.typ = Some(TRespType(mem.typ.get))
+        handle.typ = handle.id.typ
         val send = IMemSend(isWrite = false, handle, mem, None, index)
         val recv = IMemRecv(handle, mem, Some(lhs))
         (send, recv)
@@ -46,8 +46,8 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
       case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => {
         val handle = EVar(Id("_req_" + mem.v + "_" + msgCount))
         msgCount += 1
-        handle.id.typ = mem.typ
-        handle.typ = mem.typ
+        handle.id.typ = Some(TRespType(mem.typ.get))
+        handle.typ = handle.id.typ
         val send = IMemSend(isWrite = true, handle, mem, Some(data), index)
         val recv = IMemRecv(handle, mem, None)
         (send, recv)

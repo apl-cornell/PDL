@@ -72,6 +72,8 @@ object Utilities {
     case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case ISpeculate(s, svar, _) => Set(s, svar.id)
+    case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
+    case IMemSend(_, handle, _, _, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -92,21 +94,26 @@ object Utilities {
         v ++ getUsedVars(c.cond) ++ getUsedVars(c.body)
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
-    case CAssign(lhs, rhs) => getUsedVars(rhs)
+    case CAssign(_, rhs) => getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
       case e:EMemAccess => getUsedVars(e)
       case _ => Set()
     })
-    case CCall(id, args) => args.foldLeft[Set[Id]](Set())( (s, a) => s ++ getUsedVars(a) )
+    case CCall(_, args) => args.foldLeft[Set[Id]](Set())( (s, a) => s ++ getUsedVars(a) )
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case CSpeculate(predVar, predVal, verify, body) => getUsedVars(predVal) ++ getUsedVars(verify) ++ getUsedVars(body)
+    case CSpeculate(_, predVal, verify, body) => getUsedVars(predVal) ++ getUsedVars(verify) ++ getUsedVars(body)
     case CCheck(predVar) => Set(predVar)
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
     case ISpeculate(_,_, value) => getUsedVars(value)
+    case IMemRecv(handle, _, _) => Set(handle.id)
+    case IMemSend(_, _, _, data, addr) =>
+      if (data.isDefined) {
+        Set(data.get.id, addr.id)
+      } else Set(addr.id)
     case _ => Set()
   }
 
@@ -116,13 +123,13 @@ object Utilities {
    * @return
    */
   def getUsedVars(e: Expr): Set[Id] = e match {
-    case EUop(op, ex) => getUsedVars(ex)
-    case EBinop(op, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
-    case ERecAccess(rec, fieldName) => getUsedVars(rec)
-    case EMemAccess(mem, index) => getUsedVars(index) //memories aren't variables, they're externally defined
-    case EBitExtract(num, start, end) => getUsedVars(num)
+    case EUop(_, ex) => getUsedVars(ex)
+    case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
+    case ERecAccess(rec, _) => getUsedVars(rec)
+    case EMemAccess(_, index) => getUsedVars(index) //memories aren't variables, they're externally defined
+    case EBitExtract(num, _, _) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
-    case EApp(func, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
+    case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
       //functions are also externally defined
     case EVar(id) => id.typ = e.typ; Set(id)
     case ECast(_, exp) => getUsedVars(exp)

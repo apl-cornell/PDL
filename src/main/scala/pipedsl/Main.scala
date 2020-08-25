@@ -5,7 +5,7 @@ import common.BSVPrettyPrinter
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, CanonicalizePass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, CanonicalizePass, ConvertRecvPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
@@ -35,6 +35,8 @@ object Main {
     val stageInfo = SplitStagesPass.run(prog_recv)
     stageInfo.foreachEntry( (n, s) => {
       val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
+      val convertrecv = new ConvertRecvPass()
+      convertrecv.run(s)
       AddEdgeValuePass.run(s)
       val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
       val bsvprog = BluespecGeneration.getBSV(s.head, flattenStageList(s.tail))

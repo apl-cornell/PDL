@@ -51,6 +51,7 @@ object Syntax {
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size) => s"${elem.toString}[${size}]"
       case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
+      case TRespType(modtyp) => s"Resp($modtyp)"
     }
   }
   // Types that can be upcast to Ints
@@ -59,11 +60,11 @@ object Syntax {
   // Use case class instead of case object to get unique positions
   case class TVoid() extends Type
   case class TBool() extends Type
-
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type]) extends Type
+  case class TRespType(modtyp: Type) extends Type
 
   /**
    * Define common helper methods implicit classes.
