@@ -13,6 +13,8 @@ object BluespecGeneration {
   private val fifoType = "FIFOF"
   private val fifoModuleName = "mkFIFOF"
 
+  private val memType = ""
+
   type EdgeInfo = Map[PipelineEdge, BStructDef]
 
   //Normal Map that special cases when checking the first Stage as part of the key
