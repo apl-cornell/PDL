@@ -39,7 +39,7 @@ object Main {
       convertrecv.run(s)
       AddEdgeValuePass.run(s)
       val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
-      val bsvprog = BluespecGeneration.getBSV(s.head, flattenStageList(s.tail))
+      val bsvprog = BluespecGeneration.getBSV(mod, s.head, flattenStageList(s.tail))
       bsvWriter.printBSVProg(bsvprog)
       //BluespecGeneration.run(s.head, mod.inputs, s.tail)
       //PrettyPrinter.printStages(s)

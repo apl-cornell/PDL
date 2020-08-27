@@ -2,7 +2,8 @@ package pipedsl.passes
 
 import pipedsl.common.Syntax._
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Errors.{UnexpectedExpr}
+import pipedsl.common.Errors.UnexpectedExpr
+import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
 
 /**
@@ -14,7 +15,7 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
 
   private var msgCount = 0
   override def run(stgs: List[PStage]): List[PStage] = {
-    stgs.foreach(s => {
+    flattenStageList(stgs).foreach(s => {
       convertRecvs(s)
     })
     stgs

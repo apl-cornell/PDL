@@ -32,7 +32,8 @@ object BSVPrettyPrinter {
         ""
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
-    case BMemType(elem, addrSize) => "TODO MEM TYPE"
+    case BMemType(elem, addrSize) => "TODO MEM TYPE#(" + toBSVTypeStr(BSizedInt(false, addrSize)) +  ", " +
+      toBSVTypeStr(elem) + ")"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -74,6 +75,7 @@ object BSVPrettyPrinter {
     case BMethodInvoke(mod, method, args) =>
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       toBSVExprStr(mod) + "." + method + "(" + argstring + ")"
+    case BDontCare => "?"
   }
 
   def getFilePrinter(name: String): BSVPretyPrinterImpl = {
@@ -120,8 +122,10 @@ object BSVPrettyPrinter {
     }
 
     def printBSVStatement(stmt: BStatement): Unit = stmt match {
+      case BStmtSeq(stmts) => { stmts.foreach(s => printBSVStatement(s)) }
       case BExprStmt(expr) => w.write(mkStatementString(toBSVExprStr(expr)))
       case BModInst(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
+      case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "=", toBSVExprStr(rhs)))
@@ -139,8 +143,12 @@ object BSVPrettyPrinter {
     }
 
     def printBSVRule(rule: BRuleDef): Unit = {
-      val condString = rule.conds.map(c => toBSVExprStr(c)).mkString(" && ")
-      w.write(mkStatementString("rule", rule.name, "(", condString, ")"))
+      val condString = if (rule.conds.nonEmpty) {
+        "(" + rule.conds.map(c => toBSVExprStr(c)).mkString(" && ") + ")"
+      } else {
+        ""
+      }
+      w.write(mkStatementString("rule", rule.name, condString))
       incIndent()
       rule.body.foreach(b => printBSVStatement(b))
       decIndent()

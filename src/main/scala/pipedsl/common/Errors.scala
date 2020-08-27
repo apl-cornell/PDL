@@ -120,4 +120,6 @@ object Errors {
   )
 
   case class IllegalBSVStage(msg: String) extends RuntimeException(msg)
+
+  case class UnexpectedBSVType(msg: String) extends RuntimeException(msg)
 }

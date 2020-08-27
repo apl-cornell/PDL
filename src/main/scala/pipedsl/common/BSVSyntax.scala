@@ -21,6 +21,11 @@ object BSVSyntax {
   case object BBool extends BSVType
   case object BEmptyModule extends BSVType
 
+  /**
+   *
+   * @param t
+   * @return
+   */
   def toBSVType(t: Type): BSVType = t match {
     case Syntax.TMemType(elem, addrSize) => BMemType(toBSVType(elem), addrSize)
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
@@ -34,6 +39,11 @@ object BSVSyntax {
     case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
   }
 
+  /**
+   *
+   * @param e
+   * @return
+   */
   def toBSVExpr(e: Expr): BExpr = e match {
     case EInt(v, base, bits) => BIntLit(v, base, bits)
     case EBool(v) => BBoolLit(v)
@@ -54,6 +64,11 @@ object BSVSyntax {
     case expr: CirExpr =>throw new UnexpectedExpr(e)
   }
 
+  /**
+   *
+   * @param typ
+   * @return
+   */
   def getCanonicalStruct(typ: BStruct): BStructLit = {
     val argmap = typ.fields.foldLeft(Map[BVar, BExpr]())((m, f) => {
       m + (BVar(f.name, f.typ) -> BVar(f.name, f.typ))
@@ -63,6 +78,7 @@ object BSVSyntax {
 
   sealed trait BExpr
 
+  case object BDontCare extends BExpr
   case class BCaseExpr(cond: BExpr, cases: List[(BExpr, BExpr)]) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
@@ -74,14 +90,16 @@ object BSVSyntax {
   case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
-  case class BMethodInvoke(mod: BVar, method: String, args: List[BExpr]) extends BExpr
+  case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
 
   sealed trait BStatement
 
+  case class BStmtSeq(stmts: List[BStatement]) extends BStatement
   case class BExprStmt(expr: BExpr) extends BStatement
   case class BModInst(lhs: BVar, rhs: BModule) extends BStatement
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
+  case class BInvokeAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BDecl(lhs: BVar, rhs: BExpr) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
 
@@ -96,4 +114,20 @@ object BSVSyntax {
   case class BImport(name: String)
   case class BProgram(topModule: BModuleDef, imports: List[BImport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
+
+  /**
+   *
+   * @param name
+   * @param rules
+   * @return
+   */
+  def combineRules(name: String, rules: Iterable[BRuleDef]): BRuleDef = {
+    val newcond = rules.foldLeft(List[BExpr]())((l, r) => {
+      l ++ r.conds
+    })
+    val newstmts = rules.foldLeft(List[BStatement]())((l, r) => {
+      l ++ r.body
+    })
+    BRuleDef(name, newcond, newstmts)
+  }
 }
