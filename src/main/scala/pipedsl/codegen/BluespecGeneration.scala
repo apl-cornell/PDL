@@ -13,7 +13,8 @@ object BluespecGeneration {
   private val fifoType = "FIFOF"
   private val fifoModuleName = "mkFIFOF"
 
-  private val memType = ""
+  private val memType = "BRAM"
+  private val memModuleName = "mkBRAM1Server"
 
   type EdgeInfo = Map[PipelineEdge, BStructDef]
 
@@ -253,10 +254,11 @@ object BluespecGeneration {
   private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
     case CAssign(lhs, rhs) =>
       Some(BDecl(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))
-    case ICondCommand(cond: Expr, c: Command) =>
-      Some(BIf(toBSVExpr(cond), List(getCombinationalCommand(c).get), List()))
+    case ICondCommand(cond: Expr, c: Command) => getCombinationalCommand(c) match {
+      case Some(bc) => Some(BIf(toBSVExpr(cond), List(bc), List()))
+      case None => None
+    }
     case CExpr(exp) => Some(BExprStmt(toBSVExpr(exp)))
-    case CRecv(lhs, rhs) => None
     case CCall(id, args) => None
     case CLockOp(mem, op) => None
     case CCheck(predVar) => None
@@ -268,6 +270,7 @@ object BluespecGeneration {
     case v: IMemSend => None
     case v: ISend => None
     case v: IRecv => None
+    case CRecv(lhs, rhs) => throw UnexpectedCommand(cmd)
     case CIf(cond, cons, alt) => throw UnexpectedCommand(cmd)
     case CSeq(c1, c2) => throw UnexpectedCommand(cmd)
     case CTBar(c1, c2) => throw UnexpectedCommand(cmd)
@@ -277,5 +280,33 @@ object BluespecGeneration {
     case CSplit(cases, default) => throw UnexpectedCommand(cmd)
   }
 
+  private def getSynchronousCommand(cmd: Command): Option[BStatement] = cmd match {
+      //TODO implement calls to beginning of pipeline
+    case CCall(id, args) => None
+      //TODO implement locks
+    case CLockOp(mem, op) => None
+    case ICondCommand(cond: Expr, c: Command) => getSynchronousCommand(c) match {
+      case Some(bc) => Some(BIf(toBSVExpr(cond), List(bc), List()))
+      case None => None
+    }
+    case IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) => None
+    case IMemRecv(mem: Id, data: Option[EVar]) => data match {
+      case Some(v) =>
+      case None => None
+    }
+    case CAssign(lhs, rhs) => None
+    case CExpr(exp) => None
+    case CEmpty => None
+    case command: InternalCommand => throw UnexpectedCommand(cmd)
+    case CCheck(predVar) => throw UnexpectedCommand(cmd)
+    case CRecv(lhs, rhs) => throw UnexpectedCommand(cmd)
+    case CSeq(c1, c2) => throw UnexpectedCommand(cmd)
+    case CTBar(c1, c2) => throw UnexpectedCommand(cmd)
+    case CIf(cond, cons, alt) => throw UnexpectedCommand(cmd)
+    case COutput(exp) => throw UnexpectedCommand(cmd)
+    case CReturn(exp) => throw UnexpectedCommand(cmd)
+    case CSpeculate(predVar, predVal, verify, body) => throw UnexpectedCommand(cmd)
+    case CSplit(cases, default) => throw UnexpectedCommand(cmd)
+  }
 
 }

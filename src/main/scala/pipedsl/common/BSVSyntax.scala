@@ -14,7 +14,6 @@ object BSVSyntax {
   sealed trait BSVType
 
 
-  case class BRespType(modtyp: BSVType) extends BSVType
   case class BMemType(elem: BSVType, addrSize: Int) extends BSVType
   case class BStruct(name: String, fields: List[BVar]) extends BSVType
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
@@ -23,7 +22,6 @@ object BSVSyntax {
   case object BEmptyModule extends BSVType
 
   def toBSVType(t: Type): BSVType = t match {
-    case Syntax.TRespType(mtyp) => BRespType(toBSVType(mtyp))
     case Syntax.TMemType(elem, addrSize) => BMemType(toBSVType(elem), addrSize)
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
     case Syntax.TBool() => BBool

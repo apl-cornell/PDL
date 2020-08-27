@@ -34,22 +34,14 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
     (c.lhs, c.rhs) match {
         //Mem Read
       case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) => {
-        val handle = EVar(Id("_req_" + mem.v + "_" + msgCount))
-        msgCount += 1
-        handle.id.typ = Some(TRespType(mem.typ.get))
-        handle.typ = handle.id.typ
-        val send = IMemSend(isWrite = false, handle, mem, None, index)
-        val recv = IMemRecv(handle, mem, Some(lhs))
+        val send = IMemSend(isWrite = false, mem, None, index)
+        val recv = IMemRecv(mem, Some(lhs))
         (send, recv)
       }
         //Mem Write
       case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => {
-        val handle = EVar(Id("_req_" + mem.v + "_" + msgCount))
-        msgCount += 1
-        handle.id.typ = Some(TRespType(mem.typ.get))
-        handle.typ = handle.id.typ
-        val send = IMemSend(isWrite = true, handle, mem, Some(data), index)
-        val recv = IMemRecv(handle, mem, None)
+        val send = IMemSend(isWrite = true, mem, Some(data), index)
+        val recv = IMemRecv(mem, None)
         (send, recv)
       }
       //TODO throw better error, also handle CALLs to other modules

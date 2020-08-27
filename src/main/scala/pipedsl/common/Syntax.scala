@@ -51,7 +51,6 @@ object Syntax {
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size) => s"${elem.toString}[${size}]"
       case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
-      case TRespType(modtyp) => s"Resp($modtyp)"
     }
   }
   // Types that can be upcast to Ints
@@ -64,7 +63,6 @@ object Syntax {
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type]) extends Type
-  case class TRespType(modtyp: Type) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -178,8 +176,8 @@ object Syntax {
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
   case class ISend(handle: EVar, receiver: EVar, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
-  case class IMemSend(isWrite: Boolean, handle: EVar, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
-  case class IMemRecv(handle: EVar, mem: Id, data: Option[EVar]) extends InternalCommand
+  case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
+  case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
