@@ -1,14 +1,57 @@
 # SpecLang
 
-This repository contains notes and examples for a mid-high level hardware description language,
-which abstracts communication between computation stages for the purpose
-of proving time-dependent properties. In particular, one idea is to
-prove that speculative state is always "verified" before reaching
-architectural state (i.e. state which may not be speculative).
+This language provides a high level, imperative-style programming model
+for building pipelined processors and accelerators.
+Designers use scheduling and optimization operators to define
+when computations happen and to enable common hardware optimizations
+like out-of-order execution and speculation.
 
-The `notes` directory contains various ideas for languages that fulfill this goal.
-In particular it currently contains a `semantics` directory that contains the specification for
-potential semantics for a "speculation aware" language, inspired by "type state".
+## Set Up
 
-The `examples` directory contains example programs and explanations as
-to what they should or should not do.
+### Dependencies
+
+The compiler is built in [Scala](https://www.scala-lang.org/) and currently targets
+[Bluespec System Verilog](https://github.com/B-Lang-org/bsc) (BSV) as the output language.
+
+You will need a Java runtime, Scala, and [sbt](https://www.scala-sbt.org/) to build
+and run the compiler.
+
+
+- Install Java:
+ - On Linux: 
+ - On Mac: `brew tap AdoptOpenJDK/openjdk && brew cask install adoptopenjdk8`
+- Install Scala and sbt:
+ - Install an IDE like [intellij](https://www.jetbrains.com/idea/) and install the scala/sbt plugins (recommended)
+ - OR
+ - On Mac: `brew install scala sbt`
+ - On Linux: TODO
+
+You will need the Bluespec compiler and simulator to run end-to-end tests.
+The instructions can be found on the bluespec github. Linux is currently
+the only supported platform.
+
+### Building the Compiler
+
+In the top-level directory of this repo, run `sbt compile`.
+
+TODO is to add an `assembly` directive to build an executable jar.
+
+### Running the Compiler
+
+The main class is `pipedsl.Main` and can be run via
+the sbt command `sbt run pipedsl.Main <args>`.
+
+At the moment, the compiler takes a single argument which is the
+file path of the single source file to compile.
+
+## Compiler Structure
+
+Here we describe each of the packages and their contents and
+then we will describe the high level architecture of compilation.
+
+Packages:
+
+- pipedsl
+ - The toplevel package containing the main file and some of the other primary components,
+ such as the parser.
+-

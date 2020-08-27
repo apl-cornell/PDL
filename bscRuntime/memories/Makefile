@@ -1,7 +1,7 @@
 LABNAME = Stages Stuff
 
 BSC=bsc -no-show-timestamps -no-show-version
-B_IN=rf.bsv
+B_IN=bram.bsv
 
 OUT=Top
 
@@ -42,7 +42,7 @@ mk$(OUT).v: $(B_IN)
 	$(BSC) -show-schedule -verilog $(B_IN)
 
 .PHONY: sim
-sim: $(B_IN).bsv
+sim: $(B_IN)
 
 	$(BSC) -sim $(B_IN)
 	$(BSC) -sim -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
