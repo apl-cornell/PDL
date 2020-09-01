@@ -2,6 +2,7 @@ package pipedsl.common
 
 import pipedsl.common.BSVSyntax.MethodType.MethodType
 import pipedsl.common.Errors.UnexpectedExpr
+import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
@@ -14,7 +15,8 @@ object BSVSyntax {
   sealed trait BSVType
 
 
-  case class BMemType(elem: BSVType, addrSize: Int) extends BSVType
+  case class BCombMemType(elem: BSVType, addrSize: Int) extends BSVType
+  case class BAsyncMemType(elem: BSVType, addrSize: Int) extends BSVType
   case class BStruct(name: String, fields: List[BVar]) extends BSVType
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
@@ -27,7 +29,8 @@ object BSVSyntax {
    * @return
    */
   def toBSVType(t: Type): BSVType = t match {
-    case Syntax.TMemType(elem, addrSize) => BMemType(toBSVType(elem), addrSize)
+    case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
+    case Syntax.TMemType(elem, addrSize, rlat, _) => BAsyncMemType(toBSVType(elem), addrSize)
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
     case Syntax.TBool() => BBool
       //TODO others
@@ -59,7 +62,7 @@ object BSVSyntax {
     case EApp(func, args) => BIntLit(0, 10, 1)
     case ERecAccess(rec, fieldName) => throw new UnexpectedExpr(e)
     case ERecLiteral(fields) => throw new UnexpectedExpr(e)
-    case EMemAccess(mem, index) => throw new UnexpectedExpr(e)
+    case EMemAccess(mem, index) => BMemRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
     case ECast(ctyp, exp) => throw new UnexpectedExpr(e)
     case expr: CirExpr =>throw new UnexpectedExpr(e)
   }
@@ -91,6 +94,7 @@ object BSVSyntax {
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
+  case class BMemRead(mem: BVar, addr: BExpr) extends BExpr
 
   sealed trait BStatement
 
@@ -102,6 +106,9 @@ object BSVSyntax {
   case class BInvokeAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BDecl(lhs: BVar, rhs: BExpr) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
+  case class BMemReadReq(mem: BVar, addr: BExpr) extends BStatement
+  case class BMemReadResp(lhs: BVar, mem: BVar) extends BStatement
+  case class BMemWrite(mem: BVar, addr: BExpr, data: BExpr) extends BStatement
 
 
   case class BStructDef(typ: BStruct, derives: List[String])

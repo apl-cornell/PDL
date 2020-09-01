@@ -15,9 +15,6 @@ object BluespecGeneration {
   private val fifoType = "FIFOF"
   private val fifoModuleName = "mkFIFOF"
 
-  private val memType = "BRAM"
-  private val memModuleName = "mkBRAM1Server"
-
   type EdgeInfo = Map[PipelineEdge, BStructDef]
   type ModInfo = Map[Id, BVar]
   //Normal Map that special cases when checking the first Stage as part of the key
@@ -57,10 +54,12 @@ object BluespecGeneration {
   def getWireType(typ: BSVType): BInterface = {
     BInterface(wireType, List(BVar("elemtyp", typ)))
   }
+
   //TODO generate a struct literal that represents passing parameters to an external modules
   //only works for memories right now.
   def getRequestStruct(modTyp: BSVType, sendreq: Command): BStructLit = modTyp match {
-    case t@BMemType(_, _) => sendreq match { case c: IMemSend => getMemRequestStruct(t, c) }
+    case BCombMemType(e, a) => sendreq match { case c: IMemSend => getMemRequestStruct(e, a, c) }
+    case BAsyncMemType(e, a) => sendreq match { case c: IMemSend => getMemRequestStruct(e, a, c) }
     case BInterface(name, tparams) => //TODO
       throw UnexpectedBSVType(s"Type $modTyp does not receive requests")
     case _ => throw UnexpectedBSVType(s"Type $modTyp does not receive requests")
@@ -70,16 +69,17 @@ object BluespecGeneration {
    * Given a memory request, generates the corresponding
    * memory request struct, according to the compiler's configured memory type
    * and the type of memory the request is for.
-   * @param typ - The memory type that the request is targeting
+   * @param elem - The type of elements the memory contains
+   * @param addrSize - The number of bits in the address field of the memory
    * @param sendreq - The memory send operation
    * @return - The struct representing the request to the appropriate type of memory.
    */
-  def getMemRequestStruct(typ: BMemType, sendreq: IMemSend): BStructLit = {
+  def getMemRequestStruct(elem: BSVType, addrSize: Int, sendreq: IMemSend): BStructLit = {
     val fields: Map[BVar, BExpr] = Map(
       BVar("write", BBool) -> BBoolLit(sendreq.isWrite),
       BVar("responseOnWrite", BBool) -> BBoolLit(false),
-      BVar("address", BSizedInt(unsigned = true, typ.addrSize)) -> toBSVExpr(sendreq.addr),
-      BVar("datain", typ.elem) -> (sendreq.data match {
+      BVar("address", BSizedInt(unsigned = true, addrSize)) -> toBSVExpr(sendreq.addr),
+      BVar("datain", elem) -> (sendreq.data match {
         case Some(din) => toBSVExpr(din)
         case None => BDontCare
       })
@@ -170,7 +170,6 @@ object BluespecGeneration {
    */
   private def getStageModule(stg: PStage, edgeMap: EdgeMap, mods: ModInfo): BModuleDef = {
     //Define module parameters to communicate along pipeline edges
-    //TODO also generate the memory parameters we expect to read from/write to
     val outMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
       val edgeStructType = edgeMap(e)
       m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
@@ -179,9 +178,10 @@ object BluespecGeneration {
       val edgeStructType = edgeMap(e)
       m + (e -> BVar(genParamName(e.from), getFifoType(edgeStructType)))
     })
-    //TODO only pass the module parameters that are actually needed
+    //TODO only pass the module parameters that are actually needed instead of all
     val params = inOutMap.values.toList ++ mods.values
-    //Generate the combinational connections and Wire definitions for communicating between rules
+    //Generate set of definitions needed by rule conditions
+    //(declaring variables read from unconditional inputs)
     val sBody = getStageBody(stg, inOutMap, edgeMap)
     //Generate the set of execution rules for reading args and writing outputs
     val execRules: List[BRuleDef] = getExecRules(stg, edgeMap, inOutMap, mods)
@@ -195,9 +195,7 @@ object BluespecGeneration {
   //to ensure that the compiler makes this always true.
   /**
    * Given a pipeline stage, generate the list of execution rules
-   * that correspond to reading inputs and writing outputs. The generated
-   * rules guarantee that reads and writes always happen in the same cycle,
-   * even if they are different rules.
+   * that correspond to reading inputs and computing and writing outputs.
    * @param stg - The pipeline stage to process
    * @param edgeMap - The edge to BSV type lookup info
    * @param paramMap - The edge to module param info (a.k.a which variable represents the edge fifo)
@@ -269,24 +267,24 @@ object BluespecGeneration {
       })
     }
   }
+
   /**
    * Given a stage and the relevant edge information, generate the
-   * read rules for the stage which involve reading data from the input
-   * edges and also any input modules (memories, etc.)
+   * read rules for the stage which involve reading data from the
+   * conditional input edges and also any input modules (memories, etc.)
    * @param stg - The stage to process
    * @param edgeMap - Edge to Struct Type Mapping
    * @param paramMap - Edge to Parameter name Mapping
    * @return A list of BSV rules
    */
   private def getReadRules(stg: PStage, edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar], mods: ModInfo): List[BRuleDef] = {
-    val (condIn, uncondIn) = stg.inEdges.partition(e => e.condRecv.isDefined)
-    val uncondInStmts = getEdgeStatements(stg, uncondIn, edgeMap, paramMap, readInputs = false)
+    val condIn = stg.inEdges.filter(e => e.condRecv.isDefined)
     val readCmdStmts = getReadCmds(stg.cmds, mods)
     if (condIn.isEmpty) {
-      List(BRuleDef("readInputs", List(), uncondInStmts ++ readCmdStmts))
+      List(BRuleDef("readInputs", List(), readCmdStmts))
     } else {
       condIn.foldLeft(List[BRuleDef]())((l, e) => {
-        val inStmts = getEdgeStatements(stg, List(e), edgeMap, paramMap, readInputs = true) ++ uncondInStmts ++ readCmdStmts
+        val inStmts = getEdgeStatements(stg, List(e), edgeMap, paramMap, readInputs = true) ++ readCmdStmts
         //each rule has the read stmts for that edge, and all the unconditional reads
         l :+ BRuleDef("input_" + l.size, List(toBSVExpr(e.condRecv.get)), inStmts)
       })
@@ -434,12 +432,7 @@ object BluespecGeneration {
     case IMemSend(_: Boolean, _: Id, _: Option[EVar], _: EVar) => None
     case IMemRecv(mem: Id, data: Option[EVar]) => data match {
       case Some(v) => {
-        val tmpVar = BVar("_" + mem.v + "_resp_" + v.id.v, toBSVType(v.typ.get))
-        //TODO make configurable and figure out how to determine the port,
-        //if multiple ports are supported
-        val getPort = BMethodInvoke(mods(mem), "portA", List())
-        val getResp = BMethodInvoke(getPort, "response", List())
-        Some(BInvokeAssign(BVar(v.id.v, toBSVType(v.typ.get)), BMethodInvoke(getResp, "get", List())))
+        Some(BMemReadResp(BVar(v.id.v, toBSVType(v.typ.get)), mods(mem)))
       }
       case None => None
     }
@@ -483,13 +476,12 @@ object BluespecGeneration {
     }
     //TODO implement locks
     case CLockOp(mem, op) => None
-    //TODO no magic variables, tie to memory implementation configuration
-    case c@IMemSend(_: Boolean, mem: Id, _: Option[EVar], _: EVar) => {
-      val request = getRequestStruct(mods(mem).typ, c)
-      val getPort = BMethodInvoke(mods(mem), "portA", List())
-      val getReq = BMethodInvoke(getPort, "request", List())
-      val putReq = BMethodInvoke(getReq, "put", List(request))
-      Some(BExprStmt(putReq))
+    case IMemSend(isWrite, mem: Id, data: Option[EVar], addr: EVar) => {
+      if (isWrite) {
+        Some(BMemWrite(mods(mem), toBSVExpr(addr), toBSVExpr(data.get)))
+      } else {
+        Some(BMemReadReq(mods(mem), toBSVExpr(addr)))
+      }
     }
     //TODO implement calls
     case CCall(id, args) => None

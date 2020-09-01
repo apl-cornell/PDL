@@ -32,8 +32,10 @@ object BSVPrettyPrinter {
         ""
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
-    case BMemType(elem, addrSize) => "TODO MEM TYPE#(" + toBSVTypeStr(BSizedInt(false, addrSize)) +  ", " +
-      toBSVTypeStr(elem) + ")"
+    case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
+      toBSVTypeStr(BSizedInt(false, addrSize)) + ")"
+    case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
+      toBSVTypeStr(BSizedInt(false, addrSize)) + ")"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -50,6 +52,8 @@ object BSVPrettyPrinter {
         toBSVExprStr(c._1) + ": return " + toBSVExprStr(c._2)
       }).mkString(";")
       mkExprString("case (", toBSVExprStr(cond), ")", caseString,"endcase")
+      //TODO make this not a magic method name, import from config
+    case BMemRead(mem, addr) => toBSVExprStr(mem) + ".read(" + toBSVExprStr(addr) + ")"
     case BBoolLit(v) => if (v) { "True" } else { "False" }
     case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
     case BStructLit(typ, fields) =>
@@ -129,6 +133,13 @@ object BSVPrettyPrinter {
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "=", toBSVExprStr(rhs)))
+        //TODO no magic variables get runtime names from some configuration
+      case BMemReadReq(mem, addr) => w.write(mkStatementString(
+        toBSVExprStr(mem)+".readReq(", toBSVExprStr(addr),")"))
+      case BMemReadResp(lhs, mem) => w.write(mkStatementString(
+        toDeclString(lhs), "<-", toBSVExprStr(mem) + ".readResp()"))
+      case BMemWrite(mem, addr, data) => w.write(mkStatementString(
+        toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
       case BIf(cond, trueBranch, falseBranch) =>
         w.write(mkStatementString("if", "(", toBSVExprStr(cond) + ")"))
         w.write(mkIndentedExpr("begin\n"))
