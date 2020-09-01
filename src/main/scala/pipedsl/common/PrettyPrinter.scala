@@ -114,6 +114,7 @@ object PrettyPrinter {
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
+      case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirNew(mod, inits, mods) => "new " + mod.v +
         "(" + inits.map(i => printExprToString(i)).mkString(",") + ")" +
         "[" + mods.map(m => m.v).mkString(",") + "]"
@@ -128,7 +129,7 @@ object PrettyPrinter {
     case TBool() => "bool"
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
-    case TMemType(elem, addrSize) =>printTypeToString(elem) + "[" + addrSize.toString + "]"
+    case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
     case TModType(inputs, refs) => "TODO MOD TYPE"
   }
 

@@ -2,9 +2,10 @@ package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedPipelineStatement}
+import pipedsl.common.Errors.{MissingType, UnavailableArgUse, UnexpectedAsyncReference, UnexpectedPipelineStatement, UnexpectedSyncReference, UnexpectedType}
 import pipedsl.common.Syntax
 import Environments.Environment
+import pipedsl.common.Syntax.Latency.{Combinational, Latency, join}
 
 /**
  * - Checks that variables set by receive statements
@@ -33,7 +34,7 @@ object TimingTypeChecker extends TypeChecks[Type] {
     val allAvailable = m.modules.foldLeft[Available](inputs)((av, m) => {
       av + m.name
     })
-    checkCommand(m.body, allAvailable, NoneAvailable, insideCond = false)
+    checkCommand(m.body, allAvailable, NoneAvailable)
     env
   }
 
@@ -42,47 +43,49 @@ object TimingTypeChecker extends TypeChecks[Type] {
    * @param c
    * @param vars
    * @param nextVars
-   * @param insideCond
    * @return
    */
-  def checkCommand(c: Command, vars: Available, nextVars: Available, insideCond: Boolean): (Available, Available) = c match {
+  def checkCommand(c: Command, vars: Available, nextVars: Available): (Available, Available) = c match {
     case CSeq(c1, c2) => {
-      val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
-      checkCommand(c2, v2, nv2, insideCond)
+      val (v2, nv2) = checkCommand(c1, vars, nextVars)
+      checkCommand(c2, v2, nv2)
     }
     case CTBar(c1, c2) => {
-      val (v2, nv2) = checkCommand(c1, vars, nextVars, insideCond)
-      checkCommand(c2, v2 ++ nv2, NoneAvailable, insideCond)
+      val (v2, nv2) = checkCommand(c1, vars, nextVars)
+      checkCommand(c2, v2 ++ nv2, NoneAvailable)
     }
     case CSplit(cases, default) => {
-      if (insideCond) { throw UnexpectedPipelineStatement(c.pos, "pipeline split")}
-      var (endv, endnv) = checkCommand(default, vars, nextVars, insideCond)
+      var (endv, endnv) = checkCommand(default, vars, nextVars)
       for (c <- cases) {
-        if(checkExpr(c.cond, vars)) {
+        if(checkExpr(c.cond, vars) != Latency.Combinational) {
           throw UnexpectedAsyncReference(c.cond.pos, c.cond.toString)
         }
-        val (v2, nv2) = checkCommand(c.body, vars, nextVars, insideCond)
+        val (v2, nv2) = checkCommand(c.body, vars, nextVars)
         endv = endv.intersect(v2)
         endnv = endnv.intersect(nv2)
       }
       (endv, endnv)
     }
     case CIf(cond, cons, alt) => {
-      if(checkExpr(cond, vars)) {
+      if(checkExpr(cond, vars) != Latency.Combinational) {
         throw UnexpectedAsyncReference(cond.pos, cond.toString)
       }
-      val (vt, nvt) = checkCommand(cons, vars, nextVars, insideCond = true)
-      val (vf, nvf) = checkCommand(alt, vars, nextVars, insideCond = true)
+      val (vt, nvt) = checkCommand(cons, vars, nextVars)
+      val (vf, nvf) = checkCommand(alt, vars, nextVars)
       (vt.intersect(vf), nvt.intersect(nvf))
     }
     case CAssign(lhs, rhs) => {
-      if (checkExpr(rhs, vars)) {
+      if (checkExpr(rhs, vars) != Latency.Combinational) {
         throw UnexpectedAsyncReference(rhs.pos, rhs.toString)
       }
       (vars + lhs.id, nextVars)
     }
     case CRecv(lhs, rhs) => {
-      checkExpr(rhs, vars)
+      val rhsLat = checkExpr(rhs, vars)
+      val lhsLat = checkExpr(lhs, vars, isRhs = false)
+      if (rhsLat == Combinational && lhsLat == Combinational) {
+        throw UnexpectedSyncReference(c.pos, s"<- statements expect a noncombinational reference")
+      }
       (lhs, rhs) match {
         case (EVar(id), EMemAccess(_, _)) => (vars, nextVars + id)
         case (EVar(id), _) => throw UnexpectedAsyncReference(lhs.pos, s"rhs of '$id <-' but be a memory or module reference")
@@ -92,36 +95,36 @@ object TimingTypeChecker extends TypeChecks[Type] {
     }
     case CLockOp(_, _) => (vars, nextVars)
     case CSpeculate(predVar, predVal, verify, body) => {
-      if(checkExpr(predVal, vars)) {
+      if(checkExpr(predVal, vars) != Combinational) {
         throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")
       }
-      val (varsv, nvarsv) = checkCommand(verify, vars ++ nextVars, NoneAvailable, insideCond)
-      val (vars2, nvars2) = checkCommand(body, vars + predVar.id ++ nextVars, NoneAvailable, insideCond)
+      val (varsv, nvarsv) = checkCommand(verify, vars ++ nextVars, NoneAvailable)
+      val (vars2, nvars2) = checkCommand(body, vars + predVar.id ++ nextVars, NoneAvailable)
       (varsv ++ vars2, nvarsv ++ nvars2)
     }
-    case CCheck(predVar) => {
+    case CCheck(_) => {
       (vars, nextVars)
     }
     case CCall(_, args) => {
-      args.foreach(a => if(checkExpr(a, vars)) {
+      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       (vars, nextVars)
     }
     case COutput(exp) => {
-      if (checkExpr(exp, vars)) {
+      if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)
       }
       (vars, nextVars)
     }
     case CReturn(exp) => {
-      if (checkExpr(exp, vars)) {
+      if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)
       }
       (vars, nextVars)
     }
     case CExpr(exp) => {
-      if (checkExpr(exp, vars)) {
+      if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)
       }
       (vars, nextVars)
@@ -129,25 +132,28 @@ object TimingTypeChecker extends TypeChecks[Type] {
     case Syntax.CEmpty => (vars, nextVars)
   }
 
-  //Returns true if any subexpression references memory or an external module
-  def checkExpr(e: Expr, vars: Available): Boolean = e match {
-    case EUop(_, e) => checkExpr(e, vars)
+  def checkExpr(e: Expr, vars: Available, isRhs: Boolean = true): Latency = e match {
+    case EUop(_, e) => checkExpr(e, vars, isRhs)
     case EBinop(_, e1, e2) => {
-      checkExpr(e1, vars) || checkExpr(e2, vars)
+      join(checkExpr(e1, vars, isRhs), checkExpr(e2, vars, isRhs))
     }
-    case ERecAccess(rec, _) => checkExpr(rec, vars)
-    case EMemAccess(_, index) => {
-      checkExpr(index, vars)
-      true
+    case ERecAccess(rec, _) => checkExpr(rec, vars, isRhs)
+    case EMemAccess(m, index) => m.typ.get match {
+      case TMemType(_, _, rLat, wLat) =>{
+        val memLat = if (isRhs) { rLat } else { wLat }
+        val indexExpr = checkExpr(index, vars, isRhs)
+        join(indexExpr, memLat)
+      }
+      case _ => throw UnexpectedType(m.pos, m.v, "Mem Type", m.typ.get)
     }
-    case EBitExtract(num, _, _) => checkExpr(num, vars)
+    case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs)
     case ETernary(cond, tval, fval) => {
-      checkExpr(cond, vars) || checkExpr(tval, vars) || checkExpr(fval, vars)
+      join(join(checkExpr(cond, vars, isRhs), checkExpr(tval, vars, isRhs)), checkExpr(fval, vars, isRhs))
     }
-    case EApp(_, args) => args.foldLeft[Boolean](false)((usesMem, a) => checkExpr(a, vars) || usesMem)
-    case EVar(id) => if(!vars(id)) { throw UnavailableArgUse(e.pos, id.toString)} else { false }
-    case ECast(_, exp) => checkExpr(exp, vars)
-    case _ => false
+    case EApp(_, args) => args.foldLeft[Latency](Combinational)((lat, a) => join(checkExpr(a, vars), lat))
+    case EVar(id) => if(!vars(id) && isRhs) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
+    case ECast(_, exp) => checkExpr(exp, vars, isRhs)
+    case _ => Combinational
   }
   //No timing in the circuit, just connections
   override def checkCircuit(c: Circuit, env: Environment[Type]): Environment[Type] = env

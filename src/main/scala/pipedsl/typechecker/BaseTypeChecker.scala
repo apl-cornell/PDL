@@ -6,6 +6,7 @@ import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
 import pipedsl.common.Syntax
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 
 
 //TODO kinds of typechecking we need to do:
@@ -147,7 +148,12 @@ object BaseTypeChecker extends TypeChecks[Type] {
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Type]): (Type, Environment[Type]) = c match {
     case CirMem(elemTyp, addrSize) => {
-      val mtyp = TMemType(elemTyp, addrSize)
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
+    case CirRegFile(elemTyp, addrSize) => {
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
@@ -340,7 +346,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv)
       (memt, idxt) match {
-        case (TMemType(e, s), TSizedInt(l, true)) if l == s => (e, env1)
+        case (TMemType(e, s, _, _), TSizedInt(l, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }
