@@ -34,6 +34,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
 
   private def newVar(s: String, p: Position, t: Option[Type]): EVar = {
     val (nvar, nused, ncnt) = freshVar(s, usedVars, counter)
+    nvar.typ = t
     usedVars = nused
     counter = ncnt
     val v = EVar(nvar).setPos(p)

@@ -121,13 +121,27 @@ object BSVSyntax {
    * @param rules
    * @return
    */
-  def combineRules(name: String, rules: Iterable[BRuleDef]): BRuleDef = {
-    val newcond = rules.foldLeft(List[BExpr]())((l, r) => {
-      l ++ r.conds
-    })
-    val newstmts = rules.foldLeft(List[BStatement]())((l, r) => {
-      l ++ r.body
-    })
-    BRuleDef(name, newcond, newstmts)
+  def combineRules(name: String, rules: Iterable[BRuleDef]): Option[BRuleDef] = {
+      val newcond = rules.foldLeft(List[BExpr]())((l, r) => {
+        l ++ r.conds
+      })
+      val newstmts = rules.foldLeft(List[BStatement]())((l, r) => {
+        l ++ r.body
+      })
+      if (newstmts.isEmpty) {
+        None
+      } else {
+        Some(BRuleDef(name, newcond, newstmts))
+      }
+  }
+
+  /**
+   *
+   * @param rule
+   * @param stmts
+   * @return
+   */
+  def addStmts(rule: BRuleDef, stmts: Iterable[BStatement]): BRuleDef = {
+    BRuleDef(rule.name, rule.conds, rule.body ++ stmts)
   }
 }

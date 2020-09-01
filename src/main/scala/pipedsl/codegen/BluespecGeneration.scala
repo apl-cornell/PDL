@@ -205,7 +205,9 @@ object BluespecGeneration {
    */
   private def getExecRules(stg: PStage, edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar], mods: ModInfo): List[BRuleDef] = {
     val writeRules = getWriteRules(stg, edgeMap, paramMap, mods)
-    val readRules = getReadRules(stg, edgeMap, paramMap, mods)
+    //currently the method names are weird b/c the combinational statements
+    //used to be in the module body, but now they need to be at the end of the read rule bodies
+    val readRules = getReadRules(stg, edgeMap, paramMap, mods).map(r => addStmts(r, getCombinationalCommands(stg.cmds)))
     val condReads = readRules.filter(r => r.conds.nonEmpty)
     val condWrites = writeRules.filter(r => r.conds.nonEmpty)
     val execRules: List[BRuleDef] = (condReads.nonEmpty, condWrites.nonEmpty) match {
@@ -214,22 +216,32 @@ object BluespecGeneration {
         //has conditional inputs but no conditional outputs
         //1 rule for each cond read, and 1 write rule
         val outRule = combineRules("execOutput", writeRules)
-        val implicitOutConds = getImplicitOutputConditions(stg, edgeMap, paramMap)
-        outRule +: condReads.map(r => {
-          BRuleDef(r.name, r.conds ++ implicitOutConds, r.body)
-        })
+        if (outRule.isDefined) {
+          outRule.get +: condReads
+        } else {
+          condReads
+        }
       }
       case (false, true) => {
         //has conditional outputs but not inputs
         //one rule for each cond write which also triggers the read rules
         condWrites.foldLeft(List[BRuleDef]())((l, r) => {
           val outRule = combineRules(r.name, readRules :+ r)
-          l :+ outRule
+          if (outRule.isDefined) {
+            l :+ outRule.get
+          } else {
+            l
+          }
         })
       }
       case (false, false) => {
         //Single execute rule to do everything
-        List(combineRules("execute", readRules ++ writeRules))
+        val execrule = combineRules("execute", readRules ++ writeRules)
+        if (execrule.isDefined) {
+          List(execrule.get)
+        } else {
+          List()
+        }
       }
     }
     execRules
@@ -245,15 +257,15 @@ object BluespecGeneration {
    */
   private def getWriteRules(stg: PStage, edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar], mods: ModInfo): List[BRuleDef] = {
     val (condOut, uncondOut) = stg.outEdges.partition(e => e.condSend.isDefined)
-    val uncondOutStmts = getEdgeStatements(stg, uncondOut, edgeMap, paramMap, readInputWires = false)
+    val uncondOutStmts = getEdgeStatements(stg, uncondOut, edgeMap, paramMap, readInputs = false)
     val writeCmdStmts = getWriteCmds(stg.cmds, mods)
     if (condOut.isEmpty) {
       List(BRuleDef("writeOutputs", List(), uncondOutStmts ++ writeCmdStmts))
     } else {
       condOut.foldLeft(List[BRuleDef]())((l, e) => {
-        val outStmts = getEdgeStatements(stg, List(e), edgeMap, paramMap, readInputWires = false) ++ uncondOutStmts ++ writeCmdStmts
+        val outStmts = getEdgeStatements(stg, List(e), edgeMap, paramMap, readInputs = false) ++ uncondOutStmts ++ writeCmdStmts
         //each rule has the write stmts for that edge, and all the unconditional writes
-        l :+ BRuleDef("input_" + l.size, List(toBSVExpr(e.condSend.get)), outStmts)
+        l :+ BRuleDef("output_" + l.size, List(toBSVExpr(e.condSend.get)), outStmts)
       })
     }
   }
@@ -268,13 +280,13 @@ object BluespecGeneration {
    */
   private def getReadRules(stg: PStage, edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar], mods: ModInfo): List[BRuleDef] = {
     val (condIn, uncondIn) = stg.inEdges.partition(e => e.condRecv.isDefined)
-    val uncondInStmts = getEdgeStatements(stg, uncondIn, edgeMap, paramMap, readInputWires = false)
+    val uncondInStmts = getEdgeStatements(stg, uncondIn, edgeMap, paramMap, readInputs = false)
     val readCmdStmts = getReadCmds(stg.cmds, mods)
     if (condIn.isEmpty) {
       List(BRuleDef("readInputs", List(), uncondInStmts ++ readCmdStmts))
     } else {
       condIn.foldLeft(List[BRuleDef]())((l, e) => {
-        val inStmts = getEdgeStatements(stg, List(e), edgeMap, paramMap, readInputWires = true) ++ uncondInStmts ++ readCmdStmts
+        val inStmts = getEdgeStatements(stg, List(e), edgeMap, paramMap, readInputs = true) ++ uncondInStmts ++ readCmdStmts
         //each rule has the read stmts for that edge, and all the unconditional reads
         l :+ BRuleDef("input_" + l.size, List(toBSVExpr(e.condRecv.get)), inStmts)
       })
@@ -286,24 +298,24 @@ object BluespecGeneration {
    * @param es
    * @param edgeMap
    * @param paramMap
-   * @param readInputWires
+   * @param readInputs
    * @return
    */
   private def getEdgeStatements(s: PStage, es: Iterable[PipelineEdge],
-    edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar], readInputWires: Boolean = false): List[BStatement] = {
+    edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar], readInputs: Boolean = false): List[BStatement] = {
     es.foldLeft(List[BStatement]())((l, e) => {
       val stmts = if (e.to == s) {
-        val wireAssigns: List[BStatement] = if (readInputWires) {
+        val inputAssigns: List[BStatement] = if (readInputs) {
           e.values.foldLeft(List[BStatement]())((le, v) => {
             val paramExpr = BMethodInvoke(paramMap(e), "first", List())
-            le :+ BModAssign(
-              BVar(v.v, getWireType(toBSVType(v.typ.get))),
+            le :+ BDecl(
+              BVar(v.v, toBSVType(v.typ.get)),
               BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))))
           })
         } else {
           List[BStatement]()
         }
-        wireAssigns :+ BExprStmt(BMethodInvoke(paramMap(e), "deq", List()))
+        inputAssigns :+ BExprStmt(BMethodInvoke(paramMap(e), "deq", List()))
       } else {
         val op = getCanonicalStruct(edgeMap(e))
         List(BExprStmt(BMethodInvoke(paramMap(e), "enq", List(op))))
@@ -312,40 +324,9 @@ object BluespecGeneration {
     })
   }
 
-  /**
-   *
-   * @param s
-   * @param edgeMap
-   * @param paramMap
-   * @return
-   */
-  private def getImplicitOutputConditions(s: PStage, edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar]): List[BExpr] = {
-    getEdgeConditions(s, s.outEdges, edgeMap, paramMap)
-    //TODO also get the conditions from readStatements
-  }
-  /**
-   *
-   * @param s
-   * @param es
-   * @param edgeMap
-   * @param paramMap
-   * @return
-   */
-  private def getEdgeConditions(s: PStage, es: Iterable[PipelineEdge],
-    edgeMap: EdgeMap, paramMap: Map[PipelineEdge, BVar]): List[BExpr] = {
-    es.foldLeft(List[BExpr]())((l, e) => {
-      val stmt = if (e.to == s) {
-        BMethodInvoke(paramMap(e), "notEmpty", List())
-      } else {
-        BMethodInvoke(paramMap(e), "notFull", List())
-      }
-      l :+ stmt
-    })
-  }
-
   private def getStageBody(stg: PStage, pmap: Map[PipelineEdge, BVar], edgeMap: EdgeMap): List[BStatement] = {
-    //First define all of the variables read by some edge
-    val (condIn, uncondIn) = stg.inEdges.partition(e => e.condRecv.isDefined)
+    //Define all of the variables read unconditionally
+    val uncondIn = stg.inEdges.filter(e => e.condRecv.isEmpty)
     var body: List[BStatement] = List()
     //unconditional reads are just variable declarations w/ values
     uncondIn.foreach(e => {
@@ -356,14 +337,6 @@ object BluespecGeneration {
           BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))))
       })
     })
-    //conditional reads are Wires - get a set of values from all inputs to avoid double declaration
-    condIn.foldLeft(Set[Id]())((s, e) => {
-      s ++ e.values
-    }).foreach(v => {
-      body = body :+ BModInst(lhs = BVar(v.v, getWireType(toBSVType(v.typ.get))),
-        rhs = BModule(wireModuleName, List()))
-    })
-    body = body ++ getCombinationalCommands(stg.cmds)
     body
   }
   //TODO add in the module parameters into the definition w/ appropriate types
@@ -422,11 +395,7 @@ object BluespecGeneration {
     case v: ISpeculate => None
     case v: IUpdate => None
     case v: ICheck => None
-    case IMemRecv(_, data) => data match {
-      case Some(d) => Some(BModInst(lhs = BVar(d.id.v, getWireType(toBSVType(d.typ.get))),
-        rhs = BModule(wireModuleName, List())))
-      case None => None
-    }
+    case IMemRecv(_, _) => None
     case v: IMemSend => None
     case v: ISend => None
     case v: IRecv => None
@@ -470,9 +439,7 @@ object BluespecGeneration {
         //if multiple ports are supported
         val getPort = BMethodInvoke(mods(mem), "portA", List())
         val getResp = BMethodInvoke(getPort, "response", List())
-        val assignTmp = BInvokeAssign(tmpVar, BMethodInvoke(getResp, "get", List()))
-        val assignFinal = BModAssign(BVar(v.id.v, getWireType(toBSVType(v.typ.get))), tmpVar)
-        Some(BStmtSeq(List(assignTmp, assignFinal)))
+        Some(BInvokeAssign(BVar(v.id.v, toBSVType(v.typ.get)), BMethodInvoke(getResp, "get", List())))
       }
       case None => None
     }
