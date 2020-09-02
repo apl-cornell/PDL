@@ -281,11 +281,68 @@ In our language, we plan to piggy-back forwarding on top of locks since locks
 are our synchronization mechanism for shared memories.
 
 ### Syntax
-TODO
+
+There are two components to bypassing:
+ 1) Generating the new value for the memory location.
+ 2) Reading the bypassed value (instead of accessing the memory).
+
+The first needs its own syntax for promising a write will eventually be committed to the memory:
+
+```
+int<32> result = ...
+commit(rf[rd], result);
+---
+rf[rd] <- result;
+```
+
+`commit(loc, data)` tells the compiler that the current instruction will eventually write `result` into `loc`.
+The compiler then checks that such a write is actually going to be reflected in the final state of the memory
+at the point at which the lock is released. For correctness, this analysis does not need to be very precise.
+For instance, since variables are write-once in this language, we can syntactically check that there is a matching write statement.
+
+The read points for these bypass values are implicitly associated with the points at which the relevant locks are `acquired`.
+
+```
+int<32> arg1 = acquire(rf[rs1]); //block until the lock can be acquired, or a bypass value is available
+```
+or, for an asynchronous memory:
+```
+int<32> data <- acquire(dmem[addr]);
+```
+As shown above, this implies new semantics for `acquire` where it can also return the value for the associated location.
 
 ### Runtime Semantics
 
-TODO
+The main question becomes how to efficiently provide a bypass interface to locks that allows storing
+state associated with the memory.
+
+For now, we will assume we're using per-location locks, with the first suggested implementation
+(a small cache of locks that each represent some memory location and are tagged w/ the appropriate address).
+Each of these locks, in addition to thread IDs, could store values for the associated location.
+
+The `commit` operation then, at runtime, translates to updating the relevant lock entry. One subtlety here
+is that `commit`s can happen even when a lock has only been reserved (i.e. the thread doesn't currently own the lock).
+Therefore the lock FIFOs must expose an interface to access any of their entries.
+Similarly, bypassing reads must check the _newest_ reservation for a committed value, if there is one.
+This only requires that readers must be able to access the _last_ valid entry in the FIFO, rather than search the whole structure.
+
+The above implementation implies that the following snippet:
+```
+int<32> arg1 = acquire(rf[rs1]);
+```
+Will have the following runtime semantics:
+```
+if (can_acquire(rf[rs1])
+  acquire(rf[rs1])
+  arg1 = rf[rs1]
+else
+  if (last_committed(rf[rs1]).isValid)
+    arg1 = last_committed(rf[rs1]).get
+  else
+    block()
+```
+
+
 
 ## User Defined Modules
 
