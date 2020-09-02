@@ -220,6 +220,7 @@ and this won't typecheck.
 
 Similarly, the following doesn't typecheck:
 
+```
 if (test) {
  ---
  acquire(rf[rs1]);
@@ -227,6 +228,7 @@ if (test) {
  ---
  acquire(rf[rs2]);
 }
+```
 
 Because we can't guarantee that there is no alias between `rs1` or `rs2` from one
 thread and those locations from another. If we could guarantee that `rs1 != rs2`
