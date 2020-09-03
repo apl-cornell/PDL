@@ -359,7 +359,7 @@ object BluespecGeneration {
       BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
     })
     val stmts = edgeFifos.values.toList ++ mkStgs
-    //TODO Execute rule is an unconditional send to the first stage
+    //TODO expose a method to accept a reset input from the outside world.
     BModuleDef(name = "mkTop", typ = None, params = mods.values.toList, body = stmts,
       rules = List(), methods = List())
   }
@@ -500,5 +500,5 @@ object BluespecGeneration {
     case CSpeculate(predVar, predVal, verify, body) => throw UnexpectedCommand(cmd)
     case CSplit(cases, default) => throw UnexpectedCommand(cmd)
   }
-
+  
 }

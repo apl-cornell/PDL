@@ -1,16 +1,14 @@
 import FIFOF :: * ;
 
-typedef Bit#(4) ID;
-
-interface Lock;
-   method Bool check(ID tid);
-   method ActionValue#(Bool) acq(ID tid);
-   method Action rel(ID tid);
-   method Action res(ID tid);
+interface Lock#(type id);
+   method Bool owns(id tid);
+   method Action acq(id tid);
+   method Action rel(id tid);
+   method Action res(id tid);
 endinterface
 
 
-module mkLock(Lock);
+module mkLock(Lock#(type id));
    
    FIFOF#(ID) held <- mkFIFOF;
    
@@ -18,27 +16,21 @@ module mkLock(Lock);
    ID owner = held.first;
 
    //Returns True if thread `tid` may acquire the lock right now
-   method Bool check(ID tid);
+   method Bool owns(ID tid);
       return lockFree || owner == tid;
    endmethod
    
    //Returns True if the lock was acquired, else False
-   method ActionValue#(Bool) acq(ID tid);
-      if (lockFree || owner == tid)
-      begin
-	    held.enq(tid);
-	    return True;
-	 end
-      else
-	 return False;
+   method Action acq(ID tid);
+      if (lockFree || owner == tid) held.enq(tid);
    endmethod
    
    //Releases the lock iff thread `tid` owns it already
    method Action rel(ID tid);
    if (held.notEmpty && owner == tid)
-      begin
-	 held.deq();
-      end
+    begin
+	  held.deq();
+    end
    endmethod
    
    //Puts `tid` on the queue to reserve the lock

@@ -80,7 +80,7 @@ object Syntax {
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Combinational, writeLatency: Latency = Latency.Sequential) extends Type
+  case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type]) extends Type
 
   /**
@@ -197,6 +197,7 @@ object Syntax {
   case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
   case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
   case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
+  case class ILockOp(mem: Id, opName: String) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
