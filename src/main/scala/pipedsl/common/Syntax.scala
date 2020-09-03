@@ -197,7 +197,7 @@ object Syntax {
   case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
   case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
   case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
-  case class ILockOp(mem: Id, opName: String) extends InternalCommand
+  case class ICheckLock(mem: Id) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
