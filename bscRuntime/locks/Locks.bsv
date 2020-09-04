@@ -1,4 +1,9 @@
+package Locks;
+
 import FIFOF :: * ;
+
+export Lock(..);
+export mkLock;
 
 interface Lock#(type id);
    method Bool owns(id tid);
@@ -22,18 +27,20 @@ module mkLock(Lock#(id) ) provisos(Bits#(id, szId), Eq#(id));
    endmethod
    
    //If the lock is free, then tid acquires it
-   method Action acq(ID tid);
+   method Action acq(id tid);
       if (lockFree) held.enq(tid);
    endmethod
    
    //Releases the lock iff thread `tid` owns it already
-   method Action rel(ID tid);
+   method Action rel(id tid);
        if (owner == tid) held.deq();
    endmethod
    
    //Puts `tid` on the queue to reserve the lock
-   method Action res(ID tid);
+   method Action res(id tid);
       held.enq(tid);
    endmethod
    
 endmodule: mkLock
+
+endpackage

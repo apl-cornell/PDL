@@ -22,9 +22,12 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
 
   private val lockType = "Lock"
   private val lockModuleName = "mkLock"
+  private val lockLib = "Locks"
+  private val memLib = "Memories"
   private val regType = "Reg"
   private val regModuleName = "mkReg"
   private val fifoType = "FIFOF"
+  private val fifoLib = "FIFOF"
   private val fifoModuleName = "mkFIFOF"
   private val threadIdName = "_threadID"
 
@@ -100,8 +103,8 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * @return
    */
   def getBSV: BProgram = {
-    BProgram(topModule = getTopModule, imports = List(BImport(fifoType)),
-      structs = edgeStructInfo.values.toList, interfaces = List(), modules = stgMap.values.toList)
+    BProgram(topModule = getTopModule, imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)),
+      structs = firstStageStruct +: edgeStructInfo.values.toList, interfaces = List(), modules = stgMap.values.toList)
   }
 
   /**
@@ -270,17 +273,18 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     //generate a conditional assignment expression to choose
     //which conditional edge we're reading inputs from
     val condIn = stg.inEdges.filter(e => e.condRecv.isDefined)
-    val condEdgeExpr = condIn.foldLeft[BExpr](BDontCare)((expr, edge) => {
-      val paramExpr = BMethodInvoke(edgeParams(edge), "first", List())
-      BTernaryExpr(toBSVExpr(edge.condRecv.get), paramExpr, expr)
-    })
     //each edge better be accepting the same values
     val variableList = condIn.foldLeft(Set[Id]())((s, e) => {
       s ++ e.values
     })
     variableList.foreach(v => {
-      body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)),
-        BStructAccess(condEdgeExpr, BVar(v.v, toBSVType(v.typ.get))))
+      val condEdgeExpr = condIn.foldLeft[BExpr](BDontCare)((expr, edge) => {
+        val paramExpr = BMethodInvoke(edgeParams(edge), "first", List())
+        BTernaryExpr(toBSVExpr(edge.condRecv.get),
+          BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))),
+          expr)
+      })
+      body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)), condEdgeExpr)
     })
     //And now add all of the combinational connections
     body ++ getCombinationalCommands(stg.cmds)
