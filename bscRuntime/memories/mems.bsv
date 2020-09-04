@@ -9,7 +9,8 @@ endinterface
 //this one is used for asynchronous reads which involve a request and response
 interface AsyncMem#(type elem, type addr);
     method Action readReq(addr a);
-    method ActionValue#(elem) readResp();
+    method elem peekRead();
+    method Action readResp();
     method Action write(addr a, elem b);
 endinterface
 

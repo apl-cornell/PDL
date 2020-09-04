@@ -47,11 +47,8 @@ object BSVPrettyPrinter {
   }
 
   private def toBSVExprStr(expr: BExpr): String = expr match {
-    case BCaseExpr(cond, cases) =>
-      val caseString = cases.map(c => {
-        toBSVExprStr(c._1) + ": return " + toBSVExprStr(c._2)
-      }).mkString(";")
-      mkExprString("case (", toBSVExprStr(cond), ")", caseString,"endcase")
+    case BTernaryExpr(cond, trueex, falseex) => mkExprString("(", toBSVExprStr(cond), "?",
+      toBSVExprStr(trueex), ":", toBSVExprStr(falseex),")")
       //TODO make this not a magic method name, import from config
     case BMemRead(mem, addr) => toBSVExprStr(mem) + ".read(" + toBSVExprStr(addr) + ")"
     case BBoolLit(v) => if (v) { "True" } else { "False" }
@@ -80,6 +77,13 @@ object BSVPrettyPrinter {
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       toBSVExprStr(mod) + "." + method + "(" + argstring + ")"
     case BDontCare => "?"
+      //TODO get rid of magic strings
+    case BMemPeek(mem) => mem.typ match {
+      case _:BAsyncMemType => toBSVExprStr(mem) + ".peekRead()"
+    }
+    case BMemRead(mem, addr) => mem.typ match {
+      case _:BCombMemType => toBSVExprStr(mem) + ".read(" + toBSVExprStr(addr) + ")"
+    }
   }
 
   def getFilePrinter(name: String): BSVPretyPrinterImpl = {
@@ -136,8 +140,7 @@ object BSVPrettyPrinter {
         //TODO no magic variables get runtime names from some configuration
       case BMemReadReq(mem, addr) => w.write(mkStatementString(
         toBSVExprStr(mem)+".readReq(", toBSVExprStr(addr),")"))
-      case BMemReadResp(lhs, mem) => w.write(mkStatementString(
-        toDeclString(lhs), "<-", toBSVExprStr(mem) + ".readResp()"))
+      case BMemReadResp(lhs, mem) => w.write(mkStatementString(toBSVExprStr(mem) + ".readResp()"))
       case BMemWrite(mem, addr, data) => w.write(mkStatementString(
         toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
       case BIf(cond, trueBranch, falseBranch) =>
@@ -146,11 +149,15 @@ object BSVPrettyPrinter {
         incIndent()
         trueBranch.foreach(s => printBSVStatement(s))
         decIndent()
-        w.write(mkIndentedExpr("else\n"))
-        incIndent()
-        falseBranch.foreach(s => printBSVStatement(s))
-        decIndent()
         w.write(mkIndentedExpr("end\n"))
+        if (falseBranch.nonEmpty) {
+          w.write(mkIndentedExpr("else\n"))
+          w.write(mkIndentedExpr("begin\n"))
+          incIndent()
+          falseBranch.foreach(s => printBSVStatement(s))
+          decIndent()
+          w.write(mkIndentedExpr("end\n"))
+        }
     }
 
     def printBSVRule(rule: BRuleDef): Unit = {

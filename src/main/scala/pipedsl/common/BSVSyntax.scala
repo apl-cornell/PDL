@@ -53,9 +53,7 @@ object BSVSyntax {
     case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
     case eb@EBinop(_,_,_) => toBSVBop(eb)
     case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
-    case ETernary(cond, tval, fval) => BCaseExpr(toBSVExpr(cond),
-      List((BBoolLit(true), toBSVExpr(tval)),
-        (BBoolLit(false), toBSVExpr(fval))))
+    case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
     case EVar(id) => BVar(id.v, toBSVType(id.typ.get))
       //TODO functions
     //case EApp(func, args) => throw new UnexpectedExpr(e)
@@ -82,7 +80,7 @@ object BSVSyntax {
   sealed trait BExpr
 
   case object BDontCare extends BExpr
-  case class BCaseExpr(cond: BExpr, cases: List[(BExpr, BExpr)]) extends BExpr
+  case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
@@ -95,6 +93,7 @@ object BSVSyntax {
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BMemRead(mem: BVar, addr: BExpr) extends BExpr
+  case class BMemPeek(mem: BVar) extends BExpr
 
   sealed trait BStatement
 

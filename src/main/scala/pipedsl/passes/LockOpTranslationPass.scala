@@ -28,9 +28,9 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def replaceLockOps(stg: PStage, startStates: Map[Id, LockState], endStates: Map[Id, LockState]): Unit = {
     val notlockCmds = stg.cmds.filter { case _: CLockOp => false; case _ => true }
     //find the locks whose state changes in this stage:
-    val changingLocks = startStates.keys.filter(m => { startStates(m) != endStates(m) })
+    val changingLocks = endStates.keys.filter(m => { startStates.getOrElse(m, Free) != endStates(m) })
     val newlockcmds = changingLocks.foldLeft(List[Command]())((cmds, l) => {
-      startStates(l) match {
+      startStates.getOrElse(l, Free) match {
         case Free => endStates(l) match {
           case Reserved => cmds :+ CLockOp(l, Reserved)
           case Acquired => cmds :+ ICheckLock(l) :+ CLockOp(l, Acquired)
@@ -45,6 +45,6 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         case Released => throw InvalidLockState(l.pos, l.v, Released, Acquired)
       }
     })
-    stg.cmds = newlockcmds ++ notlockCmds
+    stg.cmds = notlockCmds ++ newlockcmds
   }
 }
