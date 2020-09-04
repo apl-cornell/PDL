@@ -8,29 +8,27 @@ interface Lock#(type id);
 endinterface
 
 
-module mkLock(Lock#(type id));
+module mkLock(Lock#(id) ) provisos(Bits#(id, szId), Eq#(id));
    
-   FIFOF#(ID) held <- mkFIFOF;
+   FIFOF#(id) held <- mkFIFOF;
    
    Bool lockFree = !held.notEmpty;
-   ID owner = held.first;
+   id owner = held.first;
 
    //Returns True if thread `tid` may acquire the lock right now
-   method Bool owns(ID tid);
+   //or already owns the lock
+   method Bool owns(id tid);
       return lockFree || owner == tid;
    endmethod
    
-   //Returns True if the lock was acquired, else False
+   //If the lock is free, then tid acquires it
    method Action acq(ID tid);
-      if (lockFree || owner == tid) held.enq(tid);
+      if (lockFree) held.enq(tid);
    endmethod
    
    //Releases the lock iff thread `tid` owns it already
    method Action rel(ID tid);
-   if (held.notEmpty && owner == tid)
-    begin
-	  held.deq();
-    end
+       if (owner == tid) held.deq();
    endmethod
    
    //Puts `tid` on the queue to reserve the lock
