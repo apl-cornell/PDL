@@ -77,6 +77,8 @@ object BSVPrettyPrinter {
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       toBSVExprStr(mod) + "." + method + "(" + argstring + ")"
     case BDontCare => "?"
+    case BZero => "0"
+    case BOne => "1"
       //TODO get rid of magic strings
     case BMemPeek(mem) => mem.typ match {
       case _:BAsyncMemType => toBSVExprStr(mem) + ".peekRead()"

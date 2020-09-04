@@ -22,8 +22,11 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
 
   private val lockType = "Lock"
   private val lockModuleName = "mkLock"
+  private val regType = "Reg"
+  private val regModuleName = "mkReg"
   private val fifoType = "FIFOF"
   private val fifoModuleName = "mkFIFOF"
+  private val threadIdName = "_threadID"
 
   type EdgeInfo = Map[PipelineEdge, BStructDef]
   type ModInfo = Map[Id, BVar]
@@ -45,10 +48,11 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
 
   }
 
+  private val threadIdVar = BVar(threadIdName, getThreadIdType)
   //Data types for passing between stages
-  private val edgeStructInfo = getEdgeStructInfo(firstStage +: otherStages)
+  private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true)
   //First stage should have exactly one input edge by definition
-  private val firstStageStruct = edgeStructInfo(firstStage.inEdges.head)
+  private val firstStageStruct = getEdgeStructInfo(List(firstStage), addTId = false).values.head
   //This map returns the correct struct type based on the destination stage
   private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
   //Generate map from existing module parameter names to BSV variables
@@ -60,9 +64,9 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     locks + (m.name -> BVar(genLockName(m.name), getLockType(otherStages.length + 1)))
   })
   //Generate a Submodule for each stage
-  private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, BModuleDef]())((m, s) => {
-    m + (s -> getStageModule(s))
-  })
+  private val stgMap = (otherStages).foldLeft(Map[PStage, BModuleDef]())((m, s) => {
+    m + (s -> getStageModule(s, isFirstStg = false))
+  }) + (firstStage -> getStageModule(firstStage, isFirstStg = true))
 
   /**
    * Uses the configured fifo interface type and the provided
@@ -73,14 +77,29 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
   private def getFifoType(typ: BSVType): BInterface = {
     BInterface(fifoType, List(BVar("elemtyp", typ)))
   }
-
-  private def getLockType(numStages: Int): BSVType = {
-    val idtype = BSizedInt(unsigned = true, log2(numStages))
-    BInterface(lockType, List(BVar("idsize", idtype)))
+  /**
+   * Uses the configured register interface type and the provided
+   * BSV type to make a paramterized register type.
+   * @param typ - The BSV type that describes the register's element type
+   * @return - The new BSV type describing the parameterized register
+   */
+  private def getRegType(typ: BSVType): BInterface = {
+    BInterface(regType, List(BVar("elemtyp", typ)))
   }
 
+  private def getThreadIdType: BSVType = {
+    BSizedInt(unsigned = true, log2(otherStages.length + 1))
+  }
+  private def getLockType(numStages: Int): BSVType = {
+    BInterface(lockType, List(BVar("idsize", getThreadIdType)))
+  }
 
-  def getBSV(): BProgram = {
+  /**
+   * Returns the BSV program AST that represents the translation
+   * of the provided module.
+   * @return
+   */
+  def getBSV: BProgram = {
     BProgram(topModule = getTopModule, imports = List(BImport(fifoType)),
       structs = edgeStructInfo.values.toList, interfaces = List(), modules = stgMap.values.toList)
   }
@@ -89,24 +108,20 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * Converts the edge value information into BSV structs
    * that hold all of those values and puts it into a lookup structure.
    * @param stgs - The list of stages to process.
+   * @param addTId - If true, then add a ThreadID field to the struct
    * @return - A map from edges to the BSV type definitions that represent their values.
    */
-  private def getEdgeStructInfo(stgs: Iterable[PStage]): Map[PipelineEdge, BStructDef] = {
+  private def getEdgeStructInfo(stgs: Iterable[PStage], addTId: Boolean = true): Map[PipelineEdge, BStructDef] = {
     stgs.foldLeft[Map[PipelineEdge, BStructDef]](Map())((m, s) => {
       s.inEdges.foldLeft[Map[PipelineEdge, BStructDef]](m)((ms, e) => {
-        ms + (e -> getEdgeStruct(e))
+        var sfields = e.values.foldLeft(List[BVar]())((l, id) => {
+          l :+ BVar(id.v, toBSVType(id.typ.get))
+        })
+        if (addTId) sfields = sfields :+ threadIdVar
+        val styp = BStruct(genEdgeName(e), sfields)
+        val structdef =  BStructDef(styp, List("Bits", "Eq"))
+        ms + (e -> structdef)
       })
-    })
-  }
-  //A Helper for @getEdgeStructInfo
-  private def getEdgeStruct(e: PipelineEdge): BStructDef = {
-    val styp = BStruct(genEdgeName(e), getBsvStructFields(e.values))
-    BStructDef(styp, List("Bits", "Eq"))
-  }
-  //A Helper for @getEdgeStruct
-  private def getBsvStructFields(inputs: Iterable[Id]): List[BVar] = {
-    inputs.foldLeft(List[BVar]())((l, id) => {
-      l :+ BVar(id.v, toBSVType(id.typ.get))
     })
   }
 
@@ -133,7 +148,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * @param stg - The pipeline stage to convert
    * @return - The generated BSV module definition
    */
-  private def getStageModule(stg: PStage): BModuleDef = {
+  private def getStageModule(stg: PStage, isFirstStg: Boolean = false): BModuleDef = {
     //Define module parameters to communicate along pipeline edges
     val outMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
       val edgeStructType = edgeMap(e)
@@ -147,9 +162,9 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     val params = inOutMap.values.toList ++ modParams.values ++ lockParams.values
     //Generate set of definitions needed by rule conditions
     //(declaring variables read from unconditional inputs)
-    val sBody = getStageBody(stg, inOutMap)
+    val sBody = getStageBody(stg, inOutMap, isFirstStg)
     //Generate the set of execution rules for reading args and writing outputs
-    val execRule = getStageRule(stg, inOutMap)
+    val execRule = getStageRule(stg, inOutMap, isFirstStg)
     //TODO We don't need to generate methods at the moment since all communication is via FIFOs
     // this may need to change eventually
     BModuleDef(name = genModuleName(stg), typ = None,
@@ -158,30 +173,34 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
 
   /**
    * Given a stage and the relevant edge information, generate the
-   * write rules for the stage which involve writing data to the output
-   * edges and also any output modules (memories, etc.)
+   * rule which represents executing this stage, both reading its inputs
+   * and writing its outputs
    * @param stg - The stage to process
    * @param paramMap - Edge to Parameter name Mapping
    * @return A single BSV Rule
    */
-  private def getStageRule(stg: PStage, paramMap: Map[PipelineEdge, BVar]): BRuleDef = {
-    val writeCmdStmts = getEffectCmds(stg.cmds)
+  private def getStageRule(stg: PStage, paramMap: Map[PipelineEdge, BVar], isFirstStg: Boolean = false): BRuleDef = {
+    var writeCmdStmts = getEffectCmds(stg.cmds)
     val queueStmts = getEdgeQueueStmts(stg, stg.allEdges, paramMap)
     val blockingConds = getBlockingConds(stg.cmds)
+    //add a statement to increment the thread ID
+    if (isFirstStg) {
+      writeCmdStmts = writeCmdStmts :+
+        BModAssign(threadIdVar, BBOp("+", threadIdVar, BOne))
+    }
     BRuleDef("execute", blockingConds, writeCmdStmts ++ queueStmts)
   }
 
   /**
    * If any commands could cause blocking conditions that prevent
    * the rule from running, place those here (e.g. checking if locks can be acquired)
-   * @param cmds
-   * @return
+   * @param cmds The list of commands to translate
+   * @return The list of translated blocking commands
    */
   private def getBlockingConds(cmds: Iterable[Command]): List[BExpr] = {
     cmds.foldLeft(List[BExpr]())((l, c) => c match {
       case ICheckLock(mem) => {
-        //TODO add argument (thread id)
-        l :+ BMethodInvoke(lockParams(mem), "owns", List())
+        l :+ BMethodInvoke(lockParams(mem), "owns", List(threadIdVar))
       }
       case _ => l
     })
@@ -191,10 +210,10 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * Get the list of statements that represent dequeuing from
    * or enqueuing onto the input and output edges. Wrap them in
    * conditional statements if they are conditional edges.
-   * @param s
-   * @param es
-   * @param paramMap
-   * @return
+   * @param s The stage we're compiling
+   * @param es The subset of s's edges that we're translating
+   * @param paramMap The edge variable names used by this stage
+   * @return A list of statements that represent queue operations for the relevant edges
    */
   private def getEdgeQueueStmts(s: PStage, es: Iterable[PipelineEdge],
     paramMap: Map[PipelineEdge, BVar]): List[BStatement] = {
@@ -221,14 +240,19 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
 
   /**
    *
-   * @param stg
-   * @param edgeParams
+   * @param stg The stage to compile
+   * @param edgeParams The edge parameter variables used by this stage
    * @return
    */
-  private def getStageBody(stg: PStage, edgeParams: Map[PipelineEdge, BVar]): List[BStatement] = {
+  private def getStageBody(stg: PStage, edgeParams: Map[PipelineEdge, BVar], isFirstStg: Boolean = false): List[BStatement] = {
+    var body: List[BStatement] = List()
+    //If the first stage, then instantiate the threadID register
+    if (isFirstStg) {
+      body = body :+ BModInst(BVar(threadIdName, getRegType(getThreadIdType)),
+        BModule(regModuleName, List(BZero)))
+    }
     //Define all of the variables read unconditionally
     val uncondIn = stg.inEdges.filter(e => e.condRecv.isEmpty)
-    var body: List[BStatement] = List()
     //unconditional reads are just variable declarations w/ values
     uncondIn.foreach(e => {
       //First element in read queue
@@ -237,6 +261,11 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
         body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)),
           BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))))
       })
+      //only read threadIDs from an unconditional edge
+      if (!isFirstStg) {
+        body = body :+ BDecl(threadIdVar,
+          BStructAccess(paramExpr, threadIdVar))
+      }
     })
     //generate a conditional assignment expression to choose
     //which conditional edge we're reading inputs from
@@ -271,6 +300,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
       m + (id -> BModInst(lockParams(id), BModule(lockModuleName, List())))
     })
+    //Instantiate each stage module
     val mkStgs = (firstStage +: otherStages).map(s => {
       val moddef = stgMap(s)
       val modtyp = moddef.typ match {
@@ -301,8 +331,8 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * Translate all of the commands that go into the execution
    * rules that do not write any permanent state; they may modify state
    * implicitly through read operations.
-   * @param cmd
-   * @return
+   * @param cmd The command to translate
+   * @return Some(translation) if cmd is combinational, otherwise None
    */
   private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
     case CAssign(lhs, rhs) =>
@@ -338,7 +368,6 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     case CSpeculate(predVar, predVal, verify, body) => throw UnexpectedCommand(cmd)
     case CSplit(cases, default) => throw UnexpectedCommand(cmd)
   }
-
   //Helper to accumulate getWriteCmd results into a single list
   private def getEffectCmds(cmds: Iterable[Command]): List[BStatement] = {
     cmds.foldLeft(List[BStatement]())((l, c) => {
@@ -352,8 +381,8 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * Returns the translation of any commands that write to any state:
    * this includes CALLs to the pipeline, lock acquisition, or any
    * memory requests/responses
-   * @param cmd
-   * @return
+   * @param cmd The command to translate
+   * @return Some(translation) if cmd is effectful, else None
    */
   private def getEffectCmd(cmd: Command): Option[BStatement] = cmd match {
     case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c) match {
@@ -363,9 +392,9 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     //TODO implement lock arguments (a.k.a. thread IDs)
     case CLockOp(mem, op) => op match {
       case pipedsl.common.Locks.LockState.Free => None
-      case pipedsl.common.Locks.LockState.Reserved => Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List())))
-      case pipedsl.common.Locks.LockState.Acquired => Some(BExprStmt(BMethodInvoke(lockParams(mem), "acq", List())))
-      case pipedsl.common.Locks.LockState.Released => Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List())))
+      case pipedsl.common.Locks.LockState.Reserved => Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(threadIdVar))))
+      case pipedsl.common.Locks.LockState.Acquired => Some(BExprStmt(BMethodInvoke(lockParams(mem), "acq", List(threadIdVar))))
+      case pipedsl.common.Locks.LockState.Released => Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List(threadIdVar))))
     }
     case IMemSend(isWrite, mem: Id, data: Option[EVar], addr: EVar) => {
       if (isWrite) {

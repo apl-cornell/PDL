@@ -41,7 +41,7 @@ object Main {
       LockOpTranslationPass.run(s)
       val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
       val bsvgenerator = new BluespecGeneration(mod, s.head, flattenStageList(s.tail))
-      bsvWriter.printBSVProg(bsvgenerator.getBSV())
+      bsvWriter.printBSVProg(bsvgenerator.getBSV)
       //BluespecGeneration.run(s.head, mod.inputs, s.tail)
       //PrettyPrinter.printStages(s)
       //PrettyPrinter.printStageGraph(n.v, s)

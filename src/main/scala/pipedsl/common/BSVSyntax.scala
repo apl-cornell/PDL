@@ -80,6 +80,8 @@ object BSVSyntax {
   sealed trait BExpr
 
   case object BDontCare extends BExpr
+  case object BZero extends BExpr
+  case object BOne extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
