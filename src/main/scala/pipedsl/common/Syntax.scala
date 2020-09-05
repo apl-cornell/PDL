@@ -1,8 +1,10 @@
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
+import java.lang.Integer
 import Errors._
 import Security._
 import Locks.LockState._
+
 
 object Syntax {
   /**
@@ -33,7 +35,7 @@ object Syntax {
     val sr: (Int, Int) => Int = (_ >> _)
     val or: (Boolean, Boolean) => Boolean = (_ || _)
     val and: (Boolean, Boolean) => Boolean = (_ && _)
-    val concat: (Int, Int) => Int = (_ + _) //TODO fix for interpreter
+    val concat: (Int, Int) => Int = (a, b) => (a << (32-Integer.numberOfLeadingZeros(b)) | b)
   }
 
   import Annotations._
@@ -80,7 +82,15 @@ object Syntax {
   sealed trait UOp extends Positional {
     val op: String;
     override def toString: String = this.op
+    def operate(v1: Any): Option[Any] = this match {
+      //TODO match on all case UOps, currently seems like only BoolUOp is actually parsed
+      case b:BoolUOp => b.op match {
+        case "!" => Some(!v1.asInstanceOf[Boolean])
+        case _ => None
+      }
+    }
   }
+  
   case class BoolUOp(op: String) extends UOp
   case class NumUOp(op: String) extends UOp
   case class BitUOp(op: String) extends UOp
@@ -103,10 +113,10 @@ object Syntax {
         case _ => None
       }
       case c: CmpOp => c.op match {
-        case ">" => Some(1.asInstanceOf[Int] > v2.asInstanceOf[Int])
-        case ">=" => Some(1.asInstanceOf[Int] >= v2.asInstanceOf[Int])
-        case "<=" =>  Some(1.asInstanceOf[Int] <= v2.asInstanceOf[Int])
-        case "<" => Some(1.asInstanceOf[Int] < v2.asInstanceOf[Int])
+        case ">" => Some(v1.asInstanceOf[Int] > v2.asInstanceOf[Int])
+        case ">=" => Some(v1.asInstanceOf[Int] >= v2.asInstanceOf[Int])
+        case "<=" => Some(v1.asInstanceOf[Int] <= v2.asInstanceOf[Int])
+        case "<" => Some(v1.asInstanceOf[Int] < v2.asInstanceOf[Int])
         case _ => None
       }
       case _ => None
