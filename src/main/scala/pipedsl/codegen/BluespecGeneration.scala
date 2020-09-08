@@ -153,13 +153,13 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    */
   private def getStageModule(stg: PStage, isFirstStg: Boolean = false): BModuleDef = {
     //Define module parameters to communicate along pipeline edges
-    val outMap = stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
-      val edgeStructType = edgeMap(e)
-      m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
-    })
-    val inOutMap = outMap ++ stg.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
+    val inMap = stg.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
       val edgeStructType = edgeMap(e)
       m + (e -> BVar(genParamName(e.from), getFifoType(edgeStructType)))
+    })
+    val inOutMap = inMap ++ stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
+      val edgeStructType = edgeMap(e)
+      m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
     })
     //TODO only pass the module parameters that are actually needed instead of all
     val params = inOutMap.values.toList ++ modParams.values ++ lockParams.values
@@ -298,7 +298,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
       es ++ s.inEdges ++ s.outEdges
     })
     val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
-      m + (e -> BModInst(BVar(genParamName(e), edgeMap(e)), BModule(fifoModuleName, List())))
+      m + (e -> BModInst(BVar(genParamName(e), getFifoType(edgeMap(e))), BModule(fifoModuleName, List())))
     })
     //Instantiate a lock for each memory:
     val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {

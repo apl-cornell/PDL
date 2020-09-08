@@ -33,9 +33,9 @@ object BSVPrettyPrinter {
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
-      toBSVTypeStr(BSizedInt(false, addrSize)) + ")"
+      toBSVTypeStr(BSizedInt(true, addrSize)) + ")"
     case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
-      toBSVTypeStr(BSizedInt(false, addrSize)) + ")"
+      toBSVTypeStr(BSizedInt(true, addrSize)) + ")"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
