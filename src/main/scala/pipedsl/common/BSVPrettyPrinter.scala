@@ -194,7 +194,7 @@ object BSVPrettyPrinter {
       incIndent()
       method.body.foreach(s => printBSVStatement(s))
       decIndent()
-      w.write(mkStatementString("endmethod"))
+      w.write(mkIndentedExpr("endmethod\n"))
     }
 
     def printInterface(intdef: BInterfaceDef): Unit = {
@@ -204,7 +204,7 @@ object BSVPrettyPrinter {
         printBSVMethodSig(m)
       })
       decIndent()
-      w.write(mkStatementString("endinterface"))
+      w.write(mkIndentedExpr("endinterface\n"))
     }
 
     def printModule(mod: BModuleDef, synthesize: Boolean = false): Unit = {
