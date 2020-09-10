@@ -62,14 +62,16 @@ object BSVPrettyPrinter {
     case BVar(name, typ) => name
     case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
+      //TODO incorporate bit types into the typesystem properly
+      //and then remove the custom pack/unpack operations
     case BBitExtract(expr, start, end) => mkExprString(
-      "(", toBSVExprStr(expr), "[", end.toString, ":", start.toString, "]" ,")"
+      "unpack(", "pack(", toBSVExprStr(expr), ")", "[", end.toString, ":", start.toString, "]" ,")"
     )
     case BConcat(first, rest) =>
-      val exprstr = rest.foldLeft[String](toBSVExprStr(first))((s, e) => {
-        s + ", " + toBSVExprStr(e)
+      val exprstr = rest.foldLeft[String]("pack(" + toBSVExprStr(first) + ")")((s, e) => {
+        s + ", " + "pack(" + toBSVExprStr(e) + ")"
       })
-      mkExprString( "{", exprstr, "}")
+      mkExprString( "unpack({", exprstr, "})")
     case BModule(name, args) =>
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
