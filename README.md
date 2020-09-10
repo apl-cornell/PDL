@@ -39,7 +39,7 @@ TODO is to add an `assembly` directive to build an executable jar.
 ### Running the Compiler
 
 The main class is `pipedsl.Main` and can be run via
-the sbt command `sbt run pipedsl.Main <args>`.
+the sbt command `sbt "run pipedsl.Main <args>"`.
 
 At the moment, the compiler takes a single argument which is the
 file path of the single source file to compile.

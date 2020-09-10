@@ -1,3 +1,8 @@
+package Memories;
+
+export MemCombRead(..);
+export AsyncMem(..);
+
 //these are the memory interfaces we suppport
 //the first is used for memories that support combinational reads
 
@@ -14,3 +19,4 @@ interface AsyncMem#(type elem, type addr);
     method Action write(addr a, elem b);
 endinterface
 
+endpackage

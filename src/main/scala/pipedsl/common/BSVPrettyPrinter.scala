@@ -33,9 +33,9 @@ object BSVPrettyPrinter {
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
-      toBSVTypeStr(BSizedInt(false, addrSize)) + ")"
+      toBSVTypeStr(BSizedInt(true, addrSize)) + ")"
     case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
-      toBSVTypeStr(BSizedInt(false, addrSize)) + ")"
+      toBSVTypeStr(BSizedInt(true, addrSize)) + ")"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -148,7 +148,7 @@ object BSVPrettyPrinter {
       case BMemWrite(mem, addr, data) => w.write(mkStatementString(
         toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
       case BIf(cond, trueBranch, falseBranch) =>
-        w.write(mkStatementString("if", "(", toBSVExprStr(cond) + ")"))
+        w.write(mkExprString("if", "(", toBSVExprStr(cond) + ")"))
         w.write(mkIndentedExpr("begin\n"))
         incIndent()
         trueBranch.foreach(s => printBSVStatement(s))
