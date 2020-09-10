@@ -33,9 +33,9 @@ object BSVPrettyPrinter {
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
-      toBSVTypeStr(BSizedInt(true, addrSize)) + ")"
+      toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
-      toBSVTypeStr(BSizedInt(true, addrSize)) + ")"
+      toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -49,8 +49,6 @@ object BSVPrettyPrinter {
   private def toBSVExprStr(expr: BExpr): String = expr match {
     case BTernaryExpr(cond, trueex, falseex) => mkExprString("(", toBSVExprStr(cond), "?",
       toBSVExprStr(trueex), ":", toBSVExprStr(falseex),")")
-      //TODO make this not a magic method name, import from config
-    case BMemRead(mem, addr) => toBSVExprStr(mem) + ".read(" + toBSVExprStr(addr) + ")"
     case BBoolLit(v) => if (v) { "True" } else { "False" }
     case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
     case BStructLit(typ, fields) =>
@@ -120,6 +118,10 @@ object BSVPrettyPrinter {
       w.write(mkStatementString("import", imp.name, ":: *"))
     }
 
+    def printExport(exp: BExport): Unit = {
+      w.write(mkStatementString("export", exp.name, if (exp.expFields) "(..)" else ""))
+    }
+
     def printStructDef(sdef: BStructDef): Unit = {
       val structstring = mkExprString("struct {",
         sdef.typ.fields.map(f => {
@@ -148,7 +150,7 @@ object BSVPrettyPrinter {
       case BMemWrite(mem, addr, data) => w.write(mkStatementString(
         toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
       case BIf(cond, trueBranch, falseBranch) =>
-        w.write(mkExprString("if", "(", toBSVExprStr(cond) + ")"))
+        w.write(mkIndentedExpr("if", "(", toBSVExprStr(cond) + ")"))
         w.write(mkIndentedExpr("begin\n"))
         incIndent()
         trueBranch.foreach(s => printBSVStatement(s))
@@ -177,8 +179,33 @@ object BSVPrettyPrinter {
       w.write(mkIndentedExpr("endrule\n"))
     }
 
-    //TODO - we don't generate any methods atm
-    def printBSVMethod(method: BMethodDef, w: Writer): Unit = {}
+    def printBSVMethodSig(sig: BMethodSig): Unit = {
+      val mtypstr = sig.typ match {
+        case Action => "Action"
+        case Value(t) => toBSVTypeStr(t)
+        case ActionValue(t) => "ActionValue#(" + toBSVTypeStr(t) + ")"
+      }
+      val paramstr = sig.params.map(p => toDeclString(p)).mkString(", ")
+      w.write(mkStatementString("method", mtypstr, sig.name, "(", paramstr, ")"))
+    }
+
+    def printBSVMethod(method: BMethodDef): Unit = {
+      printBSVMethodSig(method.sig)
+      incIndent()
+      method.body.foreach(s => printBSVStatement(s))
+      decIndent()
+      w.write(mkStatementString("endmethod"))
+    }
+
+    def printInterface(intdef: BInterfaceDef): Unit = {
+      w.write(mkStatementString("interface", toBSVTypeStr(intdef.typ)))
+      incIndent()
+      intdef.methods.foreach(m => {
+        printBSVMethodSig(m)
+      })
+      decIndent()
+      w.write(mkStatementString("endinterface"))
+    }
 
     def printModule(mod: BModuleDef, synthesize: Boolean = false): Unit = {
       //this just defines the interface this module implements,
@@ -199,7 +226,7 @@ object BSVPrettyPrinter {
       mkStatementString("") //for readability only
       mod.rules.foreach(r => printBSVRule(r))
       mkStatementString("")
-      mod.methods.foreach(m => printBSVMethod(m, w))
+      mod.methods.foreach(m => printBSVMethod(m))
       mkStatementString("")
       decIndent()
       //Doesn't end in semi-colon
@@ -209,11 +236,15 @@ object BSVPrettyPrinter {
     def printBSVProg(b: BProgram): Unit = {
       b.imports.foreach(i => printImport(i))
       w.write("\n")
+      b.exports.foreach(e => printExport(e))
+      w.write("\n")
       b.structs.foreach(s => printStructDef(s))
+      w.write("\n")
+      b.interfaces.foreach(in => printInterface(in))
       w.write("\n")
       b.modules.foreach(m => printModule(m))
       w.write("\n")
-      printModule(b.topModule, synthesize = true)
+      printModule(b.topModule)
       w.flush()
     }
   }

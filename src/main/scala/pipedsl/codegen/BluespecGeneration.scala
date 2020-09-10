@@ -30,6 +30,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
   private val fifoLib = "FIFOF"
   private val fifoModuleName = "mkFIFOF"
   private val threadIdName = "_threadID"
+  private val startMethodName = "start"
 
   type EdgeInfo = Map[PipelineEdge, BStructDef]
   type ModInfo = Map[Id, BVar]
@@ -64,13 +65,18 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
   })
   //mapping memory ids to their associated locks
   private val lockParams: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
-    locks + (m.name -> BVar(genLockName(m.name), getLockType(otherStages.length + 1)))
+    locks + (m.name -> BVar(genLockName(m.name), getLockType()))
   })
   //Generate a Submodule for each stage
   private val stgMap = (otherStages).foldLeft(Map[PStage, BModuleDef]())((m, s) => {
     m + (s -> getStageModule(s, isFirstStg = false))
   }) + (firstStage -> getStageModule(firstStage, isFirstStg = true))
+  //Define an interface for interacting with this module
+  private val startMethod = BMethodSig(startMethodName, Action, firstStageStruct.typ.fields)
+  private val modInterfaceTyp = BInterface(mod.name.v.capitalize, List())
+  private val modInterfaceDef = BInterfaceDef(modInterfaceTyp, List(startMethod))
 
+  private val topModule = getTopModule
   /**
    * Uses the configured fifo interface type and the provided
    * BSV type to make a paramterized fifo type.
@@ -93,7 +99,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
   private def getThreadIdType: BSVType = {
     BSizedInt(unsigned = true, log2(otherStages.length + 1))
   }
-  private def getLockType(numStages: Int): BSVType = {
+  private def getLockType(): BInterface = {
     BInterface(lockType, List(BVar("idsize", getThreadIdType)))
   }
 
@@ -103,8 +109,10 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * @return
    */
   def getBSV: BProgram = {
-    BProgram(topModule = getTopModule, imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)),
-      structs = firstStageStruct +: edgeStructInfo.values.toList, interfaces = List(), modules = stgMap.values.toList)
+    BProgram(topModule = topModule, imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)),
+      exports = List(BExport(modInterfaceTyp.name, expFields = true), BExport(topModule.name, expFields = false)),
+      structs = firstStageStruct +: edgeStructInfo.values.toList,
+      interfaces = List(modInterfaceDef), modules = stgMap.values.toList)
   }
 
   /**
@@ -168,8 +176,6 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     val sBody = getStageBody(stg, inOutMap, isFirstStg)
     //Generate the set of execution rules for reading args and writing outputs
     val execRule = getStageRule(stg, inOutMap, isFirstStg)
-    //TODO We don't need to generate methods at the moment since all communication is via FIFOs
-    // this may need to change eventually
     BModuleDef(name = genModuleName(stg), typ = None,
       params = params, body = sBody, rules = List(execRule), methods = List())
   }
@@ -297,13 +303,17 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     val allEdges = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
       es ++ s.inEdges ++ s.outEdges
     })
+    val edgeParams = allEdges.foldLeft(Map[PipelineEdge, BVar]())((m, e) => {
+      m + (e -> BVar(genParamName(e), getFifoType(edgeMap(e))))
+    })
     val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
-      m + (e -> BModInst(BVar(genParamName(e), getFifoType(edgeMap(e))), BModule(fifoModuleName, List())))
+      m + (e -> BModInst(edgeParams(e), BModule(fifoModuleName, List())))
     })
     //Instantiate a lock for each memory:
     val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
       m + (id -> BModInst(lockParams(id), BModule(lockModuleName, List())))
     })
+
     //Instantiate each stage module
     val mkStgs = (firstStage +: otherStages).map(s => {
       val moddef = stgMap(s)
@@ -317,9 +327,11 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
       BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
     })
     val stmts = edgeFifos.values.toList ++ memLocks.values.toList ++ mkStgs
-    //TODO expose a method to accept a reset input from the outside world.
-    BModuleDef(name = "mkTop", typ = None, params = modParams.values.toList, body = stmts,
-      rules = List(), methods = List())
+    //expose a start method as part of the top level interface
+    val startMethodDef = BMethodDef(startMethod, getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, edgeParams))
+    BModuleDef(name = "mk" + mod.name.v.capitalize, typ = Some(modInterfaceTyp),
+      params = modParams.values.toList, body = stmts,
+      rules = List(), methods = List(startMethodDef))
   }
 
   //Helper to accumulate getCombinationalCommand results into a single list
@@ -333,8 +345,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
   }
   /**
    * Translate all of the commands that go into the execution
-   * rules that do not write any permanent state; they may modify state
-   * implicitly through read operations.
+   * rules that do not write any permanent state.
    * @param cmd The command to translate
    * @return Some(translation) if cmd is combinational, otherwise None
    */
@@ -416,7 +427,6 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     }
     //TODO implement calls
     case CCall(id, args) => None
-    case IMemRecv(_: Id, _: Option[EVar]) => None
     case _:ICheckLock => None
     case CAssign(lhs, rhs) => None
     case CExpr(exp) => None

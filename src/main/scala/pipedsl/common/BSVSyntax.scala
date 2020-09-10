@@ -1,19 +1,17 @@
 package pipedsl.common
 
-import pipedsl.common.BSVSyntax.MethodType.MethodType
 import pipedsl.common.Errors.UnexpectedExpr
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
 
-  object MethodType extends Enumeration {
-    type MethodType = Value
-    val Action, Val, ActionVal = Value
-  }
+  sealed trait MethodType
+  case object Action extends MethodType
+  case class Value(rtyp: BSVType) extends MethodType
+  case class ActionValue(rtyp: BSVType) extends MethodType
 
   sealed trait BSVType
-
 
   case class BCombMemType(elem: BSVType, addrSize: Int) extends BSVType
   case class BAsyncMemType(elem: BSVType, addrSize: Int) extends BSVType
@@ -120,7 +118,8 @@ object BSVSyntax {
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])
   case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig])
   case class BImport(name: String)
-  case class BProgram(topModule: BModuleDef, imports: List[BImport], structs: List[BStructDef],
+  case class BExport(name: String, expFields: Boolean)
+  case class BProgram(topModule: BModuleDef, imports: List[BImport], exports: List[BExport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
 
   /**
