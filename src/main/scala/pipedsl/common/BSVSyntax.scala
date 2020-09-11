@@ -113,6 +113,7 @@ object BSVSyntax {
   case class BStructDef(typ: BStruct, derives: List[String])
   case class BRuleDef(name: String, conds: List[BExpr], body: List[BStatement])
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
+  case class BFuncDef(name: String) //TODO the rest of this
   case class BMethodDef(sig: BMethodSig, body: List[BStatement])
   case class BModuleDef(name: String, typ: Option[BInterface],
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])

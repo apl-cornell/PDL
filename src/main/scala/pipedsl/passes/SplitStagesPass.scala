@@ -2,12 +2,10 @@ package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SReceive, SSend, SpecStage}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities._
 import Passes.{CommandPass, ModulePass, ProgPass}
-import pipedsl.common.{Dataflow, Syntax}
 
 
-object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
+class SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
 
   var stgCounter: Int = 0
 

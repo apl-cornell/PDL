@@ -9,6 +9,7 @@ import passes.{AddEdgeValuePass, CanonicalizePass, ConvertRecvPass, LockOpTransl
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
+import pipedsl.codegen.BluespecGeneration.BluespecModuleGenerator
 
 object Main {
   val logger: Logger = Logger("main")
@@ -24,29 +25,31 @@ object Main {
     if (!Files.exists(inputFile)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
+    //TODO option to parse different syntax forms (mostly for testing)
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
+    //TODO pull all of this into a different class/function that organizes IR transformation passes and code generation
     val prog = CanonicalizePass.run(r.get)
-    //logger.info(prog.toString)
     val basetypes = BaseTypeChecker.check(prog, None)
     TimingTypeChecker.check(prog, Some(basetypes))
     val prog_recv = SimplifyRecvPass.run(prog)
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
-    val stageInfo = SplitStagesPass.run(prog_recv)
+    //Done checking things
+    val stageInfo = new SplitStagesPass().run(prog_recv)
+    //Run the transformation passes on the stage representation
     stageInfo.foreachEntry( (n, s) => {
       val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
-      val convertrecv = new ConvertRecvPass()
-      convertrecv.run(s)
+      new ConvertRecvPass().run(s)
       AddEdgeValuePass.run(s)
       LockOpTranslationPass.run(s)
-      val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
-      val bsvgenerator = new BluespecGeneration(mod, s.head, flattenStageList(s.tail))
+      //Code Generation
+      val outputDir = "testOutputs";
+      val outputFileName = mod.name.v.capitalize + ".bsv"
+      val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outputDir + "/" + outputFileName);
+      val bsvgenerator = new BluespecModuleGenerator(mod, s.head, flattenStageList(s.tail))
       bsvWriter.printBSVProg(bsvgenerator.getBSV)
-      //BluespecGeneration.run(s.head, mod.inputs, s.tail)
-      //PrettyPrinter.printStages(s)
-      //PrettyPrinter.printStageGraph(n.v, s)
-
     })
+    //TODO accept output type and location options
   }
 
 }
