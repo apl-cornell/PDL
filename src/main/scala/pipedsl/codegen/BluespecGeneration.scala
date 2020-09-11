@@ -219,7 +219,7 @@ object BluespecGeneration {
       }
       val edgeParams = inOutMap ++ firstStageParams
       //TODO only pass the module parameters that are actually needed instead of all
-      val params = edgeParams.values.toList ++ modParams.values ++ lockParams.values
+      val params = edgeParams.values.toList.sortWith(_.name < _.name) ++ modParams.values ++ lockParams.values
       //Generate set of definitions needed by rule conditions
       //(declaring variables read from unconditional inputs)
       val sBody = getStageBody(stg, edgeParams, isFirstStg)
@@ -386,7 +386,7 @@ object BluespecGeneration {
         if (s != firstStage) {
           args = args :+ startedge
         }
-        args = args ++ modParams.values.toList ++ lockParams.values.toList //TODO only pass mods that are necessary
+        args = args.sortWith(_.name < _.name) ++ modParams.values.toList ++ lockParams.values.toList //TODO only pass mods that are necessary
         BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
       })
       val stmts = edgeFifos.values.toList ++ memLocks.values.toList ++ mkStgs
