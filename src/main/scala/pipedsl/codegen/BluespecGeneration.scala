@@ -168,14 +168,25 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     val inOutMap = inMap ++ stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
       val edgeStructType = edgeMap(e)
       m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
+
     })
+    //TODO only include this edge if this stage has a recursive call
+    val firstStageParams = if (isFirstStg) {
+      Map()
+    } else {
+      firstStage.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
+        val edgeStructType = edgeMap(e)
+        m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
+      })
+    }
+    val edgeParams = inOutMap ++ firstStageParams
     //TODO only pass the module parameters that are actually needed instead of all
-    val params = inOutMap.values.toList ++ modParams.values ++ lockParams.values
+    val params = edgeParams.values.toList ++ modParams.values ++ lockParams.values
     //Generate set of definitions needed by rule conditions
     //(declaring variables read from unconditional inputs)
-    val sBody = getStageBody(stg, inOutMap, isFirstStg)
+    val sBody = getStageBody(stg, edgeParams, isFirstStg)
     //Generate the set of execution rules for reading args and writing outputs
-    val execRule = getStageRule(stg, inOutMap, isFirstStg)
+    val execRule = getStageRule(stg, edgeParams, isFirstStg)
     BModuleDef(name = genModuleName(stg), typ = None,
       params = params, body = sBody, rules = List(execRule), methods = List())
   }
@@ -189,7 +200,7 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * @return A single BSV Rule
    */
   private def getStageRule(stg: PStage, paramMap: Map[PipelineEdge, BVar], isFirstStg: Boolean = false): BRuleDef = {
-    var writeCmdStmts = getEffectCmds(stg.cmds)
+    var writeCmdStmts = getEffectCmds(stg.cmds, paramMap)
     val queueStmts = getEdgeQueueStmts(stg, stg.allEdges, paramMap)
     val blockingConds = getBlockingConds(stg.cmds)
     //add a statement to increment the thread ID
@@ -384,9 +395,9 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
     case CSplit(cases, default) => throw UnexpectedCommand(cmd)
   }
   //Helper to accumulate getWriteCmd results into a single list
-  private def getEffectCmds(cmds: Iterable[Command]): List[BStatement] = {
+  private def getEffectCmds(cmds: Iterable[Command], paramMap: Map[PipelineEdge, BVar]): List[BStatement] = {
     cmds.foldLeft(List[BStatement]())((l, c) => {
-      getEffectCmd(c) match {
+      getEffectCmd(c, paramMap) match {
         case Some(bs) => l :+ bs
         case None => l
       }
@@ -399,8 +410,8 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
    * @param cmd The command to translate
    * @return Some(translation) if cmd is effectful, else None
    */
-  private def getEffectCmd(cmd: Command): Option[BStatement] = cmd match {
-    case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c) match {
+  private def getEffectCmd(cmd: Command, paramMap: Map[PipelineEdge, BVar]): Option[BStatement] = cmd match {
+    case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c, paramMap) match {
       case Some(bc) => Some(BIf(toBSVExpr(cond), List(bc), List()))
       case None => None
     }
@@ -425,8 +436,12 @@ class BluespecGeneration(val mod: ModuleDef, val firstStage: PStage, val otherSt
       }
       case None => None
     }
-    //TODO implement calls
-    case CCall(id, args) => None
+    case CCall(id, args) => if (id == mod.name) {
+      Some(BStmtSeq(getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, paramMap)))
+    } else {
+      //TODO implement calls by using id to lookup the appropriate method
+      None
+    }
     case _:ICheckLock => None
     case CAssign(lhs, rhs) => None
     case CExpr(exp) => None

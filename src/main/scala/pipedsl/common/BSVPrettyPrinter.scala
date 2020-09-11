@@ -150,7 +150,7 @@ object BSVPrettyPrinter {
       case BMemWrite(mem, addr, data) => w.write(mkStatementString(
         toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
       case BIf(cond, trueBranch, falseBranch) =>
-        w.write(mkIndentedExpr("if", "(", toBSVExprStr(cond) + ")"))
+        w.write(mkIndentedExpr("if", "(", toBSVExprStr(cond) + ")\n"))
         w.write(mkIndentedExpr("begin\n"))
         incIndent()
         trueBranch.foreach(s => printBSVStatement(s))
