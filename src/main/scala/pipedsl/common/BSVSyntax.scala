@@ -75,6 +75,16 @@ object BSVSyntax {
     BStructLit(typ, argmap)
   }
 
+  /**
+   *
+   * @param typ
+   * @param args
+   * @return
+   */
+  def getNamedStruct(typ: BStruct, args: Iterable[BExpr]): BStructLit = {
+    BStructLit(typ, typ.fields.zip(args).toMap)
+  }
+
   sealed trait BExpr
 
   case object BDontCare extends BExpr

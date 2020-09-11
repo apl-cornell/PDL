@@ -214,7 +214,7 @@ object BluespecGeneration {
       } else {
         firstStage.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
           val edgeStructType = edgeMap(e)
-          m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
+          m + (e -> BVar(genParamName(e.to) +"_to", getFifoType(edgeStructType)))
         })
       }
       val edgeParams = inOutMap ++ firstStageParams
@@ -277,7 +277,7 @@ object BluespecGeneration {
      * @return A list of statements that represent queue operations for the relevant edges
      */
     private def getEdgeQueueStmts(s: PStage, es: Iterable[PipelineEdge],
-      paramMap: Map[PipelineEdge, BVar]): List[BStatement] = {
+      paramMap: Map[PipelineEdge, BVar], args: Option[Iterable[BExpr]] = None): List[BStatement] = {
       es.foldLeft(List[BStatement]())((l, e) => {
         val stmt = if (e.to == s) {
           val deq = BExprStmt(BMethodInvoke(paramMap(e), "deq", List()))
@@ -287,7 +287,11 @@ object BluespecGeneration {
             deq
           }
         } else {
-          val op = getCanonicalStruct(edgeMap(e))
+          val op = if (args.isDefined) {
+            getNamedStruct(edgeMap(e), args.get)
+          } else {
+            getCanonicalStruct(edgeMap(e))
+          }
           val enq = BExprStmt(BMethodInvoke(paramMap(e), "enq", List(op)))
           if (e.condSend.isDefined) {
             BIf(toBSVExpr(e.condSend.get), List(enq), List())
@@ -376,9 +380,13 @@ object BluespecGeneration {
           case None => BEmptyModule
         }
         //TODO only include startedge on stages that recursively call
-        val args: List[BVar] = (s.allEdges.map(e => {
+        var args: List[BVar] = s.allEdges.map(e => {
           edgeFifos(e).lhs
-        }).toList :+ startedge) ++ modParams.values.toList ++ lockParams.values.toList //TODO only pass mods that are necessary
+        }).toList
+        if (s != firstStage) {
+          args = args :+ startedge
+        }
+        args = args ++ modParams.values.toList ++ lockParams.values.toList //TODO only pass mods that are necessary
         BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
       })
       val stmts = edgeFifos.values.toList ++ memLocks.values.toList ++ mkStgs
@@ -486,7 +494,10 @@ object BluespecGeneration {
         case None => None
       }
       case CCall(id, args) => if (id == mod.name) {
-        Some(BStmtSeq(getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, paramMap)))
+        Some(BStmtSeq(
+          getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
+            paramMap, Some(args.map(a => toBSVExpr(a))))
+        ))
       } else {
         //TODO implement calls by using id to lookup the appropriate method
         None
