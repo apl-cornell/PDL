@@ -9,7 +9,7 @@ import passes.{AddEdgeValuePass, CanonicalizePass, ConvertRecvPass, LockOpTransl
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
-import pipedsl.codegen.BluespecGeneration.BluespecModuleGenerator
+import pipedsl.codegen.BluespecGeneration.{BluespecModuleGenerator, BluespecProgramGenerator}
 
 object Main {
   val logger: Logger = Logger("main")
@@ -38,18 +38,18 @@ object Main {
     val stageInfo = new SplitStagesPass().run(prog_recv)
     //Run the transformation passes on the stage representation
     stageInfo.foreachEntry( (n, s) => {
-      val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
       new ConvertRecvPass().run(s)
       AddEdgeValuePass.run(s)
       LockOpTranslationPass.run(s)
-      //Code Generation
-      val outputDir = "testOutputs";
-      val outputFileName = mod.name.v.capitalize + ".bsv"
-      val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outputDir + "/" + outputFileName);
-      val bsvgenerator = new BluespecModuleGenerator(mod, s.head, flattenStageList(s.tail))
-      bsvWriter.printBSVProg(bsvgenerator.getBSV)
     })
-    //TODO accept output type and location options
+    //Do Code Generation
+    val bsvgen = new BluespecProgramGenerator(prog_recv, stageInfo)
+    val outputDir = "testOutputs"
+    bsvgen.getBSVPrograms.foreach(p => {
+      val outputFileName = p.name + ".bsv"
+      val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outputDir + "/" + outputFileName);
+      bsvWriter.printBSVProg(p)
+    })
   }
 
 }

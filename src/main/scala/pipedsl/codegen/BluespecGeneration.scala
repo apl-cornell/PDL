@@ -2,16 +2,23 @@ package pipedsl.codegen
 
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
-import pipedsl.common.Errors.UnexpectedCommand
+import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
 
 
 object BluespecGeneration {
 
+  private val lockLib = "Locks"
+  private val memLib = "Memories"
+  private val fifoLib = "FIFOF"
+
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]]) {
 
-    //TODO fill this stuff in
+    private val combMemMod = "mkCombMem"
+    private val asyncMemMod = "mkAsyncMem"
+
+    //TODO compile functions into bsv functions into their own file
     //fill in the function map by generating each function and using
     //it to refer to prior functions
     private val funcMap: Map[Id, BFuncDef] = Map()
@@ -22,9 +29,54 @@ object BluespecGeneration {
           mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail)
         ).getBSV)
     })
-    //TODO generate the top-level bsv program defined by prog.cir
-    //This instantiates the prior modules, connects them, and initializes them
 
+    private def translateCircuit(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
+      case CirSeq(c1, c2) =>
+        val (stmts1, env1) = translateCircuit(c1, env)
+        val (stmts2, env2) = translateCircuit(c2, env1)
+        (stmts1 ++ stmts2, env2)
+      case CirConnect(name, c) =>
+        val mod = cirExprToModule(c, env)
+        val modtyp = name.typ.get match {
+          case TModType(_, _) => BInterface(mod.name)
+          case t@_ => toBSVType(t)
+        }
+        val modvar = BVar(name.v, modtyp)
+        (List(BModInst(modvar, mod)), env + (name -> modvar))
+    }
+
+    //Create a top level module that is synthesizable, takes no parameters
+    //and instantiates all of the required memories and pipeline modules
+    private val topLevelModule: BModuleDef = {
+      val (cirstmts, argmap) = translateCircuit(prog.circ, Map())
+      BModuleDef(name = "mkCircuit", typ = None, params = List(), body = cirstmts, rules = List(), methods = List())
+    }
+
+    private def getMemoryModule(mtyp: BSVType): BModule = mtyp match {
+      case BCombMemType(elem, addrSize) => BModule(name = combMemMod, List())
+      case BAsyncMemType(elem, addrSize) => BModule(name = asyncMemMod, List())
+      case _ => throw UnexpectedBSVType("Not an expected memory type")
+    }
+
+    private def cirExprToModule(c: CirExpr, env: Map[Id, BVar]): BModule = c match {
+      case CirMem(elemTyp, addrSize) =>
+        val memtyp = toBSVType(TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous))
+        getMemoryModule(memtyp)
+      case CirRegFile(elemTyp, addrSize) =>
+        val memtyp = toBSVType(TMemType(elemTyp, addrSize, Latency.Combinational, Latency.Sequential))
+        getMemoryModule(memtyp)
+      case CirNew(mod, _, mods) =>
+        //inits are used in the testbench rule body, not module instantiation
+        BModule(name = mod.v.capitalize , args = mods.map(m => env(m)))
+    }
+
+    val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
+      imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList, exports = List(),
+      structs = List(), interfaces = List(), modules = List())
+
+    def getBSVPrograms: List[BProgram] = {
+      modMap.values.toList :+ topProgram
+    }
   }
 
   class BluespecFunctionGenerator() {
@@ -43,16 +95,13 @@ object BluespecGeneration {
    * @param otherStages - The full remaining list of pipeline stages.
    * @return - The BSV Module that represents this pipeline.
    */
-  class BluespecModuleGenerator(val mod: ModuleDef, val firstStage: PStage, val otherStages: List[PStage]) {
+  private class BluespecModuleGenerator(val mod: ModuleDef, val firstStage: PStage, val otherStages: List[PStage]) {
 
     private val lockType = "Lock"
     private val lockModuleName = "mkLock"
-    private val lockLib = "Locks"
-    private val memLib = "Memories"
     private val regType = "Reg"
     private val regModuleName = "mkReg"
     private val fifoType = "FIFOF"
-    private val fifoLib = "FIFOF"
     private val fifoModuleName = "mkFIFOF"
     private val threadIdName = "_threadID"
     private val startMethodName = "start"
@@ -92,7 +141,7 @@ object BluespecGeneration {
     })
     //mapping memory ids to their associated locks
     private val lockParams: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
-      locks + (m.name -> BVar(genLockName(m.name), getLockType()))
+      locks + (m.name -> BVar(genLockName(m.name), getLockType))
     })
     //Generate a Submodule for each stage
     private val stgMap = (otherStages).foldLeft(Map[PStage, BModuleDef]())((m, s) => {
@@ -131,7 +180,7 @@ object BluespecGeneration {
       BSizedInt(unsigned = true, log2(otherStages.length + 1))
     }
 
-    private def getLockType(): BInterface = {
+    private def getLockType: BInterface = {
       BInterface(lockType, List(BVar("idsize", getThreadIdType)))
     }
 
@@ -142,7 +191,7 @@ object BluespecGeneration {
      * @return
      */
     def getBSV: BProgram = {
-      BProgram(topModule = topModule, imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)),
+      BProgram(name = mod.name.v.capitalize, topModule = topModule, imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)),
         exports = List(BExport(modInterfaceTyp.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList,
         interfaces = List(modInterfaceDef), modules = stgMap.values.toList)

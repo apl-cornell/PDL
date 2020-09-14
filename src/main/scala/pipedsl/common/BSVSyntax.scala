@@ -28,10 +28,10 @@ object BSVSyntax {
    */
   def toBSVType(t: Type): BSVType = t match {
     case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
-    case Syntax.TMemType(elem, addrSize, rlat, _) => BAsyncMemType(toBSVType(elem), addrSize)
+    case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
     case Syntax.TBool() => BBool
-      //TODO others
+    //TODO others
   }
 
   //TODO a better way to translate operators
@@ -130,7 +130,7 @@ object BSVSyntax {
   case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig])
   case class BImport(name: String)
   case class BExport(name: String, expFields: Boolean)
-  case class BProgram(topModule: BModuleDef, imports: List[BImport], exports: List[BExport], structs: List[BStructDef],
+  case class BProgram(name: String, topModule: BModuleDef, imports: List[BImport], exports: List[BExport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
 
   /**

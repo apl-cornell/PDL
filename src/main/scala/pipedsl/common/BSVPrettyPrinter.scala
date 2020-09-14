@@ -211,7 +211,7 @@ object BSVPrettyPrinter {
       w.write(mkIndentedExpr("endinterface\n"))
     }
 
-    def printModule(mod: BModuleDef, synthesize: Boolean = false): Unit = {
+    def printModule(mod: BModuleDef): Unit = {
       //this just defines the interface this module implements,
       // the variable is necessary but unused
       val interfaceParam = if (mod.typ.isDefined) {
@@ -221,7 +221,8 @@ object BSVPrettyPrinter {
       }
       val paramStr = (mod.params :+ interfaceParam).map(p => toDeclString(p)).mkString(", ")
       val paramString = mkExprString("(", paramStr, ")")
-      if (synthesize) {
+      //can synthesize if there are no parameters
+      if (mod.params.isEmpty) {
         w.write("(* synthesize *)\n")
       }
       w.write(mkStatementString("module", mod.name, paramString))

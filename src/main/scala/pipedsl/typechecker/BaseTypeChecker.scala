@@ -142,6 +142,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     }
     case CirConnect(name, c) => {
       val (t, env2) = checkCirExpr(c, tenv)
+      name.typ = Some(t)
       env2.add(name, t)
     }
   }
@@ -162,7 +163,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       mtyp match {
         case TModType(ityps, refs) => {
           if(ityps.length != inits.length) {
-            throw ArgLengthMismatch(c.pos, ityps.length, inits.length)
+            throw ArgLengthMismatch(c.pos, inits.length, ityps.length)
           }
           ityps.zip(inits).foreach {
             case (expectedT, arg) => {
@@ -171,6 +172,9 @@ object BaseTypeChecker extends TypeChecks[Type] {
                 throw UnexpectedSubtype(arg.pos, arg.toString, expectedT, atyp)
               }
             }
+          }
+          if(refs.length != mods.length) {
+            throw ArgLengthMismatch(c.pos, mods.length, refs.length)
           }
           refs.zip(mods).foreach {
             case (reftyp, mname) => {
