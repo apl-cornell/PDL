@@ -1,4 +1,4 @@
-import CPU :: *;
+import Cpu :: *;
 import Memories :: *;
 
 (*synthesize*)
