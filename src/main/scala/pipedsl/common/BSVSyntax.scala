@@ -124,7 +124,7 @@ object BSVSyntax {
   case class BRuleDef(name: String, conds: List[BExpr], body: List[BStatement])
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
   case class BFuncDef(name: String) //TODO the rest of this
-  case class BMethodDef(sig: BMethodSig, body: List[BStatement])
+  case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
   case class BModuleDef(name: String, typ: Option[BInterface],
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])
   case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig])

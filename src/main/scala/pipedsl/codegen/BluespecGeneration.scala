@@ -78,6 +78,7 @@ object BluespecGeneration {
 
     }
 
+    private val busyReg = BVar("busy", getRegType(BBool))
     private val threadIdVar = BVar(threadIdName, getThreadIdType)
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true)
@@ -389,9 +390,16 @@ object BluespecGeneration {
         args = args.sortWith(_.name < _.name) ++ modParams.values.toList ++ lockParams.values.toList //TODO only pass mods that are necessary
         BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
       })
-      val stmts = edgeFifos.values.toList ++ memLocks.values.toList ++ mkStgs
+      //Instantiate the register that describes when the module is busy/ready for inputs
+      val busyInst = BModInst(busyReg, BModule(regModuleName, List(BBoolLit(false))))
+      val stmts = (edgeFifos.values.toList ++ memLocks.values.toList :+ busyInst) ++ mkStgs
       //expose a start method as part of the top level interface
-      val startMethodDef = BMethodDef(startMethod, getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, edgeParams))
+      val startMethodDef = BMethodDef(startMethod, Some(BUOp("!", busyReg)),
+        //send data to pipeline
+        getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, edgeParams) :+
+          //And set busy status to true
+          BModAssign(busyReg, BBoolLit(true))
+      )
       BModuleDef(name = "mk" + mod.name.v.capitalize, typ = Some(modInterfaceTyp),
         params = modParams.values.toList, body = stmts,
         rules = List(), methods = List(startMethodDef))

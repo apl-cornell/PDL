@@ -179,18 +179,21 @@ object BSVPrettyPrinter {
       w.write(mkIndentedExpr("endrule\n"))
     }
 
-    def printBSVMethodSig(sig: BMethodSig): Unit = {
+    def printBSVMethodSig(sig: BMethodSig , cond: Option[BExpr]): Unit = {
       val mtypstr = sig.typ match {
         case Action => "Action"
         case Value(t) => toBSVTypeStr(t)
         case ActionValue(t) => "ActionValue#(" + toBSVTypeStr(t) + ")"
       }
       val paramstr = sig.params.map(p => toDeclString(p)).mkString(", ")
-      w.write(mkStatementString("method", mtypstr, sig.name, "(", paramstr, ")"))
+      val condstr = if (cond.isDefined) {
+        mkExprString("if(", toBSVExprStr(cond.get), ")")
+      } else { "" }
+      w.write(mkStatementString("method", mtypstr, sig.name, "(", paramstr, ")", condstr))
     }
 
     def printBSVMethod(method: BMethodDef): Unit = {
-      printBSVMethodSig(method.sig)
+      printBSVMethodSig(method.sig, method.cond)
       incIndent()
       method.body.foreach(s => printBSVStatement(s))
       decIndent()
@@ -201,7 +204,8 @@ object BSVPrettyPrinter {
       w.write(mkStatementString("interface", toBSVTypeStr(intdef.typ)))
       incIndent()
       intdef.methods.foreach(m => {
-        printBSVMethodSig(m)
+        //don't print conditions in the interface definition
+        printBSVMethodSig(m, None)
       })
       decIndent()
       w.write(mkIndentedExpr("endinterface\n"))
