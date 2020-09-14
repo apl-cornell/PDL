@@ -12,6 +12,7 @@ object BluespecGeneration {
   private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
+  private val startMethodName = "start"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]]) {
 
@@ -37,25 +38,27 @@ object BluespecGeneration {
         (stmts1 ++ stmts2, env2)
       case CirConnect(name, c) =>
         val mod = cirExprToModule(c, env)
-        val modtyp = name.typ.get match {
-          case TModType(_, _) => BInterface(mod.name)
-          case t@_ => toBSVType(t)
-        }
+        val modtyp = getModuleType(c, name.typ.get)
         val modvar = BVar(name.v, modtyp)
         (List(BModInst(modvar, mod)), env + (name -> modvar))
     }
 
-    //Create a top level module that is synthesizable, takes no parameters
-    //and instantiates all of the required memories and pipeline modules
-    private val topLevelModule: BModuleDef = {
-      val (cirstmts, argmap) = translateCircuit(prog.circ, Map())
-      BModuleDef(name = "mkCircuit", typ = None, params = List(), body = cirstmts, rules = List(), methods = List())
-    }
+
 
     private def getMemoryModule(mtyp: BSVType): BModule = mtyp match {
       case BCombMemType(elem, addrSize) => BModule(name = combMemMod, List())
       case BAsyncMemType(elem, addrSize) => BModule(name = asyncMemMod, List())
       case _ => throw UnexpectedBSVType("Not an expected memory type")
+    }
+
+    private def getModuleType(c: CirExpr, expected: Type): BSVType = c match {
+      case CirNew(mod, _, _) => {
+        modMap(mod).topModule.typ match {
+          case Some(bint) => bint
+          case None => BEmptyModule
+        }
+      }
+      case _ => toBSVType(expected)
     }
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar]): BModule = c match {
@@ -66,10 +69,26 @@ object BluespecGeneration {
         val memtyp = toBSVType(TMemType(elemTyp, addrSize, Latency.Combinational, Latency.Sequential))
         getMemoryModule(memtyp)
       case CirNew(mod, _, mods) =>
-        //inits are used in the testbench rule body, not module instantiation
-        BModule(name = mod.v.capitalize , args = mods.map(m => env(m)))
+        BModule(name = modMap(mod).topModule.name , args = mods.map(m => env(m)))
     }
 
+    private def initCircuit(c: Circuit, env: Map[Id, BVar]): List[BStatement] = c match {
+      case CirSeq(c1, c2) => initCircuit(c1, env) ++ initCircuit(c2, env)
+      case CirConnect(name, c) => c match {
+        case CirNew(_, inits, _) => List(
+          BExprStmt(BMethodInvoke(env(name), startMethodName, inits.map(i => toBSVExpr(i))))
+        )
+        case _ => List() //TODO if/when memories can be initialized it goes here
+      }
+    }
+
+    //Create a top level module that is synthesizable, takes no parameters
+    //and instantiates all of the required memories and pipeline modules
+    private val topLevelModule: BModuleDef = {
+      val (cirstmts, argmap) = translateCircuit(prog.circ, Map())
+      val initrule = BRuleDef(name = "init", conds = List(), body = initCircuit(prog.circ, argmap))
+      BModuleDef(name = "mkCircuit", typ = None, params = List(), body = cirstmts, rules = List(initrule), methods = List())
+    }
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList, exports = List(),
       structs = List(), interfaces = List(), modules = List())
@@ -104,7 +123,7 @@ object BluespecGeneration {
     private val fifoType = "FIFOF"
     private val fifoModuleName = "mkFIFOF"
     private val threadIdName = "_threadID"
-    private val startMethodName = "start"
+
 
     type EdgeInfo = Map[PipelineEdge, BStructDef]
     type ModInfo = Map[Id, BVar]
