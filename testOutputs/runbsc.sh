@@ -5,8 +5,8 @@ BPATH="-p .:"$(realpath ~/volume/SpecLang/bscRuntime/locks)":"$(realpath ~/volum
 #Compiling Base Module
 bsc $ARGS $BPATH -show-schedule -verilog Cpu.bsv
 #Compile test bench
-bsc $ARGS $BPATH -show-schedule -verilog tb.bsv
+bsc $ARGS $BPATH -show-schedule -verilog Circuit.bsv
 #Run simulation for like...a million cycles
-bsc $ARGS $BPATH -sim tb.bsv
-bsc $ARGS -sim -o top.bexe -e top top.ba
-./top.bexe > top.sim.out
+bsc $ARGS $BPATH -sim Circuit.bsv
+bsc $ARGS -sim -o mkCircuit.bexe -e mkCircuit mkCircuit.ba
+./mkCircuit.bexe > top.sim.out
