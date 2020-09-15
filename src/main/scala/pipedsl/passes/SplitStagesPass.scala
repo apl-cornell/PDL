@@ -5,7 +5,7 @@ import pipedsl.common.Syntax._
 import Passes.{CommandPass, ModulePass, ProgPass}
 
 
-class SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
+object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
 
   var stgCounter: Int = 0
 

@@ -167,8 +167,8 @@ object DAGSyntax {
    * @param falseStages
    * @param joinStage
    */
-  class IfStage(n: Id, val cond: Expr, val trueStages: List[PStage],
-    val falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
+  class IfStage(n: Id, val cond: Expr, var trueStages: List[PStage],
+    var falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
 
     val condVar = EVar(Id("__cond" + n.v))
     condVar.typ = Some(TBool())

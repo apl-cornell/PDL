@@ -1,15 +1,17 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-import common.BSVPrettyPrinter
+import common.{BSVPrettyPrinter, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, CanonicalizePass, ConvertRecvPass, LockOpTranslationPass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
 import pipedsl.codegen.BluespecGeneration.{BluespecModuleGenerator, BluespecProgramGenerator}
+import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.Syntax.Id
 
 object Main {
   val logger: Logger = Logger("main")
@@ -35,13 +37,17 @@ object Main {
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
     //Done checking things
-    val stageInfo = new SplitStagesPass().run(prog_recv)
+    val stageInfo: Map[Id, List[PStage]] = SplitStagesPass.run(prog_recv)
     //Run the transformation passes on the stage representation
-    stageInfo.foreachEntry( (n, s) => {
-      new ConvertRecvPass().run(s)
-      AddEdgeValuePass.run(s)
-      LockOpTranslationPass.run(s)
-    })
+    stageInfo map { case (n, stgs) =>
+      new ConvertRecvPass().run(stgs)
+      AddEdgeValuePass.run(stgs)
+      LockOpTranslationPass.run(stgs)
+      //This pass produces a new stage list (not modifying in place)
+      val newstgs = CollapseStagesPass.run(stgs)
+      PrettyPrinter.printStageGraph(n.v, newstgs)
+      n -> newstgs
+    }
     //Do Code Generation
     val bsvgen = new BluespecProgramGenerator(prog_recv, stageInfo)
     val outputDir = "testOutputs"

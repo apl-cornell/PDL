@@ -124,6 +124,9 @@ object BluespecGeneration {
     private val fifoModuleName = "mkFIFOF"
     private val threadIdName = "_threadID"
 
+    //Helpers for disambiguating generated edge names
+    private var edgeCounter: Map[(PStage, PStage), Int] = Map().withDefaultValue(0)
+    private var edgeNames: Map[PipelineEdge, String] = Map()
 
     type EdgeInfo = Map[PipelineEdge, BStructDef]
     type ModInfo = Map[Id, BVar]
@@ -231,7 +234,7 @@ object BluespecGeneration {
             l :+ BVar(id.v, toBSVType(id.typ.get))
           })
           if (addTId) sfields = sfields :+ threadIdVar
-          val styp = BStruct(genEdgeName(e), sfields)
+          val styp = BStruct(genStructName(e), sfields)
           val structdef = BStructDef(styp, List("Bits", "Eq"))
           ms + (e -> structdef)
         })
@@ -240,11 +243,26 @@ object BluespecGeneration {
 
     //Helper functions that cannonically generate names from pipeline structures.
     private def genEdgeName(e: PipelineEdge) = {
-      "E_" + e.from.name.v + "_TO_" + e.to.name.v
+      if (edgeNames.contains(e)) {
+        edgeNames(e)
+      } else {
+        val existingedges = edgeCounter(e.from, e.to)
+        val endstr = if (existingedges > 0) {
+          "_" + existingedges.toString
+        } else { "" }
+        val name = e.from.name.v + "_TO_" + e.to.name.v + endstr
+        edgeNames = edgeNames.updated(e, name)
+        edgeCounter = edgeCounter.updated((e.from, e.to), existingedges + 1)
+        name
+      }
+    }
+
+    private def genStructName(e: PipelineEdge) = {
+      "E_" + genEdgeName(e);
     }
 
     private def genParamName(e: PipelineEdge): String = {
-      "fifo_" + e.from.name.v + "_" + e.to.name.v
+      "fifo_" + genEdgeName(e)
     }
 
     private def genParamName(s: PStage): String = {
@@ -270,11 +288,11 @@ object BluespecGeneration {
       //Define module parameters to communicate along pipeline edges
       val inMap = stg.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
         val edgeStructType = edgeMap(e)
-        m + (e -> BVar(genParamName(e.from), getFifoType(edgeStructType)))
+        m + (e -> BVar(genParamName(e), getFifoType(edgeStructType)))
       })
       val inOutMap = inMap ++ stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
         val edgeStructType = edgeMap(e)
-        m + (e -> BVar(genParamName(e.to), getFifoType(edgeStructType)))
+        m + (e -> BVar(genParamName(e), getFifoType(edgeStructType)))
 
       })
       //TODO only include this edge if this stage has a recursive call
@@ -283,7 +301,7 @@ object BluespecGeneration {
       } else {
         firstStage.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
           val edgeStructType = edgeMap(e)
-          m + (e -> BVar(genParamName(e.to) +"_to", getFifoType(edgeStructType)))
+          m + (e -> BVar(genParamName(e) +"_to", getFifoType(edgeStructType)))
         })
       }
       val edgeParams = inOutMap ++ firstStageParams
