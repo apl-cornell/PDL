@@ -148,8 +148,8 @@ object Utilities {
    * @param stg
    * @return
    */
-  def getReachableStages(stg: PStage): Set[PStage] = {
-    visit[Set[PStage]](stg, Set(stg), (s, stgs) => stgs + s);
+  def getReachableStages(stg: PStage): List[PStage] = {
+    visit[List[PStage]](stg, List[PStage](), (s, stgs) => stgs :+ s)
   }
 
   /**

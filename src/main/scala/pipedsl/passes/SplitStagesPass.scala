@@ -5,9 +5,9 @@ import pipedsl.common.Syntax._
 import Passes.{CommandPass, ModulePass, ProgPass}
 
 
-object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
+class SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PStage]] with ProgPass[Map[Id, List[PStage]]] {
 
-  var stgCounter: Int = 0
+  private var stgCounter: Int = 0
 
   def nextStageId(): Id = {
     val s = s"Stage__$stgCounter"
@@ -22,6 +22,7 @@ object SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PS
   }
 
   override def run(m: ModuleDef): List[PStage] = {
+    stgCounter = 0
     val stgs = run(m.body)
     val emptyStage = new PStage(Id("_input_"))
     //Add an edge to a not-real stage to simplify

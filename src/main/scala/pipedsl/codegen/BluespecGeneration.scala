@@ -3,8 +3,11 @@ package pipedsl.codegen
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand}
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
+
+import scala.annotation.tailrec
 
 
 object BluespecGeneration {
@@ -411,12 +414,12 @@ object BluespecGeneration {
         val paramExpr = BMethodInvoke(edgeParams(e), "first", List())
         e.values.foreach(v => {
           body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)),
-            BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))))
+            Some(BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get)))))
         })
         //only read threadIDs from an unconditional edge
         if (!isFirstStg) {
           body = body :+ BDecl(threadIdVar,
-            BStructAccess(paramExpr, threadIdVar))
+            Some(BStructAccess(paramExpr, threadIdVar)))
         }
       })
       //generate a conditional assignment expression to choose
@@ -433,10 +436,10 @@ object BluespecGeneration {
             BStructAccess(paramExpr, BVar(v.v, toBSVType(v.typ.get))),
             expr)
         })
-        body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)), condEdgeExpr)
+        body = body :+ BDecl(BVar(v.v, toBSVType(v.typ.get)), Some(condEdgeExpr))
       })
       //And now add all of the combinational connections
-      body ++ getCombinationalCommands(stg.cmds)
+      body ++ getCombinationalDeclarations(stg.cmds) ++ getCombinationalCommands(stg.cmds)
     }
 
     //TODO add in the module parameters into the definition w/ appropriate types
@@ -491,6 +494,37 @@ object BluespecGeneration {
         rules = List(), methods = List(startMethodDef))
     }
 
+    /**
+     *
+     * @param cmds
+     * @return
+     */
+    private def getCombinationalDeclarations(cmds: Iterable[Command]): List[BDecl] = {
+      var result = List[BDecl]()
+      var decls = Set[BVar]()
+      cmds.foreach(c => {
+        val decopt = getCombinationalDeclaration(c)
+        if (decopt.isDefined) {
+          val dec = decopt.get
+          if (!decls.contains(dec.lhs)) {
+            result = result :+ dec
+            decls = decls + dec.lhs
+          }
+        }
+      })
+      result
+    }
+
+    @tailrec
+    private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
+      case CAssign(lhs, _) => Some(BDecl(BVar(lhs.id.v, toBSVType(lhs.typ.get)), None))
+      case ICondCommand(_, cmd) => getCombinationalDeclaration(cmd)
+      case IMemRecv(mem, data) => data match {
+        case Some(v) => Some(BDecl(BVar(v.id.v, toBSVType(v.typ.get)), None))
+        case None => None
+      }
+      case _ => None
+    }
     //Helper to accumulate getCombinationalCommand results into a single list
     private def getCombinationalCommands(cmds: Iterable[Command]): List[BStatement] = {
       cmds.foldLeft(List[BStatement]())((l, c) => {
@@ -510,7 +544,7 @@ object BluespecGeneration {
      */
     private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
       case CAssign(lhs, rhs) =>
-        Some(BDecl(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))
+        Some(BAssign(BVar(lhs.id.v, toBSVType(lhs.typ.get)), toBSVExpr(rhs)))
       case ICondCommand(cond: Expr, c: Command) => getCombinationalCommand(c) match {
         case Some(bc) => Some(BIf(toBSVExpr(cond), List(bc), List()))
         case None => None
@@ -518,7 +552,7 @@ object BluespecGeneration {
       case CExpr(exp) => Some(BExprStmt(toBSVExpr(exp)))
       case IMemRecv(mem: Id, data: Option[EVar]) => data match {
         case Some(v) => {
-          Some(BDecl(BVar(v.id.v, toBSVType(v.typ.get)), BMemPeek(modParams(mem))))
+          Some(BAssign(BVar(v.id.v, toBSVType(v.typ.get)), BMemPeek(modParams(mem))))
         }
         case None => None
       }

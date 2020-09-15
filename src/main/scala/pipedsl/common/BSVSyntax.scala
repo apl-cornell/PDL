@@ -113,7 +113,7 @@ object BSVSyntax {
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BInvokeAssign(lhs: BVar, rhs: BExpr) extends BStatement
-  case class BDecl(lhs: BVar, rhs: BExpr) extends BStatement
+  case class BDecl(lhs: BVar, rhs: Option[BExpr]) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
   case class BMemReadReq(mem: BVar, addr: BExpr) extends BStatement
   case class BMemReadResp(lhs: BVar, mem: BVar) extends BStatement

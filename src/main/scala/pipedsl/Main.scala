@@ -37,9 +37,9 @@ object Main {
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
     //Done checking things
-    val stageInfo: Map[Id, List[PStage]] = SplitStagesPass.run(prog_recv)
+    val stageInfo: Map[Id, List[PStage]] = new SplitStagesPass().run(prog_recv)
     //Run the transformation passes on the stage representation
-    stageInfo map { case (n, stgs) =>
+    val optstageInfo = stageInfo map { case (n, stgs) =>
       new ConvertRecvPass().run(stgs)
       AddEdgeValuePass.run(stgs)
       LockOpTranslationPass.run(stgs)
@@ -49,7 +49,7 @@ object Main {
       n -> newstgs
     }
     //Do Code Generation
-    val bsvgen = new BluespecProgramGenerator(prog_recv, stageInfo)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo)
     val outputDir = "testOutputs"
     bsvgen.getBSVPrograms.foreach(p => {
       val outputFileName = p.name + ".bsv"
