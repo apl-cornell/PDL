@@ -1,6 +1,5 @@
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
-import java.lang.Integer
 import Errors._
 import Security._
 import Locks.LockState._
@@ -23,11 +22,11 @@ object Syntax {
   }
 
   object OpConstructor {
-    val add: (Double, Double) => Double = (_ + _)
-    val mul: (Double, Double) => Double = (_ * _)
-    val div: (Double, Double) => Double  = (_ / _)
-    val sub: (Double, Double) => Double = (_ - _)
-    val mod: (Double, Double) => Double  = (_ % _)
+    val add: (Int, Int) => Int = (_ + _)
+    val mul: (Int, Int) => Int = (_ * _)
+    val div: (Int, Int) => Int  = (_ / _)
+    val sub: (Int, Int) => Int = (_ - _)
+    val mod: (Int, Int) => Int  = (_ % _)
     val band: (Int, Int) => Int = (_ & _)
     val bor: (Int, Int) => Int = (_ | _)
     val bxor: (Int, Int) => Int = (_ ^ _)
@@ -102,8 +101,8 @@ object Syntax {
     val op: String;
     override def toString = this.op
     def operate(v1: Any, v2: Any): Option[Any] = this match {
-      case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].doubleValue(),
-        v2.asInstanceOf[Number].doubleValue()))
+      case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].intValue(),
+        v2.asInstanceOf[Number].intValue()))
       case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].intValue(),
         v2.asInstanceOf[Number].intValue()))
       case b: BoolOp => Some(b.fun(v1.asInstanceOf[Boolean], v2.asInstanceOf[Boolean]))
@@ -126,7 +125,7 @@ object Syntax {
   case class EqOp(op: String) extends BOp
   case class CmpOp(op: String) extends BOp
   case class BoolOp(op: String, fun: (Boolean, Boolean) => Boolean) extends BOp
-  case class NumOp(op: String, fun: (Double, Double) => Double) extends BOp
+  case class NumOp(op: String, fun: (Int, Int) => Int) extends BOp
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
   sealed trait Expr extends Positional with TypeAnnotation {
@@ -219,6 +218,4 @@ object Syntax {
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends CirExpr
-
-
 }
