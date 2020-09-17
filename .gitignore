@@ -3,3 +3,6 @@
 *.aux
 *.pdf
 .idea
+*.bo
+*.sched
+testOutputs/*

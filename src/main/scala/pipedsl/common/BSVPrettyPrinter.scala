@@ -143,11 +143,7 @@ object BSVPrettyPrinter {
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) => {
-        if (rhs.isDefined){
-          w.write(mkStatementString(toDeclString(lhs), "=", toBSVExprStr(rhs.get)))
-        } else {
-          w.write(mkStatementString(toDeclString(lhs)))
-        }
+        w.write(mkStatementString(toDeclString(lhs), "=", if (rhs.isDefined) toBSVExprStr(rhs.get) else "?"))
       }
         //TODO no magic variables get runtime names from some configuration
       case BMemReadReq(mem, addr) => w.write(mkStatementString(

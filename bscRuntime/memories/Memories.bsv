@@ -1,10 +1,15 @@
+package Memories;
+
 import RegFile :: *;
 import FIFOF :: *;
+import SpecialFIFOs :: *;
 
-package Memories;
+
 
 export MemCombRead(..);
 export AsyncMem(..);
+export mkCombMem;
+export mkAsyncMem;
 
 //these are the memory interfaces we suppport
 //the first is used for memories that support combinational reads
@@ -23,12 +28,12 @@ interface AsyncMem#(type elem, type addr);
 endinterface
 
 //wrapper around the built-in register file
-module mkCombMem(MemCombRead#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr));
+module mkCombMem(MemCombRead#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
     RegFile#(addr, elem) rf <- mkRegFileFull();
 
     method elem read(addr a);
-        rf.sub(a);
+       return rf.sub(a);
     endmethod
 
     method Action write(addr a, elem b);
@@ -38,12 +43,12 @@ module mkCombMem(MemCombRead#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(a
 endmodule
 
 //Todo build like..a real memory here on BRAMS or something
-module mkAsyncMem(AsyncMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr));
+module mkAsyncMem(AsyncMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
     RegFile#(addr, elem) rf <- mkRegFileFull();
-    FIFOF#(addr) reqs <- mkPipelineFIFO();
+    FIFOF#(addr) reqs <- mkPipelineFIFOF();
 
-    elem nextOut = rf.sub(reqs.first)
+    elem nextOut = rf.sub(reqs.first);
 
     method Action readReq(addr a);
         reqs.enq(a);
