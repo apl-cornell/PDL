@@ -1,15 +1,16 @@
 package pipedsl.common
 
 import DAGSyntax._
-import Syntax.Id
+import Syntax.{Id}
 import Utilities._
+import pipedsl.common.Locks.LockState._
 
 object Dataflow {
 
-  type DFMap[T] = Map[Id, Set[T]]
+  type DFMap[T] = Map[Id, T]
 
-  case class Analysis[T](isForward: Boolean, init: Set[T],
-                         merge: (PStage, DFMap[T]) => Set[T], transfer: (PStage, Set[T]) => Set[T])
+  case class Analysis[T](isForward: Boolean, init: T,
+                         merge: (PStage, DFMap[T]) => T, transfer: (PStage, T) => T)
 
   /**
    * This is the worklist algorithm for dataflow analysis, which only operates on sets of
@@ -42,17 +43,18 @@ object Dataflow {
     while (worklist.nonEmpty) {
       val node: PStage = worklist.head
       worklist = worklist.tail
-      val inVal: Set[T] = analysis.merge(node, inEdges(node).foldLeft[DFMap[T]](Map())((m, s) => {
+      val inVal: T = analysis.merge(node, inEdges(node).foldLeft[DFMap[T]](Map())((m, s) => {
         m + (s.name -> outResult(s.name))
       }))
       inResult = inResult.updated(node.name, inVal)
-      val outVal: Set[T] = analysis.transfer(node, inVal)
+      val outVal: T = analysis.transfer(node, inVal)
       if (outVal != outResult(node.name)) {
         outResult = outResult.updated(node.name, outVal)
         worklist = outEdges(node).foldLeft(worklist)((wl, n) => {
-          stgSet.contains(n) match {
-            case true => wl :+ n
-            case false => wl
+          if (stgSet.contains(n)) {
+            wl :+ n
+          } else {
+            wl
           }
         })
       }
@@ -75,7 +77,7 @@ object Dataflow {
    * @param used The set of variables used later in the pipeline,
    * @return The set of variables used in *p* and later in the pipeline.
    */
-  def transferUsedVars(p: PStage, used: Set[Id]): Set[Id] = {
+   def transferUsedVars(p: PStage, used: Set[Id]): Set[Id] = {
     getUsedVars(p.cmds) ++ used -- getWrittenVars(p.cmds)
     //if a var was written this stage, then we don't need to send it from the prior stage
   }
@@ -88,8 +90,8 @@ object Dataflow {
    * @param used Variables used in later stages.
    * @return All variables unioned together
    */
-  def mergeUsedVars(node: PStage, used: DFMap[Id]): Set[Id] = node match {
-    case stg: SpecStage => {
+  def mergeUsedVars(node: PStage, used: DFMap[Set[Id]]): Set[Id] = node match {
+    case stg: SpecStage =>
       //only add the variables that are used in the join
       //but not written in *either* branch
       val joinNeeds = used(stg.joinStage.name)
@@ -98,10 +100,11 @@ object Dataflow {
       val specNeeds = used(stg.specStages.head.name)
       val specWritten = joinNeeds -- joinNeeds.intersect(specNeeds)
       specNeeds.union(verifNeeds) -- specWritten -- verifWritten
-    }
     case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
   }
 
-  val UsedInLaterStages = Analysis(isForward = false, Set(), mergeUsedVars, transferUsedVars)
-
+  val UsedInLaterStages: Analysis[Set[Id]] =
+    Analysis[Set[Id]](isForward = false, Set(), mergeUsedVars, transferUsedVars)
+  val LockStateInfo: Analysis[Map[Id, LockState]] =
+    Analysis[Map[Id, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
 }

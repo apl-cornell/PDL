@@ -1,0 +1,42 @@
+/*
+s = 0;
+for(int i = 0; i < 100; i++) {
+  d = A[i] - B[i];
+  if (d > 0) {
+    s += d;
+  }
+}
+return s;
+*/
+
+pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: int<32>[1]<c,s>] {
+    if (counter < 100<8>) {
+        call sum(counter + 1<8>);
+        //acquire(memA[counter]);
+        acquire(memA);
+        //acquire(memB[counter]);
+        acquire(memB);
+        int<32> argA <- memA[counter];
+        int<32> argB <- memB[counter];
+        //release(memA[counter]);
+        release(memA);
+        //release(memB[counter]);
+        release(memB);
+        ---
+        int<32> d = argA - argB; //could split into multiple cycles as in HLS examples
+        if (d > 0<32>) {
+            ---
+            acquire(total);
+            int<32> s = total[0] + d; //could split into multiple cycles as in HLS
+            total[0] <- s;
+            release(total);
+        }
+    } //else done, do nothing
+}
+
+circuit {
+    total = regfile(int<32>, 1);
+    memA = memory(int<32>, 8);
+    memB = memory(int<32>, 8);
+    s = new sum(0<8>)[memA, memB, total];
+}

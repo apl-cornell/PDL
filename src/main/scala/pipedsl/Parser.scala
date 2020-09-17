@@ -22,6 +22,7 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val iden: P[Id] = positioned {
     "" ~> "[a-zA-Z_][a-zA-Z0-9_]*".r ^^ { v => Id(v) }
   }
+
   lazy val posint = "[0-9]+".r ^^ { n => n.toInt } | err("Expected positive number")
 
   lazy val stringVal: P[String] =
@@ -198,7 +199,18 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
-  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ^^ { case elem ~ size => TMemType(elem, size) }
+  lazy val latency: P[Latency.Latency] = "c" ^^ { _ => Latency.Combinational } |
+    "s" ^^ { _ => Latency.Sequential } |
+    "a" ^^ { _ => Latency.Asynchronous }
+  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency)).? ^^ { case elem ~ size ~ lats => {
+    if (lats.isDefined) {
+      val rlat = lats.get._1
+      val wlat = lats.get._2
+      TMemType(elem, size, rlat, wlat)
+    } else {
+      TMemType(elem, size)
+    }
+  }}
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
   lazy val baseTyp: P[Type] = memory | sizedInt | bool
 
@@ -230,9 +242,12 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val cmem: P[CirExpr] = positioned {
     "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(elem, addr) }
   }
+  lazy val crf: P[CirExpr] = positioned {
+    "regfile" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirRegFile(elem, addr) }
+  }
 
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | cmem | crf) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cseq: P[Circuit] = positioned {

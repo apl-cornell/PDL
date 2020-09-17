@@ -1,4 +1,4 @@
-pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<16>[32]] {
+pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<16>[32]<a,a>] {
     acquire(imem);
     int<16> insn <- imem[pc];
     release(imem);
@@ -8,8 +8,8 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<16>[32]] {
     int<5> rs2 = insn{10:6};
     int<5> rd = insn{15:11};
     acquire(rf);
-    int<32> arg1 <- rf[rs1];
-    int<32> arg2 <- rf[rs2];
+    int<32> arg1 = rf[rs1];
+    int<32> arg2 = rf[rs2];
     ---
     int<32> offset = ((op_type == 0b0<1>) && (arg1 == arg2)) ? 0b0<27> ++ rd : 4<32>;
     int<32> npc = pc + offset;
@@ -25,6 +25,6 @@ pipe cpu(pc: int<32>)[rf: int<32>[5], imem: int<16>[32]] {
 
 circuit {
     i = memory(int<16>, 32);
-    r = memory(int<32>, 5);
-    c = new cpu(0<32>)[r, i, d];
+    r = regfile(int<32>, 5);
+    c = new cpu(0<32>)[r, i];
 }

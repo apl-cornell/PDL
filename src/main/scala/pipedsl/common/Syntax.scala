@@ -2,7 +2,7 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
-import Locks.LockState._
+import pipedsl.common.Locks.LockState.LockState
 
 object Syntax {
   /**
@@ -19,6 +19,25 @@ object Syntax {
       var maybeSpec: Boolean = false
     }
   }
+
+  object Latency extends Enumeration {
+    type Latency = Value
+    val Combinational = Value("c")
+    val Sequential = Value("s")
+    val Asynchronous = Value("a")
+
+    def join(l1: Latency, l2: Latency): Latency = l1 match {
+      case Combinational => l2
+      case Sequential => l2 match {
+        case Asynchronous => Asynchronous
+        case _ => l1
+      }
+      case Asynchronous => l1
+    }
+
+  }
+
+  import Latency._
 
   object OpConstructor {
     val add: (Double, Double) => Double = (_ + _)
@@ -49,7 +68,7 @@ object Syntax {
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
-      case TMemType(elem, size) => s"${elem.toString}[${size}]"
+      case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
       case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
     }
   }
@@ -61,7 +80,7 @@ object Syntax {
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TMemType(elem: Type, addrSize: Int) extends Type
+  case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type]) extends Type
 
   /**
@@ -178,6 +197,7 @@ object Syntax {
   case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
   case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
   case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
+  case class ICheckLock(mem: Id) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
@@ -208,6 +228,7 @@ object Syntax {
 
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
+  case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends CirExpr
 
 

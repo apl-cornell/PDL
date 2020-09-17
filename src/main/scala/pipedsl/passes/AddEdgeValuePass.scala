@@ -20,7 +20,7 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
     stgs
   }
 
-  def addEdgeValues(stg: PStage, usedIns: DFMap[Id]): Unit = {
+  def addEdgeValues(stg: PStage, usedIns: DFMap[Set[Id]]): Unit = {
     stg match {
       case s: IfStage => {
         val choiceEdge = PipelineEdge(None, None, s, s.joinStage, Set(s.condVar.id))
