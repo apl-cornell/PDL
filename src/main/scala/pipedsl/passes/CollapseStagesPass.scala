@@ -20,9 +20,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
 
   override def run(stgs: List[PStage]): List[PStage] = {
     stgs.foreach(s => simplifyIfs(s))
-    //only return the stgs reachable from the start node
-    //since we've cut off some nodes from the graph
-    getReachableStages(stgs.head)
+    eliminateEmptyStages(stgs.head)
   }
 
   private def simplifyIfs(stg: PStage): Unit = stg match {
@@ -57,6 +55,30 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     case _ =>
   }
 
+  private def eliminateEmptyStages(start: PStage): List[PStage] = {
+    var result = getReachableStages(start)
+    var done = false
+    while (!done) {
+      //reverse will just speed this up a bit
+      result.reverse.foreach(s => {
+        //This stage does nothing! Make it unreachable by removing all input edges
+        if (s.cmds.isEmpty && s.outEdges.isEmpty) {
+          s.inEdges.foreach(e => s.removeEdge(e))
+        }
+      })
+      val tmp = getReachableStages(start)
+      //done once we stop removing stages
+      done = tmp.equals(result)
+      result = tmp
+    }
+    result
+  }
+  /**
+   *
+   * @param stg
+   * @param cond
+   * @param stmts
+   */
   private def addCondStmts(stg: PStage, cond: Expr, stmts: Iterable[Command]): Unit = {
     val condstmts = stmts.map(s => ICondCommand(cond, s))
     stg.cmds = stg.cmds ++ condstmts

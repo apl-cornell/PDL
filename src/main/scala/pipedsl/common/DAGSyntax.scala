@@ -103,7 +103,7 @@ object DAGSyntax {
       edges.foreach(e => this.addEdge(e))
     }
 
-    private def removeEdge(edge: PipelineEdge): Unit = {
+    def removeEdge(edge: PipelineEdge): Unit = {
       val other = if (edge.to == this) { edge.from } else { edge.to }
       this.edges = this.edges - edge
       other.edges = other.edges - edge
