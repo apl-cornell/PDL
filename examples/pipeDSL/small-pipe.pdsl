@@ -14,13 +14,13 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<16>[32]<a,a>] {
     int<32> offset = ((op_type == 0b0<1>) && (arg1 == arg2)) ? 0b0<27> ++ rd : 4<32>;
     int<32> npc = pc + offset;
     int<32> alu_res = arg1 + arg2;
+    call cpu(npc);
     ---
     int<32> tmp = 0b1<32>;
     if (op_type == 0b1<1>) {
         rf[rd] <- alu_res + tmp;
     }
     release(rf);
-    call cpu(npc);
 }
 
 circuit {
