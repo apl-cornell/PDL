@@ -28,9 +28,11 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
   private def simplifyIfs(stg: PStage): Unit = stg match {
     case s: IfStage =>
       //TODO recursively merge inner portions of the pipeline
+      s.trueStages.foreach(t => simplifyIfs(t))
+      s.falseStages.foreach(f => simplifyIfs(f))
       //Check if the branches are combinational
-      val isTrueComb = s.trueStages.head == s.trueStages.last
-      val isFalseComb = s.falseStages.head == s.falseStages.last
+      val isTrueComb = s.trueStages.head.outEdges.exists(e => e.to == s.joinStage)
+      val isFalseComb = s.falseStages.head.outEdges.exists(e => e.to == s.joinStage)
       //Merge in the first true and false stages since that delay is artificial
       mergeStages(s, s.trueStages.head)
       mergeStages(s, s.falseStages.head)
