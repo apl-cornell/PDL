@@ -1,0 +1,41 @@
+def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
+    if (op == 1<2>) {
+        return arg1 + arg2;
+    } else if (op == 2<2>) {
+        return arg1 >> arg2;
+    } else if (op == 3<2>) {
+        return arg1 - arg2;
+    } else {
+        return arg1 * arg2;
+    }
+}
+pipe cpu(pc: int<5>)[rf: int<32>[5], imem: int<32>[5], dmem: int<32>[5]] {
+    acquire(imem);
+    int<32> insn <- imem[pc];
+    release(imem);
+    ---
+    int<2> op_type = insn{1:0};
+    int<2> op = insn{3:2};
+    int<5> rs1 = insn{8:4};
+    int<5> rs2 = insn{13:9};
+    int<5> rd = insn{18:14};
+    int<13> imm = insn{31:19};
+    acquire(rf);
+    int<32> arg1 <- rf[rs1];
+    int<32> arg2 <- rf[rs2];
+    ---
+    //op_type == ALU;
+    int<32> add_arg2 = (op_type == 0b1<2>) ? arg2 : 0x0<19> ++ imm;
+    int<32> alu_res = alu(arg1, add_arg2, op);
+    ---
+    rf[rd] <- alu_res;
+    release(rf);
+    call cpu(pc + 1<5>);
+}
+
+circuit {
+    i = memory(int<32>, 5);
+    d = memory(int<32>, 5);
+    r = memory(int<32>, 5);
+    c = new cpu(0<5>)[r, i, d];
+}

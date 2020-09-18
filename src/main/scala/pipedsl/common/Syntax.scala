@@ -4,6 +4,7 @@ import Errors._
 import Security._
 import pipedsl.common.Locks.LockState.LockState
 
+
 object Syntax {
   /**
    * Annotations added by the various passes of the type checker.
@@ -40,11 +41,11 @@ object Syntax {
   import Latency._
 
   object OpConstructor {
-    val add: (Double, Double) => Double = (_ + _)
-    val mul: (Double, Double) => Double = (_ * _)
-    val div: (Double, Double) => Double  = (_ / _)
-    val sub: (Double, Double) => Double = (_ - _)
-    val mod: (Double, Double) => Double  = (_ % _)
+    val add: (Int, Int) => Int = (_ + _)
+    val mul: (Int, Int) => Int = (_ * _)
+    val div: (Int, Int) => Int  = (_ / _)
+    val sub: (Int, Int) => Int = (_ - _)
+    val mod: (Int, Int) => Int  = (_ % _)
     val band: (Int, Int) => Int = (_ & _)
     val bor: (Int, Int) => Int = (_ | _)
     val bxor: (Int, Int) => Int = (_ ^ _)
@@ -52,7 +53,7 @@ object Syntax {
     val sr: (Int, Int) => Int = (_ >> _)
     val or: (Boolean, Boolean) => Boolean = (_ || _)
     val and: (Boolean, Boolean) => Boolean = (_ && _)
-    val concat: (Int, Int) => Int = (_ + _) //TODO fix for interpreter
+    val concat: (Int, Int) => Int = (a, b) => (a << (32-Integer.numberOfLeadingZeros(b)) | b)
   }
 
   import Annotations._
@@ -99,7 +100,15 @@ object Syntax {
   sealed trait UOp extends Positional {
     val op: String;
     override def toString: String = this.op
+    def operate(v1: Any): Option[Any] = this match {
+      //TODO match on all case UOps, currently seems like only BoolUOp is actually parsed
+      case b:BoolUOp => b.op match {
+        case "!" => Some(!v1.asInstanceOf[Boolean])
+        case _ => None
+      }
+    }
   }
+  
   case class BoolUOp(op: String) extends UOp
   case class NumUOp(op: String) extends UOp
   case class BitUOp(op: String) extends UOp
@@ -111,8 +120,8 @@ object Syntax {
     val op: String;
     override def toString = this.op
     def operate(v1: Any, v2: Any): Option[Any] = this match {
-      case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].doubleValue(),
-        v2.asInstanceOf[Number].doubleValue()))
+      case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].intValue(),
+        v2.asInstanceOf[Number].intValue()))
       case b: BitOp => Some(b.fun(v1.asInstanceOf[Number].intValue(),
         v2.asInstanceOf[Number].intValue()))
       case b: BoolOp => Some(b.fun(v1.asInstanceOf[Boolean], v2.asInstanceOf[Boolean]))
@@ -122,10 +131,10 @@ object Syntax {
         case _ => None
       }
       case c: CmpOp => c.op match {
-        case ">" => Some(1.asInstanceOf[Int] > v2.asInstanceOf[Int])
-        case ">=" => Some(1.asInstanceOf[Int] >= v2.asInstanceOf[Int])
-        case "<=" =>  Some(1.asInstanceOf[Int] <= v2.asInstanceOf[Int])
-        case "<" => Some(1.asInstanceOf[Int] < v2.asInstanceOf[Int])
+        case ">" => Some(v1.asInstanceOf[Int] > v2.asInstanceOf[Int])
+        case ">=" => Some(v1.asInstanceOf[Int] >= v2.asInstanceOf[Int])
+        case "<=" => Some(v1.asInstanceOf[Int] <= v2.asInstanceOf[Int])
+        case "<" => Some(v1.asInstanceOf[Int] < v2.asInstanceOf[Int])
         case _ => None
       }
       case _ => None
@@ -135,7 +144,7 @@ object Syntax {
   case class EqOp(op: String) extends BOp
   case class CmpOp(op: String) extends BOp
   case class BoolOp(op: String, fun: (Boolean, Boolean) => Boolean) extends BOp
-  case class NumOp(op: String, fun: (Double, Double) => Double) extends BOp
+  case class NumOp(op: String, fun: (Int, Int) => Int) extends BOp
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
   sealed trait Expr extends Positional with TypeAnnotation {
@@ -230,6 +239,4 @@ object Syntax {
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends CirExpr
-
-
 }

@@ -1,18 +1,32 @@
 package pipedsl
 
-import common.Syntax._
 import pipedsl.common.Errors
+import pipedsl.common.Syntax._
 
 import scala.collection.immutable
 
-class Interpreter {
+class Interpreter(val maxIterations: Int) {
 
     type Environment = scala.collection.immutable.Map[Id, Any]
+    type MemoryEnvironment = scala.collection.immutable.Map[Id, Array[Int]]
+    type Functions = scala.collection.immutable.Map[Id, FuncDef]
+    type Modules = scala.collection.immutable.Map[Id, ModuleDef]
+    type ModuleCalls = scala.collection.immutable.Queue[Unit => Environment]
+    
+    var functions: Functions = new immutable.HashMap[Id, FuncDef]()
+    var modules: Modules = new immutable.HashMap[Id, ModuleDef]()
+    var memoryEnv: MemoryEnvironment = new immutable.HashMap[Id, Array[Int]]()
+    var moduleCalls: ModuleCalls = immutable.Queue[Unit => Environment]()
+    var iterations: Int = 1
 
     def interp_expr(e: Expr, env:Environment): Any = e match {
         case i: EInt => i.v
         case b: EBool => b.v
         case o: EBinop => o.op.operate(interp_expr(o.e1, env), interp_expr(o.e2, env)) match {
+            case Some(v) => v
+            case None => throw Errors.UnexpectedExpr(e)
+        }
+        case u: EUop => u.op.operate(interp_expr(u.ex, env)) match {
             case Some(v) => v
             case None => throw Errors.UnexpectedExpr(e)
         }
@@ -23,9 +37,9 @@ class Interpreter {
             rec.asInstanceOf[Map[Id, Any]](rf.fieldName)
         }
         case m: EMemAccess => {
-            val mem = env(m.mem)
+            val mem = memoryEnv(m.mem)
             val idx = interp_expr(m.index, env)
-            mem.asInstanceOf[Array[Any]](idx.asInstanceOf[Int])
+            mem(idx.asInstanceOf[Int])
         }
         case t: ETernary => {
             val cond = interp_expr(t.cond, env)
@@ -40,34 +54,38 @@ class Interpreter {
             val start = be.start
             val end = be.end
             if (start > end) throw Errors.InvalidBitExtraction(start, end)
-            val mask = ~0 << (31 - end) >> (31 - end)
-            (mask & n) >> start
+            val mask = (~0) << (31 - end) >>> (31 - (end-start)) << start
+            (mask & n) >>> start
+        }
+        case f: EApp => {
+            val func: FuncDef = functions.get(f.func).get
+            var newEnv = new immutable.HashMap[Id, Any]()
+            for (index <- 0 until f.args.length) {
+                //add arguments to new environment that will be used for the new function execution 
+                newEnv = newEnv + (func.args(index).name -> interp_expr(f.args(index), env))
+            }
+            interp_function(func, newEnv)
         }
         case ex => throw Errors.UnexpectedExpr(ex)
     }
+    
 
-
-
-    def interp_command(c: Command): Unit = {
-        interp_command_helper(c, new immutable.HashMap[Id, Any]())
-    }
-
-    def interp_command_helper(c: Command, env: Environment): Environment = c match {
+    def interp_command(c: Command, env: Environment): Environment = c match {
         case CSeq(c1, c2) => {
-            val e2 = interp_command_helper(c1, env)
-            interp_command_helper(c2, e2)
+            val e2 = interp_command(c1, env)
+            interp_command(c2, e2)
         }
         case CTBar(c1, c2) => {
-            val e2 = interp_command_helper(c1, env)
+            val e2 = interp_command(c1, env)
             //TODO also produce and update next cycle values
-            interp_command_helper(c2, e2)
+            interp_command(c2, e2)
         }
         case CIf(cond, tbr, fbr) => {
             val b = interp_expr(cond, env).asInstanceOf[Boolean]
             if (b) {
-                interp_command_helper(tbr, env)
+                interp_command(tbr, env)
             } else {
-                interp_command_helper(fbr, env)
+                interp_command(fbr, env)
             }
         }
         case CAssign(lhs, rhs) => {
@@ -84,7 +102,24 @@ class Interpreter {
         }
         case CRecv(lhs, rhs) => {
             //TODO values available next cycle
-            env
+            val rval = interp_expr(rhs, env)
+            lhs match {
+                case EVar(id) => {
+                    env.get(id) match {
+                        case Some(v) => throw Errors.AlreadySetException(id)
+                        case None => {
+                            env + (id -> rval)
+                        }
+                    }
+                }
+                case EMemAccess(mem, index) => {
+                    val memArray = memoryEnv(mem)
+                    val idx = interp_expr(index, env)
+                    memArray(idx.asInstanceOf[Int]) = rval.asInstanceOf[Int]
+                    memoryEnv = memoryEnv + (mem -> memArray)
+                    env
+                }
+            }
         }
         case CExpr(exp) => {
             interp_expr(exp, env)
@@ -92,9 +127,48 @@ class Interpreter {
         }
         case COutput(exp) => {
             val v = interp_expr(exp, env)
-            println(v)
+            env
+        }
+        case CReturn(exp) => {
+            val r = interp_expr(exp, env)
+            env + (Id("__RETURN__") -> r)
+        }
+        case CCall(id, args) => {
+            var newEnv = new immutable.HashMap[Id, Any]()
+            val moddef = modules(id)
+            for (index <- 0 until args.length) {
+                //add arguments to new environment that will be used for the new module execution 
+                newEnv = newEnv + (moddef.inputs(index).name -> interp_expr(args(index), env))
+            }
+            moduleCalls = moduleCalls.enqueue(_ => interp_module(moddef, newEnv))
             env
         }
         case _ => env
+    }
+    
+    def interp_function(f: FuncDef, env: Environment): Any = {
+        interp_command(f.body, env)(Id("__RETURN__"))
+    }
+    
+    def interp_module(m: ModuleDef, env: Environment): Environment = { 
+        interp_command(m.body, env)
+    }
+    
+    def interp_prog(p: Prog, mems: Map[String, Array[Int]]): Environment = {
+        p.fdefs.foreach(fdef => functions = functions + (fdef.name -> fdef))
+        p.moddefs.foreach(moddef => modules = modules + (moddef.name -> moddef))
+        mems.keySet.foreach(mem => memoryEnv = memoryEnv + (Id(mem) -> mems.get(mem).get))
+        interp_module(p.moddefs(0), new immutable.HashMap[Id, Any]() + (Id("pc") -> 0))
+        while (iterations < maxIterations) {
+            val queueSize = moduleCalls.length
+            for (i <- 0 until queueSize) {
+                val dequeuedCall = moduleCalls.dequeue
+                moduleCalls = dequeuedCall._2
+                dequeuedCall._1()
+            }
+            iterations = iterations + 1
+        }
+        memoryEnv.keySet.foreach(mem => {println(mem.v); println(memoryEnv.get(mem).get.mkString(", "))})
+        memoryEnv
     }
 }

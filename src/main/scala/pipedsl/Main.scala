@@ -1,11 +1,12 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-import common.{BSVPrettyPrinter, PrettyPrinter}
+
+import common.{BSVPrettyPrinter, MemoryInputParser, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
@@ -13,13 +14,15 @@ import pipedsl.codegen.BluespecGeneration.{BluespecModuleGenerator, BluespecProg
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.Id
 
+import scala.collection.immutable
+import scala.io.Source
+
 object Main {
   val logger: Logger = Logger("main")
 
   def main(args: Array[String]): Unit = {
     logger.debug("Hello")
     val p: Parser = new Parser();
-    val i: Interpreter = new Interpreter();
     if (args.length < 1) {
       throw new RuntimeException(s"Need to pass a file path as an argument")
     }
@@ -36,6 +39,11 @@ object Main {
     val prog_recv = SimplifyRecvPass.run(prog)
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
+    /** How to call the interpreter
+    val i: Interpreter = new Interpreter(4)
+    i.interp_prog(RemoveTimingPass.run(prog_recv), MemoryInputParser.parse(args))
+    **/
+    
     //Done checking things
     val stageInfo: Map[Id, List[PStage]] = new SplitStagesPass().run(prog_recv)
     //Run the transformation passes on the stage representation
@@ -57,5 +65,4 @@ object Main {
       bsvWriter.printBSVProg(p)
     })
   }
-
 }
