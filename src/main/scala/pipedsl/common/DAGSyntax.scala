@@ -103,7 +103,7 @@ object DAGSyntax {
       edges.foreach(e => this.addEdge(e))
     }
 
-    private def removeEdge(edge: PipelineEdge): Unit = {
+    def removeEdge(edge: PipelineEdge): Unit = {
       val other = if (edge.to == this) { edge.from } else { edge.to }
       this.edges = this.edges - edge
       other.edges = other.edges - edge
@@ -167,8 +167,8 @@ object DAGSyntax {
    * @param falseStages
    * @param joinStage
    */
-  class IfStage(n: Id, val cond: Expr, val trueStages: List[PStage],
-    val falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
+  class IfStage(n: Id, val cond: Expr, var trueStages: List[PStage],
+    var falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
 
     val condVar = EVar(Id("__cond" + n.v))
     condVar.typ = Some(TBool())

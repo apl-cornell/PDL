@@ -1,20 +1,20 @@
 package pipedsl.common
 
-import pipedsl.common.BSVSyntax.MethodType.MethodType
 import pipedsl.common.Errors.UnexpectedExpr
+import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
 
-  object MethodType extends Enumeration {
-    type MethodType = Value
-    val Action, Val, ActionVal = Value
-  }
+  sealed trait MethodType
+  case object Action extends MethodType
+  case class Value(rtyp: BSVType) extends MethodType
+  case class ActionValue(rtyp: BSVType) extends MethodType
 
   sealed trait BSVType
 
-
-  case class BMemType(elem: BSVType, addrSize: Int) extends BSVType
+  case class BCombMemType(elem: BSVType, addrSize: Int) extends BSVType
+  case class BAsyncMemType(elem: BSVType, addrSize: Int) extends BSVType
   case class BStruct(name: String, fields: List[BVar]) extends BSVType
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
@@ -27,10 +27,11 @@ object BSVSyntax {
    * @return
    */
   def toBSVType(t: Type): BSVType = t match {
-    case Syntax.TMemType(elem, addrSize) => BMemType(toBSVType(elem), addrSize)
+    case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
+    case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
     case Syntax.TBool() => BBool
-      //TODO others
+    //TODO others
   }
 
   //TODO a better way to translate operators
@@ -50,16 +51,14 @@ object BSVSyntax {
     case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
     case eb@EBinop(_,_,_) => toBSVBop(eb)
     case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
-    case ETernary(cond, tval, fval) => BCaseExpr(toBSVExpr(cond),
-      List((BBoolLit(true), toBSVExpr(tval)),
-        (BBoolLit(false), toBSVExpr(fval))))
+    case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
     case EVar(id) => BVar(id.v, toBSVType(id.typ.get))
       //TODO functions
     //case EApp(func, args) => throw new UnexpectedExpr(e)
     case EApp(func, args) => BIntLit(0, 10, 1)
     case ERecAccess(rec, fieldName) => throw new UnexpectedExpr(e)
     case ERecLiteral(fields) => throw new UnexpectedExpr(e)
-    case EMemAccess(mem, index) => throw new UnexpectedExpr(e)
+    case EMemAccess(mem, index) => BMemRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
     case ECast(ctyp, exp) => throw new UnexpectedExpr(e)
     case expr: CirExpr =>throw new UnexpectedExpr(e)
   }
@@ -76,10 +75,22 @@ object BSVSyntax {
     BStructLit(typ, argmap)
   }
 
+  /**
+   *
+   * @param typ
+   * @param args
+   * @return
+   */
+  def getNamedStruct(typ: BStruct, args: Iterable[BExpr]): BStructLit = {
+    BStructLit(typ, typ.fields.zip(args).toMap)
+  }
+
   sealed trait BExpr
 
   case object BDontCare extends BExpr
-  case class BCaseExpr(cond: BExpr, cases: List[(BExpr, BExpr)]) extends BExpr
+  case object BZero extends BExpr
+  case object BOne extends BExpr
+  case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
@@ -91,6 +102,8 @@ object BSVSyntax {
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
+  case class BMemRead(mem: BVar, addr: BExpr) extends BExpr
+  case class BMemPeek(mem: BVar) extends BExpr
 
   sealed trait BStatement
 
@@ -100,19 +113,24 @@ object BSVSyntax {
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BInvokeAssign(lhs: BVar, rhs: BExpr) extends BStatement
-  case class BDecl(lhs: BVar, rhs: BExpr) extends BStatement
+  case class BDecl(lhs: BVar, rhs: Option[BExpr]) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
+  case class BMemReadReq(mem: BVar, addr: BExpr) extends BStatement
+  case class BMemReadResp(lhs: BVar, mem: BVar) extends BStatement
+  case class BMemWrite(mem: BVar, addr: BExpr, data: BExpr) extends BStatement
 
 
   case class BStructDef(typ: BStruct, derives: List[String])
   case class BRuleDef(name: String, conds: List[BExpr], body: List[BStatement])
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
-  case class BMethodDef(sig: BMethodSig, body: List[BStatement])
+  case class BFuncDef(name: String) //TODO the rest of this
+  case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
   case class BModuleDef(name: String, typ: Option[BInterface],
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])
   case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig])
   case class BImport(name: String)
-  case class BProgram(topModule: BModuleDef, imports: List[BImport], structs: List[BStructDef],
+  case class BExport(name: String, expFields: Boolean)
+  case class BProgram(name: String, topModule: BModuleDef, imports: List[BImport], exports: List[BExport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
 
   /**

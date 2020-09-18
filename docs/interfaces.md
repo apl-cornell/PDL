@@ -300,16 +300,17 @@ The compiler then checks that such a write is actually going to be reflected in 
 at the point at which the lock is released. For correctness, this analysis does not need to be very precise.
 For instance, since variables are write-once in this language, we can syntactically check that there is a matching write statement.
 
-The read points for these bypass values are implicitly associated with the points at which the relevant locks are `acquired`.
+The read points for these bypass values are implicitly associated with the points at which the relevant locks are `reserved`.
 
 ```
-int<32> arg1 = acquire(rf[rs1]); //block until the lock can be acquired, or a bypass value is available
+int<32> arg1 = reserve(rf[rs1]); //block until the lock can be acquired, or a bypass value is available
 ```
 or, for an asynchronous memory:
 ```
-int<32> data <- acquire(dmem[addr]);
+int<32> data <- reserve(dmem[addr]);
 ```
-As shown above, this implies new semantics for `acquire` where it can also return the value for the associated location.
+As shown above, this implies new semantics for `reserve` where it can also return the value for the associated location.
+In this case, `reserve` _will block_ until the  bypass data is available, but the lock is still not considered `acquired` yet at that point.
 
 ### Runtime Semantics
 
@@ -328,25 +329,47 @@ This only requires that readers must be able to access the _last_ valid entry in
 
 The above implementation implies that the following snippet:
 ```
-int<32> arg1 = acquire(rf[rs1]);
+int<32> arg1 = reserve(rf[rs1]);
 ```
 Will have the following runtime semantics:
 ```
-if (can_acquire(rf[rs1])
+if (can_acquire(rf[rs1]) {
   acquire(rf[rs1])
   arg1 = rf[rs1]
-else
-  if (last_committed(rf[rs1]).isValid)
-    arg1 = last_committed(rf[rs1]).get
-  else
-    block()
+} else {
+  reserve(rf[rs1]);
+  while (last_committed(rf[rs1]).isValid) {
+    block();
+  }
+  arg1 = last_committed(rf[rs1]).get
+}
 ```
-
-
 
 ## User Defined Modules
 
-TODO
+So far we've only described a single modular interface: Memories.
+These have implicit `read` and `write` interfaces,
+with either combinational or non-combinational latencies.
+There are a few approaches we can take to generalize this for user defined modules.
+
+The simplest is to just force them to also have the same interface as memories.
+In this way, every module can be called and optionally returns some value.
+Right now, modules (as defined with the `pipe` keyword) don't expose any interface,
+other than accepting an input value. It would be relatively straightforward to expose
+a (potentially optional) return value as well. However, this doesn't allow for
+the exposure of multiple methods (`read` vs. `write`).
+
+### Pipeline Methods
+
+In order for our language to really work, every module really needs to have
+a single sequential pipeline. If we would like to expose multiple methods, these
+should still be exposed as a single input where the method name is a secondary parameter.
+In this way, every interaction with a module is really a "request" followed by a "response"
+in a later cycle; we could introduce some syntactic sugar or macros to make this nicer to use.
+
+Calling any method of a pipeline would require holding the lock for that module, as if it
+were a memory. In order to slightly optimize these method calls, it would be nice
+to verify that some methods are combinational so that we could support combinational reads (like register files).
 
 ## Speculation
 

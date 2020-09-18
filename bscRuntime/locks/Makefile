@@ -1,7 +1,7 @@
 LABNAME = Stages Stuff
 
-BSC=bsc -no-show-timestamps -no-show-version
-B_IN=linear_comm.bsv
+BSC=bsc -no-show-timestamps -no-show-version --aggressive-conditions
+B_IN=Locks.bsv
 
 OUT=Top
 

@@ -1,7 +1,7 @@
 LABNAME = Stages Stuff
 
-BSC=bsc -no-show-timestamps -no-show-version
-B_IN=bram.bsv
+BSC=bsc -no-show-timestamps -no-show-version -aggressive-conditions
+B_IN=Memories.bsv
 
 OUT=Top
 

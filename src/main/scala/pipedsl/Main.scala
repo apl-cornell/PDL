@@ -1,14 +1,18 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-import common.{BSVPrettyPrinter, MemoryInputParser}
+
+import common.{BSVPrettyPrinter, MemoryInputParser, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, CanonicalizePass, ConvertRecvPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
+import pipedsl.codegen.BluespecGeneration.{BluespecModuleGenerator, BluespecProgramGenerator}
+import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.Syntax.Id
 
 import scala.collection.immutable
 import scala.io.Source
@@ -26,30 +30,39 @@ object Main {
     if (!Files.exists(inputFile)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
+    //TODO option to parse different syntax forms (mostly for testing)
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile)));
+    //TODO pull all of this into a different class/function that organizes IR transformation passes and code generation
     val prog = CanonicalizePass.run(r.get)
-    //logger.info(prog.toString)
     val basetypes = BaseTypeChecker.check(prog, None)
     TimingTypeChecker.check(prog, Some(basetypes))
     val prog_recv = SimplifyRecvPass.run(prog)
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
-    val stageInfo = SplitStagesPass.run(prog_recv)
+    /** How to call the interpreter
     val i: Interpreter = new Interpreter(4)
     i.interp_prog(RemoveTimingPass.run(prog_recv), MemoryInputParser.parse(args))
-    stageInfo.foreachEntry( (n, s) => {
-      val mod = prog_recv.moddefs.find(m => m.name == n).getOrThrow(new RuntimeException())
-      val convertrecv = new ConvertRecvPass()
-      convertrecv.run(s)
-      AddEdgeValuePass.run(s)
-      val bsvWriter = BSVPrettyPrinter.getFilePrinter("testOutputs/one.bsv")
-      val bsvprog = BluespecGeneration.getBSV(mod, s.head, flattenStageList(s.tail))
-      bsvWriter.printBSVProg(bsvprog)
-      //BluespecGeneration.run(s.head, mod.inputs, s.tail)
-      //PrettyPrinter.printStages(s)
-      //PrettyPrinter.printStageGraph(n.v, s)
-
+    **/
+    
+    //Done checking things
+    val stageInfo: Map[Id, List[PStage]] = new SplitStagesPass().run(prog_recv)
+    //Run the transformation passes on the stage representation
+    val optstageInfo = stageInfo map { case (n, stgs) =>
+      new ConvertRecvPass().run(stgs)
+      AddEdgeValuePass.run(stgs)
+      LockOpTranslationPass.run(stgs)
+      //This pass produces a new stage list (not modifying in place)
+      val newstgs = CollapseStagesPass.run(stgs)
+      PrettyPrinter.printStageGraph(n.v, newstgs)
+      n -> newstgs
+    }
+    //Do Code Generation
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo)
+    val outputDir = "testOutputs"
+    bsvgen.getBSVPrograms.foreach(p => {
+      val outputFileName = p.name + ".bsv"
+      val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outputDir + "/" + outputFileName);
+      bsvWriter.printBSVProg(p)
     })
   }
-
 }

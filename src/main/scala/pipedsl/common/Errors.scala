@@ -106,6 +106,9 @@ object Errors {
   case class UnexpectedAsyncReference(pos: Position, node: String) extends TypeError (
     s"$node references memory in a synchronous statement", pos)
 
+  case class UnexpectedSyncReference(pos: Position, msg: String) extends TypeError (
+    msg, pos
+  )
   case class UnresolvedSpeculation(pos: Position, operation: String) extends TypeError (
     s"Tried to perform $operation while in a potentially speculative state", pos)
 
