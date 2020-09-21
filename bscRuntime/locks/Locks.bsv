@@ -4,8 +4,9 @@ import FIFOF :: * ;
 import Vector :: *;
 
 export Lock(..);
+export AddrLock(..);
 export mkLock;
-
+export mkAddrLock;
 
 interface Lock#(type id);
    method Bool isEmpty();
@@ -58,7 +59,9 @@ endmodule: mkLock
 
 
 `define DEFAULT_LOCK_ENTRIES 4
-`define LOCK_VEC_BITS Bit#(TLog#(`DEFAULT_LOCK_ENTRIES))
+`define LAST_ENTRY 3
+typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
+`define LOCK_VEC_BITS LockIdx#(`DEFAULT_LOCK_ENTRIES)
 
 module mkAddrLock(AddrLock#(id, addr)) provisos(Bits#(id, szId), Eq#(id), Bits#(addr, szAddr), Eq#(addr));
 
@@ -69,7 +72,7 @@ module mkAddrLock(AddrLock#(id, addr)) provisos(Bits#(id, szId), Eq#(id), Bits#(
    //returns invalid if no lock is associated with loc
    function Maybe#(`LOCK_VEC_BITS) getLockIndex(addr loc);
       Maybe#(`LOCK_VEC_BITS) result = tagged Invalid;
-      for (`LOCK_VEC_BITS idx = 0; idx < `DEFAULT_LOCK_ENTRIES; idx = idx + 1)
+      for (`LOCK_VEC_BITS idx = 0; idx < `LAST_ENTRY; idx = idx + 1)
 	    if (result matches tagged Invalid &&& 
 	       entryVec[idx] matches tagged Valid.t &&& t == loc)
 	       result = tagged Valid idx;
@@ -88,7 +91,7 @@ module mkAddrLock(AddrLock#(id, addr)) provisos(Bits#(id, szId), Eq#(id), Bits#(
    //returns invalid if all locks are in use
    function Maybe#(`LOCK_VEC_BITS) getFreeLock();
       Maybe#(`LOCK_VEC_BITS) result = tagged Invalid;
-      for (`LOCK_VEC_BITS idx = 0; idx < `DEFAULT_LOCK_ENTRIES; idx = idx + 1)
+      for (`LOCK_VEC_BITS idx = 0; idx < `LAST_ENTRY; idx = idx + 1)
 	    if (result matches tagged Invalid &&& 
 	       entryVec[idx] matches tagged Invalid)
 	       result = tagged Valid idx;
