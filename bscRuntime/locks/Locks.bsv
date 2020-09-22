@@ -11,14 +11,12 @@ export mkAddrLock;
 interface Lock#(type id);
    method Bool isEmpty();
    method Bool owns(id tid);
-   method Action acq(id tid);
    method Action rel(id tid);
    method Action res(id tid);
 endinterface
 
 interface AddrLock#(type id, type addr);
    method Bool owns(id tid, addr loc);
-   method Action acq(id tid, addr loc);
    method Action rel(id tid, addr loc);
    method Action res(id tid, addr loc);
 endinterface
@@ -39,12 +37,7 @@ module mkLock(Lock#(id) ) provisos(Bits#(id, szId), Eq#(id));
    method Bool owns(id tid);
       return lockFree || owner == tid;
    endmethod
-   
-   //If the lock is free, then tid acquires it
-   method Action acq(id tid);
-      if (lockFree) held.enq(tid);
-   endmethod
-   
+      
    //Releases the lock iff thread `tid` owns it already
    method Action rel(id tid);
        if (owner == tid) held.deq();
@@ -116,22 +109,7 @@ module mkAddrLock(AddrLock#(id, addr)) provisos(Bits#(id, szId), Eq#(id), Bits#(
 	 //free then this location is acquirable
 	 return hasFree;
    endmethod
-   
-   method Action acq(id tid, addr loc);
-      Maybe#(Lock#(id)) addrLock = getLock(loc);
-      if (addrLock matches tagged Valid.lock)
-	 lock.acq(tid);
-      else
-	 begin
-	    Maybe#(`LOCK_VEC_BITS) freeLock = getFreeLock();
-	    if (freeLock matches tagged Valid.idx)
-	    begin
-	       lockVec[idx].acq(tid);
-	       entryVec[idx] <= tagged Valid loc;
-	    end
-	 end
-   endmethod
-   
+      
    method Action rel(id tid, addr loc);
       Maybe#(`LOCK_VEC_BITS) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)

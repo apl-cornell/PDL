@@ -604,7 +604,7 @@ object BluespecGeneration {
       case CLockOp(mem, op) => op match {
         case pipedsl.common.Locks.LockState.Free => None
         case pipedsl.common.Locks.LockState.Reserved => Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(threadIdVar))))
-        case pipedsl.common.Locks.LockState.Acquired => Some(BExprStmt(BMethodInvoke(lockParams(mem), "acq", List(threadIdVar))))
+        case pipedsl.common.Locks.LockState.Acquired => Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(threadIdVar))))
         case pipedsl.common.Locks.LockState.Released => Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List(threadIdVar))))
       }
       case IMemSend(isWrite, mem: Id, data: Option[EVar], addr: EVar) => {

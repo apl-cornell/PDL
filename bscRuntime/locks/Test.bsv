@@ -21,7 +21,7 @@ module mkTop();
 		   end
 		else
 		   begin
-		      $display("Thread %d cannot release lock for addres %d", t, a);
+		      $display("Thread %d cannot release lock for address %d", t, a);
 		   end
 	     endaction;
    endfunction
@@ -30,12 +30,27 @@ module mkTop();
       return action
 		if (l1.owns(t, a))
 		   begin
-		      l1.acq(t, a);
+		      l1.res(t, a);
 		      $display("Thread %d acquired lock for address %d", t, a);
 		   end
-		else
+ 		else
 		   begin
 		      $display("Thread %d cannot acquire lock for address %d", t, a);
+		   end
+	     endaction;
+   endfunction
+   
+   function Action res(ThreadID t, Address a);
+      return action
+		l1.res(t, a);
+		if (l1.owns(t, a))
+		   begin
+
+		      $display("Thread %d acquired lock for address %d", t, a);
+		   end
+ 		else
+		   begin
+		      $display("Thread %d reserving lock for address %d", t, a);
 		   end
 	     endaction;
    endfunction
@@ -51,12 +66,22 @@ module mkTop();
       s <= A1;
    endrule
    
-   rule exec1(s == A1);
-      acq(t2, a1);
+   rule acq1(s == A1);
+      res(t2, a1);
+      s <= A2;
+   endrule
+
+   rule acq2(s == A2);
+      acq(t2, a2);
       dorel(t1, a1);
-      s <= Done;
+      s <= R1;
    endrule
    
+   rule r1(s == R1 && l1.owns(t2, a1));
+      dorel(t2, a1);
+      dorel(t2, a2);
+      s <= Done;
+   endrule
 
    rule stop(s == Done);
       $finish();

@@ -47,7 +47,7 @@ mk$(OUT).v: $(B_IN)
 .PHONY: sim
 sim: $(B_LIB) $(B_SIM)
 
-	$(BSC) -sim $(B_SIM)
+	$(BSC) -show-schedule -sim $(B_SIM)
 	$(BSC) -sim -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
 	./mk$(OUT).bexe > smoke_test_bluesim.out 
 
