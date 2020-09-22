@@ -26,8 +26,14 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
     val newRecvs = recvs.map(r => convertRecv(r))
     val newCmds = stg.cmds.filterNot(c => recvs.contains(c)) ++ newRecvs.map(t => t._1)
     stg.cmds = newCmds
-    stg.succs.foreach(s => {
-      s.cmds = newRecvs.map(t => t._2) ++ s.cmds
+    stg.outEdges.foreach(e => {
+      val nstg = e.to
+      val nrecvs = if (e.condRecv.isDefined) {
+        newRecvs.map(t => ICondCommand(e.condRecv.get, t._2))
+      } else {
+        newRecvs.map(t => t._2)
+      }
+      nstg.cmds = nrecvs ++ nstg.cmds
     })
   }
 

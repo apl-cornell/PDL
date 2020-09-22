@@ -65,15 +65,21 @@ pipe test7(input: int<32>)[rf: int<32>[5]] {
     }
 } */
 //Expected success since reserve is before branch
-pipe test8(input: int<32>)[rf: int<32>[5]] {
+pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
     reserve(rf);
     if (input{0:0} == 1) {
+        ---
         acquire(rf);
-        release(rf);
+        int<32> out <- rf[0<5>];
     } else {
+        ---
         acquire(rf);
-        release(rf);
+        int<32> out <- rf[1<5>];
     }
+    ---
+    rf[2<5>] <- out;
+    release(rf);
+
 }
 //Expected success
 pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
@@ -86,6 +92,7 @@ pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     release(dmem);
 }
 //Expected success
+/*
 pipe test10(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
   speculate(int<1> x = 1, {
     x = 1;
@@ -94,7 +101,7 @@ pipe test10(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
   })
   ---
   release(rf);
-}
+} */
 /* Expected failure since speculation may happen before acquire
 pipe test11(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
   speculate(int<1> x = 1, {
@@ -107,6 +114,7 @@ pipe test11(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
   release(rf);
 } */
 // Expect success
+/*
 pipe test12(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     acquire(rf);
     speculate(int<1> x = 1, {
@@ -116,7 +124,7 @@ pipe test12(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     })
     ---
     release(rf);
-}
+}*/
 /* Expected failure since speculation may happen after release
 pipe test13(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     acquire(rf);

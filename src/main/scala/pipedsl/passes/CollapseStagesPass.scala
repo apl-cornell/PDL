@@ -25,7 +25,6 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
 
   private def simplifyIfs(stg: PStage): Unit = stg match {
     case s: IfStage =>
-      //TODO recursively merge inner portions of the pipeline
       s.trueStages.foreach(t => simplifyIfs(t))
       s.falseStages.foreach(f => simplifyIfs(f))
       //Check if the branches are combinational
