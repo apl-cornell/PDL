@@ -1,0 +1,91 @@
+/*
+ * This file has examples of so-called "functional" modules.
+ * These modules (unlike, for example, memories) have no internal state
+ * but simply process requests and produce outputs.
+ * Importantly, they are pipelined, and can process multiple requests at once.
+ */
+
+//note the return type after the ':'
+pipe mult(d1: int<32>, d2: int<32>)[]: int<32> {
+     //do stuff stage 1
+     ---
+     //do stuff stage 2
+     ---
+     //do stuff stage 3
+     ---
+     //output the result on this stage
+     output(d1 * d2);
+     //this involves placing it on an output queue
+     //which the client will read from
+}
+
+//This is an example client that might use the multiplier.
+
+pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult]: () {
+     acquire(inputs);
+     int<32> a1 <- inputs[pc];
+     int<32> a2 <- inputs[pc + 1<32>];
+     release(inputs);
+     call client(pc + 2<32>);
+     ---
+     int<32> result <- call mult(a1, a2);
+     ---
+     acquire(outputs);
+     outputs[pc] <- result;
+     release(outputs);
+}
+
+//This is a 3-stage pipeline:  read inputs -> call mult -> recv mult/ write outputs
+
+//This has the problem that only 3 instructions can be processed at a time, even though the multiplier is pipelined.
+//If we consider that each of those '->' to be queues (which the current code generator does)
+//Then we *actually* can fill the pipeline with more instructions.
+
+//We can imagine a pass where we "balance" these queue sizes based on the depth of
+//called modules, but that is an extra, late-stage optimization
+
+
+//Now let's consider a pipeline where this is called in multiple conditional paths
+
+pipe multiclient(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult]: () {
+     acquire(inputs);
+     call multiclient(pc + 2<32>);
+     if (pc{0:0} == 0<1>) {
+        int<32> a1 <- inputs[pc];
+        release(inputs);
+     	---
+	int<32> result <- call mult(a1, a1);
+     } else {
+        int<32> a2 <- inputs[pc + 1<32>];
+	release(inputs);
+        ---
+        int<32> result <- call mult(a2, a2);
+     }
+     ---
+     acquire(outputs);
+     outputs[pc] <- result;
+     release(outputs);
+}
+
+//Now we need to reason about ordering of the calls to `mult`.
+//In theory both of the stages that `call mult` can be running in parallel.
+//There is currently no way to resolve which one should execute first and therefore
+//also receive the output first.
+
+//We could just use locks as before:
+
+/*
+  reserve(mult);
+  if (...); {
+     ---
+     acquire(mult);
+     int<32> result <- mult(..);
+  } else {
+     ---
+     acquire(mult);
+     int<32> result <- mult(..);
+  }
+  release(mult);
+
+*/
+
