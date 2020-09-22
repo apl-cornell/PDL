@@ -70,7 +70,7 @@ object Syntax {
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
-      case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
+      case TModType(ins, refs, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
     }
   }
   // Types that can be upcast to Ints
@@ -82,7 +82,9 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
-  case class TModType(inputs: List[Type], refs: List[Type]) extends Type
+  case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type]) extends Type
+  //This is primarily used for parsing and is basically just a type variable
+  case class TNamedType(name: Id) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -221,7 +223,8 @@ object Syntax {
   case class ModuleDef(
     name: Id,
     inputs: List[Param],
-    modules: List[Param], //TODO external module connections
+    modules: List[Param],
+    ret: Option[Type],
     body: Command) extends Definition
 
   case class Param(name: Id, typ: Type) extends Positional

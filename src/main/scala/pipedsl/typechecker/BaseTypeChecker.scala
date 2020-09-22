@@ -73,17 +73,27 @@ object BaseTypeChecker extends TypeChecks[Type] {
   }
 
   def checkModule(m: ModuleDef, tenv: Environment[Type]): Environment[Type] = {
-    val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories
-    val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ}) //TODO require memory or module types
+    //TODO disallow memories
+    val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
+    //TODO require memory or module types
+    val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ replaceNamedType(p.typ, tenv) })
     val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
-    val modTyp = TModType(inputTyps, modTyps)
+    val modTyp = TModType(inputTyps, modTyps, m.ret)
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, hascall = false, Set())
     checkCommand(m.body, bodyEnv)
     outEnv
   }
+
+  //Module parameters can't be given a proper type during parsing if they refer to another module
+  //This uses module names in the type environment to lookup their already checked types
+  private def replaceNamedType(t: Type, tenv: Environment[Type]): Type = t match {
+    case TNamedType(name) => tenv(name)
+    case _ => t
+  }
+
   /**
    * - Checks that all paths have at most 1 call statement
    * - Checks that every variable is *assigned* exactly once in each path.
@@ -161,7 +171,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CirNew(mod, inits, mods) => {
       val mtyp = tenv(mod)
       mtyp match {
-        case TModType(ityps, refs) => {
+        case TModType(ityps, refs, _) => {
           if(ityps.length != inits.length) {
             throw ArgLengthMismatch(c.pos, inits.length, ityps.length)
           }
@@ -256,7 +266,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     }
     case CCall(id, args) => {
       tenv(id) match {
-        case TModType(ityps, _) => {
+        case TModType(ityps, _, _) => {
           if (args.length != ityps.length) {
             throw ArgLengthMismatch(c.pos, args.length, ityps.length)
           }

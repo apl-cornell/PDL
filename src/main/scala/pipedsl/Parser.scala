@@ -211,8 +211,9 @@ class Parser extends RegexParsers with PackratParsers {
       TMemType(elem, size)
     }
   }}
+  lazy val namedType: P[Type] = iden ^^ { i => TNamedType(i) }
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
-  lazy val baseTyp: P[Type] = memory | sizedInt | bool
+  lazy val baseTyp: P[Type] = memory | sizedInt | bool | namedType
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp
@@ -229,8 +230,8 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val moddef: P[ModuleDef] = positioned {
-    "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ braces(cmd) ^^ {
-      case i ~ ps ~ mods ~ c => ModuleDef(i, ps, mods, c)
+    "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ (":" ~> typ).? ~ braces(cmd) ^^ {
+      case i ~ ps ~ mods ~ rt ~ c => ModuleDef(i, ps, mods, rt, c)
     }
   }
 

@@ -1,12 +1,11 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-
 import common.{BSVPrettyPrinter, MemoryInputParser, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
@@ -35,8 +34,9 @@ object Main {
     //TODO pull all of this into a different class/function that organizes IR transformation passes and code generation
     val prog = CanonicalizePass.run(r.get)
     val basetypes = BaseTypeChecker.check(prog, None)
-    TimingTypeChecker.check(prog, Some(basetypes))
-    val prog_recv = SimplifyRecvPass.run(prog)
+    val nprog = new BindModuleTypes(basetypes).run(prog)
+    TimingTypeChecker.check(nprog, Some(basetypes))
+    val prog_recv = SimplifyRecvPass.run(nprog)
     LockChecker.check(prog_recv, None)
     SpeculationChecker.check(prog_recv, Some(basetypes))
     /** How to call the interpreter
@@ -57,6 +57,7 @@ object Main {
       n -> newstgs
     }
     //Do Code Generation
+    /*
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo)
     val outputDir = "testOutputs"
     bsvgen.getBSVPrograms.foreach(p => {
@@ -64,5 +65,6 @@ object Main {
       val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outputDir + "/" + outputFileName);
       bsvWriter.printBSVProg(p)
     })
+     */
   }
 }

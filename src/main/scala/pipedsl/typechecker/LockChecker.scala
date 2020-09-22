@@ -23,7 +23,7 @@ object LockChecker extends TypeChecks[LockState] {
   override def checkModule(m: ModuleDef, env: Environment[LockState]): Environment[LockState] = {
     val nenv = m.modules.foldLeft[Environment[LockState]](env)( (e, m) => m.typ match {
       case TMemType(_, _, _, _) => e.add(m.name, Free)
-      case TModType(_, _) => e.add(m.name, Free)
+      case TModType(_, _, _) => e.add(m.name, Free)
       case _ => throw UnexpectedCase(m.pos)
     })
     val finalenv = checkCommand(m.body, nenv)
