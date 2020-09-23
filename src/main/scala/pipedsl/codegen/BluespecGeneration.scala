@@ -3,7 +3,6 @@ package pipedsl.codegen
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand}
-import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
 
@@ -15,7 +14,10 @@ object BluespecGeneration {
   private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
-  private val startMethodName = "start"
+  private val requestMethodName = "req"
+  private val peekResponseMethodName = "peek"
+  private val responseMethodName = "resp"
+  private val checkResponseMethodName = "handle"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]]) {
 
@@ -78,7 +80,7 @@ object BluespecGeneration {
       case CirSeq(c1, c2) => initCircuit(c1, env) ++ initCircuit(c2, env)
       case CirConnect(name, c) => c match {
         case CirNew(_, inits, _) => List(
-          BExprStmt(BMethodInvoke(env(name), startMethodName, inits.map(i => toBSVExpr(i))))
+          BExprStmt(BMethodInvoke(env(name), requestMethodName, inits.map(i => toBSVExpr(i))))
         )
         case _ => List() //TODO if/when memories can be initialized it goes here
       }
@@ -174,7 +176,7 @@ object BluespecGeneration {
       m + (s -> getStageModule(s, isFirstStg = false))
     }) + (firstStage -> getStageModule(firstStage, isFirstStg = true))
     //Define an interface for interacting with this module
-    private val startMethod = BMethodSig(startMethodName, Action, firstStageStruct.typ.fields)
+    private val startMethod = BMethodSig(requestMethodName, Action, firstStageStruct.typ.fields)
     private val modInterfaceTyp = BInterface(mod.name.v.capitalize, List())
     private val modInterfaceDef = BInterfaceDef(modInterfaceTyp, List(startMethod))
 
@@ -352,6 +354,10 @@ object BluespecGeneration {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case ICheckLock(mem) => {
           l :+ BMethodInvoke(lockParams(mem), "owns", List(threadIdVar))
+        }
+        case IRecv(handle, sender, outvar) => {
+          //TODO check that we can receive from the module this cycle.
+          l
         }
         case _ => l
       })
@@ -557,6 +563,10 @@ object BluespecGeneration {
         }
         case None => None
       }
+      case IRecv(_, sender, outvar) => {
+        Some(BAssign(BVar(outvar.id.v, toBSVType(outvar.typ.get)),
+          BMethodInvoke(modParams(sender), peekResponseMethodName, List())))
+      }
       case CLockOp(mem, op) => None
       case CCheck(predVar) => None
       case CEmpty => None
@@ -565,7 +575,6 @@ object BluespecGeneration {
       case v: ICheck => None
       case v: IMemSend => None
       case v: ISend => None
-      case v: IRecv => None
       case _: InternalCommand => None
       case COutput(exp) => None
       case CRecv(lhs, rhs) => throw UnexpectedCommand(cmd)
@@ -628,14 +637,15 @@ object BluespecGeneration {
               paramMap, Some(args.map(a => toBSVExpr(a))))
           ))
         } else {
-          //TODO implement calls by using id to lookup the appropriate method
           //TODO also add storing the handle from calling the module
-          None
+          Some(BExprStmt(BMethodInvoke(modParams(receiver), requestMethodName, args.map(a => toBSVExpr(a)))))
         }
       }
       case IRecv(handle, sender, outvar) => {
         //TODO actually call the module via its cannonical "recv" method
         //if the handle matches
+        BInvokeAssign(BVar(outvar.id.v, toBSVType(outvar.typ.get)),
+          BMethodInvoke(modParams(sender), responseMethodName, List()))
         None
       }
         //TODO write exp into dedicated output queue

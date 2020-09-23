@@ -138,17 +138,18 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val binConcat = parseOp(binOr, concat)
   lazy val expr = positioned(binConcat)
 
+  lazy val lhs = memAccess | variable
   lazy val simpleCmd: P[Command] = positioned {
+    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t; CAssign(n, r) } |
+      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
+        CRecv(l, r)
+      } |
     check |
     "acquire" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Acquired)} |
     "reserve" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Reserved)} |
       "release" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Released)} |
     "return" ~> expr ^^ { case e => CReturn(e) } |
     "output" ~> expr ^^ { case e => COutput(e) } |
-      typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t
-        CAssign(n, r) } |
-      typ.? ~ expr ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
-        CRecv(l, r) } |
       expr ^^ { case e => CExpr(e) }
   }
 
@@ -211,14 +212,16 @@ class Parser extends RegexParsers with PackratParsers {
       TMemType(elem, size)
     }
   }}
-  lazy val namedType: P[Type] = iden ^^ { i => TNamedType(i) }
+
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
-  lazy val baseTyp: P[Type] = memory | sizedInt | bool | namedType
+  lazy val baseTyp: P[Type] = memory | sizedInt | bool
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp
 
-  lazy val param: P[Param] = iden ~ ":" ~ typ ^^ { case i ~ _ ~ t =>
+  lazy val typeName: P[Type] = iden ^^ { i => TNamedType(i) }
+
+  lazy val param: P[Param] = iden ~ ":" ~ (typ | typeName) ^^ { case i ~ _ ~ t =>
     i.typ = Some(t)
     Param(i, t)
   }

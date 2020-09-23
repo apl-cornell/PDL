@@ -31,13 +31,12 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
      acquire(m);
      int<32> result <- call m(a1, a2);
      release(m);
-     /*
      ---
      acquire(outputs);
-     outputs[pc] <- result;
+     outputs[0<1>] <- result;
      release(outputs);
-     */
 }
+
 //This is a 3-stage pipeline:  read inputs -> call mult -> recv mult/ write outputs
 
 //This has the problem that only 3 instructions can be processed at a time, even though the multiplier is pipelined.
