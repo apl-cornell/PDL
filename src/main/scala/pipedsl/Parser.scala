@@ -73,6 +73,7 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
 
   lazy val simpleAtom: P[Expr] = positioned {
+    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |
     not ~ expr ^^ { case n ~ e => EUop(n, e) } |
     cast |
     memAccess |
@@ -144,7 +145,6 @@ class Parser extends RegexParsers with PackratParsers {
       "release" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Released)} |
     "return" ~> expr ^^ { case e => CReturn(e) } |
     "output" ~> expr ^^ { case e => COutput(e) } |
-      "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => CCall(i, args) } |
       typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t
         CAssign(n, r) } |
       typ.? ~ expr ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t

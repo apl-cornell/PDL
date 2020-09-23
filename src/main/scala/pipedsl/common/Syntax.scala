@@ -71,6 +71,7 @@ object Syntax {
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
       case TModType(ins, refs, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
+      case TNamedType(n) => n.toString
     }
   }
   // Types that can be upcast to Ints
@@ -172,6 +173,7 @@ object Syntax {
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
+  case class ECall(mod: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
@@ -188,7 +190,7 @@ object Syntax {
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CCall(id: Id, args: List[Expr]) extends Command
+
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
@@ -204,8 +206,8 @@ object Syntax {
   case class ISpeculate(specId: Id, specVar: EVar, value: EVar) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
-  case class ISend(handle: EVar, receiver: EVar, args: List[EVar]) extends InternalCommand
-  case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
+  case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
+  case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
   case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
   case class ICheckLock(mem: Id) extends InternalCommand

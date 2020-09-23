@@ -3,6 +3,7 @@ package pipedsl.passes
 import pipedsl.common.Syntax._
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedExpr
+import pipedsl.common.Syntax
 import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
 
@@ -11,20 +12,24 @@ import pipedsl.passes.Passes.StagePass
  * of Send and Recv pairs. The Send produces a reference
  * which the Recv uses to request the result.
  */
-class ConvertRecvPass extends StagePass[List[PStage]] {
+class ConvertAsyncPass extends StagePass[List[PStage]] {
 
   private var msgCount = 0
   override def run(stgs: List[PStage]): List[PStage] = {
     flattenStageList(stgs).foreach(s => {
-      convertRecvs(s)
+      convertAsyncCmds(s)
     })
     stgs
   }
 
-  private def convertRecvs(stg: PStage) = {
+  private def convertAsyncCmds(stg: PStage): Unit = {
     val recvs = getRecvs(stg)
+    val calls = getCalls(stg)
     val newRecvs = recvs.map(r => convertRecv(r))
-    val newCmds = stg.cmds.filterNot(c => recvs.contains(c)) ++ newRecvs.map(t => t._1)
+    val newCalls = calls.map(c => convertCall(c))
+    val newCmds = stg.cmds.filterNot(c => recvs.contains(c) || calls.contains(c)) ++
+      //only take the send parts of the receives. Calls only have a send part
+      newRecvs.map(t => t._1) ++ newCalls
     stg.cmds = newCmds
     stg.outEdges.foreach(e => {
       val nstg = e.to
@@ -51,10 +56,24 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
         val recv = IMemRecv(mem, None)
         (send, recv)
       }
-      //TODO throw better error, also handle CALLs to other modules
+      case (lhs@EVar(_), call@ECall(_, _)) => {
+        val send = convertCall(call)
+        val recv = IRecv(send.handle, send.receiver, lhs)
+        (send, recv)
+      }
       case _ => throw UnexpectedExpr(c.lhs)
     }
   }
+
+  private def convertCall(c: ECall): ISend = {
+    val arglist: List[EVar] = c.args match {
+      case l: List[EVar] => l
+      case _ => throw UnexpectedExpr(c)
+    }
+    val msghandle = freshMessage
+    ISend(msghandle, c.mod, arglist)
+  }
+
   private def getRecvs(stg: PStage): List[CRecv] = {
    stg.cmds.foldLeft(List[CRecv]())((l, c) => {
      c match {
@@ -62,5 +81,20 @@ class ConvertRecvPass extends StagePass[List[PStage]] {
        case _ => l
      }
    })
+  }
+
+  private def getCalls(stg: PStage): List[ECall] = {
+    stg.cmds.foldLeft(List[ECall]())((l, c) => {
+      c match {
+        case CExpr(call@ECall(_,_)) => l :+ call
+        case _ => l
+      }
+    })
+  }
+
+  private def freshMessage: EVar = {
+    val res = EVar(Id("_request_" + msgCount))
+    msgCount += 1
+    res
   }
 }

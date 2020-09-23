@@ -68,8 +68,6 @@ object PrettyPrinter {
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
       case Syntax.CAssign(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
       case Syntax.CRecv(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
-      case Syntax.CCall(id, args) => ins + "call " + id + "(" +
-        args.map(a => printExprToString(a)).mkString(",") + ");"
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
@@ -110,6 +108,7 @@ object PrettyPrinter {
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"
     case Syntax.ETernary(cond, tval, fval) => printExprToString(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
+    case Syntax.ECall(id, args) => "call " + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.EVar(id) => id.v
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
@@ -130,7 +129,7 @@ object PrettyPrinter {
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
     case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
-    case TModType(inputs, refs) => "TODO MOD TYPE"
+    case TModType(inputs, refs, _) => "TODO MOD TYPE"
   }
 
   def printStageGraph(name: String, stages: List[PStage]): Unit = {

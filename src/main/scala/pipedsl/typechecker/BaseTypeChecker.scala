@@ -44,6 +44,12 @@ object BaseTypeChecker extends TypeChecks[Type] {
     tenv.add(f.name, ftyp)
   }
 
+  /**
+   *
+   * @param c
+   * @param tenv
+   * @return
+   */
   private def checkFuncWellFormed(c: Command, tenv: Environment[Type]): Option[Type] = c match {
     case CSeq(c1, c2) => {
       val r1 = checkFuncWellFormed(c1, tenv)
@@ -82,7 +88,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     val modTyp = TModType(inputTyps, modTyps, m.ret)
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
-    checkModuleBodyWellFormed(m.body, hascall = false, Set())
+    checkModuleBodyWellFormed(m.body, Set())
     checkCommand(m.body, bodyEnv)
     outEnv
   }
@@ -95,54 +101,45 @@ object BaseTypeChecker extends TypeChecks[Type] {
   }
 
   /**
-   * - Checks that all paths have at most 1 call statement
-   * - Checks that every variable is *assigned* exactly once in each path.
-   *   Receives may be conditional (and therefore occur only in some paths)
+   * - Checks that no variable is assigned multiple times.
    * @param c
-   * @param hascall
-   * @return (command may execute a call, set of assigned variables)
+   * @return set of assigned variables
    */
-  def checkModuleBodyWellFormed(c: Command, hascall: Boolean, assignees: Set[Id]): (Boolean, Set[Id]) = c match {
+  def checkModuleBodyWellFormed(c: Command, assignees: Set[Id]): Set[Id] = c match {
     case CSeq(c1, c2) => {
-      val (hc2, as2) = checkModuleBodyWellFormed(c1, hascall, assignees)
-      checkModuleBodyWellFormed(c2, hc2, as2)
+      val a2 = checkModuleBodyWellFormed(c1, assignees)
+      checkModuleBodyWellFormed(c2,a2)
     }
     case CTBar(c1, c2) => {
-      val (hc2, as2) = checkModuleBodyWellFormed(c1, hascall, assignees)
-      checkModuleBodyWellFormed(c2, hc2, as2)
+      val a2 = checkModuleBodyWellFormed(c1, assignees)
+      checkModuleBodyWellFormed(c2, a2)
     }
     case CSplit(cs, d) => {
       val branches = cs.map(c => c.body) :+ d
       //check all branches in same context
-      branches.foldLeft((hascall, assignees))((res, c) => {
-        val (hasc, cassgns) = checkModuleBodyWellFormed(c, hascall, assignees)
-        (res._1 || hasc, res._2 ++ cassgns)
+      branches.foldLeft(assignees)((res, c) => {
+        val cassgns = checkModuleBodyWellFormed(c, assignees)
+        res ++ cassgns
       })
     }
     case CIf(_, cons, alt) => {
-      val (hct, ast) = checkModuleBodyWellFormed(cons, hascall, assignees)
-      val (hcf, asf) = checkModuleBodyWellFormed(alt, hascall, assignees)
-      (hct || hcf, ast.intersect(asf))
+      val ast = checkModuleBodyWellFormed(cons, assignees)
+      val asf = checkModuleBodyWellFormed(alt, assignees)
+      ast ++ asf
     }
-    case CCall(_, _) => if (hascall) {
-      //throw UnexpectedCall(c.pos)
-      //TODO maybe we don't bother with this. trust programmer to not call multiple times
-      (hascall, assignees)
-      } else { (true, assignees) }
-    case CAssign(lhs@EVar(id), _) => {
-        if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
-          (hascall, assignees + id)
+    case CRecv(lhs@EVar(id), _) => {
+      if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
+        assignees + id
       }
     }
-    case CSpeculate(_, _, verify, body) => {
-      val (hascallv, assgnv) = checkModuleBodyWellFormed(verify, hascall, assignees)
-      val (hascalls, assgns) = checkModuleBodyWellFormed(body, hascall, assignees)
-      //TODO maybe we don't bother with this. trust programmer to not call multiple times
-      //if (hascallv && hascalls) throw UnexpectedCall(c.pos)
-      (hascallv || hascalls, assgnv ++ assgns) //variables from both branches are available after
+    case CAssign(lhs@EVar(id), _) => {
+        if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
+          assignees + id
+      }
     }
+    //returns are only for function calls
     case CReturn(_) => throw UnexpectedReturn(c.pos)
-    case _ => (hascall, assignees)
+    case _ => assignees
   }
 
   def checkCircuit(c: Circuit, tenv: Environment[Type]): Environment[Type] = c match {
@@ -264,24 +261,6 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CCheck(predVar) => {
       tenv
     }
-    case CCall(id, args) => {
-      tenv(id) match {
-        case TModType(ityps, _, _) => {
-          if (args.length != ityps.length) {
-            throw ArgLengthMismatch(c.pos, args.length, ityps.length)
-          }
-          ityps.zip(args).foreach {
-            case (expectedT, a) =>
-              val (atyp, _) = checkExpression(a, tenv)
-              if (!isSpeculativeSubtype(atyp, expectedT)) {
-                throw UnexpectedSubtype(a.pos, a.toString, expectedT, atyp)
-              }
-          }
-          tenv
-        }
-        case _ => throw UnexpectedType(c.pos, id.toString, "Module type", tenv(id))
-      }
-    }
     case COutput(exp) => {
       checkExpression(exp, tenv)
       tenv
@@ -339,7 +318,6 @@ object BaseTypeChecker extends TypeChecks[Type] {
           }
         }
       }
-
     }
     case ERecAccess(rec, fieldName) => {
       val (rt, renv) = checkExpression(rec, tenv)
@@ -397,6 +375,25 @@ object BaseTypeChecker extends TypeChecks[Type] {
           (tret, tenv) //TODO check return env
         }
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
+      }
+    }
+    case ECall(mod, args) => {
+      val mtyp = tenv(mod)
+      mtyp match {
+        case TModType(inputs, refs, retType) => {
+          if (inputs.length != args.length) {
+            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+          }
+          inputs.zip(args).foreach {
+            case (expectedT, a) =>
+              val (atyp, aenv) = checkExpression(a, tenv)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+              }
+          }
+          (if (retType.isDefined) retType.get else TVoid(), tenv)
+        }
+        case _ => throw UnexpectedType(mod.pos, "module name", "module type", mtyp)
       }
     }
     case EVar(id) => e.typ match {

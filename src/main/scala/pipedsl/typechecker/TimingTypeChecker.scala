@@ -5,7 +5,7 @@ import TypeChecker.TypeChecks
 import pipedsl.common.Errors.{MissingType, UnavailableArgUse, UnexpectedAsyncReference, UnexpectedPipelineStatement, UnexpectedSyncReference, UnexpectedType}
 import pipedsl.common.Syntax
 import Environments.Environment
-import pipedsl.common.Syntax.Latency.{Combinational, Latency, join}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, join}
 
 /**
  * - Checks that variables set by receive statements
@@ -88,6 +88,7 @@ object TimingTypeChecker extends TypeChecks[Type] {
       }
       (lhs, rhs) match {
         case (EVar(id), EMemAccess(_, _)) => (vars, nextVars + id)
+        case (EVar(id), ECall(_,_)) => (vars, nextVars + id)
         case (EVar(id), _) => throw UnexpectedAsyncReference(lhs.pos, s"rhs of '$id <-' but be a memory or module reference")
         case (EMemAccess(_,_), EMemAccess(_,_)) => throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
         case _ => (vars, nextVars)
@@ -105,12 +106,6 @@ object TimingTypeChecker extends TypeChecks[Type] {
     case CCheck(_) => {
       (vars, nextVars)
     }
-    case CCall(_, args) => {
-      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
-        throw UnexpectedAsyncReference(a.pos, a.toString)
-      })
-      (vars, nextVars)
-    }
     case COutput(exp) => {
       if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)
@@ -123,10 +118,7 @@ object TimingTypeChecker extends TypeChecks[Type] {
       }
       (vars, nextVars)
     }
-    case CExpr(exp) => {
-      if (checkExpr(exp, vars) != Combinational) {
-        throw UnexpectedAsyncReference(exp.pos, exp.toString)
-      }
+    case CExpr(exp) => { checkExpr(exp, vars)
       (vars, nextVars)
     }
     case Syntax.CEmpty => (vars, nextVars)
@@ -150,7 +142,17 @@ object TimingTypeChecker extends TypeChecks[Type] {
     case ETernary(cond, tval, fval) => {
       join(join(checkExpr(cond, vars, isRhs), checkExpr(tval, vars, isRhs)), checkExpr(fval, vars, isRhs))
     }
-    case EApp(_, args) => args.foldLeft[Latency](Combinational)((lat, a) => join(checkExpr(a, vars), lat))
+    case EApp(_, args) =>
+      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      Combinational
+    case ECall(_, args) => {
+      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      Asynchronous
+    }
     case EVar(id) => if(!vars(id) && isRhs) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)
     case _ => Combinational

@@ -5,7 +5,7 @@ import common.{BSVPrettyPrinter, MemoryInputParser, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertRecvPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertAsyncPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.BluespecGeneration
@@ -38,7 +38,7 @@ object Main {
     TimingTypeChecker.check(nprog, Some(basetypes))
     val prog_recv = SimplifyRecvPass.run(nprog)
     LockChecker.check(prog_recv, None)
-    SpeculationChecker.check(prog_recv, Some(basetypes))
+    //TODO speculation fix in the future SpeculationChecker.check(prog_recv, Some(basetypes))
     /** How to call the interpreter
     val i: Interpreter = new Interpreter(4)
     i.interp_prog(RemoveTimingPass.run(prog_recv), MemoryInputParser.parse(args))
@@ -48,7 +48,7 @@ object Main {
     val stageInfo: Map[Id, List[PStage]] = new SplitStagesPass().run(prog_recv)
     //Run the transformation passes on the stage representation
     val optstageInfo = stageInfo map { case (n, stgs) =>
-      new ConvertRecvPass().run(stgs)
+      new ConvertAsyncPass().run(stgs)
       AddEdgeValuePass.run(stgs)
       LockOpTranslationPass.run(stgs)
       //This pass produces a new stage list (not modifying in place)

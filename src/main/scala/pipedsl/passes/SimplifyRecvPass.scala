@@ -83,15 +83,23 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
             .setPos(c.pos))
           .setPos(c.pos)
       }
+      case (EVar(_), ECall(id, args)) => {
+        //TODO cleanup and stop copying code
+        val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty, List()))((cs, a) => {
+          val argAssn = CAssign(newVar("carg", a.pos, a.typ), a).setPos(a.pos)
+          (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
+        })
+        CSeq(argAssgns._1, CRecv(lhs, ECall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
+      }
       case _ => throw UnexpectedCase(c.pos)
     }
     //calls also get translated to send statements later
-    case CCall(id, args) => {
+    case CExpr(ECall(id, args)) => {
       val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty, List()))((cs, a) => {
         val argAssn = CAssign(newVar("carg", a.pos, a.typ), a).setPos(a.pos)
         (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
       })
-      CSeq(argAssgns._1, CCall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)
+      CSeq(argAssgns._1, CExpr(ECall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
     }
     case _ => c
   }

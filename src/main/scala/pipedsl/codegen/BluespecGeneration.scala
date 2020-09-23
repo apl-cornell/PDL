@@ -46,8 +46,6 @@ object BluespecGeneration {
         (List(BModInst(modvar, mod)), env + (name -> modvar))
     }
 
-
-
     private def getMemoryModule(mtyp: BSVType): BModule = mtyp match {
       case BCombMemType(elem, addrSize) => BModule(name = combMemMod, List())
       case BAsyncMemType(elem, addrSize) => BModule(name = asyncMemMod, List())
@@ -556,7 +554,6 @@ object BluespecGeneration {
         }
         case None => None
       }
-      case CCall(id, args) => None
       case CLockOp(mem, op) => None
       case CCheck(predVar) => None
       case CEmpty => None
@@ -621,13 +618,21 @@ object BluespecGeneration {
         }
         case None => None
       }
-      case CCall(id, args) => if (id == mod.name) {
-        Some(BStmtSeq(
-          getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
-            paramMap, Some(args.map(a => toBSVExpr(a))))
-        ))
-      } else {
-        //TODO implement calls by using id to lookup the appropriate method
+      case ISend(handle, receiver, args) => {
+        if (receiver == mod.name) {
+          Some(BStmtSeq(
+            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
+              paramMap, Some(args.map(a => toBSVExpr(a))))
+          ))
+        } else {
+          //TODO implement calls by using id to lookup the appropriate method
+          //TODO also add storing the handle from calling the module
+          None
+        }
+      }
+      case IRecv(handle, sender, outvar) => {
+        //TODO actually call the module via its cannonical "recv" method
+        //if the handle matches
         None
       }
       case _: ICheckLock => None

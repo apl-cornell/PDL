@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax.{CAssign, CCall, CCheck, CEmpty, CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, CaseObj, Command, EVar, Expr, Id, ModuleDef, Prog}
+import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
 import scala.collection.mutable.ListBuffer
@@ -37,7 +37,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         }
         CSplit(newCases, newDefault)
       }
-      case CCall(id, args) => {
+      case CExpr(ECall(id, args)) => {
         val assigns: ListBuffer[Command] = new ListBuffer[Command]()
         val newArgs: ListBuffer[Expr] = new ListBuffer[Expr]()
         for (index <- 0 until args.length) {
@@ -45,7 +45,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           assigns.addOne(CAssign(arg, args(index)))
           newArgs.addOne(arg)
         }
-        calls.addOne(CCall(id, newArgs.toList))
+        calls.addOne(CExpr(ECall(id, newArgs.toList)))
         convertCListToCSeq(assigns, 0)
       }
       case _ => c

@@ -55,7 +55,10 @@ object Environments {
         override def remove(name: Id): Environment[Type] = {
             TypeEnv(this.typeMap - name)
         }
-        override def get(name: Id): Option[Type] = typeMap.get(name)
+        override def get(name: Id): Option[Type] = typeMap.get(name) match {
+            case Some(TNamedType(n)) => this.get(n)
+            case other@_ => other
+        }
         override def getMappedIds(): Set[Id] = typeMap.keySet
         override def intersect(other: Environment[Type]): Environment[Type] = {
             TypeEnv(

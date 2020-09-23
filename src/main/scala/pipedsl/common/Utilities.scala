@@ -48,7 +48,6 @@ object Utilities {
     case CSpeculate(predVar, predVal, verify, body) =>
      getUsedVars(predVal) ++ getAllVarNames(verify) ++ getAllVarNames(body) + predVar.id
     case CCheck(predVar) => Set(predVar)
-    case CCall(id, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
@@ -58,7 +57,6 @@ object Utilities {
     case Syntax.CEmpty => Set()
   }
 
-  //Get variables written this cycle combinationally
   def getWrittenVars(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getWrittenVars(c1) ++ getWrittenVars(c2)
     case CTBar(c1, c2) => getWrittenVars(c1) ++ getWrittenVars(c2)
@@ -73,6 +71,8 @@ object Utilities {
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case ISpeculate(s, svar, _) => Set(s, svar.id)
     case IMemRecv(_, data) => if (data.isDefined) Set(data.get.id) else Set()
+    case ISend(handle, _, _) => Set(handle.id)
+    case IRecv(_, _, out) => Set(out.id)
     case _ => Set()
   }
 
@@ -98,7 +98,6 @@ object Utilities {
       case e:EMemAccess => getUsedVars(e)
       case _ => Set()
     })
-    case CCall(_, args) => args.foldLeft[Set[Id]](Set())( (s, a) => s ++ getUsedVars(a) )
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
@@ -112,6 +111,8 @@ object Utilities {
       if (data.isDefined) {
         Set(data.get.id, addr.id)
       } else Set(addr.id)
+    case IRecv(handle, _, _) => Set(handle.id)
+    case ISend(_, _, args) => args.map(a => a.id).toSet
     case _ => Set()
   }
 
@@ -129,6 +130,7 @@ object Utilities {
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
       //functions are also externally defined
+    case ECall(id, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
     case EVar(id) => id.typ = e.typ; Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case _ => Set()
@@ -189,6 +191,7 @@ object Utilities {
       case _ => l :+ stg
     })
   }
+
   /**
    *
    * @param condL

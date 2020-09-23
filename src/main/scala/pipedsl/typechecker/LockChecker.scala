@@ -85,6 +85,7 @@ object LockChecker extends TypeChecks[LockState] {
     case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem,_), _) => env(mem).matchOrError(lhs.pos, mem.v, Acquired) { case Acquired => env }
         case (_, EMemAccess(mem,_)) => env(mem).matchOrError(rhs.pos, mem.v, Acquired) { case Acquired => env }
+        case (_, ECall(mod,_)) => env(mod).matchOrError(rhs.pos, mod.v, Acquired) { case Acquired => env }
         case _ => throw UnexpectedCase(c.pos)
       }
     case CLockOp(mem, op) => env.add(mem, op) //logic inside the lock environment class
