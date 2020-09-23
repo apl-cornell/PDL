@@ -57,7 +57,6 @@ object Main {
       n -> newstgs
     }
     //Do Code Generation
-    /*
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo)
     val outputDir = "testOutputs"
     bsvgen.getBSVPrograms.foreach(p => {
@@ -65,6 +64,5 @@ object Main {
       val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outputDir + "/" + outputFileName);
       bsvWriter.printBSVProg(p)
     })
-     */
   }
 }

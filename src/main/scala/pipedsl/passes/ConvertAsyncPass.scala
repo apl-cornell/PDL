@@ -27,7 +27,7 @@ class ConvertAsyncPass extends StagePass[List[PStage]] {
     val calls = getCalls(stg)
     val newRecvs = recvs.map(r => convertRecv(r))
     val newCalls = calls.map(c => convertCall(c))
-    val newCmds = stg.cmds.filterNot(c => recvs.contains(c) || calls.contains(c)) ++
+    val newCmds = stg.cmds.filterNot(c => recvs.contains(c) || calls.map(cexp => CExpr(cexp)).contains(c)) ++
       //only take the send parts of the receives. Calls only have a send part
       newRecvs.map(t => t._1) ++ newCalls
     stg.cmds = newCmds

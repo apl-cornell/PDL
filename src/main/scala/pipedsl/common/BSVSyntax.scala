@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.UnexpectedExpr
-import pipedsl.common.Syntax.Latency.Combinational
+import pipedsl.common.Syntax.Latency.{Combinational, Sequential}
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
@@ -26,12 +26,12 @@ object BSVSyntax {
    * @param t
    * @return
    */
-  def toBSVType(t: Type): BSVType = t match {
+  def toBSVType(t: Type, modmap: Option[Map[Id, BSVType]] = None): BSVType = t match {
     case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
     case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
     case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
     case Syntax.TBool() => BBool
-    //TODO others
+    case Syntax.TModType(_, _, _, Some(n)) => modmap.get(n)
   }
 
   //TODO a better way to translate operators

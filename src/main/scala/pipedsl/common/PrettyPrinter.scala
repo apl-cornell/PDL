@@ -129,7 +129,7 @@ object PrettyPrinter {
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
     case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
-    case TModType(inputs, refs, _) => "TODO MOD TYPE"
+    case TModType(inputs, refs, _, name) => "TODO MOD TYPE"
   }
 
   def printStageGraph(name: String, stages: List[PStage]): Unit = {

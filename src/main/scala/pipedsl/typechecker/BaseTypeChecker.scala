@@ -85,7 +85,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ replaceNamedType(p.typ, tenv) })
     val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
     val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
-    val modTyp = TModType(inputTyps, modTyps, m.ret)
+    val modTyp = TModType(inputTyps, modTyps, m.ret, Some(m.name))
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
@@ -168,7 +168,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CirNew(mod, inits, mods) => {
       val mtyp = tenv(mod)
       mtyp match {
-        case TModType(ityps, refs, _) => {
+        case TModType(ityps, refs, _, _) => {
           if(ityps.length != inits.length) {
             throw ArgLengthMismatch(c.pos, inits.length, ityps.length)
           }
@@ -380,7 +380,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case ECall(mod, args) => {
       val mtyp = tenv(mod)
       mtyp match {
-        case TModType(inputs, refs, retType) => {
+        case TModType(inputs, refs, retType, _) => {
           if (inputs.length != args.length) {
             throw ArgLengthMismatch(e.pos, inputs.length, args.length)
           }

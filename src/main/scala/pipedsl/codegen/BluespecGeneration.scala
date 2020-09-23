@@ -30,7 +30,8 @@ object BluespecGeneration {
     private val modMap: Map[Id, BProgram] = prog.moddefs.foldLeft(Map[Id, BProgram]())((mapping, mod) => {
       mapping +
         ( mod.name -> new BluespecModuleGenerator(
-          mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail)
+          mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail),
+          mapping map { case (i, p) => (i, p.topModule.typ.get) }
         ).getBSV)
     })
 
@@ -115,7 +116,9 @@ object BluespecGeneration {
    * @param otherStages - The full remaining list of pipeline stages.
    * @return - The BSV Module that represents this pipeline.
    */
-  private class BluespecModuleGenerator(val mod: ModuleDef, val firstStage: PStage, val otherStages: List[PStage]) {
+  private class BluespecModuleGenerator(val mod: ModuleDef,
+    val firstStage: PStage, val otherStages: List[PStage],
+    val bsvMods: Map[Id, BInterface]) {
 
     private val lockType = "Lock"
     private val lockModuleName = "mkLock"
@@ -160,7 +163,7 @@ object BluespecGeneration {
     private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
     //Generate map from existing module parameter names to BSV variables
     private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](Map())((vars, m) => {
-      vars + (m.name -> BVar(m.name.v, toBSVType(m.typ)))
+      vars + (m.name -> BVar(m.name.v, toBSVType(m.typ, Some(bsvMods))))
     })
     //mapping memory ids to their associated locks
     private val lockParams: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
@@ -564,11 +567,11 @@ object BluespecGeneration {
       case v: ISend => None
       case v: IRecv => None
       case _: InternalCommand => None
+      case COutput(exp) => None
       case CRecv(lhs, rhs) => throw UnexpectedCommand(cmd)
       case CIf(cond, cons, alt) => throw UnexpectedCommand(cmd)
       case CSeq(c1, c2) => throw UnexpectedCommand(cmd)
       case CTBar(c1, c2) => throw UnexpectedCommand(cmd)
-      case COutput(exp) => throw UnexpectedCommand(cmd)
       case CReturn(exp) => throw UnexpectedCommand(cmd)
       case CSpeculate(predVar, predVal, verify, body) => throw UnexpectedCommand(cmd)
       case CSplit(cases, default) => throw UnexpectedCommand(cmd)
@@ -635,6 +638,8 @@ object BluespecGeneration {
         //if the handle matches
         None
       }
+        //TODO write exp into dedicated output queue
+      case COutput(exp) => None
       case _: ICheckLock => None
       case CAssign(lhs, rhs) => None
       case CExpr(exp) => None
@@ -645,7 +650,6 @@ object BluespecGeneration {
       case CSeq(c1, c2) => throw UnexpectedCommand(cmd)
       case CTBar(c1, c2) => throw UnexpectedCommand(cmd)
       case CIf(cond, cons, alt) => throw UnexpectedCommand(cmd)
-      case COutput(exp) => throw UnexpectedCommand(cmd)
       case CReturn(exp) => throw UnexpectedCommand(cmd)
       case CSpeculate(predVar, predVal, verify, body) => throw UnexpectedCommand(cmd)
       case CSplit(cases, default) => throw UnexpectedCommand(cmd)
