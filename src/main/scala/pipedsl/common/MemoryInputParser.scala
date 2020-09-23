@@ -9,11 +9,11 @@ import scala.io.Source
  */
 object MemoryInputParser {
   
-  def parse(args: Array[String]): Map[String, Array[Int]] = {
-    val memCli=  "\\(([a-zA-Z_][a-zA-Z0-9_]*),(.*),(\\d *)\\)".r
+  def parse(args: Seq[String]): Map[String, Array[Int]] = {
+    val memCli=  "\\(([a-zA-Z_][a-zA-Z0-9_]*);(.*);(\\d*)\\)".r
     var memories = immutable.HashMap[String, Array[Int]]()
-    for (index <- 1 until args.length) {
-      args(index) match {
+    for (arg <- args) {
+      arg match {
         case memCli(iden, file, address) => {
           val inputFile = Source.fromFile(file).getLines.toArray.map(s => Integer.decode(s).toInt)
           val memSize = Math.pow(2, Integer.parseInt(address)).toInt

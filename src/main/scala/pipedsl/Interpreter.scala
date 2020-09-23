@@ -1,5 +1,7 @@
 package pipedsl
 
+import java.io.{FileOutputStream, OutputStreamWriter}
+
 import pipedsl.common.Errors
 import pipedsl.common.Syntax._
 
@@ -154,7 +156,7 @@ class Interpreter(val maxIterations: Int) {
         interp_command(m.body, env)
     }
     
-    def interp_prog(p: Prog, mems: Map[String, Array[Int]]): Environment = {
+    def interp_prog(p: Prog, mems: Map[String, Array[Int]], outputFile: String): Environment = {
         p.fdefs.foreach(fdef => functions = functions + (fdef.name -> fdef))
         p.moddefs.foreach(moddef => modules = modules + (moddef.name -> moddef))
         mems.keySet.foreach(mem => memoryEnv = memoryEnv + (Id(mem) -> mems.get(mem).get))
@@ -168,7 +170,10 @@ class Interpreter(val maxIterations: Int) {
             }
             iterations = iterations + 1
         }
-        memoryEnv.keySet.foreach(mem => {println(mem.v); println(memoryEnv.get(mem).get.mkString(", "))})
+        val writer = new OutputStreamWriter(new FileOutputStream(outputFile))
+        memoryEnv.keySet.foreach(mem => {writer.write(mem.v + "\n"); writer.write(memoryEnv.get(mem).get.mkString(", ") + "\n")})
+        writer.flush()
+        writer.close()
         memoryEnv
     }
 }
