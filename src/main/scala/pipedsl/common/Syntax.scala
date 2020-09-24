@@ -71,6 +71,7 @@ object Syntax {
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
+      case TRequestHandle(m) => s"${}_Request"
       case TNamedType(n) => n.toString
     }
   }
@@ -84,6 +85,7 @@ object Syntax {
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
+  case class TRequestHandle(mod: Id) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
 

@@ -21,47 +21,47 @@ object BSVSyntax {
   case object BBool extends BSVType
   case object BEmptyModule extends BSVType
 
-  /**
-   *
-   * @param t
-   * @return
-   */
-  def toBSVType(t: Type, modmap: Option[Map[Id, BSVType]] = None): BSVType = t match {
-    case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
-    case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
-    case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
-    case Syntax.TBool() => BBool
-    case Syntax.TModType(_, _, _, Some(n)) => modmap.get(n)
-  }
+  class BSVTranslator(var modmap: Map[Id, BSVType] = Map(), var handleMap: Map[Id, BSVType] = Map()) {
 
-  //TODO a better way to translate operators
-  def toBSVBop(b: EBinop): BExpr = b.op match {
-    case BitOp("++", _) => BConcat(toBSVExpr(b.e1), List(toBSVExpr(b.e2)))
-    case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
-  }
+    def toBSVType(t: Type): BSVType = t match {
+      case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
+      case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
+      case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
+      case Syntax.TBool() => BBool
+      case Syntax.TModType(_, _, _, Some(n)) => modmap(n)
+      case Syntax.TRequestHandle(n) => handleMap(n)
+    }
 
-  /**
-   *
-   * @param e
-   * @return
-   */
-  def toBSVExpr(e: Expr): BExpr = e match {
-    case EInt(v, base, bits) => BIntLit(v, base, bits)
-    case EBool(v) => BBoolLit(v)
-    case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
-    case eb@EBinop(_,_,_) => toBSVBop(eb)
-    case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
-    case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
-    case EVar(id) => BVar(id.v, toBSVType(id.typ.get))
+    def toBSVVar(v: EVar): BVar = {
+      BVar(v.id.v, toBSVType(v.id.typ.get))
+    }
+
+    def toBSVExpr(e: Expr): BExpr = e match {
+      case EInt(v, base, bits) => BIntLit(v, base, bits)
+      case EBool(v) => BBoolLit(v)
+      case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
+      case eb@EBinop(_,_,_) => toBSVBop(eb)
+      case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
+      case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
+      case e@EVar(id) => toBSVVar(e)
       //TODO functions
-    //case EApp(func, args) => throw new UnexpectedExpr(e)
-    case EApp(func, args) => BIntLit(0, 10, 1)
-    case ERecAccess(rec, fieldName) => throw new UnexpectedExpr(e)
-    case ERecLiteral(fields) => throw new UnexpectedExpr(e)
-    case EMemAccess(mem, index) => BMemRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
-    case ECast(ctyp, exp) => throw new UnexpectedExpr(e)
-    case expr: CirExpr =>throw new UnexpectedExpr(e)
+      //case EApp(func, args) => throw new UnexpectedExpr(e)
+      case EApp(func, args) => BIntLit(0, 10, 1)
+      case ERecAccess(rec, fieldName) => throw new UnexpectedExpr(e)
+      case ERecLiteral(fields) => throw new UnexpectedExpr(e)
+      case EMemAccess(mem, index) => BMemRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
+      case ECast(ctyp, exp) => throw new UnexpectedExpr(e)
+      case expr: CirExpr =>throw new UnexpectedExpr(e)
+    }
+
+    //TODO a better way to translate operators
+    def toBSVBop(b: EBinop): BExpr = b.op match {
+      case BitOp("++", _) => BConcat(toBSVExpr(b.e1), List(toBSVExpr(b.e2)))
+      case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
+    }
   }
+
+
 
   /**
    *

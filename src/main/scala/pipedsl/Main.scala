@@ -8,8 +8,8 @@ import java.nio.file.Files
 import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertAsyncPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
-import pipedsl.codegen.BluespecGeneration
-import pipedsl.codegen.BluespecGeneration.{BluespecModuleGenerator, BluespecProgramGenerator}
+import pipedsl.codegen.bsv.BluespecGeneration.{BluespecModuleGenerator, BluespecProgramGenerator}
+import pipedsl.codegen.bsv.BluespecGeneration
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.Id
 
@@ -48,7 +48,7 @@ object Main {
     val stageInfo: Map[Id, List[PStage]] = new SplitStagesPass().run(prog_recv)
     //Run the transformation passes on the stage representation
     val optstageInfo = stageInfo map { case (n, stgs) =>
-      new ConvertAsyncPass().run(stgs)
+      new ConvertAsyncPass(n).run(stgs)
       AddEdgeValuePass.run(stgs)
       LockOpTranslationPass.run(stgs)
       //This pass produces a new stage list (not modifying in place)

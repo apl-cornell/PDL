@@ -12,7 +12,7 @@ import pipedsl.passes.Passes.StagePass
  * of Send and Recv pairs. The Send produces a reference
  * which the Recv uses to request the result.
  */
-class ConvertAsyncPass extends StagePass[List[PStage]] {
+class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
 
   private var msgCount = 0
   override def run(stgs: List[PStage]): List[PStage] = {
@@ -56,6 +56,7 @@ class ConvertAsyncPass extends StagePass[List[PStage]] {
         val recv = IMemRecv(mem, None)
         (send, recv)
       }
+        //module calls
       case (lhs@EVar(_), call@ECall(_, _)) => {
         val send = convertCall(call)
         val recv = IRecv(send.handle, send.receiver, lhs)
@@ -94,6 +95,8 @@ class ConvertAsyncPass extends StagePass[List[PStage]] {
 
   private def freshMessage: EVar = {
     val res = EVar(Id("_request_" + msgCount))
+    res.typ = Some(TRequestHandle(modName))
+    res.id.typ = res.typ
     msgCount += 1
     res
   }

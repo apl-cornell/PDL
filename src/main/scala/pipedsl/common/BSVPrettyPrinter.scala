@@ -139,7 +139,7 @@ object BSVPrettyPrinter {
       case BStmtSeq(stmts) => { stmts.foreach(s => printBSVStatement(s)) }
       case BExprStmt(expr) => w.write(mkStatementString(toBSVExprStr(expr)))
       case BModInst(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
-      case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
+      case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) => {

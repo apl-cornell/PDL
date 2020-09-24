@@ -28,9 +28,14 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
      release(inputs);
      call client(pc + 2<32>);
      ---
-     acquire(m);
-     int<32> result <- call m(a1, a2);
-     release(m);
+     if (false) {
+        acquire(m);
+        int<32> result <- call m(a1, a2);
+        release(m);
+        ---
+     } else {
+        int<32> result = 10<32>;
+     }
      ---
      acquire(outputs);
      outputs[0<1>] <- result;
