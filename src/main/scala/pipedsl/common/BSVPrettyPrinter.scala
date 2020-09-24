@@ -1,6 +1,6 @@
 package pipedsl.common
 
-import java.io.{FileOutputStream, OutputStreamWriter, Writer}
+import java.io.{File, FileOutputStream, OutputStreamWriter, Writer}
 
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.Errors.BaseError
@@ -88,7 +88,7 @@ object BSVPrettyPrinter {
     }
   }
 
-  def getFilePrinter(name: String): BSVPretyPrinterImpl = {
+  def getFilePrinter(name: File): BSVPretyPrinterImpl = {
     new BSVPretyPrinterImpl(new OutputStreamWriter(new FileOutputStream(name)))
   }
 

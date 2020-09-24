@@ -7,13 +7,14 @@ import scopt.OParser
 object CommandLineParser {
   
   case class Config(
-                     out: File = new File("."),
-                     debug: Boolean = false,
-                     mode: String = "",
-                     file: File = new File("."),
-                     memoryInput: Seq[String] = Seq(),
-                     maxIterations: Int = 0
-                   )
+    out: File = new File("."),
+    debug: Boolean = false,
+    mode: String = "",
+    file: File = new File("."),
+    memoryInput: Seq[String] = Seq(),
+    maxIterations: Int = 0,
+    printStageGraph: Boolean = false
+  )
 
   def buildParser(): OParser[Unit, Config] = {
     val builder = OParser.builder[Config]
@@ -28,6 +29,9 @@ object CommandLineParser {
           .action((x, c) => c.copy(out = x))
           .text("out is the file to print the output to"),
         help('h', "help").text("prints this usage text"),
+        opt[Unit]("printStages")
+          .action((_, c) => c.copy(printStageGraph = true))
+          .text("Print the dot representation of the generated pipelines to stdout"),
         arg[File]("<file>...")
           .required()
           .action((x, c) => c.copy(file = x))
@@ -51,7 +55,7 @@ object CommandLineParser {
               .text("provided memory inputs")
           ),
         cmd("gen")
-          .text("generates code for the provided pdsl file and prints the generated bluespec to the out file\n")
+          .text("generates code for the provided pdsl file and writes the generated bluespec in the 'out' directory\n")
           .action((_, c) => c.copy(mode = "gen"))
       )
     }

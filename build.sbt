@@ -2,6 +2,7 @@ name := "PipeDSL"
 version := "0.0.1"
 scalaVersion := "2.13.2"
 
+
 libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.8" % "test",
   "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2",
@@ -10,3 +11,8 @@ libraryDependencies ++= Seq(
   "com.lihaoyi" %% "pprint" % "0.5.6",
   "com.github.scopt" % "scopt_2.13" % "4.0.0-RC2"
 )
+
+//Deployment Options
+assemblyJarName in assembly := "pdsl.jar"
+test in assembly := {}
+mainClass in assembly := Some("pipedsl.Main")
