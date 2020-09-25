@@ -41,8 +41,9 @@ TODO is to add an `assembly` directive to build an executable jar.
 The main class is `pipedsl.Main` and can be run via
 the sbt command `sbt "run pipedsl.Main <args>"`.
 
-At the moment, the compiler takes a single argument which is the
-file path of the single source file to compile.
+The sbt command `sbt assembly` can also be used to produce an executable jar,
+which will be located in `SPEC_LANG_DIR/target/scala-2.13/pdsl.jar`.
+This can be executed by running java with the command `java -jar pdsl.jar <args>`.
 
 ## Compiler Structure
 
