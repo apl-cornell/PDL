@@ -1,9 +1,7 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.BSVSyntax
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
-import pipedsl.common.Syntax.Id
 
 object BluespecInterfaces {
 
@@ -12,11 +10,76 @@ object BluespecInterfaces {
   val peekMethodName = "peek"
   val checkHandleMethodName = "checkHandle"
 
-  def requestMethod(args: List[BVar], handleTyp: BSVType): BMethodSig =
+
+  private val regModuleName = "mkReg"
+  private val fifoModuleName = "mkFIFOF"
+  private val regType = "Reg"
+  private val fifoType = "FIFOF"
+  private val fifoDequeuMethodName = "deq"
+  private val fifoEnqueueMethodName = "enq"
+  private val fifoFirstMethodName = "first"
+
+  /**
+   * Uses the configured fifo interface type and the provided
+   * BSV type to make a paramterized fifo type.
+   *
+   * @param typ - The BSV type that describes the fifo's elements' types
+   * @return - The new BSV type describing the parameterized fifo
+   */
+  def getFifoType(typ: BSVType): BInterface = {
+    BInterface(fifoType, List(BVar("elemtyp", typ)))
+  }
+
+  def getFifo: BModule = BModule(fifoModuleName, List())
+
+  def getFifoDeq(f: BVar): BMethodInvoke = {
+    BMethodInvoke(f, fifoDequeuMethodName, List())
+  }
+  def getFifoEnq(f: BVar, data: BExpr): BMethodInvoke = {
+    BMethodInvoke(f, fifoEnqueueMethodName, List(data))
+  }
+  def getFifoPeek(f: BVar): BMethodInvoke = {
+    BMethodInvoke(f, fifoFirstMethodName, List())
+  }
+
+  /**
+   * Uses the configured register interface type and the provided
+   * BSV type to make a paramterized register type.
+   *
+   * @param typ - The BSV type that describes the register's element type
+   * @return - The new BSV type describing the parameterized register
+   */
+  def getRegType(typ: BSVType): BInterface = {
+    BInterface(regType, List(BVar("elemtyp", typ)))
+  }
+
+  def getReg(initVal: BExpr): BModule = {
+    BModule(regModuleName, List(initVal))
+  }
+
+
+  def defineInterface(intName: String, inputs: List[BVar],
+    handleTyp: BSVType, retTyp: Option[BSVType]): BInterfaceDef = {
+    var methods: List[BMethodSig] =
+      List( requestMethod(inputs, handleTyp),
+        BluespecInterfaces.responseMethod,
+        BluespecInterfaces.checkHandleMethod(handleTyp))
+    if (retTyp.isDefined) {
+      methods = methods :+ BluespecInterfaces.peekMethod(retTyp.get)
+    }
+    BInterfaceDef(BInterface(intName.capitalize), methods)
+  }
+
+  def getRequestMethod(bint: BInterfaceDef): BMethodSig = bint.methods.find(m => m.name == requestMethodName).get
+  def getResponseMethod(bint: BInterfaceDef): BMethodSig = bint.methods.find(m => m.name == responseMethodName).get
+  def getPeekMethod(bint: BInterfaceDef): BMethodSig = bint.methods.find(m => m.name == peekMethodName).get
+  def getHandleMethod(bint: BInterfaceDef): BMethodSig = bint.methods.find(m => m.name == checkHandleMethodName).get
+
+  private def requestMethod(args: List[BVar], handleTyp: BSVType): BMethodSig =
     BMethodSig(requestMethodName, ActionValue(handleTyp), args)
-  def responseMethod: BMethodSig = BMethodSig(responseMethodName, Action, List())
-  def peekMethod(rettype: BSVType): BMethodSig = BMethodSig(peekMethodName, Value(rettype), List())
-  def checkHandleMethod(handletyp: BSVType): BMethodSig =
+  private def responseMethod: BMethodSig = BMethodSig(responseMethodName, Action, List())
+  private def peekMethod(rettype: BSVType): BMethodSig = BMethodSig(peekMethodName, Value(rettype), List())
+  private def checkHandleMethod(handletyp: BSVType): BMethodSig =
     BMethodSig(checkHandleMethodName, Value(BBool), List(BVar("handle", handletyp)))
 
   private val combMemMod = "mkCombMem"
@@ -28,7 +91,7 @@ object BluespecInterfaces {
     case _ => throw UnexpectedBSVType("Not an expected memory type")
   }
 
-  def getName(prog: BProgram): String = prog.topModule.name
+  def getModuleName(prog: BProgram): String = prog.topModule.name
   def getInterface(prog: BProgram): BSVType = prog.topModule.typ match {
     case Some(value) => value
     case None => BEmptyModule
@@ -43,33 +106,4 @@ object BluespecInterfaces {
         //others should be unreachable
     }
   }
-
-  //This class can be used for convenient tracking of expected methods
-  //that all generated bsv programs will expose in their top level module
-  class InterfaceMap() {
-    private case class Signature(req: BMethodSig, resp: BMethodSig, peek: BMethodSig, handle: BMethodSig)
-
-    private var intMap: Map[BInterface, Signature] = Map()
-    private var progMap: Map[Id, BProgram] = Map()
-
-    def addModuleInterface(name: Id, prog: BProgram): Unit = {
-      //TODO better error messages
-      val interface = prog.topModule.typ.get
-      val intdef = prog.interfaces.find(i => i.typ == interface).get
-      val req = intdef.methods.find(m => m.name == requestMethodName).get
-      val resp = intdef.methods.find(m => m.name == responseMethodName).get
-      val peek = intdef.methods.find(m => m.name == peekMethodName).get
-      val handle = intdef.methods.find(m => m.name == checkHandleMethodName).get
-      val sig = Signature(req, resp, peek, handle)
-      intMap = intMap + (interface -> sig)
-      progMap = progMap + (name -> prog)
-    }
-    //TODO better error messages
-    def getReq(int: BInterface): BMethodSig = intMap(int).req
-    def getResp(int: BInterface): BMethodSig = intMap(int).resp
-    def getPeek(int: BInterface): BMethodSig = intMap(int).peek
-    def getHandle(int: BInterface): BMethodSig = intMap(int).handle
-
-  }
-
 }

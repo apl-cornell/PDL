@@ -32,6 +32,7 @@ object BSVPrettyPrinter {
         ""
       }) + "Int#(" + size + ")"
     case BBool => "Bool"
+    case BVoid => "void"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
@@ -136,8 +137,9 @@ object BSVPrettyPrinter {
     }
 
     def printBSVStatement(stmt: BStatement): Unit = stmt match {
-      case BStmtSeq(stmts) => { stmts.foreach(s => printBSVStatement(s)) }
+      case BStmtSeq(stmts) => stmts.foreach(s => printBSVStatement(s))
       case BExprStmt(expr) => w.write(mkStatementString(toBSVExprStr(expr)))
+      case BReturnStmt(expr) => w.write(mkStatementString("return", toBSVExprStr(expr)))
       case BModInst(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
       case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))

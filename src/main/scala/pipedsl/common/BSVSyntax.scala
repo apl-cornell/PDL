@@ -19,6 +19,7 @@ object BSVSyntax {
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
   case object BBool extends BSVType
+  case object BVoid extends BSVType
   case object BEmptyModule extends BSVType
 
   class BSVTranslator(var modmap: Map[Id, BSVType] = Map(), var handleMap: Map[Id, BSVType] = Map()) {
@@ -30,6 +31,7 @@ object BSVSyntax {
       case Syntax.TBool() => BBool
       case Syntax.TModType(_, _, _, Some(n)) => modmap(n)
       case Syntax.TRequestHandle(n) => handleMap(n)
+      case Syntax.TVoid() => BVoid
     }
 
     def toBSVVar(v: EVar): BVar = {
@@ -109,6 +111,7 @@ object BSVSyntax {
 
   case class BStmtSeq(stmts: List[BStatement]) extends BStatement
   case class BExprStmt(expr: BExpr) extends BStatement
+  case class BReturnStmt(expr: BExpr) extends BStatement
   case class BModInst(lhs: BVar, rhs: BModule) extends BStatement
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
