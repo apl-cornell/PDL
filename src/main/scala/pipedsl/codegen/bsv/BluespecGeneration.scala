@@ -670,7 +670,8 @@ object BluespecGeneration {
         if (receiver == mod.name) {
           Some(BStmtSeq(
             getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
-              Some(args.map(a => translator.toBSVExpr(a))))
+              //need to add threadid var explicitly, its not in the surface syntax
+              Some(args.map(a => translator.toBSVExpr(a)) :+ translator.toBSVVar(threadIdVar)))
           ))
         } else {
           Some(BInvokeAssign(translator.toBSVVar(handle),
