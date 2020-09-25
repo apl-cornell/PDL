@@ -126,13 +126,14 @@ object BluespecGeneration {
     private var edgeCounter: Map[(PStage, PStage), Int] = Map().withDefaultValue(0)
     private var edgeNames: Map[PipelineEdge, String] = Map()
 
-    type EdgeInfo = Map[PipelineEdge, BStructDef]
+    type EdgeInfo = Map[PipelineEdge, BVar]
     type ModInfo = Map[Id, BVar]
     type LockInfo = Map[Id, BVar]
+    type StageCode = (Iterable[BStatement], Iterable[BRuleDef])
 
     //Normal Map that special cases when checking the first Stage as part of the key
     //Since The First stage only has 1 incoming 'edge'
-    class EdgeMap(firstStage: PStage, firstStageInput: BStruct, edges: EdgeInfo) {
+    class EdgeMap(firstStage: PStage, firstStageInput: BStruct, edges: Map[PipelineEdge, BStructDef]) {
 
       private val realMap: Map[PipelineEdge, BStruct] = edges map { case (k, v) => (k, v.typ) }
 
@@ -168,6 +169,12 @@ object BluespecGeneration {
     private val inputFields = getEdgeStructInfo(List(firstStage), addTId = false).values.head.typ.fields
     //This map returns the correct struct type based on the destination stage
     private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
+    val allEdges = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
+      es ++ s.inEdges ++ s.outEdges
+    })
+    val edgeParams: EdgeInfo = allEdges.foldLeft(Map[PipelineEdge, BVar]())((m, e) => {
+      m + (e -> BVar(genParamName(e), BluespecInterfaces.getFifoType(edgeMap(e))))
+    })
     //Generate map from existing module parameter names to BSV variables
     private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](Map())((vars, m) => {
       vars + (m.name -> BVar(m.name.v, translator.toBSVType(m.typ)))
@@ -177,9 +184,9 @@ object BluespecGeneration {
       locks + (m.name -> BVar(genLockName(m.name), getLockType))
     })
     //Generate a Submodule for each stage
-    private val stgMap = otherStages.foldLeft(Map[PStage, BModuleDef]())((m, s) => {
-      m + (s -> getStageModule(s, isFirstStg = false))
-    }) + (firstStage -> getStageModule(firstStage, isFirstStg = true))
+    private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
+      m + (s -> getStageCode(s))
+    })
     //The Interface this module exposes to the outside world
     private val modInterfaceDef = BluespecInterfaces.defineInterface(
       mod.name.v,
@@ -216,7 +223,7 @@ object BluespecGeneration {
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
         interfaces = List(modInterfaceDef),
-        modules = stgMap.values.toList)
+        modules = List())
     }
 
     /**
@@ -271,8 +278,8 @@ object BluespecGeneration {
       "s_" + s.name
     }
 
-    private def genModuleName(s: PStage): String = {
-      "mk" + s.name.v
+    private def getStagePrefix(s: PStage): String = {
+      "_" + s.name.v + "_"
     }
 
     private def genLockName(mem: Id): String = {
@@ -286,36 +293,15 @@ object BluespecGeneration {
      * @param stg - The pipeline stage to convert
      * @return - The generated BSV module definition
      */
-    private def getStageModule(stg: PStage, isFirstStg: Boolean = false): BModuleDef = {
-      //Define module parameters to communicate along pipeline edges
-      val inMap = stg.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
-        val edgeStructType = edgeMap(e)
-        m + (e -> BVar(genParamName(e), BluespecInterfaces.getFifoType(edgeStructType)))
-      })
-      val inOutMap = inMap ++ stg.outEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
-        val edgeStructType = edgeMap(e)
-        m + (e -> BVar(genParamName(e), BluespecInterfaces.getFifoType(edgeStructType)))
-
-      })
-      //TODO only include this edge if this stage has a recursive call
-      val firstStageParams = if (isFirstStg) {
-        Map()
-      } else {
-        firstStage.inEdges.foldLeft[Map[PipelineEdge, BVar]](Map())((m, e) => {
-          val edgeStructType = edgeMap(e)
-          m + (e -> BVar(genParamName(e) + "_to", BluespecInterfaces.getFifoType(edgeStructType)))
-        })
-      }
-      val edgeParams = inOutMap ++ firstStageParams
-      //TODO only pass the module parameters that are actually needed instead of all
-      val params = edgeParams.values.toList.sortWith(_.name < _.name) ++ modParams.values ++ lockParams.values
+    private def getStageCode(stg: PStage): StageCode = {
       //Generate set of definitions needed by rule conditions
       //(declaring variables read from unconditional inputs)
-      val sBody = getStageBody(stg, edgeParams)
+      translator.setVariablePrefix(getStagePrefix(stg))
+      val sBody = getStageBody(stg)
       //Generate the set of execution rules for reading args and writing outputs
-      val execRule = getStageRule(stg, edgeParams)
-      BModuleDef(name = genModuleName(stg), typ = None,
-        params = params, body = sBody, rules = List(execRule), methods = List())
+      val execRule = getStageRule(stg)
+      translator.setVariablePrefix("")
+      (sBody, List(execRule))
     }
 
     /**
@@ -324,16 +310,15 @@ object BluespecGeneration {
      * and writing its outputs
      *
      * @param stg      - The stage to process
-     * @param paramMap - Edge to Parameter name Mapping
      * @return A single BSV Rule
      */
-    private def getStageRule(stg: PStage, paramMap: Map[PipelineEdge, BVar]): BRuleDef = {
+    private def getStageRule(stg: PStage): BRuleDef = {
       //This is used to declare request handle variables (they must be declared in the rule body)
-      val writeCmdDecls = getEffectDecls(stg.cmds, paramMap)
-      var writeCmdStmts = getEffectCmds(stg.cmds, paramMap)
-      val queueStmts = getEdgeQueueStmts(stg, stg.allEdges, paramMap)
+      val writeCmdDecls = getEffectDecls(stg.cmds)
+      val writeCmdStmts = getEffectCmds(stg.cmds)
+      val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.cmds)
-      BRuleDef("execute", blockingConds, writeCmdDecls ++ writeCmdStmts ++ queueStmts)
+      BRuleDef( genParamName(stg) + "_execute", blockingConds, writeCmdDecls ++ writeCmdStmts ++ queueStmts)
     }
 
     /**
@@ -362,14 +347,13 @@ object BluespecGeneration {
      *
      * @param s        The stage we're compiling
      * @param es       The subset of s's edges that we're translating
-     * @param paramMap The edge variable names used by this stage
      * @return A list of statements that represent queue operations for the relevant edges
      */
     private def getEdgeQueueStmts(s: PStage, es: Iterable[PipelineEdge],
-      paramMap: Map[PipelineEdge, BVar], args: Option[Iterable[BExpr]] = None): List[BStatement] = {
+      args: Option[Iterable[BExpr]] = None): List[BStatement] = {
       es.foldLeft(List[BStatement]())((l, e) => {
         val stmt = if (e.to == s) {
-          val deq = BExprStmt(BluespecInterfaces.getFifoDeq(paramMap(e)))
+          val deq = BExprStmt(BluespecInterfaces.getFifoDeq(edgeParams(e)))
           if (e.condRecv.isDefined) {
             BIf(translator.toBSVExpr(e.condRecv.get), List(deq), List())
           } else {
@@ -381,7 +365,7 @@ object BluespecGeneration {
           } else {
             getCanonicalStruct(edgeMap(e))
           }
-          val enq = BExprStmt(BluespecInterfaces.getFifoEnq(paramMap(e), op))
+          val enq = BExprStmt(BluespecInterfaces.getFifoEnq(edgeParams(e), op))
           if (e.condSend.isDefined) {
             BIf(translator.toBSVExpr(e.condSend.get), List(enq), List())
           } else {
@@ -395,10 +379,9 @@ object BluespecGeneration {
     /**
      *
      * @param stg        The stage to compile
-     * @param edgeParams The edge parameter variables used by this stage
      * @return
      */
-    private def getStageBody(stg: PStage, edgeParams: Map[PipelineEdge, BVar]): List[BStatement] = {
+    private def getStageBody(stg: PStage): List[BStatement] = {
       var body: List[BStatement] = List()
       //Define all of the variables read unconditionally
       val uncondIn = stg.inEdges.filter(e => e.condRecv.isEmpty)
@@ -407,11 +390,13 @@ object BluespecGeneration {
         //First element in read queue
         val paramExpr = BMethodInvoke(edgeParams(e), "first", List())
         e.values.foreach(v => {
-          val pvar = BVar(v.v, translator.toBSVType(v.typ.get))
+          //rename variables declared in this stage
+          val pvar = translator.toBSVVar(v)
           body = body :+ BDecl(pvar, Some(BStructAccess(paramExpr, pvar)))
         })
         //only read threadIDs from an unconditional edge
-        body = body :+ BDecl(threadIdVar, Some(BStructAccess(paramExpr, threadIdVar)))
+        body = body :+ BDecl(translator.toBSVVar(threadIdVar),
+          Some(BStructAccess(paramExpr, threadIdVar)))
       })
       //generate a conditional assignment expression to choose
       //which conditional edge we're reading inputs from
@@ -422,12 +407,12 @@ object BluespecGeneration {
       })
       variableList.foreach(v => {
         val condEdgeExpr = condIn.foldLeft[BExpr](BDontCare)((expr, edge) => {
-          val paramExpr = BMethodInvoke(edgeParams(edge), "first", List())
+          val paramExpr = BluespecInterfaces.getFifoPeek(edgeParams(edge))
           BTernaryExpr(translator.toBSVExpr(edge.condRecv.get),
             BStructAccess(paramExpr, BVar(v.v, translator.toBSVType(v.typ.get))),
             expr)
         })
-        body = body :+ BDecl(BVar(v.v, translator.toBSVType(v.typ.get)), Some(condEdgeExpr))
+        body = body :+ BDecl(translator.toBSVVar(v), Some(condEdgeExpr))
       })
       //And now add all of the combinational connections
       body ++ getCombinationalDeclarations(stg.cmds) ++ getCombinationalCommands(stg.cmds)
@@ -438,12 +423,7 @@ object BluespecGeneration {
     private def getTopModule: BModuleDef = {
       //Body instantiates all of the params (fifos & memories) and then all of the stages
       //One fifo per edge in the graph
-      val allEdges = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
-        es ++ s.inEdges ++ s.outEdges
-      })
-      val edgeParams = allEdges.foldLeft(Map[PipelineEdge, BVar]())((m, e) => {
-        m + (e -> BVar(genParamName(e), BluespecInterfaces.getFifoType(edgeMap(e))))
-      })
+
       val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
         m + (e -> BModInst(edgeParams(e), BluespecInterfaces.getFifo))
       })
@@ -455,21 +435,11 @@ object BluespecGeneration {
 
       //Instantiate each stage module
       val startedge = edgeFifos(firstStage.inEdges.head).lhs
-      val mkStgs = (firstStage +: otherStages).map(s => {
-        val moddef = stgMap(s)
-        val modtyp = moddef.typ match {
-          case Some(t) => t
-          case None => BEmptyModule
-        }
-        //TODO only include startedge on stages that recursively call
-        var args: List[BVar] = s.allEdges.map(e => {
-          edgeFifos(e).lhs
-        }).toList
-        if (s != firstStage) {
-          args = args :+ startedge
-        }
-        args = args.sortWith(_.name < _.name) ++ modParams.values.toList ++ lockParams.values.toList //TODO only pass mods that are necessary
-        BModInst(BVar(genParamName(s), modtyp), BModule(moddef.name, args))
+      val stgStmts = stgMap.keys.foldLeft(List[BStatement]())((l, s) => {
+        l ++ stgMap(s)._1
+      })
+      val stgrules = stgMap.keys.foldLeft(List[BRuleDef]())((l, s) => {
+        l ++ stgMap(s)._2
       })
       //Instantiate the registers that describes when the module is busy/ready for inputs
       //And how it returns outputs
@@ -477,14 +447,17 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, BluespecInterfaces.getFifo)
       val threadInst = BModInst(BVar(threadIdName, BluespecInterfaces.getRegType(getThreadIdType)),
         BluespecInterfaces.getReg(BZero))
-      val stmts = (edgeFifos.values.toList ++ memLocks.values.toList :+ busyInst :+ outputInst :+ threadInst) ++ mkStgs
+      val stmts = (edgeFifos.values.toList ++ memLocks.values.toList
+        :+ busyInst
+        :+ outputInst
+        :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()
       val reqMethodDef = BMethodDef(
         sig = BluespecInterfaces.getRequestMethod(modInterfaceDef),
         cond = Some(BUOp("!", busyReg)),
         //send input data (arguments to this method) to pipeline
-        body = getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, edgeParams) :+
+        body = getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges) :+
           //And set busy status to true
           //TODO, don't use this when the module doesn't have recursive calls
           // (since it's ok to pipeline separate requests in that case)
@@ -530,7 +503,7 @@ object BluespecGeneration {
         typ = Some(modInterfaceDef.typ),
         params = modParams.values.toList,
         body = stmts,
-        rules = List(),
+        rules = stgrules,
         methods = methods)
     }
 
@@ -619,9 +592,9 @@ object BluespecGeneration {
     }
 
     //Helper to accumulate geteffectdecl results into a single list
-    private def getEffectDecls(cmds: Iterable[Command], paramMap: Map[PipelineEdge, BVar]): List[BStatement] = {
+    private def getEffectDecls(cmds: Iterable[Command]): List[BStatement] = {
       cmds.foldLeft(List[BStatement]())((l, c) => {
-        getEffectDecl(c, paramMap) match {
+        getEffectDecl(c) match {
           case Some(bs) => l :+ bs
           case None => l
         }
@@ -635,20 +608,19 @@ object BluespecGeneration {
      * In that example, request must be declared in the rule body, not the module body.
  *
      * @param cmd - The commands to be checked
-     * @param paramMap - The mapping of source variable names to module parameter names
      * @return
      */
     @tailrec
-    private def getEffectDecl(cmd: Command, paramMap: Map[PipelineEdge, BVar]): Option[BStatement] = cmd match {
-      case ICondCommand(_: Expr, c: Command) => getEffectDecl(c, paramMap)
+    private def getEffectDecl(cmd: Command): Option[BStatement] = cmd match {
+      case ICondCommand(_: Expr, c: Command) => getEffectDecl(c)
       case ISend(handle, _, _) => Some(BDecl(translator.toBSVVar(handle), None))
       case _ => None
     }
 
     //Helper to accumulate getWriteCmd results into a single list
-    private def getEffectCmds(cmds: Iterable[Command], paramMap: Map[PipelineEdge, BVar]): List[BStatement] = {
+    private def getEffectCmds(cmds: Iterable[Command]): List[BStatement] = {
       cmds.foldLeft(List[BStatement]())((l, c) => {
-        getEffectCmd(c, paramMap) match {
+        getEffectCmd(c) match {
           case Some(bs) => l :+ bs
           case None => l
         }
@@ -663,8 +635,8 @@ object BluespecGeneration {
      * @param cmd The command to translate
      * @return Some(translation) if cmd is effectful, else None
      */
-    private def getEffectCmd(cmd: Command, paramMap: Map[PipelineEdge, BVar]): Option[BStatement] = cmd match {
-      case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c, paramMap) match {
+    private def getEffectCmd(cmd: Command): Option[BStatement] = cmd match {
+      case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c) match {
         case Some(bc) => Some(BIf(translator.toBSVExpr(cond), List(bc), List()))
         case None => None
       }
@@ -689,8 +661,7 @@ object BluespecGeneration {
       case ISend(handle, receiver, args) =>
         if (receiver == mod.name) {
           Some(BStmtSeq(
-            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
-              paramMap, Some(args.map(a => translator.toBSVExpr(a))))
+            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(args.map(a => translator.toBSVExpr(a))))
           ))
         } else {
           Some(BInvokeAssign(translator.toBSVVar(handle),

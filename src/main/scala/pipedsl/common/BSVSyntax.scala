@@ -24,6 +24,9 @@ object BSVSyntax {
 
   class BSVTranslator(var modmap: Map[Id, BSVType] = Map(), var handleMap: Map[Id, BSVType] = Map()) {
 
+    private var variablePrefix = ""
+    def setVariablePrefix(p: String): Unit = variablePrefix = p
+
     def toBSVType(t: Type): BSVType = t match {
       case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
       case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
@@ -34,8 +37,14 @@ object BSVSyntax {
       case Syntax.TVoid() => BVoid
     }
 
+    def toBSVVar(v: BVar): BVar = {
+      BVar(variablePrefix + v.name, v.typ)
+    }
+    def toBSVVar(i: Id): BVar = {
+      BVar(variablePrefix + i.v, toBSVType(i.typ.get))
+    }
     def toBSVVar(v: EVar): BVar = {
-      BVar(v.id.v, toBSVType(v.id.typ.get))
+      toBSVVar(v.id)
     }
 
     def toBSVExpr(e: Expr): BExpr = e match {
