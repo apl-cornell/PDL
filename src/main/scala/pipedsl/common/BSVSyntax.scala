@@ -79,9 +79,10 @@ object BSVSyntax {
    * @param typ
    * @return
    */
-  def getCanonicalStruct(typ: BStruct): BStructLit = {
+  def getCanonicalStruct(typ: BStruct, t: BSVTranslator): BStructLit = {
     val argmap = typ.fields.foldLeft(Map[BVar, BExpr]())((m, f) => {
-      m + (BVar(f.name, f.typ) -> BVar(f.name, f.typ))
+      //don't translate field name, do translate RHS
+      m + (BVar(f.name, f.typ) -> t.toBSVVar(f))
     })
     BStructLit(typ, argmap)
   }

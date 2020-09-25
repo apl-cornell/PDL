@@ -347,6 +347,7 @@ object BluespecGeneration {
      *
      * @param s        The stage we're compiling
      * @param es       The subset of s's edges that we're translating
+     * @param args
      * @return A list of statements that represent queue operations for the relevant edges
      */
     private def getEdgeQueueStmts(s: PStage, es: Iterable[PipelineEdge],
@@ -363,7 +364,7 @@ object BluespecGeneration {
           val op = if (args.isDefined) {
             getNamedStruct(edgeMap(e), args.get)
           } else {
-            getCanonicalStruct(edgeMap(e))
+            getCanonicalStruct(edgeMap(e), translator)
           }
           val enq = BExprStmt(BluespecInterfaces.getFifoEnq(edgeParams(e), op))
           if (e.condSend.isDefined) {
@@ -392,7 +393,9 @@ object BluespecGeneration {
         e.values.foreach(v => {
           //rename variables declared in this stage
           val pvar = translator.toBSVVar(v)
-          body = body :+ BDecl(pvar, Some(BStructAccess(paramExpr, pvar)))
+          body = body :+ BDecl(pvar, Some(BStructAccess(paramExpr,
+            //but don't rename the struct field names
+            BVar(v.v, translator.toBSVType(v.typ.get)))))
         })
         //only read threadIDs from an unconditional edge
         body = body :+ BDecl(translator.toBSVVar(threadIdVar),
@@ -662,9 +665,11 @@ object BluespecGeneration {
         case None => None
       }
       case ISend(handle, receiver, args) =>
+        //Only for sends that are recursive (i.e., not leaving this module)
         if (receiver == mod.name) {
           Some(BStmtSeq(
-            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(args.map(a => translator.toBSVExpr(a))))
+            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
+              Some(args.map(a => translator.toBSVExpr(a))))
           ))
         } else {
           Some(BInvokeAssign(translator.toBSVVar(handle),
