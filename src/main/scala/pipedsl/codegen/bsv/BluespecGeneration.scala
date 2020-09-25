@@ -331,7 +331,7 @@ object BluespecGeneration {
     private def getBlockingConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case ICheckLock(mem) =>
-          l :+ BMethodInvoke(lockParams(mem), "owns", List(threadIdVar))
+          l :+ BMethodInvoke(lockParams(mem), "owns", List(translator.toBSVVar(threadIdVar)))
         case IRecv(handle, sender, _) =>
           l :+ BMethodInvoke(modParams(sender),
             BluespecInterfaces.checkHandleMethodName,
@@ -643,9 +643,12 @@ object BluespecGeneration {
       //TODO implement lock arguments (a.k.a. thread IDs)
       case CLockOp(mem, op) => op match {
         case pipedsl.common.Locks.LockState.Free => None
-        case pipedsl.common.Locks.LockState.Reserved => Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(threadIdVar))))
-        case pipedsl.common.Locks.LockState.Acquired => Some(BExprStmt(BMethodInvoke(lockParams(mem), "acq", List(threadIdVar))))
-        case pipedsl.common.Locks.LockState.Released => Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List(threadIdVar))))
+        case pipedsl.common.Locks.LockState.Reserved =>
+          Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(translator.toBSVVar(threadIdVar)))))
+        case pipedsl.common.Locks.LockState.Acquired =>
+          Some(BExprStmt(BMethodInvoke(lockParams(mem), "acq", List(translator.toBSVVar(threadIdVar)))))
+        case pipedsl.common.Locks.LockState.Released =>
+          Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List(translator.toBSVVar(threadIdVar)))))
       }
       case IMemSend(isWrite, mem: Id, data: Option[EVar], addr: EVar) =>
         if (isWrite) {
@@ -674,10 +677,10 @@ object BluespecGeneration {
         val outstruct = if (mod.ret.isDefined) {
           BStructLit(outputQueueElem,
             Map(outputStructData -> translator.toBSVExpr(exp),
-              outputStructHandle -> threadIdVar)
+              outputStructHandle -> translator.toBSVVar(threadIdVar))
           )
         } else {
-          BStructLit(outputQueueElem, Map(outputStructHandle -> threadIdVar))
+          BStructLit(outputQueueElem, Map(outputStructHandle -> translator.toBSVVar(threadIdVar)))
         }
         Some(BStmtSeq(List(
           BModAssign(busyReg, BBoolLit(false)), //we're done processing the current request
