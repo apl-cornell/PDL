@@ -336,6 +336,7 @@ object BluespecGeneration {
           l :+ BMethodInvoke(modParams(sender),
             BluespecInterfaces.checkHandleMethodName,
             List(translator.toBSVExpr(handle)))
+        case COutput(_) => List(busyReg)
         case _ => l
       })
     }
