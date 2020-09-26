@@ -84,14 +84,19 @@ class PrettyPrinter(output: Option[File]) {
         ins + "if ( " + printExprToString(cond) + " ) {\n" +
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
-      case Syntax.CAssign(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
-      case Syntax.CRecv(lhs, rhs) => ins + printTypeToString(lhs.typ.get) + " " + printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
+
+      case Syntax.CAssign(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
+        printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
+      case Syntax.CRecv(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") + 
+        printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
-      case Syntax.CLockOp(mem, op) => ins + op.name + "(" + mem.v + ");"
+      case Syntax.CLockOp(mem, op) => ins + op.name + "(" + mem.id.v + (if (mem.expr.isDefined) "[" + 
+        printExprToString(mem.expr.get) + "]" else "") +  ");"
       case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
-        printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + printExprToString(predVal) + ", {\n" +
+        printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + 
+        printExprToString(predVal) + ", {\n" +
         printCmdToString(verify, indent + 4) + "\n" + ins + "}, {\n" +
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
@@ -99,7 +104,8 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " + printCmdToString(cmd)
       case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
-      case Syntax.ISpeculate(specId, specVar, value) => ins + specId + "= speculate(" + printExprToString(specVar) + ", " + printExprToString(value) + ");"
+      case Syntax.ISpeculate(specId, specVar, value) => ins + specId + "= speculate(" + printExprToString(specVar) + ", " 
+        + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case _ => "TODO PRINTING COMMAND"
     }

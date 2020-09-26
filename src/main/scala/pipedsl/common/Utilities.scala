@@ -46,7 +46,8 @@ object Utilities {
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
     case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
-    case CLockOp(mem, _) => Set(mem)
+    //TODO update for location specific locs
+    case CLockOp(mem, _) => Set(mem.id)
     case CSpeculate(predVar, predVal, verify, body) =>
      getUsedVars(predVal) ++ getAllVarNames(verify) ++ getAllVarNames(body) + predVar.id
     case CCheck(predVar) => Set(predVar)

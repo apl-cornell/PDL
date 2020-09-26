@@ -250,7 +250,8 @@ object BaseTypeChecker extends TypeChecks[Type] {
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
     case CLockOp(mem, _) => {
-      tenv(mem).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
+      //TODO check expr too
+      tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case _: TModType => tenv
         case _: TMemType => tenv
       }

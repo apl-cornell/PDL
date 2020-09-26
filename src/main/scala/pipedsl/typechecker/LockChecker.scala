@@ -88,7 +88,8 @@ object LockChecker extends TypeChecks[LockState] {
         case (_, ECall(mod,_)) => env(mod).matchOrError(rhs.pos, mod.v, Acquired) { case Acquired => env }
         case _ => throw UnexpectedCase(c.pos)
       }
-    case CLockOp(mem, op) => env.add(mem, op) //logic inside the lock environment class
+      //TODO don't just use id
+    case CLockOp(mem, op) => env.add(mem.id, op) //logic inside the lock environment class
     case _ => env
   }
   override def checkCircuit(c: Circuit, env: Environment[LockState]): Environment[LockState] = env
