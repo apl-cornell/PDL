@@ -59,7 +59,10 @@ object CommandLineParser {
           ),
         cmd("gen")
           .text("generates code for the provided pdsl file and writes the generated bluespec in the 'out' directory\n")
-          .action((_, c) => c.copy(mode = "gen"))
+          .action((_, c) => c.copy(mode = "gen")),
+        cmd("typecheck") 
+          .text("parses and type checks the resulting AST")
+          .action((_, c) => c.copy(mode = "typecheck"))
       )
     }
     parser1

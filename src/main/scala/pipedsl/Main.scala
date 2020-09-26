@@ -3,14 +3,14 @@ package pipedsl
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertAsyncPass, LockOpTranslationPass, MarkNonRecursiveModulePass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
-import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import com.typesafe.scalalogging.Logger
 import pipedsl.codegen.bsv.BSVPrettyPrinter
+import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter}
-import pipedsl.typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
+import pipedsl.passes._
+import pipedsl.typechecker._
 
 object Main {
   val logger: Logger = Logger("main")
@@ -23,6 +23,7 @@ object Main {
           case "parse" => parse(debug = true, printOutput = true, config.out, config.file)
           case "interpret" => interpret(config.out, config.maxIterations, config.memoryInput, config.file)
           case "gen" => gen(config.out, config.file, config.printStageGraph, config.debug)
+          case "typecheck" => runPasses(parse(true, true, config.out, config.file))
         }
       case _ =>
     }
@@ -36,7 +37,6 @@ object Main {
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile.toPath)))
     if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(r.get)
     r.get
-
   }
 
   def interpret(outputFile: File, maxIterations:Int, memoryInputs: Seq[String], inputFile: File): Unit = {
@@ -53,6 +53,7 @@ object Main {
     TimingTypeChecker.check(nprog, Some(basetypes))
     MarkNonRecursiveModulePass.run(nprog)
     val recvProg = SimplifyRecvPass.run(nprog)
+    LockWellformedChecker.check(canonProg)
     LockChecker.check(recvProg, None)
     SpeculationChecker.check(recvProg, Some(basetypes))
     recvProg
