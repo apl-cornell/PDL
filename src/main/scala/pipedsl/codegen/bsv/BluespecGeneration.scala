@@ -82,7 +82,8 @@ object BluespecGeneration {
     //TODO generate other debugging/testing rules
     private val topLevelModule: BModuleDef = {
       val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
-      val startedRegInst = BModInst(BVar("started", BBool), BluespecInterfaces.getReg(BBoolLit(false)))
+      val startedRegInst = BModInst(BVar("started", BluespecInterfaces.getRegType(BBool)),
+        BluespecInterfaces.getReg(BBoolLit(false)))
       val startedReg = startedRegInst.lhs
       val initCond = BUOp("!", startedReg)
       val setStartReg = BModAssign(startedReg, BBoolLit(true))
@@ -448,7 +449,6 @@ object BluespecGeneration {
       })
 
       //Instantiate each stage module
-      val startedge = edgeFifos(firstStage.inEdges.head).lhs
       val stgStmts = stgMap.keys.foldLeft(List[BStatement]())((l, s) => {
         l ++ stgMap(s)._1
       })
