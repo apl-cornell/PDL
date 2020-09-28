@@ -14,7 +14,7 @@ object BluespecGeneration {
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
 
-  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]]) {
+  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false) {
 
     //TODO compile functions into bsv functions into their own file
     //fill in the function map by generating each function and using
@@ -31,7 +31,7 @@ object BluespecGeneration {
     private val modMap: Map[Id, BProgram] = prog.moddefs.foldLeft(Map[Id, BProgram]())((mapping, mod) => {
       val modtyps = mapping map { case (i, p) => (i, p.topModule.typ.get) }
       val newmod = new BluespecModuleGenerator(
-        mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, handleTyps
+        mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, handleTyps, debug
       ).getBSV
       mapping + ( mod.name -> newmod )
     })
@@ -70,11 +70,10 @@ object BluespecGeneration {
 
     private def initCircuit(c: Circuit, env: Map[Id, BVar]): List[BStatement] = c match {
       case CirSeq(c1, c2) => initCircuit(c1, env) ++ initCircuit(c2, env)
-      case CirExprStmt(CirCall(m, args)) => {
+      case CirExprStmt(CirCall(m, args)) =>
         List(BExprStmt(
           BMethodInvoke(env(m), BluespecInterfaces.requestMethodName, args.map(a => translator.toBSVExpr(a)))
         ))
-      }
       case _ => List() //TODO if/when memories can be initialized it goes here
     }
 
@@ -87,8 +86,9 @@ object BluespecGeneration {
       val startedReg = startedRegInst.lhs
       val initCond = BUOp("!", startedReg)
       val setStartReg = BModAssign(startedReg, BBoolLit(true))
+      val debugStart = if (debug) { BDisplay("Starting Pipeline %t", List(BTime)) } else BEmpty
       val initrule = BRuleDef(name = "init", conds = List(initCond),
-        body = initCircuit(prog.circ, argmap) :+ setStartReg)
+        body = initCircuit(prog.circ, argmap) :+ setStartReg :+ debugStart)
       BModuleDef(name = "mkCircuit", typ = None, params = List(),
         body = cirstmts :+ startedRegInst, rules = List(initrule), methods = List())
     }
@@ -120,7 +120,7 @@ object BluespecGeneration {
    */
   private class BluespecModuleGenerator(val mod: ModuleDef,
     val firstStage: PStage, val otherStages: List[PStage],
-    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[Id, BSVType]) {
+    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[Id, BSVType], val debug:Boolean = false) {
 
     private val translator = new BSVTranslator(bsvMods, bsvHandles)
 
@@ -324,7 +324,11 @@ object BluespecGeneration {
       val writeCmdStmts = getEffectCmds(stg.cmds)
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.cmds)
-      BRuleDef( genParamName(stg) + "_execute", blockingConds, writeCmdDecls ++ writeCmdStmts ++ queueStmts)
+      val debugStmt = if (debug) {
+        BDisplay(mod.name.v + ":Executing Stage " + stg.name + " %t", List(BTime))
+      } else BEmpty
+      BRuleDef( genParamName(stg) + "_execute", blockingConds,
+        writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
     }
 
     /**

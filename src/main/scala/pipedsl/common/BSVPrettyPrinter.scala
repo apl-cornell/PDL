@@ -44,7 +44,7 @@ object BSVPrettyPrinter {
     case 10 => "d" + value.toString
     case 8 => "o" + value.toOctalString
     case 2 => "b" + value.toBinaryString
-    case default => throw BaseError(base)
+    case _ => throw BaseError(base)
   }
 
   private def toBSVExprStr(expr: BExpr): String = expr match {
@@ -58,7 +58,7 @@ object BSVPrettyPrinter {
       }).mkString(",")
       mkExprString(typ.name, "{",  fieldStr, "}")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
-    case BVar(name, typ) => name
+    case BVar(name, _) => name
     case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
       //TODO incorporate bit types into the typesystem properly
@@ -80,6 +80,7 @@ object BSVPrettyPrinter {
     case BDontCare => "?"
     case BZero => "0"
     case BOne => "1"
+    case BTime => "$time()"
       //TODO get rid of magic strings
     case BMemPeek(mem) => mem.typ match {
       case _:BAsyncMemType => toBSVExprStr(mem) + ".peekRead()"
@@ -144,13 +145,12 @@ object BSVPrettyPrinter {
       case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
-      case BDecl(lhs, rhs) => {
+      case BDecl(lhs, rhs) =>
         w.write(mkStatementString(toDeclString(lhs), "=", if (rhs.isDefined) toBSVExprStr(rhs.get) else "?"))
-      }
-        //TODO no magic variables get runtime names from some configuration
+      //TODO no magic variables get runtime names from some configuration
       case BMemReadReq(mem, addr) => w.write(mkStatementString(
         toBSVExprStr(mem)+".readReq(", toBSVExprStr(addr),")"))
-      case BMemReadResp(lhs, mem) => w.write(mkStatementString(toBSVExprStr(mem) + ".readResp()"))
+      case BMemReadResp(_, mem) => w.write(mkStatementString(toBSVExprStr(mem) + ".readResp()"))
       case BMemWrite(mem, addr, data) => w.write(mkStatementString(
         toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
       case BIf(cond, trueBranch, falseBranch) =>
@@ -168,6 +168,9 @@ object BSVPrettyPrinter {
           decIndent()
           w.write(mkIndentedExpr("end\n"))
         }
+      case BDisplay(fmt, args) => w.write(mkStatementString("$display(\"" + fmt + "\",",
+        args.map(a => toBSVExprStr(a)).mkString(","), ")"))
+      case BEmpty => ()
     }
 
     def printBSVRule(rule: BRuleDef): Unit = {

@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.UnexpectedExpr
-import pipedsl.common.Syntax.Latency.{Combinational, Sequential}
+import pipedsl.common.Syntax.Latency.{Combinational}
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
@@ -102,6 +102,7 @@ object BSVSyntax {
   case object BDontCare extends BExpr
   case object BZero extends BExpr
   case object BOne extends BExpr
+  case object BTime extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
@@ -117,6 +118,7 @@ object BSVSyntax {
   case class BMemRead(mem: BVar, addr: BExpr) extends BExpr
   case class BMemPeek(mem: BVar) extends BExpr
 
+
   sealed trait BStatement
 
   case class BStmtSeq(stmts: List[BStatement]) extends BStatement
@@ -131,6 +133,8 @@ object BSVSyntax {
   case class BMemReadReq(mem: BVar, addr: BExpr) extends BStatement
   case class BMemReadResp(lhs: BVar, mem: BVar) extends BStatement
   case class BMemWrite(mem: BVar, addr: BExpr, data: BExpr) extends BStatement
+  case class BDisplay(fmt: String, args: List[BExpr]) extends BStatement
+  case object BEmpty extends BStatement
 
 
   case class BStructDef(typ: BStruct, derives: List[String])

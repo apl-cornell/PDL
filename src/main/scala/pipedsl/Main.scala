@@ -57,7 +57,7 @@ object Main {
       n -> newstgs
     }
     //Do Code Generation
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, true)
     val outputDir = "testOutputs"
     bsvgen.getBSVPrograms.foreach(p => {
       val outputFileName = p.name + ".bsv"
