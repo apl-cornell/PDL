@@ -27,6 +27,8 @@ object LockWellformedChecker {
   def check(p:Prog) : Unit = {
     val Prog(_, moddefs, _) = p
     moddefs.foreach(m => checkModule(m))
+    //Reset the map for the next program check
+    MemLockTypeMap = new immutable.HashMap[Id, LockType]()
   }
   
   private def checkModule(moduleDef: ModuleDef): Unit = {
