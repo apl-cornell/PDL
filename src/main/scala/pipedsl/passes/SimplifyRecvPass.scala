@@ -58,7 +58,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
     case CRecv(lhs, rhs) => (lhs, rhs) match {
       case (EVar(_), EMemAccess(_, EVar(_))) => c //leave it alone, already in the form we want
       case (EVar(_), EMemAccess(mem, idx)) => { //separate out the index computation
-        val idxAssgn = CAssign(newVar("index", idx.pos, lhs.typ), idx).setPos(idx.pos)
+        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
         CSeq(idxAssgn, CRecv(lhs, EMemAccess(mem, idxAssgn.lhs).setPos(rhs.pos))).setPos(c.pos)
       }
       case (EMemAccess(_, EVar(_)), EVar(_)) => c //leave it alone, already in form we want
@@ -67,13 +67,13 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         CSeq(rhsAssgn, CRecv(lhs, rhsAssgn.lhs).setPos(c.pos)).setPos(c.pos)
       }
       case (EMemAccess(mem,idx), EVar(_)) => { //separate out the index computation
-        val idxAssgn = CAssign(newVar("index", idx.pos, lhs.typ), idx).setPos(idx.pos)
+        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
         val access = EMemAccess(mem, idxAssgn.lhs).setPos(lhs.pos)
         access.typ = lhs.typ
         CSeq(idxAssgn, CRecv(access, rhs).setPos(c.pos)).setPos(c.pos)
       }
       case (EMemAccess(mem,idx), _) => { //separate the index computation AND the rhs computation into new variables
-        val idxAssgn = CAssign(newVar("index", idx.pos, lhs.typ), idx).setPos(idx.pos)
+        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
         val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs).setPos(rhs.pos)
         val access = EMemAccess(mem, idxAssgn.lhs).setPos(lhs.pos)
         access.typ = lhs.typ
