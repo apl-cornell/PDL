@@ -37,5 +37,6 @@ circuit {
     i = memory(int<32>, 5);
     d = memory(int<32>, 5);
     r = memory(int<32>, 5);
-    c = new cpu(0<5>)[r, i, d];
+    c = new cpu[r, i, d];
+    call c(0<5>);
 }

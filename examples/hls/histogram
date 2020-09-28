@@ -38,5 +38,6 @@ circuit {
     f = regfile(int<32>, 7);
     w = regfile(int<32>, 7);
     h = regfile(int<32>, 32);
-    hg = new hist(0<7>)[f, w, h];
+    hg = new hist[f, w, h];
+    call hg(0<7>);
 }

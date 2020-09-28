@@ -1,5 +1,6 @@
 package pipedsl.codegen.bsv
 
+import pipedsl.common.BSVSyntax
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.UnexpectedCommand
@@ -36,6 +37,12 @@ object BluespecGeneration {
       mapping + ( mod.name -> newmod )
     })
 
+    private val modToHandle: Map[BSVType, BSVType] = prog.moddefs.map(m => m.name)
+      .foldLeft(Map[BSVType, BSVType]())((mapping, mod) => {
+      val modtyp =  BluespecInterfaces.getInterface(modMap(mod))
+        mapping + (modtyp -> handleTyps(mod))
+    })
+
     private val translator = new BSVTranslator(modMap map { case (i, p) => (i, p.topModule.typ.get) }, handleTyps)
 
     private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
@@ -68,11 +75,14 @@ object BluespecGeneration {
         BModule(name = BluespecInterfaces.getModuleName(modMap(mod)), args = mods.map(m => env(m)))
     }
 
+    private var freshCnt = 0
     private def initCircuit(c: Circuit, env: Map[Id, BVar]): List[BStatement] = c match {
       case CirSeq(c1, c2) => initCircuit(c1, env) ++ initCircuit(c2, env)
       case CirExprStmt(CirCall(m, args)) =>
-        List(BExprStmt(
-          BMethodInvoke(env(m), BluespecInterfaces.requestMethodName, args.map(a => translator.toBSVExpr(a)))
+        val freshVar = BVar("_unused_" + freshCnt, modToHandle(env(m).typ))
+        freshCnt += 1
+        List(BDecl(freshVar,
+          Some(BMethodInvoke(env(m), BluespecInterfaces.requestMethodName, args.map(a => translator.toBSVExpr(a))))
         ))
       case _ => List() //TODO if/when memories can be initialized it goes here
     }

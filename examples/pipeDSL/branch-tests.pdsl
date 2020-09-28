@@ -59,5 +59,6 @@ pipe test4(input: int<32>)[] {
 
 circuit {
     r = memory(int<32>, 5);
-    t = new test1(0<32>)[r];
+    t = new test1[r];
+    call t(0<32>);
 }

@@ -44,5 +44,6 @@ circuit {
     i = memory(int<32>, 32);
     d = memory(int<32>, 32);
     r = regfile(int<32>, 5);
-    c = new cpu(0<32>)[r, i, d];
+    c = new cpu[r, i, d];
+    call c(0<32>);
 }
