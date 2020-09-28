@@ -224,8 +224,8 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        //TODO import other used modules
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)),
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)) ++
+          bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
         interfaces = List(modInterfaceDef),
