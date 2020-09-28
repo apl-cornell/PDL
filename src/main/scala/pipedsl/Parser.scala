@@ -238,9 +238,15 @@ class Parser extends RegexParsers with PackratParsers {
     }
   }
 
+  lazy val ccall: P[CirCall] = positioned {
+    "call" ~ iden ~ parens(repsep(expr, ",")) ^^ {
+      case _ ~ i ~ inits => CirCall(i, inits)
+    }
+  }
+
   lazy val cnew: P[CirExpr] = positioned {
-    "new" ~ iden ~ parens(repsep(expr,",")) ~ brackets(repsep(iden,",")).? ^^ {
-      case _ ~ i ~ args ~ mods => CirNew(i, args, if (mods.isDefined) mods.get else List[Id]())
+    "new" ~ iden ~ brackets(repsep(iden,",")).? ^^ {
+      case _ ~ i ~ mods => CirNew(i, if (mods.isDefined) mods.get else List[Id]())
     }
   }
   lazy val cmem: P[CirExpr] = positioned {
@@ -251,12 +257,16 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | cmem | crf | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+  }
+
+  lazy val cexpr: P[Circuit] = positioned {
+    ccall ^^ { case c => CirExprStmt(c) }
   }
 
   lazy val cseq: P[Circuit] = positioned {
     cconn ~ ";" ~ cseq ^^ { case n ~ _ ~ c => CirSeq(n, c) } |
-      cconn <~ ";" | cconn
+      cconn <~ ";" | cexpr <~ ";"
   }
 
   lazy val circuit: P[Circuit] = positioned {

@@ -93,10 +93,13 @@ pipe multiclient(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>
      int<32> result <- mult(..);
   }
   release(mult);
-
 */
 
 
 circuit {
-   m = new mult(0<32>,0<32>);
+   m = new mult[];
+   ins = memory(int<32>, 32);
+   outs = memory(int<32>, 1);
+   p = new client[ins, outs, m];
+   call p(0<32>);
 }

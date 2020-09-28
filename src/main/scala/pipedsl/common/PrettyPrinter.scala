@@ -114,8 +114,7 @@ object PrettyPrinter {
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
-      case CirNew(mod, inits, mods) => "new " + mod.v +
-        "(" + inits.map(i => printExprToString(i)).mkString(",") + ")" +
+      case CirNew(mod, mods) => "new " + mod.v +
         "[" + mods.map(m => m.v).mkString(",") + "]"
     }
     case _ => "TODO"

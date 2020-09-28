@@ -38,20 +38,22 @@ object BluespecGeneration {
 
     private val translator = new BSVTranslator(modMap map { case (i, p) => (i, p.topModule.typ.get) }, handleTyps)
 
-    private def translateCircuit(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
+    private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
       case CirSeq(c1, c2) =>
-        val (stmts1, env1) = translateCircuit(c1, env)
-        val (stmts2, env2) = translateCircuit(c2, env1)
+        val (stmts1, env1) = instantiateModules(c1, env)
+        val (stmts2, env2) = instantiateModules(c2, env1)
         (stmts1 ++ stmts2, env2)
       case CirConnect(name, c) =>
         val mod = cirExprToModule(c, env)
         val modtyp = getModuleType(c, name.typ.get)
         val modvar = BVar(name.v, modtyp)
         (List(BModInst(modvar, mod)), env + (name -> modvar))
+        //These don't instantiate modules
+      case CirExprStmt(_) => (List(), env)
     }
 
     private def getModuleType(c: CirExpr, expected: Type): BSVType = c match {
-      case CirNew(mod, _, _) => BluespecInterfaces.getInterface(modMap(mod))
+      case CirNew(mod, _) => BluespecInterfaces.getInterface(modMap(mod))
       case _ => translator.toBSVType(expected)
     }
 
@@ -62,29 +64,33 @@ object BluespecGeneration {
       case CirRegFile(elemTyp, addrSize) =>
         val memtyp = translator.toBSVType(TMemType(elemTyp, addrSize, Latency.Combinational, Latency.Sequential))
         BluespecInterfaces.getMemoryModule(memtyp)
-      case CirNew(mod, _, mods) =>
+      case CirNew(mod, mods) =>
         BModule(name = BluespecInterfaces.getModuleName(modMap(mod)), args = mods.map(m => env(m)))
     }
 
     private def initCircuit(c: Circuit, env: Map[Id, BVar]): List[BStatement] = c match {
       case CirSeq(c1, c2) => initCircuit(c1, env) ++ initCircuit(c2, env)
-      case CirConnect(name, c) => c match {
-        case CirNew(_, inits, _) => List(
-          BExprStmt(BMethodInvoke(env(name),
-            BluespecInterfaces.requestMethodName, inits.map(i => translator.toBSVExpr(i))))
-        )
-        case _ => List() //TODO if/when memories can be initialized it goes here
+      case CirExprStmt(CirCall(m, args)) => {
+        List(BExprStmt(
+          BMethodInvoke(env(m), BluespecInterfaces.requestMethodName, args.map(a => translator.toBSVExpr(a)))
+        ))
       }
+      case _ => List() //TODO if/when memories can be initialized it goes here
     }
 
     //Create a top level module that is synthesizable, takes no parameters
     //and instantiates all of the required memories and pipeline modules
     //TODO generate other debugging/testing rules
     private val topLevelModule: BModuleDef = {
-      val (cirstmts, argmap) = translateCircuit(prog.circ, Map())
-      val initrule = BRuleDef(name = "init", conds = List(), body = initCircuit(prog.circ, argmap))
+      val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
+      val startedRegInst = BModInst(BVar("started", BBool), BluespecInterfaces.getReg(BBoolLit(false)))
+      val startedReg = startedRegInst.lhs
+      val initCond = BUOp("!", startedReg)
+      val setStartReg = BModAssign(startedReg, BBoolLit(true))
+      val initrule = BRuleDef(name = "init", conds = List(initCond),
+        body = initCircuit(prog.circ, argmap) :+ setStartReg)
       BModuleDef(name = "mkCircuit", typ = None, params = List(),
-        body = cirstmts, rules = List(initrule), methods = List())
+        body = cirstmts :+ startedRegInst, rules = List(initrule), methods = List())
     }
 
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
@@ -169,7 +175,7 @@ object BluespecGeneration {
     private val inputFields = getEdgeStructInfo(List(firstStage), addTId = false).values.head.typ.fields
     //This map returns the correct struct type based on the destination stage
     private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
-    val allEdges = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
+    val allEdges: Set[PipelineEdge] = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
       es ++ s.inEdges ++ s.outEdges
     })
     val edgeParams: EdgeInfo = allEdges.foldLeft(Map[PipelineEdge, BVar]())((m, e) => {
@@ -348,7 +354,7 @@ object BluespecGeneration {
      *
      * @param s        The stage we're compiling
      * @param es       The subset of s's edges that we're translating
-     * @param args
+     * @param args      An optional list of expressions to use as the arguments instead of the cannonical variable names
      * @return A list of statements that represent queue operations for the relevant edges
      */
     private def getEdgeQueueStmts(s: PStage, es: Iterable[PipelineEdge],
@@ -680,7 +686,7 @@ object BluespecGeneration {
         }
       case IRecv(_, sender, _) =>
         Some(BExprStmt(BMethodInvoke(modParams(sender), BluespecInterfaces.responseMethodName, List())))
-      case COutput(exp) => {
+      case COutput(exp) =>
         val outstruct = if (mod.ret.isDefined) {
           BStructLit(outputQueueElem,
             Map(outputStructData -> translator.toBSVExpr(exp),
@@ -694,7 +700,6 @@ object BluespecGeneration {
           //place the result in the output queue
           BExprStmt(BluespecInterfaces.getFifoEnq(outputQueue, outstruct))
         )))
-      }
       case _: ICheckLock => None
       case CAssign(_, _) => None
       case CExpr(_) => None

@@ -152,6 +152,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       name.typ = Some(t)
       env2.add(name, t)
     }
+    case CirExprStmt(ce) => checkCirExpr(ce, tenv)._2
   }
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Type]): (Type, Environment[Type]) = c match {
@@ -165,10 +166,29 @@ object BaseTypeChecker extends TypeChecks[Type] {
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
-    case CirNew(mod, inits, mods) => {
+    case CirNew(mod, mods) => {
       val mtyp = tenv(mod)
       mtyp match {
-        case TModType(ityps, refs, _, _) => {
+        case TModType(_, refs, _, _) => {
+          if(refs.length != mods.length) {
+            throw ArgLengthMismatch(c.pos, mods.length, refs.length)
+          }
+          refs.zip(mods).foreach {
+            case (reftyp, mname) => {
+              if (!(isSubtype(tenv(mname), reftyp))) {
+                throw UnexpectedSubtype(mname.pos, mname.toString, reftyp, tenv(mname))
+              }
+            }
+          }
+          (mtyp, tenv)
+        }
+        case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
+      }
+    }
+    case CirCall(mod, inits) => {
+      val mtyp = tenv(mod)
+      mtyp match {
+        case TModType(ityps, _, _, _) => {
           if(ityps.length != inits.length) {
             throw ArgLengthMismatch(c.pos, inits.length, ityps.length)
           }
@@ -177,16 +197,6 @@ object BaseTypeChecker extends TypeChecks[Type] {
               val (atyp, aenv) = checkExpression(arg, tenv)
               if (!isSubtype(atyp, expectedT)) {
                 throw UnexpectedSubtype(arg.pos, arg.toString, expectedT, atyp)
-              }
-            }
-          }
-          if(refs.length != mods.length) {
-            throw ArgLengthMismatch(c.pos, mods.length, refs.length)
-          }
-          refs.zip(mods).foreach {
-            case (reftyp, mname) => {
-              if (!(isSubtype(tenv(mname), reftyp))) {
-                throw UnexpectedSubtype(mname.pos, mname.toString, reftyp, tenv(mname))
               }
             }
           }

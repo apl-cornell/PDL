@@ -241,9 +241,11 @@ object Syntax {
   sealed trait Circuit extends Positional
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
   case class CirConnect(name: Id, c: CirExpr) extends Circuit
+  case class CirExprStmt(ce: CirExpr) extends Circuit
 
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
-  case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends CirExpr
+  case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
+  case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }
