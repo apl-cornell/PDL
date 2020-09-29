@@ -1,0 +1,11 @@
+pipe test1(input: int<32>)[mem: int<32>[5]] {
+     if (input{0:0} == 1) {
+         acquire(input);
+         release(input);
+     }
+ }
+ 
+circuit {
+ r = memory(int<32>, 5);
+ mem = memory(int<32>, 5)
+}

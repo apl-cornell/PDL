@@ -250,10 +250,18 @@ object BaseTypeChecker extends TypeChecks[Type] {
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
     case CLockOp(mem, _) => {
-      //TODO check expr too
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case _: TModType => tenv
-        case _: TMemType => tenv
+        case memt: TMemType => {
+          if(mem.expr.isEmpty) tenv
+          else {
+            val (idxt, _) =  checkExpression(mem.expr.get, tenv)
+            idxt match {
+              case TSizedInt(l, true) if l == memt.addrSize => tenv
+              case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
+            }
+          }
+        }
       }
     }
     case CSpeculate(nvar, predval, verify, body) => {
