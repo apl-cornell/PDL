@@ -3,7 +3,7 @@ package pipedsl.passes
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow._
 import pipedsl.common.Errors.InvalidLockState
-import pipedsl.common.Locks.LockState._
+import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
@@ -26,12 +26,13 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
    * @param stg - The stage to modify
    */
   private def replaceLockOps(stg: PStage, startStates: Map[Id, LockState], endStates: Map[Id, LockState]): Unit = {
-    val notlockCmds = stg.cmds.filter { case _: CLockOp => false; case _ => true }
+    val notlockCmds = stg.getCmds.filter { case _: CLockOp => false; case _ => true }
     //find the locks whose state changes in this stage:
     val changingLocks = endStates.keys.filter(m => { startStates.getOrElse(m, Free) != endStates(m) })
     val newlockcmds = changingLocks.foldLeft(List[Command]())((cmds, l) => {
       startStates.getOrElse(l, Free) match {
         case Free => endStates(l) match {
+          case Free => cmds //nothing to do!
           case Reserved => cmds :+ CLockOp(l, Reserved)
           case Acquired => cmds :+ ICheckLock(l) :+ CLockOp(l, Acquired)
           case Released => cmds :+ ICheckLock(l) //don't actually acquire the lock, just check that we can
@@ -45,6 +46,6 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         case Released => throw InvalidLockState(l.pos, l.v, Released, Acquired)
       }
     })
-    stg.cmds = notlockCmds ++ newlockcmds
+    stg.setCmds(notlockCmds ++ newlockcmds)
   }
 }

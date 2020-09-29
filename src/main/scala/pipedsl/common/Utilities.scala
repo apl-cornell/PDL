@@ -2,6 +2,7 @@ package pipedsl.common
 
 import Syntax._
 import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.Errors.UnexpectedCommand
 
 object Utilities {
 
@@ -55,6 +56,7 @@ object Utilities {
     case ISpeculate(specId, specVar, value) => getUsedVars(value) + specId ++ getUsedVars(specVar)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty => Set()
+    case _ => throw UnexpectedCommand(c)
   }
 
   def getWrittenVars(c: Command): Set[Id] = c match {

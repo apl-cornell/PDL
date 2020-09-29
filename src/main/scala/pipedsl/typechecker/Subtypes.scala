@@ -12,7 +12,7 @@ object Subtypes {
     }
     def isSubtype(t1: Type, t2: Type): Boolean =  (t1, t2) match {
         case (TSizedInt(l1, u1), TSizedInt(l2, u2)) => l1 == l2 && u1 == u2
-        case (TRecType(n, f1), TRecType(n2, f2)) => {
+        case (TRecType(_, f1), TRecType(_, f2)) =>
             //f1 must contain all of the named fields of f2 and they can be subtypes of f2's fields
             f2.forall(e => {
                 f1.get(e._1) match {
@@ -20,8 +20,7 @@ object Subtypes {
                     case _ => false
                 }
             })
-        }
-        case (TFun(arg1, r1), TFun(arg2, r2)) => {
+        case (TFun(arg1, r1), TFun(arg2, r2)) =>
             if (arg1.length != arg2.length) {
                 false
             } else {
@@ -33,7 +32,6 @@ object Subtypes {
                     false
                 }
             }
-        }
         case _ => areEqual(t1, t2)
     }
 

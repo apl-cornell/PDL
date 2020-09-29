@@ -4,6 +4,8 @@ import common.Syntax._
 import common.Utilities._
 import common.Locks._
 
+import scala.util.matching.Regex
+
 class Parser extends RegexParsers with PackratParsers {
   type P[T] = PackratParser[T]
 
@@ -16,32 +18,32 @@ class Parser extends RegexParsers with PackratParsers {
 
   def angular[T](parser: P[T]): P[T] = "<" ~> parser <~ ">"
 
-  override protected val whiteSpace = """(\s|\/\/.*|(/\*((\*[^/])|[^*])*\*/))+""".r
+  override protected val whiteSpace: Regex = """(\s|\/\/.*|(/\*((\*[^/])|[^*])*\*/))+""".r
 
   // General syntax components
   lazy val iden: P[Id] = positioned {
     "" ~> "[a-zA-Z_][a-zA-Z0-9_]*".r ^^ { v => Id(v) }
   }
 
-  lazy val posint = "[0-9]+".r ^^ { n => n.toInt } | err("Expected positive number")
+  lazy val posint: Parser[Int] = "[0-9]+".r ^^ { n => n.toInt } | err("Expected positive number")
 
   lazy val stringVal: P[String] =
     "\"" ~> "[^\"]*".r <~ "\""
 
   // Atoms
   lazy val uInt: P[Expr] = "[0-9]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(n.toInt, 10, if (bits.isDefined) bits.get else log2(n.toInt)) }
-  lazy val hex = "0x[0-9a-fA-F]+".r ~ angular(posint).? ^^ { case (n ~ bits) => EInt(Integer.parseInt(n.substring(2), 16), 16,
+  lazy val hex: Parser[EInt] = "0x[0-9a-fA-F]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(Integer.parseInt(n.substring(2), 16), 16,
     if (bits.isDefined) bits.get else 4 * n.substring(2).length()) }
-  lazy val octal = "0[0-7]+".r ~ angular(posint).? ^^ {
-    case (n ~ bits) => EInt(Integer.parseInt(n.substring(1), 8), 8,
+  lazy val octal: Parser[EInt] = "0[0-7]+".r ~ angular(posint).? ^^ {
+    case n ~ bits => EInt(Integer.parseInt(n.substring(1), 8), 8,
       if (bits.isDefined) bits.get else 3 * n.substring(1).length()) }
-  lazy val binary = "0b[0-1]+".r ~ angular(posint).? ^^ {
-    case (n ~ bits)  => EInt(Integer.parseInt(n.substring(2), 2), 2,
+  lazy val binary: Parser[EInt] = "0b[0-1]+".r ~ angular(posint).? ^^ {
+    case n ~ bits => EInt(Integer.parseInt(n.substring(2), 2), 2,
       if (bits.isDefined) bits.get else n.substring(2).length()) }
-  lazy val boolean = "true" ^^ { _ => true } | "false" ^^ { _ => false }
+  lazy val boolean: Parser[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
   lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
-  lazy val recLiteral = positioned {
+  lazy val recLiteral: Parser[ERecLiteral] = positioned {
     braces(repsep(recLiteralField, ",")) ^^ (fieldList => ERecLiteral(fieldList.toMap))
   }
 
@@ -85,7 +87,7 @@ class Parser extends RegexParsers with PackratParsers {
       octal |
       binary |
       uInt |
-      boolean ^^ { case b => EBool(b) } |
+      boolean ^^ (b => EBool(b)) |
       iden ~ parens(repsep(expr, ",")) ^^ { case f ~ args => EApp(f, args) } |
       variable |
       parens(expr)
@@ -123,34 +125,34 @@ class Parser extends RegexParsers with PackratParsers {
 
 
   def parseOp(base: P[Expr], op: P[BOp]): P[Expr] = positioned {
-    chainl1[Expr](base, op ^^ { case op => EBinop(op, _, _) })
+    chainl1[Expr](base, op ^^ (op => EBinop(op, _, _)))
   }
 
-  lazy val binMul = parseOp(simpleAtom, mulOps)
-  lazy val binAdd = parseOp(binMul, addOps)
-  lazy val binEq = parseOp(binAdd, eqOps)
-  lazy val binSh = parseOp(binEq, shOps)
-  lazy val binBAnd = parseOp(binSh, bAnd)
-  lazy val binBXor = parseOp(binBAnd, bXor)
-  lazy val binBOr = parseOp(binBXor, bOr)
-  lazy val binAnd = parseOp(binBOr, and)
-  lazy val binOr = parseOp(binAnd, or)
-  lazy val binConcat = parseOp(binOr, concat)
-  lazy val expr = positioned(binConcat)
+  lazy val binMul: P[Expr] = parseOp(simpleAtom, mulOps)
+  lazy val binAdd: P[Expr] = parseOp(binMul, addOps)
+  lazy val binEq: P[Expr] = parseOp(binAdd, eqOps)
+  lazy val binSh: P[Expr] = parseOp(binEq, shOps)
+  lazy val binBAnd: P[Expr] = parseOp(binSh, bAnd)
+  lazy val binBXor: P[Expr] = parseOp(binBAnd, bXor)
+  lazy val binBOr: P[Expr] = parseOp(binBXor, bOr)
+  lazy val binAnd: P[Expr] = parseOp(binBOr, and)
+  lazy val binOr: P[Expr] = parseOp(binAnd, or)
+  lazy val binConcat: P[Expr] = parseOp(binOr, concat)
+  lazy val expr: Parser[Expr] = positioned(binConcat)
+  lazy val lhs: Parser[Expr] = memAccess | variable
 
-  lazy val lhs = memAccess | variable
   lazy val simpleCmd: P[Command] = positioned {
     typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r)
       } |
     check |
-    "acquire" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Acquired)} |
-    "reserve" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Reserved)} |
-      "release" ~> parens(iden) ^^ { i => CLockOp(i, LockState.Released)} |
-    "return" ~> expr ^^ { case e => CReturn(e) } |
-    "output" ~> expr ^^ { case e => COutput(e) } |
-      expr ^^ { case e => CExpr(e) }
+    "acquire" ~> parens(iden) ^^ { i => CLockOp(i, Acquired)} |
+    "reserve" ~> parens(iden) ^^ { i => CLockOp(i, Reserved)} |
+      "release" ~> parens(iden) ^^ { i => CLockOp(i, Released)} |
+    "return" ~> expr ^^ (e => CReturn(e)) |
+    "output" ~> expr ^^ (e => COutput(e)) |
+      expr ^^ (e => CExpr(e))
   }
 
   lazy val blockCmd: P[Command] = positioned {
@@ -159,10 +161,10 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val speculate: P[Command] = positioned {
     "speculate" ~> parens(typ ~ variable ~ "=" ~ expr ~ "," ~ block ~ "," ~ block) ^^ {
-      case t ~ v ~ _ ~ ev ~ _ ~ cv ~ _ ~ cs => {
+      case t ~ v ~ _ ~ ev ~ _ ~ cv ~ _ ~ cs =>
         v.typ = Some(t)
         CSpeculate(v, ev, cv, cs)
-    }}
+    }
   }
   lazy val check: P[Command] = positioned {
     "check" ~> parens(iden) ^^ { id => CCheck(id) }
@@ -203,7 +205,7 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val latency: P[Latency.Latency] = "c" ^^ { _ => Latency.Combinational } |
     "s" ^^ { _ => Latency.Sequential } |
     "a" ^^ { _ => Latency.Asynchronous }
-  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency)).? ^^ { case elem ~ size ~ lats => {
+  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency)).? ^^ { case elem ~ size ~ lats =>
     if (lats.isDefined) {
       val rlat = lats.get._1
       val wlat = lats.get._2
@@ -211,7 +213,7 @@ class Parser extends RegexParsers with PackratParsers {
     } else {
       TMemType(elem, size)
     }
-  }}
+  }
 
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
   lazy val baseTyp: P[Type] = memory | sizedInt | bool
@@ -261,7 +263,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val cexpr: P[Circuit] = positioned {
-    ccall ^^ { case c => CirExprStmt(c) }
+    ccall ^^ (c => CirExprStmt(c))
   }
 
   lazy val cseq: P[Circuit] = positioned {

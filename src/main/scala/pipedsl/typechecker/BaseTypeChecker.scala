@@ -5,7 +5,6 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
-import pipedsl.common.Syntax
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 
 
@@ -29,7 +28,14 @@ import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 object BaseTypeChecker extends TypeChecks[Type] {
 
   override def emptyEnv(): Environment[Type] = Environments.EmptyTypeEnv
-  
+
+  /**
+   * This does the base type checking and well-fomedness checking for a given function with
+   * an environment (that may have other function types defined already).
+   * @param f - The function definition to check.
+   * @param tenv - The current type environment (which only includes already defined functions)
+   * @return - tenv plus a new mapping from f's name to f's type
+   */
   def checkFunc(f: FuncDef, tenv: Environment[Type]): Environment[Type] = {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
     val fenv = f.args.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
@@ -45,13 +51,16 @@ object BaseTypeChecker extends TypeChecks[Type] {
   }
 
   /**
-   *
-   * @param c
-   * @param tenv
-   * @return
+   * This checks that the function doesn't include any disallowed expressions
+   * or commands (such as Calls) and checks that it does not have code following
+   * its return statement. This function is recursively defined and should be
+   * called on the function's body (which is a single command)
+   * @param c The command to check for well-formedness
+   * @param tenv The current type environment (mapping from names to types)
+   * @return Some(return type) if the analyzed command returns a value or None other wise
    */
   private def checkFuncWellFormed(c: Command, tenv: Environment[Type]): Option[Type] = c match {
-    case CSeq(c1, c2) => {
+    case CSeq(c1, c2) =>
       val r1 = checkFuncWellFormed(c1, tenv)
       val r2 = checkFuncWellFormed(c2, tenv)
       (r1, r2) match {
@@ -60,11 +69,9 @@ object BaseTypeChecker extends TypeChecks[Type] {
         case (_, Some(_)) => r2
         case (None, None) => None
       }
-    }
-    case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput => {
+    case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput =>
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
-    }
-    case CIf(_, cons, alt) => {
+    case CIf(_, cons, alt) =>
       val rt = checkFuncWellFormed(cons, tenv)
       val rf = checkFuncWellFormed(alt, tenv)
       (rt, rf) match {
@@ -73,7 +80,6 @@ object BaseTypeChecker extends TypeChecks[Type] {
         case (None, None) => None
         case _ => throw MalformedFunction(c.pos, "Missing return in branch of if")
       }
-    }
     case CReturn(exp) => exp.typ
     case _ => None
   }
@@ -101,57 +107,49 @@ object BaseTypeChecker extends TypeChecks[Type] {
   }
 
   /**
-   * - Checks that no variable is assigned multiple times.
-   * @param c
-   * @return set of assigned variables
+   * Checks that no variable is assigned multiple times in the command.
+   * @param c The command to check.
+   * @return The set of variables that get assigned in this command.
    */
-  def checkModuleBodyWellFormed(c: Command, assignees: Set[Id]): Set[Id] = c match {
-    case CSeq(c1, c2) => {
+  private def checkModuleBodyWellFormed(c: Command, assignees: Set[Id]): Set[Id] = c match {
+    case CSeq(c1, c2) =>
       val a2 = checkModuleBodyWellFormed(c1, assignees)
       checkModuleBodyWellFormed(c2,a2)
-    }
-    case CTBar(c1, c2) => {
+    case CTBar(c1, c2) =>
       val a2 = checkModuleBodyWellFormed(c1, assignees)
       checkModuleBodyWellFormed(c2, a2)
-    }
-    case CSplit(cs, d) => {
+    case CSplit(cs, d) =>
       val branches = cs.map(c => c.body) :+ d
       //check all branches in same context
       branches.foldLeft(assignees)((res, c) => {
         val cassgns = checkModuleBodyWellFormed(c, assignees)
         res ++ cassgns
       })
-    }
-    case CIf(_, cons, alt) => {
+    case CIf(_, cons, alt) =>
       val ast = checkModuleBodyWellFormed(cons, assignees)
       val asf = checkModuleBodyWellFormed(alt, assignees)
       ast ++ asf
-    }
-    case CRecv(lhs@EVar(id), _) => {
+    case CRecv(lhs@EVar(id), _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
       }
-    }
-    case CAssign(lhs@EVar(id), _) => {
-        if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
-          assignees + id
-      }
+    case CAssign(lhs@EVar(id), _) =>
+      if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
+        assignees + id
     }
     //returns are only for function calls
     case CReturn(_) => throw UnexpectedReturn(c.pos)
     case _ => assignees
   }
 
-  def checkCircuit(c: Circuit, tenv: Environment[Type]): Environment[Type] = c match {
-    case CirSeq(c1, c2) => {
+  override def checkCircuit(c: Circuit, tenv: Environment[Type]): Environment[Type] = c match {
+    case CirSeq(c1, c2) =>
       val e1 = checkCircuit(c1, tenv)
       checkCircuit(c2, e1)
-    }
-    case CirConnect(name, c) => {
+    case CirConnect(name, c) =>
       val (t, env2) = checkCirExpr(c, tenv)
       name.typ = Some(t)
       env2.add(name, t)
-    }
     case CirExprStmt(ce) => checkCirExpr(ce, tenv)._2
   }
 
@@ -283,6 +281,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
       tenv
     }
     case CEmpty => tenv
+    case _ => throw UnexpectedCommand(c)
   }
 
   def checkExpression(e: Expr, tenv: Environment[Type]): (Type, Environment[Type]) = {

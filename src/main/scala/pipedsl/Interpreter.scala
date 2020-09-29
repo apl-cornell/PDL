@@ -1,6 +1,7 @@
 package pipedsl
 
 import pipedsl.common.Errors
+import pipedsl.common.Errors.UnexpectedExpr
 import pipedsl.common.Syntax._
 
 import scala.collection.immutable
@@ -112,7 +113,6 @@ class Interpreter(val maxIterations: Int) {
             }
         }
         case CRecv(lhs, rhs) => {
-            //TODO values available next cycle
             val rval = interp_expr(rhs, env)
             lhs match {
                 case EVar(id) => {
@@ -130,6 +130,7 @@ class Interpreter(val maxIterations: Int) {
                     memoryEnv = memoryEnv + (mem -> memArray)
                     env
                 }
+                case _ => throw UnexpectedExpr(lhs)
             }
         }
         case CExpr(exp) => {

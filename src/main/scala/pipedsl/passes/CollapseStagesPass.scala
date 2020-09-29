@@ -50,7 +50,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       val priorstg = s.inEdges.head.from
       //merge this into the prior stage since that delay was added unnecessarily
       mergeStages(priorstg, s)
-    case stage: SpecStage =>
+    case _: SpecStage =>
     case _ =>
   }
 
@@ -61,7 +61,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       //reverse will just speed this up a bit
       result.reverse.foreach(s => {
         //This stage does nothing! Make it unreachable by removing all input edges
-        if (s.cmds.isEmpty && s.outEdges.isEmpty) {
+        if (s.getCmds.isEmpty && s.outEdges.isEmpty) {
           s.inEdges.foreach(e => s.removeEdge(e))
         }
       })
@@ -73,22 +73,27 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     result
   }
   /**
-   *
-   * @param stg
-   * @param cond
-   * @param stmts
+   * Given a stage, a condition, and a list of commands, add
+   * the commands to be conditionally executed in the given stage.
+   * This modifies the stage object in place.
+   * @param stg The stage to modify
+   * @param cond The expression to condition execution on
+   * @param stmts The collection of commands to execute.
    */
   private def addCondStmts(stg: PStage, cond: Expr, stmts: Iterable[Command]): Unit = {
     val condstmts = stmts.map(s => ICondCommand(cond, s))
-    stg.cmds = stg.cmds ++ condstmts
+    stg.addCmds(condstmts)
   }
 
   /**
-   * Merge src into target, but execute it conditionally
-   * @param target
-   * @param src
+   * Merge src into target, but execute it conditionally based on the
+   * condition of their connecting edge.
+   * This requires target to have direct communication edges to src.
+   * This modifies both of the stages in place.
+   * @param target The earlier stage, which is being merged into and modified.
+   * @param src The later stage, which is being removed from the stage graph.
    */
-  private def mergeStages(target: PStage, src: PStage) = {
+  private def mergeStages(target: PStage, src: PStage): Unit = {
     if (src.inEdges.exists(e => e.from != target) ||
       !src.inEdges.exists(e => e.from == target)) {
       throw new RuntimeException(s"Cannot merge ${src.name.v} since it has inputs other than ${target.name.v}")
@@ -100,9 +105,9 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     val cond = existingedges.head.condSend
     //merge in the commands
     if (cond.isDefined) {
-      addCondStmts(target, cond.get, src.cmds)
+      addCondStmts(target, cond.get, src.getCmds)
     } else {
-      target.cmds = target.cmds ++ src.cmds
+      target.addCmds(src.getCmds)
     }
     //merge in the output edge from src with target as the new from stage
     //use the old condsend to src as the new condsend

@@ -3,7 +3,7 @@ package pipedsl.common
 import java.io.{FileOutputStream, OutputStreamWriter, Writer}
 
 import pipedsl.common.BSVSyntax._
-import pipedsl.common.Errors.BaseError
+import pipedsl.common.Errors.{BaseError, UnexpectedBSVType}
 
 object BSVPrettyPrinter {
 
@@ -84,9 +84,11 @@ object BSVPrettyPrinter {
       //TODO get rid of magic strings
     case BMemPeek(mem) => mem.typ match {
       case _:BAsyncMemType => toBSVExprStr(mem) + ".peekRead()"
+      case _ => throw UnexpectedBSVType("mem peek op had bad mem type!")
     }
     case BMemRead(mem, addr) => mem.typ match {
       case _:BCombMemType => toBSVExprStr(mem) + ".read(" + toBSVExprStr(addr) + ")"
+      case _ => throw UnexpectedBSVType("mem read op had bad mem type!")
     }
   }
 

@@ -28,26 +28,24 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       case CLockOp(_,_) => CEmpty
       case CSpeculate(_, _, _, _) => CEmpty
       case CCheck(_) => CEmpty
-      case CSplit(cases, default) => {
+      case CSplit(cases, default) =>
         val newCases = List[CaseObj]()
         val newDefault = removeTimingConstructs(default)
-        for (index <- 0 until cases.length) {
+        for (index <- cases.indices) {
           val newBody = removeTimingConstructs(cases(index).body)
           newCases :+ cases(index).copy(body = newBody)
         }
         CSplit(newCases, newDefault)
-      }
-      case CExpr(ECall(id, args)) => {
+      case CExpr(ECall(id, args)) =>
         val assigns: ListBuffer[Command] = new ListBuffer[Command]()
         val newArgs: ListBuffer[Expr] = new ListBuffer[Expr]()
-        for (index <- 0 until args.length) {
+        for (index <- args.indices) {
           val arg = EVar(Id("__" + id.v + "__" + calls.length + index))
           assigns.addOne(CAssign(arg, args(index)))
           newArgs.addOne(arg)
         }
         calls.addOne(CExpr(ECall(id, newArgs.toList)))
         convertCListToCSeq(assigns, 0)
-      }
       case _ => c
     }
   }

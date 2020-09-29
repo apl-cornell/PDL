@@ -104,6 +104,7 @@ object BluespecInterfaces {
     handlemethod.typ match {
       case Value(rtyp) => rtyp
         //others should be unreachable
+      case _ => throw UnexpectedBSVType(s"Handle Method should be Value type! but was ${handlemethod.typ}")
     }
   }
 }

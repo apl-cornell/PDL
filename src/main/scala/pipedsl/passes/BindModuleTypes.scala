@@ -15,7 +15,7 @@ class BindModuleTypes(val tenv: Environment[Type]) extends ProgPass[Prog] {
   }
 
   def run(m: ModuleDef): ModuleDef = {
-    m.copy(modules = m.modules.map(p => Param(p.name, replaceNamedType(p.typ))));
+    m.copy(modules = m.modules.map(p => Param(p.name, replaceNamedType(p.typ))))
   }
 
   private def replaceNamedType(t: Type): Type = t match {

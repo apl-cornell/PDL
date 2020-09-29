@@ -2,7 +2,7 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
-import pipedsl.common.Locks.LockState.LockState
+import pipedsl.common.Locks.LockState
 
 
 object Syntax {
@@ -111,6 +111,7 @@ object Syntax {
         case "!" => Some(!v1.asInstanceOf[Boolean])
         case _ => None
       }
+      case _ => throw new UnsupportedOperationException
     }
   }
   

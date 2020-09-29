@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.UnexpectedExpr
-import pipedsl.common.Syntax.Latency.{Combinational}
+import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
@@ -54,15 +54,15 @@ object BSVSyntax {
       case eb@EBinop(_,_,_) => toBSVBop(eb)
       case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
       case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
-      case e@EVar(id) => toBSVVar(e)
+      case e@EVar(_) => toBSVVar(e)
       //TODO functions
       //case EApp(func, args) => throw new UnexpectedExpr(e)
-      case EApp(func, args) => BIntLit(0, 10, 1)
-      case ERecAccess(rec, fieldName) => throw new UnexpectedExpr(e)
-      case ERecLiteral(fields) => throw new UnexpectedExpr(e)
+      case EApp(_, _) => BIntLit(0, 10, 1)
+      case ERecAccess(_, _) => throw UnexpectedExpr(e)
+      case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index) => BMemRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
-      case ECast(ctyp, exp) => throw new UnexpectedExpr(e)
-      case expr: CirExpr =>throw new UnexpectedExpr(e)
+      case ECast(_, _) => throw UnexpectedExpr(e)
+      case _ => throw UnexpectedExpr(e)
     }
 
     //TODO a better way to translate operators
@@ -75,9 +75,13 @@ object BSVSyntax {
 
 
   /**
-   *
-   * @param typ
-   * @return
+   * This creates a struct literal from the given struct type
+   * and translator. This assumes that the arguments to struct creation
+   * are variables with the same name as the fields (modulo any variable renaming
+   * that translator may do).
+   * @param typ The BSV Struct Type
+   * @param t The translator object that will potentially rename the constructor arguments
+   * @return The canonical struct literal for type typ.
    */
   def getCanonicalStruct(typ: BStruct, t: BSVTranslator): BStructLit = {
     val argmap = typ.fields.foldLeft(Map[BVar, BExpr]())((m, f) => {
@@ -88,10 +92,14 @@ object BSVSyntax {
   }
 
   /**
-   *
-   * @param typ
-   * @param args
-   * @return
+   * This creates a struct literal from the given struct type
+   * and specified arguments. This assumes that enough arguments
+   * have been provided to set each field of the struct and that they
+   * have been provided in the appropriate order (same as the order
+   * of the fields in typ.
+   * @param typ The BSV Struct Type
+   * @param args The arguments to construct the struct with.
+   * @return A Struct Literal created from args of type typ.
    */
   def getNamedStruct(typ: BStruct, args: Iterable[BExpr]): BStructLit = {
     BStructLit(typ, typ.fields.zip(args).toMap)
@@ -150,33 +158,4 @@ object BSVSyntax {
   case class BProgram(name: String, topModule: BModuleDef, imports: List[BImport], exports: List[BExport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
 
-  /**
-   *
-   * @param name
-   * @param rules
-   * @return
-   */
-  def combineRules(name: String, rules: Iterable[BRuleDef]): Option[BRuleDef] = {
-      val newcond = rules.foldLeft(List[BExpr]())((l, r) => {
-        l ++ r.conds
-      })
-      val newstmts = rules.foldLeft(List[BStatement]())((l, r) => {
-        l ++ r.body
-      })
-      if (newstmts.isEmpty) {
-        None
-      } else {
-        Some(BRuleDef(name, newcond, newstmts))
-      }
-  }
-
-  /**
-   *
-   * @param rule
-   * @param stmts
-   * @return
-   */
-  def addStmts(rule: BRuleDef, stmts: Iterable[BStatement]): BRuleDef = {
-    BRuleDef(rule.name, rule.conds, rule.body ++ stmts)
-  }
 }

@@ -3,7 +3,6 @@ package pipedsl.passes
 import pipedsl.common.Syntax._
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedExpr
-import pipedsl.common.Syntax
 import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
 
@@ -27,10 +26,10 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
     val calls = getCalls(stg)
     val newRecvs = recvs.map(r => convertRecv(r))
     val newCalls = calls.map(c => convertCall(c))
-    val newCmds = stg.cmds.filterNot(c => recvs.contains(c) || calls.map(cexp => CExpr(cexp)).contains(c)) ++
+    val newCmds = stg.getCmds.filterNot(c => recvs.contains(c) || calls.map(cexp => CExpr(cexp)).contains(c)) ++
       //only take the send parts of the receives. Calls only have a send part
       newRecvs.map(t => t._1) ++ newCalls
-    stg.cmds = newCmds
+    stg.setCmds(newCmds)
     stg.outEdges.foreach(e => {
       val nstg = e.to
       val nrecvs = if (e.condRecv.isDefined) {
@@ -38,45 +37,43 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
       } else {
         newRecvs.map(t => t._2)
       }
-      nstg.cmds = nrecvs ++ nstg.cmds
+      nstg.setCmds(nrecvs ++ nstg.getCmds)
     })
   }
 
   private def convertRecv(c: CRecv): (Command, Command) = {
     (c.lhs, c.rhs) match {
         //Mem Read
-      case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) => {
+      case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) =>
         val send = IMemSend(isWrite = false, mem, None, index)
         val recv = IMemRecv(mem, Some(lhs))
         (send, recv)
-      }
-        //Mem Write
-      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => {
+      //Mem Write
+      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) =>
         val send = IMemSend(isWrite = true, mem, Some(data), index)
         val recv = IMemRecv(mem, None)
         (send, recv)
-      }
-        //module calls
-      case (lhs@EVar(_), call@ECall(_, _)) => {
+      //module calls
+      case (lhs@EVar(_), call@ECall(_, _)) =>
         val send = convertCall(call)
         val recv = IRecv(send.handle, send.receiver, lhs)
         (send, recv)
-      }
       case _ => throw UnexpectedExpr(c.lhs)
     }
   }
 
   private def convertCall(c: ECall): ISend = {
-    val arglist: List[EVar] = c.args match {
-      case l: List[EVar] => l
+    val arglist: List[EVar] = c.args.foldLeft(List[EVar]())((l, a) => a match {
+      case av: EVar => l :+ av
+        //should be unreachable if the SimplifyRecv pass was executed
       case _ => throw UnexpectedExpr(c)
-    }
+    })
     val msghandle = freshMessage
     ISend(msghandle, c.mod, arglist)
   }
 
   private def getRecvs(stg: PStage): List[CRecv] = {
-   stg.cmds.foldLeft(List[CRecv]())((l, c) => {
+   stg.getCmds.foldLeft(List[CRecv]())((l, c) => {
      c match {
        case cmd: CRecv => l :+ cmd
        case _ => l
@@ -85,7 +82,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
   }
 
   private def getCalls(stg: PStage): List[ECall] = {
-    stg.cmds.foldLeft(List[ECall]())((l, c) => {
+    stg.getCmds.foldLeft(List[ECall]())((l, c) => {
       c match {
         case CExpr(call@ECall(_,_)) => l :+ call
         case _ => l

@@ -1,9 +1,8 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.BSVSyntax
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
-import pipedsl.common.Errors.UnexpectedCommand
+import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
 
@@ -73,6 +72,7 @@ object BluespecGeneration {
         BluespecInterfaces.getMemoryModule(memtyp)
       case CirNew(mod, mods) =>
         BModule(name = BluespecInterfaces.getModuleName(modMap(mod)), args = mods.map(m => env(m)))
+      case CirCall(_, _) => throw UnexpectedExpr(c)
     }
 
     private var freshCnt = 0
@@ -331,10 +331,10 @@ object BluespecGeneration {
      */
     private def getStageRule(stg: PStage): BRuleDef = {
       //This is used to declare request handle variables (they must be declared in the rule body)
-      val writeCmdDecls = getEffectDecls(stg.cmds)
-      val writeCmdStmts = getEffectCmds(stg.cmds)
+      val writeCmdDecls = getEffectDecls(stg.getCmds)
+      val writeCmdStmts = getEffectCmds(stg.getCmds)
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
-      val blockingConds = getBlockingConds(stg.cmds)
+      val blockingConds = getBlockingConds(stg.getCmds)
       val debugStmt = if (debug) {
         BDisplay(mod.name.v + ":Executing Stage " + stg.name + " %t", List(BTime))
       } else BEmpty
@@ -440,7 +440,7 @@ object BluespecGeneration {
         body = body :+ BDecl(translator.toBSVVar(v), Some(condEdgeExpr))
       })
       //And now add all of the combinational connections
-      body ++ getCombinationalDeclarations(stg.cmds) ++ getCombinationalCommands(stg.cmds)
+      body ++ getCombinationalDeclarations(stg.getCmds) ++ getCombinationalCommands(stg.getCmds)
     }
 
     //TODO add in the module parameters into the definition w/ appropriate types
@@ -664,14 +664,13 @@ object BluespecGeneration {
         case Some(bc) => Some(BIf(translator.toBSVExpr(cond), List(bc), List()))
         case None => None
       }
-      //TODO implement lock arguments (a.k.a. thread IDs)
       case CLockOp(mem, op) => op match {
-        case pipedsl.common.Locks.LockState.Free => None
-        case pipedsl.common.Locks.LockState.Reserved =>
+        case pipedsl.common.Locks.Free => None
+        case pipedsl.common.Locks.Reserved =>
           Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(translator.toBSVVar(threadIdVar)))))
-        case pipedsl.common.Locks.LockState.Acquired =>
+        case pipedsl.common.Locks.Acquired =>
           Some(BExprStmt(BMethodInvoke(lockParams(mem), "acq", List(translator.toBSVVar(threadIdVar)))))
-        case pipedsl.common.Locks.LockState.Released =>
+        case pipedsl.common.Locks.Released =>
           Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List(translator.toBSVVar(threadIdVar)))))
       }
       case IMemSend(isWrite, mem: Id, data: Option[EVar], addr: EVar) =>
