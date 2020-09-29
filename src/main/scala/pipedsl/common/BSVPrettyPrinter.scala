@@ -2,6 +2,7 @@ package pipedsl.common
 
 import java.io.{FileOutputStream, OutputStreamWriter, Writer}
 
+import pipedsl.codegen.bsv.BluespecInterfaces
 import pipedsl.common.BSVSyntax._
 import pipedsl.common.Errors.{BaseError, UnexpectedBSVType}
 
@@ -81,13 +82,16 @@ object BSVPrettyPrinter {
     case BZero => "0"
     case BOne => "1"
     case BTime => "$time()"
-      //TODO get rid of magic strings
-    case BMemPeek(mem) => mem.typ match {
-      case _:BAsyncMemType => toBSVExprStr(mem) + ".peekRead()"
+    case c@BMemCheckAddr(mem, _) => mem.typ match {
+      case _:BAsyncMemType =>  toBSVExprStr(BluespecInterfaces.toMethodInvoke(c))
       case _ => throw UnexpectedBSVType("mem peek op had bad mem type!")
     }
-    case BMemRead(mem, addr) => mem.typ match {
-      case _:BCombMemType => toBSVExprStr(mem) + ".read(" + toBSVExprStr(addr) + ")"
+    case p@BMemPeek(mem) => mem.typ match {
+      case _:BAsyncMemType => toBSVExprStr(BluespecInterfaces.toMethodInvoke(p))
+      case _ => throw UnexpectedBSVType("mem peek op had bad mem type!")
+    }
+    case r@BMemRead(mem, _) => mem.typ match {
+      case _:BCombMemType => toBSVExprStr(BluespecInterfaces.toMethodInvoke(r))
       case _ => throw UnexpectedBSVType("mem read op had bad mem type!")
     }
   }
@@ -149,12 +153,9 @@ object BSVPrettyPrinter {
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) =>
         w.write(mkStatementString(toDeclString(lhs), "=", if (rhs.isDefined) toBSVExprStr(rhs.get) else "?"))
-      //TODO no magic variables get runtime names from some configuration
-      case BMemReadReq(mem, addr) => w.write(mkStatementString(
-        toBSVExprStr(mem)+".readReq(", toBSVExprStr(addr),")"))
-      case BMemReadResp(_, mem) => w.write(mkStatementString(toBSVExprStr(mem) + ".readResp()"))
-      case BMemWrite(mem, addr, data) => w.write(mkStatementString(
-        toBSVExprStr(mem) + ".write(", toBSVExprStr(addr), ",", toBSVExprStr(data), ")"))
+      case r@BMemReadReq(_, _) => printBSVStatement(BExprStmt(BluespecInterfaces.toMethodInvoke(r)))
+      case r@BMemReadResp(_, _) => printBSVStatement(BExprStmt(BluespecInterfaces.toMethodInvoke(r)))
+      case w@BMemWrite(_, _, _) => printBSVStatement(BExprStmt(BluespecInterfaces.toMethodInvoke(w)))
       case BIf(cond, trueBranch, falseBranch) =>
         w.write(mkIndentedExpr("if", "(", toBSVExprStr(cond) + ")\n"))
         w.write(mkIndentedExpr("begin\n"))

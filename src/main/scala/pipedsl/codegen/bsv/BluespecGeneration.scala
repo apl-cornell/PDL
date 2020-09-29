@@ -353,6 +353,8 @@ object BluespecGeneration {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case ICheckLock(mem) =>
           l :+ BMethodInvoke(lockParams(mem), "owns", List(translator.toBSVVar(threadIdVar)))
+        case IMemRecv(mem: Id, addr: EVar, data: Option[EVar]) if data.isDefined =>
+          l :+ BMemCheckAddr(modParams(mem), translator.toBSVVar(addr))
         case IRecv(handle, sender, _) =>
           l :+ BMethodInvoke(modParams(sender),
             BluespecInterfaces.checkHandleMethodName,
@@ -557,7 +559,7 @@ object BluespecGeneration {
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toBSVVar(lhs), None))
       case ICondCommand(_, cmd) => getCombinationalDeclaration(cmd)
-      case IMemRecv(_, data) => data match {
+      case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toBSVVar(v), None))
         case None => None
       }
@@ -590,7 +592,7 @@ object BluespecGeneration {
         case None => None
       }
       case CExpr(exp) => Some(BExprStmt(translator.toBSVExpr(exp)))
-      case IMemRecv(mem: Id, data: Option[EVar]) => data match {
+      case IMemRecv(mem: Id, _: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toBSVVar(v), BMemPeek(modParams(mem))))
         case None => None
       }
@@ -680,7 +682,7 @@ object BluespecGeneration {
           Some(BMemReadReq(modParams(mem), translator.toBSVExpr(addr)))
         }
       //This is a write op b/c is modifies the mem queue its reading from
-      case IMemRecv(mem: Id, data: Option[EVar]) => data match {
+      case IMemRecv(mem: Id, _: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BMemReadResp(translator.toBSVVar(v), modParams(mem)))
         case None => None
       }

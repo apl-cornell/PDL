@@ -212,7 +212,7 @@ object Syntax {
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
-  case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
+  case class IMemRecv(mem: Id, addr: EVar, data: Option[EVar]) extends InternalCommand
   case class ICheckLock(mem: Id) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional

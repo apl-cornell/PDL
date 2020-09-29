@@ -23,6 +23,7 @@ endinterface
 interface AsyncMem#(type elem, type addr);
     method Action readReq(addr a);
     method elem peekRead();
+    method Bool checkAddr(addr a);
     method Action readResp();
     method Action write(addr a, elem b);
 endinterface
@@ -54,9 +55,13 @@ module mkAsyncMem(AsyncMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(add
         reqs.enq(a);
     endmethod
 
-     method elem peekRead();
+    method Bool checkAddr(addr a);
+        return reqsfirst == a;
+    endmethod
+
+    method elem peekRead();
         return nextOut;
-     endmethod
+    endmethod
 
      method Action readResp();
         reqs.deq();

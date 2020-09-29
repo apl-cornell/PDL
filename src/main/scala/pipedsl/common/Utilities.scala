@@ -9,7 +9,7 @@ object Utilities {
   def log2(x: Int): Int = {
     var y = x
     if (x < 0) { y = -y }
-    var bits = 1;
+    var bits = 1
     while (y > 1) {
       y = y >> 1
       bits += 1
@@ -29,19 +29,20 @@ object Utilities {
   }
 
   /**
-   *
-   * @param c
-   * @return
+   * Return every Id that is used for a variable name somewhere.
+   * This is primarily used to generate fresh names by gathering the
+   * set of used ones.
+   * @param c The command to check
+   * @return The set of used identifiers in c.
    */
   def getAllVarNames(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getAllVarNames(c1) ++ getAllVarNames(c2)
     case CTBar(c1, c2) => getAllVarNames(c1) ++ getAllVarNames(c2)
-    case CSplit(cases, default) => {
+    case CSplit(cases, default) =>
       val names = getAllVarNames(default)
       cases.foldLeft(names)((v, c) => {
         v ++ getUsedVars(c.cond) ++ getAllVarNames(c.body)
       })
-    }
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
     case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
@@ -72,7 +73,7 @@ object Utilities {
     case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case ISpeculate(s, svar, _) => Set(s, svar.id)
-    case IMemRecv(_, data) => if (data.isDefined) Set(data.get.id) else Set()
+    case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case _ => Set()
@@ -83,9 +84,11 @@ object Utilities {
   }
 
   /**
-   *
-   * @param c
-   * @return
+   * This gets all of the variables which are referenced
+   * (not defined) in the given command. This also skips external
+   * references like module names since those are not normal variables.
+   * @param c The command to check
+   * @return The set of variable identifiers which are used in c.
    */
   def getUsedVars(c: Command): Set[Id] = c match {
     case CSeq(c1, c2) => getUsedVars(c1) ++ getUsedVars(c2)
@@ -113,15 +116,18 @@ object Utilities {
       if (data.isDefined) {
         Set(data.get.id, addr.id)
       } else Set(addr.id)
+    case IMemRecv(_, addr, _) => Set(addr.id)
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case _ => Set()
   }
 
   /**
-   *
-   * @param e
-   * @return
+   * This gets all of the variables which are referenced
+   * (not defined) in the given command. This also skips external
+   * references like module names since those are not normal variables.
+   * @param e The expression to check
+   * @return The set of variable identifiers which are used in e.
    */
   def getUsedVars(e: Expr): Set[Id] = e match {
     case EUop(_, ex) => getUsedVars(ex)
@@ -139,43 +145,48 @@ object Utilities {
   }
 
   /**
-   *
-   * @param cs
-   * @return
+   * A convenience method for called the getUsedVars(c: Command)
+   * function on a collection of commands and unioning the results.
+   * @param cs The collection to check
+   * @return The set of variable identifiers used in any of the commands in cs.
    */
-  def getUsedVars(cs: List[Command]): Set[Id] = {
+  def getUsedVars(cs: Iterable[Command]): Set[Id] = {
     cs.foldLeft(Set[Id]())((s,c) => s ++ getUsedVars(c))
   }
 
   /**
-   *
-   * @param stg
-   * @return
+   * This does a graph traversal to find all stages which
+   * are reachable from the supplied stage and returns them
+   * in the order they were found (therefore it will always start
+   * with stg)
+   * @param stg The stage to start checking from
+   * @return The list of stages reachable from stg.
    */
   def getReachableStages(stg: PStage): List[PStage] = {
     visit[List[PStage]](stg, List[PStage](), (s, stgs) => stgs :+ s)
   }
 
   /**
-   *
-   * @param stg
-   * @param start
-   * @param visitor
-   * @tparam T
-   * @return
+   * A generic iterative graph visitor algorithm
+   * that uses the succs method on stages to find successors.
+   * This executes the traversal in a BFS order.
+   * @param stg The starting stage to visit
+   * @param start The initial result holder (result after visiting 0 stages)
+   * @param visitor The visitor function which takes a stage and a current result and accumulates a new result.
+   * @tparam T The type of the result that visitor produces
+   * @return The results of applying the visitor to all reachable stages in a BFS order.
    */
   def visit[T](stg: PStage, start: T, visitor: (PStage, T) => T): T = {
     var result = visitor(stg, start)
-    var visited = Set(stg);
-    var fringe: Set[PStage] = stg.succs
+    var visited = Set(stg)
+    var fringe: List[PStage] = stg.succs.toList
     while (fringe.nonEmpty) {
       val next = fringe.head
       fringe = fringe.tail
-      if (!visited.contains(next)) {
-        result = visitor(next, result)
-        visited = visited + next
-        fringe = fringe ++ next.succs
-      }
+      result = visitor(next, result)
+      visited = visited + next
+      val newvisits = next.succs.diff(visited)
+      fringe = fringe ++ newvisits.toList
     }
     result
   }
@@ -195,10 +206,14 @@ object Utilities {
   }
 
   /**
-   *
-   * @param condL
-   * @param condR
-   * @return
+   * Produces a new Expression object that
+   * represents the conjunction of the arguments.
+   * If either argument is missing then the result
+   * is just the other argument. If neither are provided, the result
+   * is of None type.
+   * @param condL The left expression
+   * @param condR The right expression
+   * @return Some(The conjunction of left and right) or None if neither are provided
    */
   def andExpr(condL: Option[Expr], condR: Option[Expr]): Option[Expr] = (condL, condR) match {
     case (None, None) => None

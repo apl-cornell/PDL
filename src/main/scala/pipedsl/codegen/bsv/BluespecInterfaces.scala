@@ -19,6 +19,32 @@ object BluespecInterfaces {
   private val fifoEnqueueMethodName = "enq"
   private val fifoFirstMethodName = "first"
 
+  private val memCombReadName = "read"
+  private val memWriteName = "write"
+  private val memAsyncPeekName = "peekRead"
+  private val memAsyncReadName = "readReq"
+  private val memAsyncRespName = "readResp"
+  private val memAsyncCheckName = "checkAddr"
+
+  def toMethodInvoke(peek: BMemPeek): BMethodInvoke = {
+    BMethodInvoke(peek.mem, memAsyncPeekName, List())
+  }
+  def toMethodInvoke(r: BMemRead): BMethodInvoke = {
+    BMethodInvoke(r.mem, memCombReadName, List(r.addr))
+  }
+  def toMethodInvoke(r: BMemWrite): BMethodInvoke = {
+    BMethodInvoke(r.mem, memWriteName, List(r.addr, r.data))
+  }
+  def toMethodInvoke(r: BMemReadReq): BMethodInvoke = {
+    BMethodInvoke(r.mem, memAsyncReadName, List(r.addr))
+  }
+  def toMethodInvoke(r: BMemCheckAddr): BMethodInvoke = {
+    BMethodInvoke(r.mem, memAsyncCheckName, List(r.addr))
+  }
+  def toMethodInvoke(r: BMemReadResp): BMethodInvoke = {
+    BMethodInvoke(r.mem, memAsyncRespName, List())
+  }
+
   /**
    * Uses the configured fifo interface type and the provided
    * BSV type to make a paramterized fifo type.

@@ -46,12 +46,12 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         //Mem Read
       case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) =>
         val send = IMemSend(isWrite = false, mem, None, index)
-        val recv = IMemRecv(mem, Some(lhs))
+        val recv = IMemRecv(mem, index, Some(lhs))
         (send, recv)
       //Mem Write
       case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) =>
         val send = IMemSend(isWrite = true, mem, Some(data), index)
-        val recv = IMemRecv(mem, None)
+        val recv = IMemRecv(mem, index, None)
         (send, recv)
       //module calls
       case (lhs@EVar(_), call@ECall(_, _)) =>

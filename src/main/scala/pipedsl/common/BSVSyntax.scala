@@ -125,7 +125,7 @@ object BSVSyntax {
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BMemRead(mem: BVar, addr: BExpr) extends BExpr
   case class BMemPeek(mem: BVar) extends BExpr
-
+  case class BMemCheckAddr(mem: BVar, addr: BExpr) extends BExpr
 
   sealed trait BStatement
 
