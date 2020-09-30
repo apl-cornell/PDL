@@ -7,7 +7,7 @@ export Lock(..);
 export AddrLock(..);
 export LockId(..);
 export mkLock;
-export mkAddrLock;
+export mkFAAddrLock;
 
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
 
@@ -18,39 +18,40 @@ interface Lock#(type id);
    method ActionValue#(id) res();
 endinterface
 
-interface AddrLock#(type id, type addr);
+interface AddrLock#(type id, type addr, numeric type size);
    method Bool isEmpty(addr loc);
    method Bool owns(id tid, addr loc);
    method Action rel(id tid, addr loc);
    method ActionValue#(id) res(addr loc);
 endinterface
 
-module mkLock#(Integer depth) (Lock#(LockId(depth)));
+module mkLock(Lock#(LockId#(d)));
 
-   Reg#(LockId(depth)) nextId <- mkReg(0);
-   FIFOF#(LockId(depth)) held <- mkSizedFIFOF(depth);
+   Reg#(LockId#(d)) nextId <- mkReg(0);
+   FIFOF#(LockId#(d)) held <- mkSizedFIFOF(valueOf(d));
    
    Bool lockFree = !held.notEmpty;
-   id owner = held.first;
+   LockId#(d) owner = held.first;
 
    method Bool isEmpty();
       return lockFree;
    endmethod
    
    //Returns True if thread `tid` already owns the lock
-   method Bool owns(id tid);
+   method Bool owns(LockId#(d) tid);
       return owner == tid;
    endmethod
       
    //Releases the lock iff thread `tid` owns it already
-   method Action rel(id tid);
+   method Action rel(LockId#(d) tid);
        if (owner == tid) held.deq();
    endmethod
    
    //Reserves the lock and returns the associated id
-   method Action res();
+   method ActionValue#(LockId#(d)) res();
       held.enq(nextId);
       nextId <= nextId + 1;
+      return nextId;
    endmethod
    
 endmodule: mkLock
@@ -58,24 +59,25 @@ endmodule: mkLock
 
 typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
 
-module mkFAAddrLock#(Integer numlocks, Integer depth) (AddrLock#(LockId(depth), addr)) provisos(Bits#(addr, szAddr), Eq#(addr));
+module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, szAddr), Eq#(addr));
 
-   Vector#(numlocks, Lock#(LockId(depth))) lockVec <- replicateM( mkLock(depth) );
+   Vector#(numlocks, Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
-      for (LockIdx#(numlocks) idx = 0; idx < (numlocks - 1); idx = idx + 1)
+      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
 	    if (result matches tagged Invalid &&& 
 	       entryVec[idx] matches tagged Valid.t &&& t == loc)
 	       result = tagged Valid idx;
       return result;
    endfunction
 
+
    
-   function Maybe#(Lock#(id)) getLock(addr loc);
+   function Maybe#(Lock#(LockId#(d))) getLock(addr loc);
     if (getLockIndex(loc) matches tagged Valid.idx)
        return tagged Valid lockVec[idx];
     else
@@ -86,7 +88,7 @@ module mkFAAddrLock#(Integer numlocks, Integer depth) (AddrLock#(LockId(depth), 
    //returns invalid if all locks are in use
    function Maybe#(LockIdx#(numlocks)) getFreeLock();
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
-      for (LockIdx#(numlocks) idx = 0; idx < (numlocks - 1); idx = idx + 1)
+      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
 	    if (result matches tagged Invalid &&& 
 	       entryVec[idx] matches tagged Invalid)
 	       result = tagged Valid idx;
@@ -100,15 +102,15 @@ module mkFAAddrLock#(Integer numlocks, Integer depth) (AddrLock#(LockId(depth), 
 
    //true if no lock is associated w/ addr and there is a lock lockation free
    method Bool isEmpty(addr loc);
-        Maybe#(Lock#(id)) addrLock = getLock(loc);
+        Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
         if (addrLock matches tagged Invalid)
             return isFreeLock();
         else
             return False;
    endmethod
 
-   method Bool owns(id tid, addr loc);
-      Maybe#(Lock#(id)) addrLock = getLock(loc);
+   method Bool owns(LockId#(d) tid, addr loc);
+      Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
       Bool hasFree = isFreeLock();
       if (addrLock matches tagged Valid.lock)
 	    //in this case loc is associated with lockVec[idx]
@@ -121,11 +123,11 @@ module mkFAAddrLock#(Integer numlocks, Integer depth) (AddrLock#(LockId(depth), 
 	    return hasFree;
    endmethod
       
-   method Action rel(id tid, addr loc);
+   method Action rel(LockId#(d) tid, addr loc);
       Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
 	 begin
-	    Lock#(id) lock = lockVec[idx];
+	    Lock#(LockId#(d)) lock = lockVec[idx];
 	    lock.rel(tid);
 	    //disassociated the lock from the address once its empty
 	    if (lock.isEmpty()) entryVec[idx] <= tagged Invalid;
@@ -133,22 +135,26 @@ module mkFAAddrLock#(Integer numlocks, Integer depth) (AddrLock#(LockId(depth), 
       //else no lock is associated with loc, do nothing
    endmethod
    
-   method ActionValue#(id) res(addr loc);
-      Maybe#(Lock#(id)) addrLock = getLock(loc);
+   method ActionValue#(LockId#(d)) res(addr loc);
+      Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
       if (addrLock matches tagged Valid.lock)
-	    return lock.res(tid);
+	 begin
+	    let nid <- lock.res();
+            return nid;
+	 end
       else
 	    begin
 	        Maybe#(LockIdx#(numlocks)) freeLock = getFreeLock();
 	        if (freeLock matches tagged Valid.idx)
 	            begin
 		            entryVec[idx] <= tagged Valid loc;
-		            return lockVec[idx].res(tid);
+		            let nid <- lockVec[idx].res();
+		            return nid;
 	            end
 	        else return ?;
 	    end
    endmethod
 
-endmodule: mkAddrLock
+endmodule: mkFAAddrLock
    
 endpackage
