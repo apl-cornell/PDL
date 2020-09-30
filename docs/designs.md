@@ -63,6 +63,7 @@ methods per cycle) from being generated.
 
 ## Locks
 
+### Lock Ports
 The dynamic locks that we generate also suffer from this port assignment problem.
 Locks that are per-memory (i.e., accessed with statements like `acquire(rf)`) work OK
 because we won't generate multiple requests per rule.
@@ -83,6 +84,14 @@ can always progress) but may lead to unnecessary delay.
 
 Only works with a single access per cycle. Nothing prevents generating bad code that
 tries to acquire multiple addresses per cycle.
+
+## Address-Specific Lock Implementation
+
+
+### Current Implementation
+
+It is a fully-associative structure which holds a subset of the potential addresses.
+Locks can only be acquired if there is a free space in the structure to store the lock information.
 
 ## Implicit Queues
 
