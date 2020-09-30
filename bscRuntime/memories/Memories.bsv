@@ -5,11 +5,13 @@ import FIFOF :: *;
 import SpecialFIFOs :: *;
 
 
-
 export MemCombRead(..);
 export AsyncMem(..);
+export MemId(..);
 export mkCombMem;
 export mkAsyncMem;
+
+typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
 //these are the memory interfaces we suppport
 //the first is used for memories that support combinational reads
@@ -20,12 +22,11 @@ interface MemCombRead#(type elem, type addr);
 endinterface
 
 //this one is used for asynchronous reads which involve a request and response
-interface AsyncMem#(type elem, type addr);
-    method Action readReq(addr a);
-    method elem peekRead();
-    method Bool checkAddr(addr a);
-    method Action readResp();
-    method Action write(addr a, elem b);
+interface AsyncMem#(type elem, type addr, type id);
+    method ActionValue#(id) req(addr a, elem b, Bool isWrite);
+    method elem peekResp();
+    method Bool checkRespId(id i);
+    method Action resp();
 endinterface
 
 //wrapper around the built-in register file
@@ -44,31 +45,39 @@ module mkCombMem(MemCombRead#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(a
 endmodule
 
 //Todo build like..a real memory here on BRAMS or something
-module mkAsyncMem(AsyncMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+module mkAsyncMem#(Integer inflight) (AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
+    Reg#(MemId#(inflight)) nextId <- mkReg(0);
     RegFile#(addr, elem) rf <- mkRegFileFull();
-    FIFOF#(addr) reqs <- mkPipelineFIFOF();
+    FIFOF#(MemId#(inflight)) reqs <- mSizedFIFOF(inflight);
 
     elem nextOut = rf.sub(reqs.first);
+    MemId#(inflight) respId = reqs.first;
 
-    method Action readReq(addr a);
-        reqs.enq(a);
+    method ActionValue#(MemId) readReq(addr a, elem b, Bool isWrite);
+        if (isWrite)
+            begin
+                rf.upd(a, b);
+                return ?;
+            end
+        else
+            begin
+                reqs.enq(nextId);
+                nextId <= nextId + 1;
+                return nextId;
+            end
     endmethod
 
-    method Bool checkAddr(addr a);
-        return reqsfirst == a;
+    method Bool checkRespId(MemId a);
+        return respId == a;
     endmethod
 
-    method elem peekRead();
+    method elem peekResp();
         return nextOut;
     endmethod
 
-     method Action readResp();
+     method Action resp();
         reqs.deq();
-     endmethod
-
-     method Action write(addr a, elem b);
-        rf.upd(a, b);
      endmethod
 
 endmodule
