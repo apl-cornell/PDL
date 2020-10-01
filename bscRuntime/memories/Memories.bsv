@@ -5,7 +5,7 @@ import FIFOF :: *;
 import SpecialFIFOs :: *;
 
 
-export MemCombRead(..);
+export CombMem(..);
 export AsyncMem(..);
 export MemId(..);
 export mkCombMem;
@@ -16,7 +16,7 @@ typedef UInt#(TLog#(n)) MemId#(numeric type n);
 //these are the memory interfaces we suppport
 //the first is used for memories that support combinational reads
 
-interface MemCombRead#(type elem, type addr);
+interface CombMem#(type elem, type addr);
    method elem read(addr a);
    method Action write(addr a, elem b);
 endinterface
@@ -30,7 +30,7 @@ interface AsyncMem#(type elem, type addr, type id);
 endinterface
 
 //wrapper around the built-in register file
-module mkCombMem(MemCombRead#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+module mkCombMem(CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
     RegFile#(addr, elem) rf <- mkRegFileFull();
 
@@ -44,29 +44,21 @@ module mkCombMem(MemCombRead#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(a
 
 endmodule
 
-typedef struct { a addr; i id; } MemReq#(type a, type i) deriving (Eq, Bits);
+typedef struct { Bool isWrite, a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
 //Todo build like..a real memory here on BRAMS or something
 module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
     Reg#(MemId#(inflight)) nextId <- mkReg(0);
     RegFile#(addr, elem) rf <- mkRegFileFull();
-    FIFOF#(MemReq#(addr, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
+    FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
 
     elem nextOut = rf.sub(reqs.first.addr);
     MemId#(inflight) respId = reqs.first.id;
 
     method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
-        if (isWrite)
-            begin
-                rf.upd(a, b);
-                return ?;
-            end
-        else
-            begin
-                reqs.enq(MemReq { addr: a, id: nextId} );
-                nextId <= nextId + 1;
-                return nextId;
-            end
+        nextId <= nextId + 1;
+        reqs.enq(MemReq { isWrite: isWrite, addr: a, data: b, id: nextId} );
+        return nextId;
     endmethod
 
     method Bool checkRespId(MemId#(inflight) a);
@@ -78,6 +70,7 @@ module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, 
     endmethod
 
      method Action resp();
+        if (reqs.first.isWrite) rf.upd(reqs.first.addr, reqs.first.data)
         reqs.deq();
      endmethod
 

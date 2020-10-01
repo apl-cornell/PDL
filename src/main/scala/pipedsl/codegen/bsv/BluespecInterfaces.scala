@@ -5,44 +5,130 @@ import pipedsl.common.Errors.UnexpectedBSVType
 
 object BluespecInterfaces {
 
-  val requestMethodName = "req"
-  val responseMethodName = "resp"
-  val peekMethodName = "peek"
-  val checkHandleMethodName = "checkHandle"
+  private val requestMethodName = "req"
+  private val responseMethodName = "resp"
+  private val peekMethodName = "peek"
+  private val checkHandleMethodName = "checkHandle"
 
+  def getModRequest(mod: BVar, args: Iterable[BExpr]): BMethodInvoke = {
+    BMethodInvoke(mod, requestMethodName, args.toList)
+  }
+  def getModPeek(mod: BVar): BMethodInvoke = {
+    BMethodInvoke(mod, peekMethodName, List())
+  }
+  def getModCheckHandle(mod: BVar, handle: BExpr): BMethodInvoke = {
+    BMethodInvoke(mod, checkHandleMethodName, List(handle))
+  }
+  def getModResponse(mod: BVar): BMethodInvoke = {
+    BMethodInvoke(mod, responseMethodName, List())
+  }
 
   private val regModuleName = "mkReg"
-  private val fifoModuleName = "mkFIFOF"
   private val regType = "Reg"
+
+  private val fifoModuleName = "mkFIFOF"
   private val fifoType = "FIFOF"
   private val fifoDequeuMethodName = "deq"
   private val fifoEnqueueMethodName = "enq"
   private val fifoFirstMethodName = "first"
 
-  private val memCombReadName = "read"
-  private val memWriteName = "write"
-  private val memAsyncPeekName = "peekRead"
-  private val memAsyncReadName = "readReq"
-  private val memAsyncRespName = "readResp"
-  private val memAsyncCheckName = "checkAddr"
+  private val lockHandleName = "LockId"
+  private val defaultLockHandleSize = 4
 
-  def toMethodInvoke(peek: BMemPeek): BMethodInvoke = {
-    BMethodInvoke(peek.mem, memAsyncPeekName, List())
+  def getDefaultLockHandleType: BSizedType = getLockHandleType(defaultLockHandleSize)
+
+  def getLockHandleType(sz: Integer): BSizedType = {
+    BSizedType(lockHandleName, List(sz))
   }
-  def toMethodInvoke(r: BMemRead): BMethodInvoke = {
-    BMethodInvoke(r.mem, memCombReadName, List(r.addr))
+
+  private val lockType = "Lock"
+  private val lockModuleName = "mkLock"
+
+  def getLockType(ht: BSVType): BInterface = {
+    BInterface(lockType, List(BVar("idsize", ht)))
   }
-  def toMethodInvoke(r: BMemWrite): BMethodInvoke = {
-    BMethodInvoke(r.mem, memWriteName, List(r.addr, r.data))
+
+  def getLockModule: BModule = {
+    BModule(lockModuleName, List())
   }
-  def toMethodInvoke(r: BMemReadReq): BMethodInvoke = {
-    BMethodInvoke(r.mem, memAsyncReadName, List(r.addr))
+
+  private val lockEmptyName = "isEmpty"
+  private val lockOwnsName = "owns"
+  private val lockResName = "res"
+  private val lockRelName = "rel"
+
+  def getCheckEmpty(mod: BVar): BMethodInvoke = {
+    BMethodInvoke(mod, lockEmptyName, List())
   }
-  def toMethodInvoke(r: BMemCheckAddr): BMethodInvoke = {
-    BMethodInvoke(r.mem, memAsyncCheckName, List(r.addr))
+  def getCheckOwns(mod: BVar, handle: BExpr): BMethodInvoke = {
+    BMethodInvoke(mod, lockOwnsName, List(handle))
   }
-  def toMethodInvoke(r: BMemReadResp): BMethodInvoke = {
-    BMethodInvoke(r.mem, memAsyncRespName, List())
+  def getReserve(mod: BVar): BMethodInvoke = {
+    BMethodInvoke(mod, lockResName, List())
+  }
+  def getRelease(mod: BVar, handle: BExpr): BMethodInvoke = {
+    BMethodInvoke(mod, lockRelName, List(handle))
+  }
+
+  private val memHandleName = "MemId"
+  private val defaultMemHandleSize = 2
+  def getDefaultMemHandleType: BSizedType = getMemHandleType(defaultMemHandleSize)
+  def getMemHandleType(sz: Integer): BSizedType = {
+    BSizedType(memHandleName, List(sz))
+  }
+
+  private val asyncMemType = "AsyncMem"
+  private val asyncMemMod = "mkAsyncMem"
+  private val combMemName = "CombMem"
+  private val combMemMod = "mkCombMem"
+
+  def getIdParam(name: String): BTypeParam = BTypeParam(name + "Id")
+  def getMemType(isAsync: Boolean, addr: BSVType, data: BSVType, id:Option[BSVType]): BInterface = {
+    if (isAsync) {
+      val idtyp = if (id.isDefined) {
+        id.get
+      } else {
+        getIdParam("unkownMem")
+      }
+      BInterface(asyncMemType,
+        List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("idtyp", idtyp)))
+    } else {
+      BInterface(combMemName,  List(BVar("elemtyp", data), BVar("addrtyp", addr)))
+    }
+  }
+
+  def getMem(memtyp: BInterface): BModule = {
+    memtyp.name match {
+      case `asyncMemType` => BModule(asyncMemMod, List())
+      case `combMemName` => BModule(combMemMod, List())
+      case _ => throw UnexpectedBSVType(s"${memtyp.name} is not an supported memory interface")
+    }
+  }
+  private val memCombReadName = "read"
+  private val memCombWriteName = "write"
+
+  private val memAsyncPeekName = "peekResp"
+  private val memAsyncReqName = "req"
+  private val memAsyncRespName = "resp"
+  private val memAsyncCheckName = "checkRespId"
+
+  def getMemPeek(mem: BVar): BMethodInvoke = {
+    BMethodInvoke(mem, memAsyncPeekName, List())
+  }
+  def getCombRead(mem: BVar, addr: BExpr): BMethodInvoke = {
+    BMethodInvoke(mem, memCombReadName, List(addr))
+  }
+  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
+    BMethodInvoke(mem, memCombWriteName, List(addr, data))
+  }
+  def getMemReq(mem: BVar, isWrite: Boolean, addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, BBoolLit(isWrite)))
+  }
+  def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
+    BMethodInvoke(mem, memAsyncCheckName, List(handle))
+  }
+  def getMemResp(mem: BVar): BMethodInvoke = {
+    BMethodInvoke(mem, memAsyncRespName, List())
   }
 
   /**
@@ -108,14 +194,6 @@ object BluespecInterfaces {
   private def checkHandleMethod(handletyp: BSVType): BMethodSig =
     BMethodSig(checkHandleMethodName, Value(BBool), List(BVar("handle", handletyp)))
 
-  private val combMemMod = "mkCombMem"
-  private val asyncMemMod = "mkAsyncMem"
-
-  def getMemoryModule(mtyp: BSVType): BModule = mtyp match {
-    case BCombMemType(_, _) => BModule(name = combMemMod, List())
-    case BAsyncMemType(_, _) => BModule(name = asyncMemMod, List())
-    case _ => throw UnexpectedBSVType("Not an expected memory type")
-  }
 
   def getModuleName(prog: BProgram): String = prog.topModule.name
   def getInterface(prog: BProgram): BSVType = prog.topModule.typ match {

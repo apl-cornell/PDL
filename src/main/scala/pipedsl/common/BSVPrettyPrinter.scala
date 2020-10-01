@@ -38,6 +38,8 @@ object BSVPrettyPrinter {
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
+    case BSizedType(name, sizeParams) => name + "#(" + sizeParams.map(i => i.toString).mkString(",") + ")"
+    case BTypeParam(name) => name
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -82,18 +84,6 @@ object BSVPrettyPrinter {
     case BZero => "0"
     case BOne => "1"
     case BTime => "$time()"
-    case c@BMemCheckAddr(mem, _) => mem.typ match {
-      case _:BAsyncMemType =>  toBSVExprStr(BluespecInterfaces.toMethodInvoke(c))
-      case _ => throw UnexpectedBSVType("mem peek op had bad mem type!")
-    }
-    case p@BMemPeek(mem) => mem.typ match {
-      case _:BAsyncMemType => toBSVExprStr(BluespecInterfaces.toMethodInvoke(p))
-      case _ => throw UnexpectedBSVType("mem peek op had bad mem type!")
-    }
-    case r@BMemRead(mem, _) => mem.typ match {
-      case _:BCombMemType => toBSVExprStr(BluespecInterfaces.toMethodInvoke(r))
-      case _ => throw UnexpectedBSVType("mem read op had bad mem type!")
-    }
   }
 
   def getFilePrinter(name: String): BSVPretyPrinterImpl = {
@@ -153,9 +143,6 @@ object BSVPrettyPrinter {
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) =>
         w.write(mkStatementString(toDeclString(lhs), "=", if (rhs.isDefined) toBSVExprStr(rhs.get) else "?"))
-      case r@BMemReadReq(_, _) => printBSVStatement(BExprStmt(BluespecInterfaces.toMethodInvoke(r)))
-      case r@BMemReadResp(_, _) => printBSVStatement(BExprStmt(BluespecInterfaces.toMethodInvoke(r)))
-      case w@BMemWrite(_, _, _) => printBSVStatement(BExprStmt(BluespecInterfaces.toMethodInvoke(w)))
       case BIf(cond, trueBranch, falseBranch) =>
         w.write(mkIndentedExpr("if", "(", toBSVExprStr(cond) + ")\n"))
         w.write(mkIndentedExpr("begin\n"))

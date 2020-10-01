@@ -71,7 +71,7 @@ object Syntax {
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
-      case TRequestHandle(m) => s"${}_Request"
+      case TRequestHandle(m, _) => s"${m}_Request"
       case TNamedType(n) => n.toString
     }
   }
@@ -85,7 +85,7 @@ object Syntax {
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
-  case class TRequestHandle(mod: Id) extends Type
+  case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
 
@@ -211,9 +211,14 @@ object Syntax {
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
-  case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
-  case class IMemRecv(mem: Id, addr: EVar, data: Option[EVar]) extends InternalCommand
-  case class ICheckLock(mem: Id) extends InternalCommand
+  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
+  case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand
+  //used for sequential memories that don't commit writes immediately
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand
+  case class ICheckLockFree(mem: Id) extends InternalCommand
+  case class ICheckLockOwned(mem: Id, handle: EVar) extends InternalCommand
+  case class IReserveLock(handle: EVar, mem: Id) extends InternalCommand
+  case class IReleaseLock(mem: Id, handle: EVar) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 

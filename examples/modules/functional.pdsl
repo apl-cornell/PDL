@@ -23,11 +23,12 @@ pipe mult(d1: int<32>, d2: int<32>)[]: int<32> {
 
 pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult] {
      acquire(inputs);
+     reserve(outputs);
      int<32> a1 <- inputs[pc];
      int<32> a2 <- inputs[pc + 1<32>];
-     release(inputs);
      call client(pc + 2<32>);
      ---
+     release(inputs);
      if (false) {
         acquire(m);
         int<32> result <- call m(a1+a1, a2);
@@ -40,6 +41,7 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
      acquire(outputs);
      outputs[0<1>] <- result;
      release(outputs);
+     ---
 }
 
 //This is a 3-stage pipeline:  read inputs -> call mult -> recv mult/ write outputs

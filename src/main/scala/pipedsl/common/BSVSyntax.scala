@@ -1,6 +1,7 @@
 package pipedsl.common
 
-import pipedsl.common.Errors.UnexpectedExpr
+import pipedsl.codegen.bsv.BluespecInterfaces
+import pipedsl.common.Errors.{UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
@@ -17,24 +18,49 @@ object BSVSyntax {
   case class BAsyncMemType(elem: BSVType, addrSize: Int) extends BSVType
   case class BStruct(name: String, fields: List[BVar]) extends BSVType
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
+  case class BSizedType(name: String, sizeParams: List[Integer] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
+  case class BTypeParam(name: String) extends BSVType
   case object BBool extends BSVType
   case object BVoid extends BSVType
   case object BEmptyModule extends BSVType
 
-  class BSVTranslator(var modmap: Map[Id, BSVType] = Map(), var handleMap: Map[Id, BSVType] = Map()) {
+  class BSVTranslator(val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map()) {
 
     private var variablePrefix = ""
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
     def toBSVType(t: Type): BSVType = t match {
-      case Syntax.TMemType(elem, addrSize, rlat, _) if rlat == Combinational => BCombMemType(toBSVType(elem), addrSize)
-      case Syntax.TMemType(elem, addrSize, _, _) => BAsyncMemType(toBSVType(elem), addrSize)
+      case Syntax.TMemType(elem, addrSize, rlat, _) =>
+        BluespecInterfaces.getMemType(isAsync = rlat != Combinational,
+          BSizedInt(unsigned = true, addrSize), toBSVType(elem),
+        Some(BluespecInterfaces.getDefaultMemHandleType))
       case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case Syntax.TBool() => BBool
       case Syntax.TModType(_, _, _, Some(n)) => modmap(n)
-      case Syntax.TRequestHandle(n) => handleMap(n)
+      case Syntax.TModType(_,_,_, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
+      case Syntax.TRequestHandle(n, isLock) =>
+        if (isLock) {
+          BluespecInterfaces.getDefaultLockHandleType
+        } else {
+          val modtyp = toBSVType(n.typ.get)
+          if (handleMap.contains(modtyp)) {
+            handleMap(modtyp)
+          } else {
+            //if not in the handle map, use the appropriate default handle size. If the
+            //handle is for a normal module then there is no default
+            n.typ.get match {
+              case _: TMemType => BluespecInterfaces.getDefaultMemHandleType
+              case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
+            }
+          }
+        }
       case Syntax.TVoid() => BVoid
+      case TNamedType(name) => BTypeParam(name.v)
+        //TODO implement function translation
+      case TFun(args, ret) => throw new RuntimeException
+        //TODO better error
+      case TRecType(name, fields) => throw new RuntimeException
     }
 
     def toBSVVar(v: BVar): BVar = {
@@ -60,7 +86,7 @@ object BSVSyntax {
       case EApp(_, _) => BIntLit(0, 10, 1)
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index) => BMemRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
+      case EMemAccess(mem, index) => BluespecInterfaces.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
       case ECast(_, _) => throw UnexpectedExpr(e)
       case _ => throw UnexpectedExpr(e)
     }
@@ -123,9 +149,6 @@ object BSVSyntax {
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
-  case class BMemRead(mem: BVar, addr: BExpr) extends BExpr
-  case class BMemPeek(mem: BVar) extends BExpr
-  case class BMemCheckAddr(mem: BVar, addr: BExpr) extends BExpr
 
   sealed trait BStatement
 
@@ -138,9 +161,6 @@ object BSVSyntax {
   case class BInvokeAssign(lhs: BVar, rhs: BExpr) extends BStatement
   case class BDecl(lhs: BVar, rhs: Option[BExpr]) extends BStatement
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
-  case class BMemReadReq(mem: BVar, addr: BExpr) extends BStatement
-  case class BMemReadResp(lhs: BVar, mem: BVar) extends BStatement
-  case class BMemWrite(mem: BVar, addr: BExpr, data: BExpr) extends BStatement
   case class BDisplay(fmt: String, args: List[BExpr]) extends BStatement
   case object BEmpty extends BStatement
 

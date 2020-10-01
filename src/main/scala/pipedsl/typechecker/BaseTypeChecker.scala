@@ -388,8 +388,9 @@ object BaseTypeChecker extends TypeChecks[Type] {
     }
     case ECall(mod, args) => {
       val mtyp = tenv(mod)
+      mod.typ = Some(mtyp)
       mtyp match {
-        case TModType(inputs, refs, retType, _) => {
+        case TModType(inputs, _, retType, _) => {
           if (inputs.length != args.length) {
             throw ArgLengthMismatch(e.pos, inputs.length, args.length)
           }

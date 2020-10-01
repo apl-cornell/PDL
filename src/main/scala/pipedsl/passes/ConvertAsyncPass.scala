@@ -2,7 +2,7 @@ package pipedsl.passes
 
 import pipedsl.common.Syntax._
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Errors.UnexpectedExpr
+import pipedsl.common.Errors.{UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
 
@@ -30,6 +30,10 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
       //only take the send parts of the receives. Calls only have a send part
       newRecvs.map(t => t._1) ++ newCalls
     stg.setCmds(newCmds)
+    //Nowhere to put the receive statements!!
+    if (newRecvs.nonEmpty && stg.outEdges.isEmpty) {
+      throw new RuntimeException("invalid pipeline graph!!! Missing final stage")
+    }
     stg.outEdges.foreach(e => {
       val nstg = e.to
       val nrecvs = if (e.condRecv.isDefined) {
@@ -45,14 +49,22 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
     (c.lhs, c.rhs) match {
         //Mem Read
       case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) =>
-        val send = IMemSend(isWrite = false, mem, None, index)
-        val recv = IMemRecv(mem, index, Some(lhs))
+        val handle = freshMessage(mem)
+        val send = IMemSend(handle, isWrite = false, mem, None, index)
+        val recv = IMemRecv(mem, handle, Some(lhs))
         (send, recv)
       //Mem Write
-      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) =>
-        val send = IMemSend(isWrite = true, mem, Some(data), index)
-        val recv = IMemRecv(mem, index, None)
-        (send, recv)
+      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => mem.typ.get match {
+        case TMemType(_, _, _, Latency.Asynchronous) =>
+          val handle = freshMessage(mem)
+          val send = IMemSend(handle, isWrite = true, mem, Some(data), index)
+          val recv = IMemRecv(mem, handle, None)
+          (send, recv)
+          //if the memory is sequential we don't use handle since it
+          //is assumed to complete at the end of the cycle
+        case TMemType(_, _, _, _) => (IMemWrite(mem, index, data), CEmpty)
+        case _ => throw UnexpectedType(mem.pos, "Memory Write Statement", "Memory Type", mem.typ.get)
+      }
       //module calls
       case (lhs@EVar(_), call@ECall(_, _)) =>
         val send = convertCall(call)
@@ -68,7 +80,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         //should be unreachable if the SimplifyRecv pass was executed
       case _ => throw UnexpectedExpr(c)
     })
-    val msghandle = freshMessage
+    val msghandle = freshMessage(c.mod)
     ISend(msghandle, c.mod, arglist)
   }
 
@@ -90,9 +102,9 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
     })
   }
 
-  private def freshMessage: EVar = {
+  private def freshMessage(m: Id): EVar = {
     val res = EVar(Id("_request_" + msgCount))
-    res.typ = Some(TRequestHandle(modName))
+    res.typ = Some(TRequestHandle(m, isLock = false))
     res.id.typ = res.typ
     msgCount += 1
     res

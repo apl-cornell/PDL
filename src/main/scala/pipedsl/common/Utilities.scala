@@ -74,8 +74,10 @@ object Utilities {
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case ISpeculate(s, svar, _) => Set(s, svar.id)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
+    case IMemSend(handle, _, _, _, _) => Set(handle.id)
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
+    case IReserveLock(handle, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -112,13 +114,16 @@ object Utilities {
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
     case ISpeculate(_,_, value) => getUsedVars(value)
-    case IMemSend(_, _, data, addr) =>
+    case IMemSend(_, _, _, data, addr) =>
       if (data.isDefined) {
         Set(data.get.id, addr.id)
       } else Set(addr.id)
-    case IMemRecv(_, addr, _) => Set(addr.id)
+    case IMemRecv(_, handle, _) => Set(handle.id)
+    case IMemWrite(_, addr, data) => Set(addr.id, data.id)
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
+    case ICheckLockOwned(_, handle) => Set(handle.id)
+    case IReleaseLock(_, handle) => Set(handle.id)
     case _ => Set()
   }
 
@@ -223,7 +228,7 @@ object Utilities {
   }
 
   implicit class RichOption[A](opt: Option[A]) {
-    def getOrThrow[T <: Throwable](except: T) = opt match {
+    def getOrThrow[T <: Throwable](except: T): A = opt match {
       case Some(v) => v
       case None => throw except
     }

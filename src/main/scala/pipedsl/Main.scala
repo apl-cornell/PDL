@@ -49,8 +49,9 @@ object Main {
     //Run the transformation passes on the stage representation
     val optstageInfo = stageInfo map { case (n, stgs) =>
       new ConvertAsyncPass(n).run(stgs)
-      AddEdgeValuePass.run(stgs)
       LockOpTranslationPass.run(stgs)
+      //Must be done after all passes that introduce new variables
+      AddEdgeValuePass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
       val newstgs = CollapseStagesPass.run(stgs)
       PrettyPrinter.printStageGraph(n.v, newstgs)
