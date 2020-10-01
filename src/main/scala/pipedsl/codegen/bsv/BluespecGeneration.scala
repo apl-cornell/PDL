@@ -638,6 +638,8 @@ object BluespecGeneration {
       case IReserveLock(handle, _) => Some(
         BDecl(translator.toBSVVar(handle), None)
       )
+      case IMemSend(handle, _, _, _, _) =>
+        Some(BDecl(translator.toBSVVar(handle), None))
       case _ => None
     }
 
