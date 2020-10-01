@@ -81,9 +81,9 @@ object BluespecGeneration {
       case CirExprStmt(CirCall(m, args)) =>
         val freshVar = BVar("_unused_" + freshCnt, modToHandle(env(m).typ))
         freshCnt += 1
-        List(BDecl(freshVar, Some(
-          BluespecInterfaces.getModRequest(env(m), args.map(a => translator.toBSVExpr(a)))
-        )))
+        List(BDecl(freshVar, None),
+          BInvokeAssign(freshVar, BluespecInterfaces.getModRequest(env(m), args.map(a => translator.toBSVExpr(a)))
+        ))
       case _ => List() //TODO if/when memories can be initialized it goes here
     }
 
