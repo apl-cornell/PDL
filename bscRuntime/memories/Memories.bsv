@@ -44,7 +44,7 @@ module mkCombMem(CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr,
 
 endmodule
 
-typedef struct { Bool isWrite, a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
+typedef struct { Bool isWrite; a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
 //Todo build like..a real memory here on BRAMS or something
 module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
@@ -70,8 +70,8 @@ module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, 
     endmethod
 
      method Action resp();
-        if (reqs.first.isWrite) rf.upd(reqs.first.addr, reqs.first.data)
-        reqs.deq();
+        if (reqs.first.isWrite) rf.upd(reqs.first.addr, reqs.first.data);
+	reqs.deq();
      endmethod
 
 endmodule
