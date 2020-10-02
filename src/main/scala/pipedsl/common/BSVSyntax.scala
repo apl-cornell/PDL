@@ -91,9 +91,10 @@ object BSVSyntax {
       case _ => throw UnexpectedExpr(e)
     }
 
+    //TODO handle this better
     def translateCast(e: ECast): BExpr = {
       e.ctyp match {
-        case TBool() => BUnpack(BPack(toBSVExpr(e.exp)))
+        case TBool() => toBSVExpr(e.exp)
         case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
           "TBool", e.ctyp)
       }
