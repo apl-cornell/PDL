@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.BSVSyntax._
+import BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.Syntax._
@@ -329,7 +329,8 @@ object BluespecGeneration {
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.getCmds)
       val debugStmt = if (debug) {
-        BDisplay(mod.name.v + ":Executing Stage " + stg.name + " %t", List(BTime))
+        BDisplay(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t",
+          List(translator.toBSVVar(threadIdVar), BTime))
       } else BEmpty
       BRuleDef( genParamName(stg) + "_execute", blockingConds,
         writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
@@ -679,9 +680,8 @@ object BluespecGeneration {
             data.map(e => translator.toBSVExpr(e)))
       ))
       //This is an effectful op b/c is modifies the mem queue its reading from
-      case IMemRecv(mem: Id, _: EVar, _: Option[EVar]) => {
+      case IMemRecv(mem: Id, _: EVar, _: Option[EVar]) =>
         Some(BExprStmt(BluespecInterfaces.getMemResp(modParams(mem))))
-      }
       case IMemWrite(mem, addr, data) => Some(
         BExprStmt(
           BluespecInterfaces.getCombWrite(modParams(mem), translator.toBSVExpr(addr), translator.toBSVExpr(data))

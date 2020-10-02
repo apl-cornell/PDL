@@ -1,7 +1,7 @@
 package pipedsl
 
 import com.typesafe.scalalogging.Logger
-import common.{BSVPrettyPrinter, MemoryInputParser, PrettyPrinter}
+import common.{MemoryInputParser, PrettyPrinter}
 import java.io.File
 import java.nio.file.Files
 
@@ -9,7 +9,7 @@ import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStag
 import typechecker.{BaseTypeChecker, LockChecker, SpeculationChecker, TimingTypeChecker}
 import common.Utilities._
 import pipedsl.codegen.bsv.BluespecGeneration.{BluespecModuleGenerator, BluespecProgramGenerator}
-import pipedsl.codegen.bsv.BluespecGeneration
+import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecGeneration}
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.Id
 

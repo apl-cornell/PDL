@@ -1,8 +1,8 @@
-package pipedsl.common
+package pipedsl.codegen.bsv
 
 import java.io.{FileOutputStream, OutputStreamWriter, Writer}
 
-import pipedsl.common.BSVSyntax._
+import pipedsl.codegen.bsv.BSVSyntax._
 import pipedsl.common.Errors.BaseError
 
 object BSVPrettyPrinter {
@@ -35,7 +35,7 @@ object BSVPrettyPrinter {
     case BVoid => "void"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
-    case BAsyncMemType(elem, addrSize) =>"AsyncMem#(" + toBSVTypeStr(elem) + "," +
+    case BAsyncMemType(elem, addrSize) => "AsyncMem#(" + toBSVTypeStr(elem) + "," +
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BSizedType(name, sizeParams) => name + "#(" + sizeParams.map(i => i.toString).mkString(",") + ")"
     case BTypeParam(name) => name
@@ -51,22 +51,26 @@ object BSVPrettyPrinter {
 
   private def toBSVExprStr(expr: BExpr): String = expr match {
     case BTernaryExpr(cond, trueex, falseex) => mkExprString("(", toBSVExprStr(cond), "?",
-      toBSVExprStr(trueex), ":", toBSVExprStr(falseex),")")
-    case BBoolLit(v) => if (v) { "True" } else { "False" }
+      toBSVExprStr(trueex), ":", toBSVExprStr(falseex), ")")
+    case BBoolLit(v) => if (v) {
+      "True"
+    } else {
+      "False"
+    }
     case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
     case BStructLit(typ, fields) =>
       val fieldStr = fields.keys.map(k => {
         mkExprString(toBSVExprStr(k), ":", toBSVExprStr(fields(k)))
       }).mkString(",")
-      mkExprString(typ.name, "{",  fieldStr, "}")
+      mkExprString(typ.name, "{", fieldStr, "}")
     case BPack(e) => mkExprString("pack(", toBSVExprStr(e), ")")
     case BUnpack(e) => mkExprString("unpack(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
     case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
-      //TODO incorporate bit types into the typesystem properly
-      //and then remove the custom pack/unpack operations
+    //TODO incorporate bit types into the typesystem properly
+    //and then remove the custom pack/unpack operations
     case BBitExtract(expr, start, end) => mkExprString(toBSVExprStr(expr),
       "[", end.toString, ":", start.toString, "]"
     )
@@ -99,9 +103,11 @@ object BSVPrettyPrinter {
     private def indent(): String = {
       " " * curIndent
     }
+
     private def incIndent(): Unit = {
       curIndent += indentSize
     }
+
     private def decIndent(): Unit = {
       curIndent -= indentSize
     }
@@ -109,6 +115,7 @@ object BSVPrettyPrinter {
     private def mkIndentedExpr(strs: String*): String = {
       indent() + strs.mkString(" ")
     }
+
     private def mkStatementString(strs: String*): String = {
       indent() + strs.mkString(" ") + ";\n"
     }
@@ -177,7 +184,7 @@ object BSVPrettyPrinter {
       w.write(mkIndentedExpr("endrule\n"))
     }
 
-    def printBSVMethodSig(sig: BMethodSig , cond: Option[BExpr]): Unit = {
+    def printBSVMethodSig(sig: BMethodSig, cond: Option[BExpr]): Unit = {
       val mtypstr = sig.typ match {
         case Action => "Action"
         case Value(t) => toBSVTypeStr(t)
@@ -186,7 +193,9 @@ object BSVPrettyPrinter {
       val paramstr = sig.params.map(p => toDeclString(p)).mkString(", ")
       val condstr = if (cond.isDefined) {
         mkExprString("if(", toBSVExprStr(cond.get), ")")
-      } else { "" }
+      } else {
+        ""
+      }
       w.write(mkStatementString("method", mtypstr, sig.name, "(", paramstr, ")", condstr))
     }
 
@@ -251,4 +260,5 @@ object BSVPrettyPrinter {
       w.flush()
     }
   }
+
 }

@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.BSVSyntax._
+import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
 
 object BluespecInterfaces {
