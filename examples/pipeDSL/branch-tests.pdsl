@@ -44,7 +44,7 @@ pipe test3(input: int<32>)[] {
 }
 
 pipe test4(input: int<32>)[] {
-    if (input{0:0} == 1) {
+    if (cast (input{0:0}, bool)) {
         if (input{1:1} == 0) {
             int<2> x = 0<2>;
         } else {

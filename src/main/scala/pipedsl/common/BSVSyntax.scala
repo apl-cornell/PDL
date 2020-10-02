@@ -78,7 +78,7 @@ object BSVSyntax {
       case EBool(v) => BBoolLit(v)
       case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
       case eb@EBinop(_,_,_) => toBSVBop(eb)
-      case EBitExtract(num, start, end) => BBitExtract(toBSVExpr(num), start, end)
+      case EBitExtract(num, start, end) => BUnpack(BBitExtract(BPack(toBSVExpr(num)), start, end))
       case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
       case e@EVar(_) => toBSVVar(e)
       //TODO functions
@@ -87,13 +87,21 @@ object BSVSyntax {
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index) => BluespecInterfaces.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
-      case ECast(_, _) => throw UnexpectedExpr(e)
+      case ec@ECast(_, _) => translateCast(ec)
       case _ => throw UnexpectedExpr(e)
+    }
+
+    def translateCast(e: ECast): BExpr = {
+      e.ctyp match {
+        case TBool() => BUnpack(BPack(toBSVExpr(e.exp)))
+        case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
+          "TBool", e.ctyp)
+      }
     }
 
     //TODO a better way to translate operators
     def toBSVBop(b: EBinop): BExpr = b.op match {
-      case BitOp("++", _) => BConcat(toBSVExpr(b.e1), List(toBSVExpr(b.e2)))
+      case BitOp("++", _) => BUnpack(BConcat(BPack(toBSVExpr(b.e1)), List(BPack(toBSVExpr(b.e2)))))
       case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
     }
   }
@@ -137,6 +145,8 @@ object BSVSyntax {
   case object BZero extends BExpr
   case object BOne extends BExpr
   case object BTime extends BExpr
+  case class BPack(e: BExpr) extends BExpr
+  case class BUnpack(e: BExpr) extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr

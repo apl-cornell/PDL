@@ -438,8 +438,6 @@ object BluespecGeneration {
       body ++ getCombinationalDeclarations(stg.getCmds) ++ getCombinationalCommands(stg.getCmds)
     }
 
-    //TODO add in the module parameters into the definition w/ appropriate types
-    //TODO define the top level module interface based on the declaration
     private def getTopModule: BModuleDef = {
       //Body instantiates all of the params (fifos & memories) and then all of the stages
       //One fifo per edge in the graph

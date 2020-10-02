@@ -2,9 +2,8 @@ package pipedsl.common
 
 import java.io.{FileOutputStream, OutputStreamWriter, Writer}
 
-import pipedsl.codegen.bsv.BluespecInterfaces
 import pipedsl.common.BSVSyntax._
-import pipedsl.common.Errors.{BaseError, UnexpectedBSVType}
+import pipedsl.common.Errors.BaseError
 
 object BSVPrettyPrinter {
 
@@ -60,20 +59,22 @@ object BSVPrettyPrinter {
         mkExprString(toBSVExprStr(k), ":", toBSVExprStr(fields(k)))
       }).mkString(",")
       mkExprString(typ.name, "{",  fieldStr, "}")
+    case BPack(e) => mkExprString("pack(", toBSVExprStr(e), ")")
+    case BUnpack(e) => mkExprString("unpack(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
     case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
       //TODO incorporate bit types into the typesystem properly
       //and then remove the custom pack/unpack operations
-    case BBitExtract(expr, start, end) => mkExprString(
-      "unpack(", "pack(", toBSVExprStr(expr), ")", "[", end.toString, ":", start.toString, "]" ,")"
+    case BBitExtract(expr, start, end) => mkExprString(toBSVExprStr(expr),
+      "[", end.toString, ":", start.toString, "]"
     )
     case BConcat(first, rest) =>
-      val exprstr = rest.foldLeft[String]("pack(" + toBSVExprStr(first) + ")")((s, e) => {
-        s + ", " + "pack(" + toBSVExprStr(e) + ")"
+      val exprstr = rest.foldLeft[String](toBSVExprStr(first))((s, e) => {
+        s + ", " + toBSVExprStr(e)
       })
-      mkExprString( "unpack({", exprstr, "})")
+      mkExprString("{", exprstr, "}")
     case BModule(name, args) =>
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
