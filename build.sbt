@@ -2,6 +2,9 @@ name := "PipeDSL"
 version := "0.0.1"
 scalaVersion := "2.13.2"
 
+Compile / unmanagedJars += {
+  baseDirectory.value / "unmanaged" / "scalaz3-mac-x64-2.13.jar"
+}
 
 libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "3.0.8" % "test",
