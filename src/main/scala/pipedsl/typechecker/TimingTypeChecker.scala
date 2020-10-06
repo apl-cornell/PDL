@@ -17,17 +17,17 @@ import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, join
  *   "receive" statement rather than a normal assign or other combinational expression.
  * - Ensures that no pipeline splitting operations are conducted inside an if statement
  */
-object TimingTypeChecker extends TypeChecks[Type] {
+object TimingTypeChecker extends TypeChecks[Id, Type] {
 
   type Available = Set[Id]
   val NoneAvailable: Available = Set[Id]()
 
-  override def emptyEnv(): Environment[Type] = Environments.EmptyTypeEnv
+  override def emptyEnv(): Environment[Id, Type] = Environments.EmptyTypeEnv
 
   //Functions are combinational, this is checked in their well-formedness check
-  override def checkFunc(f: FuncDef, env: Environment[Type]): Environment[Type] = env
+  override def checkFunc(f: FuncDef, env: Environment[Id, Type]): Environment[Id, Type] = env
 
-  override def checkModule(m: ModuleDef, env: Environment[Type]): Environment[Type] = {
+  override def checkModule(m: ModuleDef, env: Environment[Id, Type]): Environment[Id, Type] = {
     val inputs = m.inputs.foldLeft[Available](NoneAvailable)((av,p) => {
       av + p.name
     })
@@ -168,6 +168,6 @@ object TimingTypeChecker extends TypeChecks[Type] {
     case _ => Combinational
   }
   //No timing in the circuit, just connections
-  override def checkCircuit(c: Circuit, env: Environment[Type]): Environment[Type] = env
+  override def checkCircuit(c: Circuit, env: Environment[Id, Type]): Environment[Id, Type] = env
 
 }
