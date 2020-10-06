@@ -22,7 +22,7 @@ object Main {
         config.mode match {
           case "parse" => parse(debug = true, printOutput = true, config.out, config.file)
           case "interpret" => interpret(config.out, config.maxIterations, config.memoryInput, config.file)
-          case "gen" => gen(config.out, config.file, config.printStageGraph)
+          case "gen" => gen(config.out, config.file, config.printStageGraph, config.debug)
         }
       case _ =>
     }
@@ -73,11 +73,11 @@ object Main {
     }
   }
 
-  def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false): Unit = {
+  def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false): Unit = {
     val prog = parse(debug = false, printOutput = false, outDir, inputFile)
     val prog_recv = runPasses(prog)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, debug)
     //ensure directory exists
     outDir.mkdirs()
     bsvgen.getBSVPrograms.foreach(p => {

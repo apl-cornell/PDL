@@ -32,6 +32,9 @@ object CommandLineParser {
         opt[Unit]("printStages")
           .action((_, c) => c.copy(printStageGraph = true))
           .text("Print the dot representation of the generated pipelines to stdout"),
+        opt[Unit]("debug")
+          .action((_, c) => c.copy(debug = true))
+          .text("Add debug commands to the generated circuit"),
         arg[File]("<file>...")
           .required()
           .action((x, c) => c.copy(file = x))
