@@ -21,18 +21,28 @@ pipe mult(d1: int<32>, d2: int<32>)[]: int<32> {
 
 //This is an example client that might use the multiplier.
 
-pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult]: () {
+pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult] {
      acquire(inputs);
+     reserve(outputs);
      int<32> a1 <- inputs[pc];
-     int<32> a2 <- inputs[pc + 1<32>];
-     release(inputs);
-     call client(pc + 2<32>);
+     call client(pc + 1<32>);
      ---
-     int<32> result <- call mult(a1, a2);
+     int<32> a2 <- inputs[pc + 1<32>];
+     ---
+     release(inputs);
+     if (cast (pc{0:0}, bool)) {
+        acquire(m);
+        int<32> result <- call m(a1+a1, a2);
+        release(m);
+        ---
+     } else {
+        int<32> result = 10<32>;
+     }
      ---
      acquire(outputs);
-     outputs[pc] <- result;
+     outputs[0<1>] <- result;
      release(outputs);
+     ---
 }
 
 //This is a 3-stage pipeline:  read inputs -> call mult -> recv mult/ write outputs
@@ -46,27 +56,27 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
 
 
 //Now let's consider a pipeline where this is called in multiple conditional paths
-
-pipe multiclient(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult]: () {
+/*
+pipe multiclient(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult] {
      acquire(inputs);
      call multiclient(pc + 2<32>);
      if (pc{0:0} == 0<1>) {
         int<32> a1 <- inputs[pc];
         release(inputs);
      	---
-	int<32> result <- call mult(a1, a1);
+	    int<32> result <- call mult(a1, a1);
      } else {
         int<32> a2 <- inputs[pc + 1<32>];
 	release(inputs);
         ---
-        int<32> result <- call mult(a2, a2);
+        int<32> result <- call mult(a2+a2, a2);
      }
      ---
      acquire(outputs);
      outputs[pc] <- result;
      release(outputs);
 }
-
+*/
 //Now we need to reason about ordering of the calls to `mult`.
 //In theory both of the stages that `call mult` can be running in parallel.
 //There is currently no way to resolve which one should execute first and therefore
@@ -86,6 +96,13 @@ pipe multiclient(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>
      int<32> result <- mult(..);
   }
   release(mult);
-
 */
 
+
+circuit {
+   m = new mult[];
+   ins = memory(int<32>, 32);
+   outs = memory(int<32>, 1);
+   p = new client[ins, outs, m];
+   call p(0<32>);
+}

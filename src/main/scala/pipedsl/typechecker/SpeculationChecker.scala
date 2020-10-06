@@ -47,14 +47,14 @@ object SpeculationChecker extends TypeChecks[Type] {
       } else {
         specVarsT
       }
-    case CRecv(lhs, _) => (lhs) match {
-      case (EMemAccess(_, _)) if specVars.nonEmpty =>
+    case CRecv(lhs, _) => lhs match {
+      case EMemAccess(_, _) if specVars.nonEmpty =>
         throw UnresolvedSpeculation(lhs.pos, "Memory Write")
       case _ => specVars
     }
-    case COutput(_) => throw UnresolvedSpeculation(c.pos, "Module Output")
+    case COutput(_) if specVars.nonEmpty => throw UnresolvedSpeculation(c.pos, "Module Output")
     case CLockOp(_, _) => specVars
-    case CSpeculate(predVar, _, verify, body) => {
+    case CSpeculate(predVar, _, verify, body) =>
       val specVarsVerify = checkCommand(verify, specVars, modIsSpec)
       val specVarsWithPred = predVar.id +: specVars
       val specVarsSpec = checkCommand(body, specVarsWithPred, modIsSpec)
@@ -62,12 +62,11 @@ object SpeculationChecker extends TypeChecks[Type] {
         throw MismatchedSpeculationState(c.pos)
       }
       specVarsVerify
-    }
     case CCheck(predVar) => specVars match {
       case v :: tail if v == predVar=> tail
       case _ => throw AlreadyResolvedSpeculation(c.pos)
     }
-    case CCall(_, _) => if (!modIsSpec && specVars.nonEmpty)
+    case CExpr(ECall(_, _)) => if (!modIsSpec && specVars.nonEmpty)
         throw UnresolvedSpeculation(c.pos, "pipeline call statement")
       else
         specVars

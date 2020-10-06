@@ -2,8 +2,8 @@ package pipedsl.typechecker
 
 import Environments._
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockModification, IllegalLockRelease, UnexpectedCase}
-import pipedsl.common.Locks.LockState._
+import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockRelease, UnexpectedCase}
+import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 
 /**
@@ -23,12 +23,12 @@ object LockChecker extends TypeChecks[LockState] {
   override def checkModule(m: ModuleDef, env: Environment[LockState]): Environment[LockState] = {
     val nenv = m.modules.foldLeft[Environment[LockState]](env)( (e, m) => m.typ match {
       case TMemType(_, _, _, _) => e.add(m.name, Free)
-      case TModType(_, _) => e.add(m.name, Free)
+      case TModType(_, _, _, _) => e.add(m.name, Free)
       case _ => throw UnexpectedCase(m.pos)
     })
     val finalenv = checkCommand(m.body, nenv)
     //At end of execution all acquired or reserved locks must be released
-    finalenv.getMappedIds().foreach(id => {
+    finalenv.getMappedIds.foreach(id => {
       finalenv(id).matchOrError(m.pos, id.v, Released) { case Free | Released => () }
     })
     env //no change to lock map after checking module
@@ -55,12 +55,12 @@ object LockChecker extends TypeChecks[LockState] {
       val envfree = env.filter(Free)
       val ltfree = lt.filter(Free)
       //All locks that were Free before T branch but aren't anymore
-      val ltacq = envfree -- ltfree.getMappedIds()
+      val ltacq = envfree -- ltfree.getMappedIds
       val lffree = lf.filter(Free)
       //All locks that were Free before F branch but aren't anymore
-      val lfacq = envfree -- lffree.getMappedIds()
+      val lfacq = envfree -- lffree.getMappedIds
       //If any locks were newly acquired/reserved in both branches, error
-      if (ltacq.getMappedIds().intersect(lfacq.getMappedIds()).nonEmpty) {
+      if (ltacq.getMappedIds.intersect(lfacq.getMappedIds).nonEmpty) {
         throw IllegalLockAcquisition(c.pos)
       }
       //Merge matching states, merge Free|Released states to Released, error others
@@ -73,7 +73,7 @@ object LockChecker extends TypeChecks[LockState] {
       checkCommand(body, env) //speculative body must check in the original env
       val lfinal = checkCommand(body, lverif) //but final is as if executing in serial
       val lfinalrel = lfinal.filter(Released)
-      if (lvrel.getMappedIds() != lfinalrel.getMappedIds()) {
+      if (lvrel.getMappedIds != lfinalrel.getMappedIds) {
         throw IllegalLockRelease(body.pos);
       }
       lfinal
@@ -85,6 +85,7 @@ object LockChecker extends TypeChecks[LockState] {
     case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem,_), _) => env(mem).matchOrError(lhs.pos, mem.v, Acquired) { case Acquired => env }
         case (_, EMemAccess(mem,_)) => env(mem).matchOrError(rhs.pos, mem.v, Acquired) { case Acquired => env }
+        case (_, ECall(mod,_)) => env(mod).matchOrError(rhs.pos, mod.v, Acquired) { case Acquired => env }
         case _ => throw UnexpectedCase(c.pos)
       }
     case CLockOp(mem, op) => env.add(mem, op) //logic inside the lock environment class

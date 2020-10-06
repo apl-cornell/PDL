@@ -2,7 +2,7 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
-import pipedsl.common.Locks.LockState.LockState
+import pipedsl.common.Locks.LockState
 
 
 object Syntax {
@@ -70,7 +70,9 @@ object Syntax {
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
-      case TModType(ins, refs) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
+      case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
+      case TRequestHandle(m, _) => s"${m}_Request"
+      case TNamedType(n) => n.toString
     }
   }
   // Types that can be upcast to Ints
@@ -82,7 +84,10 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
-  case class TModType(inputs: List[Type], refs: List[Type]) extends Type
+  case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
+  case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
+  //This is primarily used for parsing and is basically just a type variable
+  case class TNamedType(name: Id) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -106,6 +111,7 @@ object Syntax {
         case "!" => Some(!v1.asInstanceOf[Boolean])
         case _ => None
       }
+      case _ => throw new UnsupportedOperationException
     }
   }
   
@@ -170,6 +176,7 @@ object Syntax {
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
+  case class ECall(mod: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
@@ -186,7 +193,7 @@ object Syntax {
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CCall(id: Id, args: List[Expr]) extends Command
+
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
@@ -202,11 +209,16 @@ object Syntax {
   case class ISpeculate(specId: Id, specVar: EVar, value: EVar) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
-  case class ISend(handle: EVar, receiver: EVar, args: List[EVar]) extends InternalCommand
-  case class IRecv(handle: EVar, sender: EVar, result: EVar) extends InternalCommand
-  case class IMemSend(isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
-  case class IMemRecv(mem: Id, data: Option[EVar]) extends InternalCommand
-  case class ICheckLock(mem: Id) extends InternalCommand
+  case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
+  case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
+  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
+  case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand
+  //used for sequential memories that don't commit writes immediately
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand
+  case class ICheckLockFree(mem: Id) extends InternalCommand
+  case class ICheckLockOwned(mem: Id, handle: EVar) extends InternalCommand
+  case class IReserveLock(handle: EVar, mem: Id) extends InternalCommand
+  case class IReleaseLock(mem: Id, handle: EVar) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 
@@ -221,7 +233,8 @@ object Syntax {
   case class ModuleDef(
     name: Id,
     inputs: List[Param],
-    modules: List[Param], //TODO external module connections
+    modules: List[Param],
+    ret: Option[Type],
     body: Command) extends Definition
 
   case class Param(name: Id, typ: Type) extends Positional
@@ -234,9 +247,11 @@ object Syntax {
   sealed trait Circuit extends Positional
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
   case class CirConnect(name: Id, c: CirExpr) extends Circuit
+  case class CirExprStmt(ce: CirExpr) extends Circuit
 
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
-  case class CirNew(mod: Id, inits: List[Expr], mods: List[Id]) extends CirExpr
+  case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
+  case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }

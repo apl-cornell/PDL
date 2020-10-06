@@ -1,44 +1,13 @@
 package pipedsl.common
 
 import pipedsl.common.Syntax._
-import scala.reflect.api.Position
-import scala.util.parsing.input.Positional
 
-//TODO better name
-/*
+/**
  * This file contains syntax for the intermediate language which
  * explicitly represents pipeline stages and connections between those stages.
  * This corresponds to the language with concurrent execution semantics.
  */
 object DAGSyntax {
-
-  private def channelName(from:Id, to:Id): Id = {
-    Id(s"${from.v}_to_${to.v}")
-  }
-
-  case class Channel(s: Id, r: Id) {
-    val name: Id = channelName(s, r)
-    val sender: Id = s
-    val receiver: Id = r
-  }
-
-
-  sealed abstract class Process(n: Id) {
-    val name: Id = n
-  }
-
-  sealed trait StageCommand extends Positional
-
-  case class SAssign(lhs: Expr, rhs: Expr) extends StageCommand
-  case class SIf(cond: Expr, cons: List[StageCommand], alt: List[StageCommand]) extends StageCommand
-  case class SCall(id: Id, args: List[Expr]) extends StageCommand
-  case class SReceive(g: Option[Expr], into: EVar, s: Channel) extends StageCommand
-  case class SSend(g: Option[Expr], from: EVar, d: Channel) extends StageCommand
-  case class STermStage(g: Option[Expr], vals: List[EVar], dest: List[PStage]) extends StageCommand
-  case class SOutput(exp: Expr) extends StageCommand
-  case class SReturn(exp: Expr) extends StageCommand
-  case class SExpr(exp: Expr) extends StageCommand
-  case object SEmpty extends StageCommand
 
   case class PipelineEdge(condSend: Option[Expr], condRecv: Option[Expr],
     from: PStage, to:PStage, values: Set[Id] = Set())
@@ -47,9 +16,15 @@ object DAGSyntax {
     PipelineEdge(e.condSend, e.condRecv, e.from, e.to, e.values ++ vals)
   }
 
+  sealed abstract class Process(n: Id) {
+    val name: Id = n
+  }
+
   /**
-   *
-   * @param n
+   * The representation of a processing stage. Each stage
+   * will execute in a single cycle and is connected to other
+   * stages via edgges that are realized as Registers or FIFOs.
+   * @param n The identifier for this stage; these should be unique.
    */
   class PStage(n:Id) extends Process(n) {
 
@@ -66,20 +41,33 @@ object DAGSyntax {
     }
 
     //Set of combinational commands
-    var cmds: List[Command] = List()
-    //Successors for dataflow based computation. This encodes all dataflow dependencies.
+    private var cmds: List[Command] = List()
+
+    def getCmds: List[Command] = cmds
+
+    /**
+     *  The successors for dataflow based computation. This encodes all dataflow dependencies.
+     * @return A set of stages that immediately succeede this one.
+     */
     def succs: Set[PStage] = {
       edges.filter(e => e.from == this).map(e => e.to)
     }
-    //Successors for dataflow based computation. This encodes all dataflow dependencies.
+    /**
+     * The predecessors for dataflow based computation. This encodes all dataflow dependencies.
+     * @return A set of stages that immediately precede this one.
+     */
     def preds: Set[PStage] = {
       edges.filter(e => e.to == this).map(e => e.from)
     }
 
     /**
-     *
-     * @param other
-     * @param condSend
+     * This modifies this stage and other in place, adding a communication edge
+     * from this one to other. We need both conditional sending and receiving,
+     * since sometimes data is sent conditionally but always read if it ever appears,
+     * or vice versa.
+     * @param other The stage to add an edge to.
+     * @param condSend Some(c) if this stage only conditionally sends data to other
+     * @param condRecv Some(c) if other only conditionally receives data from this
      */
     def addEdgeTo(other: PStage, condSend: Option[Expr] = None, condRecv: Option[Expr] = None,
         vals: Set[Id] = Set()): Unit = {
@@ -88,8 +76,10 @@ object DAGSyntax {
     }
 
     /**
-     *
-     * @param edge
+     * This modifies this stage in place by addinge edge to the edge set.
+     * Whichever stage is on the other end of edge also has edge added to its edge set.
+     * Use this only if edge actually refers to this in either its from or to fields.
+     * @param edge The new edge to add.
      */
     def addEdge(edge: PipelineEdge): Unit = {
       val other = if (edge.to == this) { edge.from } else { edge.to }
@@ -97,12 +87,25 @@ object DAGSyntax {
       other.edges = other.edges + edge
     }
 
+    /**
+     * Overwrite the existing edge set for this stage. Every edge
+     * in edges should have this as either its from or to field.
+     * This correctly deletes existing edges and adds the new edges
+     * so that the other stages in the graph are updated consistently.
+     * @param edges The new set of edges to replace the old set.
+     */
     def setEdges(edges: Set[PipelineEdge]): Unit = {
       val toRemove = this.edges
       toRemove.foreach(e => this.removeEdge(e))
       edges.foreach(e => this.addEdge(e))
     }
 
+    /**
+     * Remove a given edge from the stage graph.
+     * This updates both this stage and the connected stage.
+     * This stage must be referenced by the to or from fields of edge.
+     * @param edge The edge to remove.
+     */
     def removeEdge(edge: PipelineEdge): Unit = {
       val other = if (edge.to == this) { edge.from } else { edge.to }
       this.edges = this.edges - edge
@@ -110,9 +113,10 @@ object DAGSyntax {
     }
 
     /**
-     *
-     * @param other
-     * @return
+     * Removes all edges from this to other.
+     * This consistently updates both this stage and other to reflect the changes.
+     * @param other The stage to disconnect from this one
+     * @return The set of edges that were removed.
      */
     def removeEdgesTo(other: PStage): Set[PipelineEdge] = {
       other.edges = other.edges.filter(e => e.from != this)
@@ -122,11 +126,27 @@ object DAGSyntax {
     }
 
     /**
-     *
-     * @param cmd
+     * Adds a command to the end of this stage's command list.
+     * @param cmd The Command to add
      */
     def addCmd(cmd: Command): Unit = {
       this.cmds = this.cmds :+ cmd
+    }
+
+    /**
+     * Adds a list of commands to the end of this stage's command list.
+     * @param cmds The Commands to add
+     */
+    def addCmds(cmds: Iterable[Command]): Unit = {
+      this.cmds = this.cmds ++ cmds
+    }
+
+    /**
+     * Overwrite the existing commands with the new list.
+     * @param cmds The new commands to overwrite with.
+     */
+    def setCmds(cmds: Iterable[Command]): Unit = {
+      this.cmds = cmds.toList
     }
   }
 

@@ -2,7 +2,8 @@ package pipedsl.common
 
 import scala.util.parsing.input.Position
 import Syntax._
-import pipedsl.common.Locks.LockState.LockState
+import pipedsl.common.Locks.LockState
+
 object Errors {
   def withPos(s: String, pos: Position, postMsg: String = "") =
     s"[${pos.line}.${pos.column}] $s\n${pos.longString}\n${postMsg}"

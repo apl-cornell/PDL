@@ -38,5 +38,6 @@ circuit {
     total = regfile(int<32>, 1);
     memA = memory(int<32>, 8);
     memB = memory(int<32>, 8);
-    s = new sum(0<8>)[memA, memB, total];
+    s = new sum[memA, memB, total];
+    call s(0<8>);
 }

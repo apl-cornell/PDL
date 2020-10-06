@@ -9,6 +9,14 @@ object TypeChecker {
 
     def emptyEnv(): Environment[T]
 
+    /**
+     * Given a program and an optional current envrionment mapping IDs to some type
+     * information [[T]], check the program in that environment and
+     * produce a new type environment
+     * @param p The program to check
+     * @param env The current type environment
+     * @return The new type environment
+     */
     def check(p: Prog, env: Option[Environment[T]]): Environment[T] = {
       val Prog(fdefs, mdefs, cir) = p
       val senv = env match { case Some(e) => e; case None => emptyEnv() }

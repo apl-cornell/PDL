@@ -3,6 +3,7 @@ package pipedsl
 import java.io.{FileOutputStream, OutputStreamWriter}
 
 import pipedsl.common.Errors
+import pipedsl.common.Errors.UnexpectedExpr
 import pipedsl.common.Syntax._
 
 import scala.collection.immutable
@@ -68,6 +69,17 @@ class Interpreter(val maxIterations: Int) {
             }
             interp_function(func, newEnv)
         }
+        case ECall(id, args) => {
+            var newEnv = new immutable.HashMap[Id, Any]()
+            val moddef = modules(id)
+            for (index <- 0 until args.length) {
+                //add arguments to new environment that will be used for the new module execution
+                newEnv = newEnv + (moddef.inputs(index).name -> interp_expr(args(index), env))
+            }
+            moduleCalls = moduleCalls.enqueue(_ => interp_module(moddef, newEnv))
+            //TODO only have this behavior for recursive calls; otherwise return a value
+            env
+        }
         case ex => throw Errors.UnexpectedExpr(ex)
     }
     
@@ -103,7 +115,6 @@ class Interpreter(val maxIterations: Int) {
             }
         }
         case CRecv(lhs, rhs) => {
-            //TODO values available next cycle
             val rval = interp_expr(rhs, env)
             lhs match {
                 case EVar(id) => {
@@ -121,6 +132,7 @@ class Interpreter(val maxIterations: Int) {
                     memoryEnv = memoryEnv + (mem -> memArray)
                     env
                 }
+                case _ => throw UnexpectedExpr(lhs)
             }
         }
         case CExpr(exp) => {
@@ -134,16 +146,6 @@ class Interpreter(val maxIterations: Int) {
         case CReturn(exp) => {
             val r = interp_expr(exp, env)
             env + (Id("__RETURN__") -> r)
-        }
-        case CCall(id, args) => {
-            var newEnv = new immutable.HashMap[Id, Any]()
-            val moddef = modules(id)
-            for (index <- 0 until args.length) {
-                //add arguments to new environment that will be used for the new module execution 
-                newEnv = newEnv + (moddef.inputs(index).name -> interp_expr(args(index), env))
-            }
-            moduleCalls = moduleCalls.enqueue(_ => interp_module(moddef, newEnv))
-            env
         }
         case _ => env
     }

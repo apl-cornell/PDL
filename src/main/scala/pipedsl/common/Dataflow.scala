@@ -1,9 +1,9 @@
 package pipedsl.common
 
 import DAGSyntax._
-import Syntax.{Id}
+import Syntax.Id
 import Utilities._
-import pipedsl.common.Locks.LockState._
+import pipedsl.common.Locks._
 
 object Dataflow {
 
@@ -78,7 +78,7 @@ object Dataflow {
    * @return The set of variables used in *p* and later in the pipeline.
    */
    def transferUsedVars(p: PStage, used: Set[Id]): Set[Id] = {
-    getUsedVars(p.cmds) ++ used -- getWrittenVars(p.cmds)
+    getUsedVars(p.getCmds) ++ used -- getWrittenVars(p.getCmds)
     //if a var was written this stage, then we don't need to send it from the prior stage
   }
 

@@ -22,7 +22,7 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
 
   def addEdgeValues(stg: PStage, usedIns: DFMap[Set[Id]]): Unit = {
     stg match {
-      case s: IfStage => {
+      case s: IfStage =>
         val choiceEdge = PipelineEdge(None, None, s, s.joinStage, Set(s.condVar.id))
         val newOutEdges = s.outEdges.map(e => {
           addValues(usedIns(e.to.name), e)
@@ -30,8 +30,7 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
         s.setEdges(s.inEdges ++ newOutEdges + choiceEdge)
         s.trueStages.foreach(st => addEdgeValues(st, usedIns))
         s.falseStages.foreach(sf => addEdgeValues(sf, usedIns))
-      }
-      case s: SpecStage => {
+      case s: SpecStage =>
         //Split input of join stage into two sets of inputs to be expected
         //current split algo is send everything from verify, except outputs only produced by spec
 
@@ -52,12 +51,10 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
         val specEdge = PipelineEdge(None, None, s, s.specStages.head, specUsedIns(s.specStages.head.name))
         val verifEdge = PipelineEdge(None, None,  s, s.verifyStages.head, verifUsedIns(s.verifyStages.head.name))
         s.setEdges(s.inEdges + specEdge + verifEdge)
-      }
-      case _ => {
+      case _ =>
         stg.setEdges(stg.outEdges.map(edge => {
           PipelineEdge(edge.condSend, edge.condRecv, edge.from, edge.to, usedIns(edge.to.name))
         }) ++ stg.inEdges)
-      }
     }
   }
 }
