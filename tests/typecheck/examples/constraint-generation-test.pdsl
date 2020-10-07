@@ -1,0 +1,43 @@
+pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, dmem: int<32>[32]<a,a>] {
+    acquire(imem[pc]);
+    int<32> insn <- imem[pc];
+    release(imem[pc]);
+    ---
+    int<2> op = insn{3:2};
+    int<5> rs1 = insn{4:0};
+    int<5> rs2 = rs1;
+    int<5> rd = rs2;
+    int<13> imm = insn{31:19};
+    acquire(rf);
+    int<32> arg1 = rf[rs1];
+    int<32> arg2 = rf[rs2];
+  
+    bool r = arg1 == arg2;
+    
+    bool a = true;
+    
+    bool b = false;
+    
+    bool c = (a) ? true : false;
+    
+    if (rs1 == 1<5>) {
+        int<5> rs = 2<5>;
+    } else {
+        int<5> rs = 2<5>;
+    }
+    if (rs2 == rs2) {
+        int<5> rs0 = 2<5>;
+    } else {
+        int<5> rs0 = 3<5>;
+    }
+    ---
+    release(rf);
+    call cpu(pc + 1<32>);
+}
+
+circuit {
+    i = memory(int<32>, 32);
+    d = memory(int<32>, 32);
+    r = regfile(int<32>, 5);
+    c = new cpu(0<32>)[r, i, d];
+}
