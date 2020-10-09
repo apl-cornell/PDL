@@ -3,7 +3,8 @@ package Memories;
 import RegFile :: *;
 import FIFOF :: *;
 import SpecialFIFOs :: *;
-
+import BRAMCore::*;
+import DReg :: *;
 
 export CombMem(..);
 export AsyncMem(..);
@@ -45,7 +46,6 @@ module mkCombMem(CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr,
 endmodule
 
 typedef struct { Bool isWrite; a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
-//Todo build like..a real memory here on BRAMS or something
 module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
     Reg#(MemId#(inflight)) nextId <- mkReg(0);
@@ -75,5 +75,171 @@ module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, 
      endmethod
 
 endmodule
+
+//SizedReg is totally stolen from the BSC source library (BRAM.bsv) - its just not an exported interface/module
+//////////////////////////////////////////////////////////////////////////////////
+// SizedReg allow an elaboration time argument to determine the register width.
+// However, the method are limited to compile time arguments.
+// This interface allows a hard set,  2 concurrent add ports, and various compare
+// value methods.
+//Not exported
+interface SizedReg ;
+   method Action _write (Integer i);
+   method Action addA (Integer i);
+   method Action addB (Integer d);
+   method Bool isLessThan (Integer i);
+   method Bool isGreaterThan (Integer i);
+   method Bool isEqualTo (Integer i);
+endinterface
+
+//Not exported
+module mkSizedReg (Integer maxVal, Integer initialVal, SizedReg ifc);
+   SizedReg _ifc = ? ;
+   if (maxVal < 2)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(2) '(fromInteger(initialVal)) );
+   else if (maxVal < 4)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(3) '(fromInteger(initialVal)) );
+   else if (maxVal < 8)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(4) '(fromInteger(initialVal)) );
+   else if (maxVal < 16)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(5) '(fromInteger(initialVal)) );
+   else if (maxVal < 32)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(6) '(fromInteger(initialVal)) );
+   else if (maxVal < 64)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(7) '(fromInteger(initialVal)) );
+   else if (maxVal < 128)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(8) '(fromInteger(initialVal)) );
+   else if (maxVal < 256)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(9) '(fromInteger(initialVal)) );
+   else if (maxVal < 512)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(10) '(fromInteger(initialVal)) );
+   else if (maxVal < 1024)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(11) '(fromInteger(initialVal)) );
+   else if (maxVal < 2*1024)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(12) '(fromInteger(initialVal)) );
+   else if (maxVal < 4*1024)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(13) '(fromInteger(initialVal)) );
+   else if (maxVal < 8*1024)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(14) '(fromInteger(initialVal)) );
+   else if (maxVal < 16*1024)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(15) '(fromInteger(initialVal)) );
+   else if (maxVal < 32*1024)
+      (*hide*)
+      _ifc <- mkSizedRegInt(Int#(16) '(fromInteger(initialVal)) );
+   else
+      _ifc = error ("Sized Register is too big: " + fromInteger (maxVal) );
+   return _ifc;
+endmodule
+
+//Not exported
+// scheduling is should be forced so that (read, is*) SB (addA, addB) SB  write
+module mkSizedRegInt (a init, SizedReg ifc)
+   provisos (Bits#(a,sa),
+             Arith#(a),
+             Eq#(a),
+             Ord#(a) );
+
+   (*hide*)
+   Reg#(a) _cnt <- mkReg(init);
+   (*hide*)
+   RWire#(a)  _adda <- mkRWire ;
+   (*hide*)
+   RWire#(a)  _addb <- mkRWire ;
+   (*hide*)
+   RWire#(a)  _fwrite <- mkRWire ;
+
+   rule finalAdd ( isValid(_adda.wget) || isValid (_addb.wget) || isValid(_fwrite.wget) ) ;
+      if (_fwrite.wget matches tagged Valid .w) begin
+         _cnt <= w;
+      end
+      else begin
+         a va = fromMaybe (0, _adda.wget);
+         a vb = fromMaybe (0, _addb.wget);
+         _cnt <= _cnt + va + vb ;
+      end
+   endrule
+
+   method Action _write (Integer i);
+      _fwrite.wset (fromInteger(i));
+   endmethod
+   method Action addA (Integer i);
+      _adda.wset (fromInteger(i));
+   endmethod
+   method Action addB (Integer i);
+      _addb.wset (fromInteger(i));
+   endmethod
+   method Bool isLessThan (Integer i) ;
+      return _cnt < fromInteger (i);
+   endmethod
+   method Bool isGreaterThan (Integer i) ;
+      return _cnt > fromInteger (i);
+   endmethod
+   method Bool isEqualTo (Integer i) ;
+      return _cnt == fromInteger (i);
+   endmethod
+endmodule
+
+
+//this is a wrapper for a bram module with exactly 1 cycle latency
+module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+   
+   Reg#(elem) r <- mkReg(unpack(0));
+   
+   let memSize = 2 ** valueOf(szAddr);
+   let hasOutputReg = False;
+   BRAM_PORT #(addr, elem) memory <- mkBRAMCore1(memSize, hasOutputReg);
+   
+   let outDepth = valueOf(inflight);
+   FIFOF#(elem) outData <- mkSizedBypassFIFOF(outDepth);
+   FIFOF#(MemId#(inflight)) outReqs <- mkSizedBypassFIFOF(outDepth);
+   
+   Reg#(MemId#(inflight)) curId <- mkReg(0);
+   SizedReg cnt <- mkSizedReg(outDepth, 0); //sizedreg lets us increment and decrement in the same cycle if necessary
+   Bool okToRequest = cnt.isLessThan (outDepth);
+   Reg#(Bool) dataReady <- mkDReg(False);
+   
+   rule moveToOutFifo (dataReady);
+      outData.enq(memory.read);
+   endrule
+   
+   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite) if (okToRequest);
+      memory.put(isWrite, a, b);
+      curId <= curId + 1;
+      cnt.addA(+1);
+      outReqs.enq(curId);
+      dataReady <= True;
+      return curId;
+   endmethod
+   
+   method elem peekResp();
+      return outData.first();
+   endmethod
+   
+   method Bool checkRespId(MemId#(inflight) a);
+      return outData.notEmpty() && outReqs.first() == a;
+   endmethod
+   
+   method Action resp();
+      outReqs.deq();
+      outData.deq();
+      cnt.addB(-1);
+   endmethod
+endmodule
+
+
 
 endpackage
