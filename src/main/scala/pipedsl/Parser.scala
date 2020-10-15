@@ -76,9 +76,9 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val simpleAtom: P[Expr] = positioned {
     "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |
-    not ~ expr ^^ { case n ~ e => EUop(n, e) } |
-    cast |
-    memAccess |
+      not ~ expr ^^ { case n ~ e => EUop(n, e) } |
+      cast |
+      memAccess |
       bitAccess |
       recAccess |
       ternary |
@@ -146,17 +146,17 @@ class Parser extends RegexParsers with PackratParsers {
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r)
       } |
-    check |
-    "return" ~> expr ^^ (e => CReturn(e)) |
-    "output" ~> expr ^^ (e => COutput(e)) |
+      check |
+      "acquire" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired)} |
+      "reserve" ~> parens(lockArg) ^^ { i => CLockOp(i, Reserved)} |
+      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released)} |
+      "return" ~> expr ^^ (e => CReturn(e)) |
+      "output" ~> expr ^^ (e => COutput(e)) |
       expr ^^ (e => CExpr(e))
-    "acquire" ~> parens(lockArg) ^^ { l => CLockOp(l, Acquired)} |
-    "reserve" ~> parens(lockArg) ^^ { l => CLockOp(l, Reserved)} |
-    "release" ~> parens(lockArg) ^^ { l => CLockOp(l, Released)} 
   }
   
-  lazy val lockArg: P[LockArg] = positioned {
-    iden ~ brackets(variable).? ^^ {case i ~ e => LockArg(i, e)}
+  lazy val lockArg: P[LockArg] = positioned { 
+    iden ~ brackets(variable).? ^^ {case i ~ v => LockArg(i, v)}
   }
 
   lazy val blockCmd: P[Command] = positioned {
@@ -196,13 +196,13 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val seqCmd: P[Command] = {
     simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
-    blockCmd ~ seqCmd ^^ { case c1 ~ c2 => CSeq(c1, c2) } |
+      blockCmd ~ seqCmd ^^ { case c1 ~ c2 => CSeq(c1, c2) } |
       simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty }
   }
 
   lazy val cmd: P[Command] = positioned {
     seqCmd ~ "---" ~ cmd ^^ { case c1 ~ _ ~ c2 => CTBar(c1, c2) } |
-    seqCmd
+      seqCmd
   }
 
   lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }

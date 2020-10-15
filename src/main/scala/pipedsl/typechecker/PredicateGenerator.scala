@@ -78,18 +78,14 @@ class PredicateGenerator(ctx: Z3Context) {
     }
     case _ => None
   }
-    
   def declareConstant(evar: EVar): Z3AST = 
     evar.typ match {
       case Some(value) => value match {
         case Syntax.TSizedInt(len, unsigned) => ctx.mkIntConst(evar.id.v); 
-        case Syntax.TVoid() => throw new RuntimeException("")
         case Syntax.TBool() => println(evar); ctx.mkBoolConst(evar.id.v)
-        case Syntax.TFun(args, ret) => throw new RuntimeException("")
-        case Syntax.TRecType(name, fields) => throw new RuntimeException("")
         case Syntax.TMemType(elem, addrSize, readLatency, writeLatency) => ctx.mkConst(evar.id.v, array)
-        case Syntax.TModType(inputs, refs) => throw new RuntimeException("")
+        case _ => throw new RuntimeException("Unexpected type")
       }
-      case None => throw new RuntimeException("")
+      case None => throw new RuntimeException("Missing type")
     } 
 }
