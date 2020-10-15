@@ -16,6 +16,9 @@ object Syntax {
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
+    sealed trait RecursiveAnnotation {
+      var isRecursive: Boolean = true
+    }
     sealed trait SpeculativeAnnotation {
       var maybeSpec: Boolean = false
     }
@@ -235,7 +238,7 @@ object Syntax {
     inputs: List[Param],
     modules: List[Param],
     ret: Option[Type],
-    body: Command) extends Definition
+    body: Command) extends Definition with RecursiveAnnotation
 
   case class Param(name: Id, typ: Type) extends Positional
 

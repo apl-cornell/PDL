@@ -353,7 +353,7 @@ object BluespecGeneration {
           l :+ BluespecInterfaces.getCheckMemResp(modParams(mem), translator.toBSVVar(handle))
         case IRecv(handle, sender, _) =>
           l :+ BluespecInterfaces.getModCheckHandle(modParams(sender), translator.toBSVExpr(handle))
-        case COutput(_) => List(busyReg)
+        case COutput(_) => if (mod.isRecursive) List(busyReg) else List()
         case _ => l
       })
     }
@@ -464,21 +464,18 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, BluespecInterfaces.getFifo)
       val threadInst = BModInst(BVar(threadIdName, BluespecInterfaces.getRegType(getThreadIdType)),
         BluespecInterfaces.getReg(BZero))
-      val stmts = (edgeFifos.values.toList ++ memLocks.values.toList
-        :+ busyInst
-        :+ outputInst
-        :+ threadInst) ++ stgStmts
+      var stmts: List[BStatement] = edgeFifos.values.toList ++ memLocks.values.toList
+      if (mod.isRecursive) stmts = stmts :+ busyInst
+      stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()
       val reqMethodDef = BMethodDef(
         sig = BluespecInterfaces.getRequestMethod(modInterfaceDef),
-        cond = Some(BUOp("!", busyReg)),
+        cond = if (mod.isRecursive) Some(BUOp("!", busyReg)) else None,
         //send input data (arguments to this method) to pipeline
         body = getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges) :+
-          //And set busy status to true
-          //TODO, don't use this when the module doesn't have recursive calls
-          // (since it's ok to pipeline separate requests in that case)
-          BModAssign(busyReg, BBoolLit(true)) :+
+          //And set busy status to true if recursive
+          (if (mod.isRecursive) BModAssign(busyReg, BBoolLit(true)) else BEmpty) :+
           //increment thread id
           BModAssign(threadIdVar, BBOp("+", threadIdVar, BOne)) :+
           //and return the one being used by this request
@@ -710,7 +707,8 @@ object BluespecGeneration {
           BStructLit(outputQueueElem, Map(outputStructHandle -> translator.toBSVVar(threadIdVar)))
         }
         Some(BStmtSeq(List(
-          BModAssign(busyReg, BBoolLit(false)), //we're done processing the current request
+          //we're done processing the current request
+          if (mod.isRecursive) BModAssign(busyReg, BBoolLit(false)) else BEmpty,
           //place the result in the output queue
           BExprStmt(BluespecInterfaces.getFifoEnq(outputQueue, outstruct))
         )))

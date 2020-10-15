@@ -118,20 +118,41 @@ object TimingTypeChecker extends TypeChecks[Type] {
   }
 
   def checkExpr(e: Expr, vars: Available, isRhs: Boolean = true): Latency = e match {
-    case EUop(_, e) => checkExpr(e, vars, isRhs)
+    case EUop(_, e) => checkExpr(e, vars, isRhs) match {
+      case Combinational => Combinational
+      case _ => throw UnexpectedAsyncReference(e.pos, e.toString)
+    }
     case EBinop(_, e1, e2) =>
-      join(checkExpr(e1, vars, isRhs), checkExpr(e2, vars, isRhs))
-    case ERecAccess(rec, _) => checkExpr(rec, vars, isRhs)
+      (checkExpr(e1, vars, isRhs), checkExpr(e2, vars, isRhs)) match {
+        case (Combinational, Combinational) => Combinational
+        case (Combinational, _) => throw UnexpectedAsyncReference(e2.pos, e2.toString)
+        case (_, Combinational) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
+      }
+    case ERecAccess(rec, _) => checkExpr(rec, vars, isRhs) match {
+      case Combinational => Combinational
+      case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
+    }
     case EMemAccess(m, index) => m.typ.get match {
       case TMemType(_, _, rLat, wLat) =>
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)
-        join(indexExpr, memLat)
+        indexExpr match {
+          case Combinational => memLat
+          case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
+        }
       case _ => throw UnexpectedType(m.pos, m.v, "Mem Type", m.typ.get)
     }
-    case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs)
+    case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs) match {
+      case Combinational => Combinational
+      case _ => throw UnexpectedAsyncReference(num.pos, num.toString)
+    }
     case ETernary(cond, tval, fval) =>
-      join(join(checkExpr(cond, vars, isRhs), checkExpr(tval, vars, isRhs)), checkExpr(fval, vars, isRhs))
+      (checkExpr(cond, vars, isRhs), checkExpr(tval, vars, isRhs), checkExpr(fval, vars, isRhs)) match {
+        case (Combinational, Combinational, Combinational) => Combinational
+        case (_, Combinational, Combinational) => throw UnexpectedAsyncReference(cond.pos, cond.toString)
+        case (_, _, Combinational) => throw UnexpectedAsyncReference(tval.pos, tval.toString)
+        case _ => throw UnexpectedAsyncReference(fval.pos, fval.toString)
+      }
     case EApp(_, args) =>
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)

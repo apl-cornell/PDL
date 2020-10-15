@@ -3,7 +3,7 @@ package pipedsl
 import java.io.File
 import java.nio.file.Files
 
-import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertAsyncPass, LockOpTranslationPass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
+import passes.{AddEdgeValuePass, BindModuleTypes, CanonicalizePass, CollapseStagesPass, ConvertAsyncPass, LockOpTranslationPass, MarkNonRecursiveModulePass, RemoveTimingPass, SimplifyRecvPass, SplitStagesPass}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import com.typesafe.scalalogging.Logger
 import pipedsl.codegen.bsv.BSVPrettyPrinter
@@ -51,6 +51,7 @@ object Main {
     val basetypes = BaseTypeChecker.check(canonProg, None)
     val nprog = new BindModuleTypes(basetypes).run(canonProg)
     TimingTypeChecker.check(nprog, Some(basetypes))
+    MarkNonRecursiveModulePass.run(nprog)
     val recvProg = SimplifyRecvPass.run(nprog)
     LockChecker.check(recvProg, None)
     SpeculationChecker.check(recvProg, Some(basetypes))
