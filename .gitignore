@@ -5,4 +5,7 @@
 .idea
 *.bo
 *.sched
+*.parse
+*.typecheck
+*.interpret
 testOutputs/*

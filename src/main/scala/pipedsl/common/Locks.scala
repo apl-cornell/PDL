@@ -38,7 +38,8 @@ object Locks {
   def transferLockStates(node: PStage, instates: Map[Id, LockState]): Map[Id, LockState] = {
     var newMap = instates
     node.getCmds.foreach {
-      case CLockOp(mem, op) => newMap = newMap.updated(mem, op)
+      //TODO Unique locks update
+      case CLockOp(mem, op) => newMap = newMap.updated(mem.id, op)
       case _ => ()
     }
     newMap

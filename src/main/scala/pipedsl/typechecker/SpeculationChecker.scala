@@ -5,15 +5,15 @@ import Environments._
 import pipedsl.common.Errors.{AlreadyResolvedSpeculation, MismatchedSpeculationState, UnresolvedSpeculation}
 import pipedsl.common.Syntax._
 
-object SpeculationChecker extends TypeChecks[Type] {
+object SpeculationChecker extends TypeChecks[Id, Type] {
 
-  override def emptyEnv(): Environment[Type] = EmptyTypeEnv
+  override def emptyEnv(): Environment[Id, Type] = EmptyTypeEnv
 
   //No Speculation in Functions
-  override def checkFunc(f: FuncDef, env: Environment[Type]): Environment[Type] = env
+  override def checkFunc(f: FuncDef, env: Environment[Id, Type]): Environment[Id, Type] = env
 
 
-  override def checkModule(m: ModuleDef, env: Environment[Type]): Environment[Type] = {
+  override def checkModule(m: ModuleDef, env: Environment[Id, Type]): Environment[Id, Type] = {
     val canBeSpec: List[Id] = m.inputs.foldLeft(List[Id]())((l, in) => {
       if (in.typ.maybeSpec) l :+ in.name else l
     })
@@ -73,5 +73,5 @@ object SpeculationChecker extends TypeChecks[Type] {
     case _ => specVars
   }
 
-  override def checkCircuit(c: Circuit, env: Environment[Type]): Environment[Type] = env
+  override def checkCircuit(c: Circuit, env: Environment[Id, Type]): Environment[Id, Type] = env
 }

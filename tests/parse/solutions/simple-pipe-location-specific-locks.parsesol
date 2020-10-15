@@ -1,0 +1,59 @@
+def alu(arg1:int<32>,arg2:int<32>,op:int<2>):int<32>{
+  if ( op == 1<2> ) {
+      return arg1 + arg2;
+      
+  } else {
+      if ( op == 2<2> ) {
+          return arg1 >> arg2;
+          
+      } else {
+          if ( op == 3<2> ) {
+              return arg1 - arg2;
+              
+          } else {
+              return arg1 * arg2;
+              
+          }
+      }
+  }
+  
+}
+pipe cpu(pc:int<32>)[rf:int<32>[5]<c, s>,imem:int<32>[32]<a, a>,dmem:int<32>[32]<a, a>] {
+  acquire(imem[pc]);
+  int<32> insn <- imem[pc];
+  release(imem[pc]);
+  
+  ---
+  int<2> op_type = insn{1:0};
+  int<2> op = insn{3:2};
+  int<5> rs1 = insn{8:4};
+  int<5> rs2 = insn{13:9};
+  int<5> rd = insn{18:14};
+  int<13> imm = insn{31:19};
+  acquire(rf[rs1]);
+  acquire(rf[rs2]);
+  int<32> arg1 = rf[rs1];
+  int<32> arg2 = rf[rs2];
+  
+  ---
+  int<7> x = imm{6:0};
+  
+  ---
+  int<32> offset = op_type == 0b0<2> && arg1 == arg2 ? 0b0<19> ++ imm : 4<32>;
+  int<32> npc = pc + offset;
+  int<32> add_arg2 = op_type == 0b1<2> ? arg2 : 0x0<19> ++ imm;
+  int<32> alu_res = alu(arg1,add_arg2,op);
+  
+  ---
+  rf[rd] <- alu_res;
+  release(rf[rs1]);
+  release(rf[rs2]);
+  call cpu(npc);
+  
+}
+circuit {
+  i = memory(int<32>,32);
+  d = memory(int<32>,32);
+  r = regfile(int<32>,5);
+  c = new cpu(0<32>)[r,i,d];
+}

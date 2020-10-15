@@ -25,9 +25,9 @@ import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 //  Normal IFC
 //  How to Check "call"s
 //  Speculation Labels
-object BaseTypeChecker extends TypeChecks[Type] {
-
-  override def emptyEnv(): Environment[Type] = Environments.EmptyTypeEnv
+object BaseTypeChecker extends TypeChecks[Id, Type] {
+  
+  override def emptyEnv(): Environment[Id,Type] = Environments.EmptyTypeEnv
 
   /**
    * This does the base type checking and well-fomedness checking for a given function with
@@ -36,9 +36,9 @@ object BaseTypeChecker extends TypeChecks[Type] {
    * @param tenv - The current type environment (which only includes already defined functions)
    * @return - tenv plus a new mapping from f's name to f's type
    */
-  def checkFunc(f: FuncDef, tenv: Environment[Type]): Environment[Type] = {
+  override def checkFunc(f: FuncDef, tenv: Environment[Id, Type]): Environment[Id, Type] = {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
-    val fenv = f.args.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
+    val fenv = f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
     val ftyp = TFun(typList, f.ret)
     val e1 = checkCommand(f.body, fenv)
     val rt = checkFuncWellFormed(f.body, e1)
@@ -59,8 +59,8 @@ object BaseTypeChecker extends TypeChecks[Type] {
    * @param tenv The current type environment (mapping from names to types)
    * @return Some(return type) if the analyzed command returns a value or None other wise
    */
-  private def checkFuncWellFormed(c: Command, tenv: Environment[Type]): Option[Type] = c match {
-    case CSeq(c1, c2) =>
+  private def checkFuncWellFormed(c: Command, tenv: Environment[Id, Type]): Option[Type] = c match {
+    case CSeq(c1, c2) => {
       val r1 = checkFuncWellFormed(c1, tenv)
       val r2 = checkFuncWellFormed(c2, tenv)
       (r1, r2) match {
@@ -69,6 +69,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
         case (_, Some(_)) => r2
         case (None, None) => None
       }
+    }
     case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput =>
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     case CIf(_, cons, alt) =>
@@ -84,13 +85,14 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case _ => None
   }
 
-  def checkModule(m: ModuleDef, tenv: Environment[Type]): Environment[Type] = {
+  override def checkModule(m: ModuleDef, tenv: Environment[Id, Type]): Environment[Id, Type] = {
     //TODO disallow memories
     val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
     //TODO require memory or module types
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ replaceNamedType(p.typ, tenv) })
-    val inEnv = m.inputs.foldLeft[Environment[Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
-    val pipeEnv = m.modules.foldLeft[Environment[Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
+    val inEnv = m.inputs.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
+    val pipeEnv = m.modules.foldLeft[Environment[Id, Type]](inEnv)((env, p) =>
+      { env.add(p.name, replaceNamedType(p.typ, env)) })
     val modTyp = TModType(inputTyps, modTyps, m.ret, Some(m.name))
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
@@ -101,7 +103,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
 
   //Module parameters can't be given a proper type during parsing if they refer to another module
   //This uses module names in the type environment to lookup their already checked types
-  private def replaceNamedType(t: Type, tenv: Environment[Type]): Type = t match {
+  private def replaceNamedType(t: Type, tenv: Environment[Id, Type]): Type = t match {
     case TNamedType(name) => tenv(name)
     case _ => t
   }
@@ -141,11 +143,12 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CReturn(_) => throw UnexpectedReturn(c.pos)
     case _ => assignees
   }
-
-  override def checkCircuit(c: Circuit, tenv: Environment[Type]): Environment[Type] = c match {
-    case CirSeq(c1, c2) =>
+  
+  override def checkCircuit(c: Circuit, tenv: Environment[Id, Type]): Environment[Id, Type] = c match {
+    case CirSeq(c1, c2) => {
       val e1 = checkCircuit(c1, tenv)
       checkCircuit(c2, e1)
+    }
     case CirConnect(name, c) =>
       val (t, env2) = checkCirExpr(c, tenv)
       name.typ = Some(t)
@@ -153,7 +156,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case CirExprStmt(ce) => checkCirExpr(ce, tenv)._2
   }
 
-  private def checkCirExpr(c: CirExpr, tenv: Environment[Type]): (Type, Environment[Type]) = c match {
+  private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
     case CirMem(elemTyp, addrSize) => {
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
       c.typ = Some(mtyp)
@@ -211,7 +214,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
    * @param tenv
    * @return
    */
-  def checkCommand(c: Command, tenv: Environment[Type]): Environment[Type] = c match {
+  def checkCommand(c: Command, tenv: Environment[Id, Type]): Environment[Id, Type] = c match {
     case CSeq(c1, c2) => {
       val e2 = checkCommand(c1, tenv)
       checkCommand(c2, e2)
@@ -250,9 +253,18 @@ object BaseTypeChecker extends TypeChecks[Type] {
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
     case CLockOp(mem, _) => {
-      tenv(mem).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
+      tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case _: TModType => tenv
-        case _: TMemType => tenv
+        case memt: TMemType => {
+          if(mem.evar.isEmpty) tenv
+          else {
+            val (idxt, _) =  checkExpression(mem.evar.get, tenv)
+            idxt match {
+              case TSizedInt(l, true) if l == memt.addrSize => tenv
+              case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
+            }
+          }
+        }
       }
     }
     case CSpeculate(nvar, predval, verify, body) => {
@@ -284,7 +296,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     case _ => throw UnexpectedCommand(c)
   }
 
-  def checkExpression(e: Expr, tenv: Environment[Type]): (Type, Environment[Type]) = {
+  def checkExpression(e: Expr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = {
     val (typ, nenv) = _checkE(e, tenv);
     if (e.typ.isDefined) {
       if (e.isLVal) {
@@ -297,7 +309,7 @@ object BaseTypeChecker extends TypeChecks[Type] {
     (typ, nenv)
   }
 
-  private def _checkE(e: Expr, tenv: Environment[Type]): (Type, Environment[Type]) = e match {
+  private def _checkE(e: Expr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = e match {
     case EInt(v, base, bits) => (TSizedInt(bits, unsigned = true), tenv)
     case EBool(v) => (TBool(), tenv)
     case EUop(op, e) => {

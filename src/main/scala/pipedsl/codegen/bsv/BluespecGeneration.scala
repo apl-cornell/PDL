@@ -665,11 +665,11 @@ object BluespecGeneration {
       case CLockOp(mem, op) => op match {
         case pipedsl.common.Locks.Free => None
         case pipedsl.common.Locks.Reserved =>
-          Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(translator.toBSVVar(threadIdVar)))))
+          Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "res", List(translator.toBSVVar(threadIdVar)))))
         case pipedsl.common.Locks.Acquired =>
-          Some(BExprStmt(BMethodInvoke(lockParams(mem), "res", List(translator.toBSVVar(threadIdVar)))))
+          Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "res", List(translator.toBSVVar(threadIdVar)))))
         case pipedsl.common.Locks.Released =>
-          Some(BExprStmt(BMethodInvoke(lockParams(mem), "rel", List(translator.toBSVVar(threadIdVar)))))
+          Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "rel", List(translator.toBSVVar(threadIdVar)))))
       }
       case IMemSend(handle, isWrite, mem: Id, data: Option[EVar], addr: EVar) => Some(
         BInvokeAssign(translator.toBSVVar(handle),

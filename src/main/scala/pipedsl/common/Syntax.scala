@@ -168,6 +168,8 @@ object Syntax {
       this
     }
   }
+  
+  case class LockArg(id: Id, evar: Option[EVar]) extends Positional
 
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class EBool(v: Boolean) extends Expr
@@ -200,7 +202,7 @@ object Syntax {
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
-  case class CLockOp(mem: Id, op: LockState) extends Command
+  case class CLockOp(mem: LockArg, op: LockState) extends Command
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
