@@ -19,7 +19,7 @@ object TestingMain {
    * @param testInputDir the directory of the test files
    * @param testResultDir the directory of the solution files
    */
-  def test(function: (File, File) => Any, mode: String, testInputDir: File, testResultDir: File): Unit = {
+  def test(function: (File, File) => Unit, mode: String, testInputDir: File, testResultDir: File): Unit = {
     if (testInputDir.exists && testInputDir.isDirectory && 
         testResultDir.exists && testResultDir.isDirectory) {
       val files = testInputDir.listFiles().filter(_.isFile).toList

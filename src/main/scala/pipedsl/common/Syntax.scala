@@ -169,7 +169,7 @@ object Syntax {
     }
   }
   
-  case class LockArg(id: Id, expr: Option[Expr]) extends Positional
+  case class LockArg(id: Id, evar: Option[EVar]) extends Positional
 
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class EBool(v: Boolean) extends Expr

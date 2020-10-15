@@ -156,7 +156,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
   
   lazy val lockArg: P[LockArg] = positioned {
-    iden ~ brackets(expr).? ^^ {case i ~ e => LockArg(i, e)}
+    iden ~ brackets(variable).? ^^ {case i ~ e => LockArg(i, e)}
   }
 
   lazy val blockCmd: P[Command] = positioned {

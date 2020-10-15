@@ -127,5 +127,5 @@ object Errors {
 
   case class UnexpectedBSVType(msg: String) extends RuntimeException(msg)
   
-  case class DeformedLockTypes(msg: String) extends RuntimeException(msg)
+  case class MalformedLockTypes(msg: String) extends RuntimeException(msg)
 }

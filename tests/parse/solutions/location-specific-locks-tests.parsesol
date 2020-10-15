@@ -1,11 +1,12 @@
 pipe test1(input:int<32>)[mem:int<32>[5]<a, a>] {
+  int<5> rs2 = insn{13:9};
   if ( input{0:0} == 1<1> ) {
-      acquire(mem[input{0:4}]);
+      acquire(mem[rs2]);
       
   } else {
       
   }
-  release(mem[input{0:4}]);
+  release(mem[rs2]);
   
 }
 pipe test2(input:int<32>)[rf:int<32>[5]<a, a>] {

@@ -1,6 +1,6 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.DeformedLockTypes
+import pipedsl.common.Errors.MalformedLockTypes
 import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Circuit, Command, FuncDef, Id, LockArg, ModuleDef, Prog}
 
 import scala.collection.immutable
@@ -22,13 +22,12 @@ object LockWellformedChecker {
    * Checks if the program has well formed locks
    * 
    * @param p the program to be checked
-   * @throws DeformedLockTypes error if locks are not well formed         
+   * @throws MalformedLockTypes error if locks are not well formed         
    */
   def check(p:Prog) : Unit = {
+    MemLockTypeMap = new immutable.HashMap[Id, LockType]()
     val Prog(_, moddefs, _) = p
     moddefs.foreach(m => checkModule(m))
-    //Reset the map for the next program check
-    MemLockTypeMap = new immutable.HashMap[Id, LockType]()
   }
   
   private def checkModule(moduleDef: ModuleDef): Unit = {
@@ -43,13 +42,13 @@ object LockWellformedChecker {
     case CSplit(cases, default) => {cases.foreach(c => checkCommand(c.body)); checkCommand(default)}
     case CLockOp(mem, op) => {
       if (MemLockTypeMap.get(mem.id).isDefined && !MemLockTypeMap(mem.id).equals(getLockType(mem)))
-        throw DeformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
+        throw MalformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
       else MemLockTypeMap = MemLockTypeMap + (mem.id -> getLockType(mem))
     }
     case _ =>
   }
   
-  private def getLockType(lockArg: LockArg): LockType = lockArg.expr match {
+  private def getLockType(lockArg: LockArg): LockType = lockArg.evar match {
     case Some(_) => Specific()
     case None => General()
   }

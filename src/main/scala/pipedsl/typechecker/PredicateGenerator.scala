@@ -4,9 +4,8 @@ import pipedsl.common.Syntax
 import pipedsl.common.Syntax.{BoolOp, BoolUOp, CSeq, Command, EVar, EqOp, Expr}
 import z3.scala.{Z3AST, Z3Context}
 
-object ConstraintGenerator {
+class PredicateGenerator(ctx: Z3Context) {
 
-  val ctx = new Z3Context("MODEL" -> true)
   val int = ctx.mkIntSort()
   val bool = ctx.mkBoolSort()
   val array = ctx.mkArraySort(int, int)
@@ -35,7 +34,6 @@ object ConstraintGenerator {
         case (evar: EVar, None) => preCondition
         case _ => preCondition
       }
-      //TODO: Is there anything special needed for this due to stage things
       case Syntax.CRecv(lhs, rhs) => (lhs, abstractInterpExpr(rhs)) match {
         case (evar: EVar, Some(value)) => {
           val declare = ctx.mkEq(declareConstant(evar), value)
@@ -44,16 +42,7 @@ object ConstraintGenerator {
         case (evar: EVar, None) => preCondition
         case _ => preCondition
       }
-      case Syntax.CCall(id, args) => preCondition
-      case Syntax.COutput(exp) => preCondition
-      case Syntax.CReturn(exp) => preCondition
-      case Syntax.CExpr(exp) => preCondition
-      case Syntax.CLockOp(mem, op) => preCondition
-      case Syntax.CSpeculate(predVar, predVal, verify, body) => preCondition
-      case Syntax.CCheck(predVar) =>preCondition
-      case Syntax.CSplit(cases, default) =>preCondition
-      case Syntax.CEmpty => preCondition
-      case command: Syntax.InternalCommand =>preCondition
+      case _ => preCondition
     }
   
   def abstractInterpExpr(e: Expr): Option[Z3AST] = e match {
@@ -78,10 +67,6 @@ object ConstraintGenerator {
         case _ => None
       }
     }
-    case Syntax.ERecAccess(rec, fieldName) => None
-    case Syntax.ERecLiteral(fields) => None 
-    case Syntax.EMemAccess(mem, index) => None 
-    case Syntax.EBitExtract(num, start, end) => None
     case Syntax.ETernary(cond, tval, fval) => {
       val abscond = abstractInterpExpr(cond)
       val abstval = abstractInterpExpr(tval)
@@ -91,8 +76,6 @@ object ConstraintGenerator {
         case _ => None
       }
     }
-    case Syntax.EApp(func, args) => None 
-    case Syntax.ECast(ctyp, exp) => None
     case _ => None
   }
     
