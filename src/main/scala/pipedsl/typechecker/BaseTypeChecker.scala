@@ -91,7 +91,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     //TODO require memory or module types
     val modTyps = m.modules.foldLeft[List[Type]](List())((l, p) => { l :+ replaceNamedType(p.typ, tenv) })
     val inEnv = m.inputs.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
-    val pipeEnv = m.modules.foldLeft[Environment[Id, Type]](inEnv)((env, p) => { env.add(p.name, p.typ) })
+    val pipeEnv = m.modules.foldLeft[Environment[Id, Type]](inEnv)((env, p) =>
+      { env.add(p.name, replaceNamedType(p.typ, env)) })
     val modTyp = TModType(inputTyps, modTyps, m.ret, Some(m.name))
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
