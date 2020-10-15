@@ -11,6 +11,7 @@ export AsyncMem(..);
 export MemId(..);
 export mkCombMem;
 export mkAsyncMem;
+export mkLat1Mem;
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 

@@ -25,6 +25,15 @@ interface AddrLock#(type id, type addr, numeric type size);
    method ActionValue#(id) res(addr loc);
 endinterface
 
+interface BypassAddrLock#(type id, type addr, numeric type size, type elem);
+   method Bool isEmpty(addr loc);
+   method Bool owns(id tid, addr loc);
+   method Action rel(id tid, addr loc);
+   method ActionValue#(id) res(addr loc);
+   method Action commit(addr loc, elem data);
+   method elem read(addr loc);
+endinterface
+
 module mkLock(Lock#(LockId#(d)));
 
    Reg#(LockId#(d)) nextId <- mkReg(0);
