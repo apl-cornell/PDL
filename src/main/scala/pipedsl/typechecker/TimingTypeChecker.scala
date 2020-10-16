@@ -5,7 +5,7 @@ import TypeChecker.TypeChecks
 import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedSyncReference, UnexpectedType}
 import pipedsl.common.Syntax
 import Environments.Environment
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, join}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency}
 
 /**
  * - Checks that variables set by receive statements
@@ -90,6 +90,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         case (EMemAccess(_,_), EMemAccess(_,_)) => throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
         case _ => (vars, nextVars)
       }
+    case CLockStart(_) => (vars, nextVars)
+    case CLockEnd(_) => (vars, nextVars)
     case CLockOp(_, _) => (vars, nextVars)
     case CSpeculate(predVar, predVal, verify, body) =>
       if(checkExpr(predVal, vars) != Combinational) {

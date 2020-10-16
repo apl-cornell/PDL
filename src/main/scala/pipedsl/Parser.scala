@@ -147,8 +147,11 @@ class Parser extends RegexParsers with PackratParsers {
         CRecv(l, r)
       } |
       check |
-      "acquire" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired)} |
+      "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
+      "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
+      "acquire" ~> parens(lockArg) ^^ { i => CSeq(CLockOp(i, Reserved), CLockOp(i, Acquired)) } |
       "reserve" ~> parens(lockArg) ^^ { i => CLockOp(i, Reserved)} |
+      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired) } |
       "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released)} |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => COutput(e)) |

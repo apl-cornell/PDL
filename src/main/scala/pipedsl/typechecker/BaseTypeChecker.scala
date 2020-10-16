@@ -252,6 +252,16 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
+    case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+      {
+        case _: TModType => tenv
+        case _: TMemType => tenv
+      }
+    case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+      {
+        case _: TModType => tenv
+        case _: TMemType => tenv
+      }
     case CLockOp(mem, _) => {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case _: TModType => tenv

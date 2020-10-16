@@ -1,7 +1,8 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockRelease, UnexpectedCase}
+import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockRelease, InvalidLockState, UnexpectedCase}
 import pipedsl.common.Locks._
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
@@ -26,12 +27,48 @@ object LockChecker extends TypeChecks[Id, LockState] {
       case TModType(_, _, _, _) => e.add(m.name, Free)
       case _ => throw UnexpectedCase(m.pos)
     })
+    checkLockRegions(m.body, nenv)
     val finalenv = checkCommand(m.body, nenv)
     //At end of execution all acquired or reserved locks must be released
     finalenv.getMappedKeys().foreach(id => {
       finalenv(id).matchOrError(m.pos, id.v, Released) { case Free | Released => () }
     })
     env //no change to lock map after checking module
+  }
+
+  def checkLockRegions(c: Command, env: Environment[Id, LockState]): Environment[Id, LockState] = c match {
+    case CSeq(c1, c2) =>
+      val e1 = checkLockRegions(c1, env)
+      checkLockRegions(c2, e1)
+    case CTBar(c1, c2) => val e1 = checkLockRegions(c1, env)
+      checkLockRegions(c2, e1)
+    case CIf(_, cons, alt) =>
+      val lt = checkLockRegions(cons, env)
+      val lf = checkLockRegions(alt, env)
+      val envfree = env.filter(Free)
+      val ltfree = lt.filter(Free)
+      //All locks that were Free before T branch but aren't anymore
+      val ltacq = envfree -- ltfree.getMappedKeys()
+      val lffree = lf.filter(Free)
+      //All locks that were Free before F branch but aren't anymore
+      val lfacq = envfree -- lffree.getMappedKeys()
+      //If any locks were newly acquired/reserved in both branches, error
+      if (ltacq.getMappedKeys().intersect(lfacq.getMappedKeys()).nonEmpty) {
+        throw IllegalLockAcquisition(c.pos)
+      }
+      //Merge matching states, merge Free|Released states to Released, error others
+      lt.intersect(lf) //real merge logic lives inside Envrionments.LockState
+    case CLockStart(mod) => env.add(mod, Acquired)
+    case CLockEnd(mod) => env.add(mod, Released)
+      //can only reserve locks insisde of the relevant lock region
+      //other lock ops can be outside of this pass
+    case CLockOp(mem, op) if op == Reserved =>
+      if (env(mem.id) != Acquired) {
+        throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
+      }
+      env
+    case Syntax.CEmpty => env
+    case _ => env
   }
 
   def checkCommand(c: Command, env: Environment[Id, LockState]): Environment[Id, LockState] = c match {
@@ -55,7 +92,6 @@ object LockChecker extends TypeChecks[Id, LockState] {
       val envfree = env.filter(Free)
       val ltfree = lt.filter(Free)
       //All locks that were Free before T branch but aren't anymore
-
       val ltacq = envfree -- ltfree.getMappedKeys()
       val lffree = lf.filter(Free)
       //All locks that were Free before F branch but aren't anymore

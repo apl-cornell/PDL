@@ -1,5 +1,7 @@
 pipe test1(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
     acquire(rf);
+    end(rf);
     if (input{0:0} == 1) {
         rf[input{4:0}] <- input;
         ---
@@ -15,7 +17,9 @@ pipe test1(input: int<32>)[rf: int<32>[5]] {
 }
 
 pipe test2(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
     acquire(rf);
+    end(rf);
     if (input{0:0} == 1) {
         int<32> y = 4<32>;
     } else {

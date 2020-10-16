@@ -530,23 +530,29 @@ object BluespecGeneration {
     private def getCombinationalDeclarations(cmds: Iterable[Command]): List[BDecl] = {
       var result = List[BDecl]()
       var decls = Set[BVar]()
-      cmds.foreach(c => {
-        val decopt = getCombinationalDeclaration(c)
-        if (decopt.isDefined) {
-          val dec = decopt.get
-          if (!decls.contains(dec.lhs)) {
-            result = result :+ dec
-            decls = decls + dec.lhs
+      cmds.foreach {
+        case ICondCommand(_, cmds) =>
+          val nresult = getCombinationalDeclarations(cmds)
+          nresult.foreach(stmt => {
+            if (!decls.contains(stmt.lhs)) {
+              result = result :+ stmt
+              decls = decls + stmt.lhs
+            }
+          })
+        case c => val decopt = getCombinationalDeclaration(c)
+          if (decopt.isDefined) {
+            val dec = decopt.get
+            if (!decls.contains(dec.lhs)) {
+              result = result :+ dec
+              decls = decls + dec.lhs
+            }
           }
-        }
-      })
+      }
       result
     }
 
-    @tailrec
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toBSVVar(lhs), None))
-      case ICondCommand(_, cmd) => getCombinationalDeclaration(cmd)
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toBSVVar(v), None))
         case None => None
@@ -575,10 +581,14 @@ object BluespecGeneration {
     private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
       case CAssign(lhs, rhs) =>
         Some(BAssign(translator.toBSVVar(lhs), translator.toBSVExpr(rhs)))
-      case ICondCommand(cond: Expr, c: Command) => getCombinationalCommand(c) match {
-        case Some(bc) => Some(BIf(translator.toBSVExpr(cond), List(bc), List()))
-        case None => None
-      }
+      case ICondCommand(cond: Expr, cs) =>
+        val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
+          getCombinationalCommand(c) match {
+            case Some(bc) => l :+ BIf(translator.toBSVExpr(cond), List(bc), List())
+            case None => l
+          }
+        })
+        if (stmtlist.nonEmpty) Some(BStmtSeq(stmtlist)) else None
       case CExpr(exp) => Some(BExprStmt(translator.toBSVExpr(exp)))
       case IMemRecv(mem: Id, _: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toBSVVar(v), BluespecInterfaces.getMemPeek(modParams(mem))))
@@ -587,6 +597,8 @@ object BluespecGeneration {
       case IRecv(_, sender, outvar) => Some(
         BAssign(translator.toBSVVar(outvar), BluespecInterfaces.getModPeek(modParams(sender)))
       )
+      case CLockStart(_) => None
+      case CLockEnd(_) => None
       case CLockOp(_, _) => None
       case CCheck(_) => None
       case CEmpty => None
@@ -607,13 +619,28 @@ object BluespecGeneration {
     }
 
     //Helper to accumulate geteffectdecl results into a single list
-    private def getEffectDecls(cmds: Iterable[Command]): List[BStatement] = {
-      cmds.foldLeft(List[BStatement]())((l, c) => {
-        getEffectDecl(c) match {
-          case Some(bs) => l :+ bs
-          case None => l
-        }
-      })
+    private def getEffectDecls(cmds: Iterable[Command]): List[BDecl] = {
+      var result = List[BDecl]()
+      var decls = Set[BVar]()
+      cmds.foreach {
+        case ICondCommand(_, cmds) =>
+          val nresult = getEffectDecls(cmds)
+          nresult.foreach(stmt => {
+            if (!decls.contains(stmt.lhs)) {
+              result = result :+ stmt
+              decls = decls + stmt.lhs
+            }
+          })
+        case c => val decopt = getEffectDecl(c)
+          if (decopt.isDefined) {
+            val dec = decopt.get
+            if (!decls.contains(dec.lhs)) {
+              result = result :+ dec
+              decls = decls + dec.lhs
+            }
+          }
+      }
+      result
     }
 
     /**
@@ -625,9 +652,7 @@ object BluespecGeneration {
      * @param cmd - The commands to be checked
      * @return
      */
-    @tailrec
-    private def getEffectDecl(cmd: Command): Option[BStatement] = cmd match {
-      case ICondCommand(_: Expr, c: Command) => getEffectDecl(c)
+    private def getEffectDecl(cmd: Command): Option[BDecl] = cmd match {
       case ISend(handle, rec, _) => if (rec != mod.name) {
         Some(BDecl(translator.toBSVVar(handle), None))
       } else { None }
@@ -658,10 +683,14 @@ object BluespecGeneration {
      * @return Some(translation) if cmd is effectful, else None
      */
     private def getEffectCmd(cmd: Command): Option[BStatement] = cmd match {
-      case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c) match {
-        case Some(bc) => Some(BIf(translator.toBSVExpr(cond), List(bc), List()))
-        case None => None
-      }
+      case ICondCommand(cond: Expr, cs) =>
+        val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
+          getEffectCmd(c) match {
+            case Some(bc) => l :+ BIf(translator.toBSVExpr(cond), List(bc), List())
+            case None => l
+          }
+        })
+        if (stmtlist.nonEmpty) Some(BStmtSeq(stmtlist)) else None
       case CLockOp(mem, op) => op match {
         case pipedsl.common.Locks.Free => None
         case pipedsl.common.Locks.Reserved =>
@@ -718,6 +747,9 @@ object BluespecGeneration {
       case IReleaseLock(mem, handle) => Some(
         BExprStmt(BluespecInterfaces.getRelease(lockParams(mem), translator.toBSVVar(handle)))
       )
+        //TODO lock start and end
+      case CLockStart(mod) => None
+      case CLockEnd(mod) => None
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case CAssign(_, _) => None

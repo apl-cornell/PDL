@@ -81,7 +81,7 @@ object Main {
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockWellformedChecker.check(canonProg)
-      LockChecker.check(recvProg, None)
+    //  LockChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
@@ -113,6 +113,9 @@ object Main {
       AddEdgeValuePass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
       val newstgs = CollapseStagesPass.run(stgs)
+      //after merging stages we need to eliminate some lock ops that
+      //don't make sense anymore
+      LockEliminationPass.run(newstgs)
       if (printStgGraph) new PrettyPrinter(None).printStageGraph(n.v, newstgs)
       n -> newstgs
     }

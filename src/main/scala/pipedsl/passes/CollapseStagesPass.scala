@@ -81,8 +81,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
    * @param stmts The collection of commands to execute.
    */
   private def addCondStmts(stg: PStage, cond: Expr, stmts: Iterable[Command]): Unit = {
-    val condstmts = stmts.map(s => ICondCommand(cond, s))
-    stg.addCmds(condstmts)
+    stg.addCmd(ICondCommand(cond, stmts.toList))
   }
 
   /**
