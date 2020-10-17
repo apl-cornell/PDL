@@ -81,7 +81,8 @@ object Main {
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockWellformedChecker.check(canonProg)
-      LockChecker.check(recvProg, None)
+     // LockChecker.check(recvProg, None)
+      LockConstraintChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)

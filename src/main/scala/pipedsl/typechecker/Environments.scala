@@ -1,9 +1,10 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.{AlreadyBoundType, IllegalLockMerge, IllegalLockModification, IllegalTypeMerge, MissingType}
+import pipedsl.common.Errors._
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
+import z3.scala.{Z3AST, Z3Context}
 
 object Environments {
 
@@ -142,5 +143,42 @@ object Environments {
             BoolEnv(boolSet.intersect(other.getMappedKeys()))
         override def union(other: Environment[Id, Boolean]): Environment[Id, Boolean] =
             BoolEnv(boolSet.union(other.getMappedKeys()))
+    }
+    
+    case class ConditionalLockEnv(lockMap: Map[Id, Z3AST] = Map(), ctx: Z3Context) 
+      extends Environment[Id, Z3AST] {
+        override def apply(id: Id) = this.get(id).getOrThrow(MissingType(id.pos, id.v))
+        private def updateMapping(n: Id, ns: Z3AST): Environment[Id, Z3AST] = {
+            this.copy(lockMap = lockMap + (n -> ns))
+        }
+        //only allow legal lock state transitions
+        override def add(name: Id, ns: Z3AST): Environment[Id, Z3AST] = 
+            updateMapping(name, ns)
+
+        override def remove(key: Id): Environment[Id, Z3AST] = ConditionalLockEnv(lockMap - key, ctx)
+
+        override def get(name: Id): Option[Z3AST] = lockMap.get(name)
+
+        override def getMappedKeys(): Set[Id] = lockMap.keySet
+
+        override def intersect(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
+            var newMap: Map[Id, Z3AST] = Map()
+            for (key <- other.getMappedKeys()) {
+                this.get(key) match {
+                    case Some(value) => {
+                        //Just takes the and of both lock states to merge. This works because if lock state 
+                        // is unchanged from a branch, it will be "cond implies a and (not cond) implies a"
+                        val and = ctx.mkAnd(value, other(key))
+                        newMap = newMap + (key -> and)
+                    }
+                    case None => newMap = newMap + (key -> other(key))
+                }
+            }
+            this.copy(lockMap = newMap)
+        }
+
+        //This is filler code, I don't think we ever actually need this
+        override def union(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = other
+        
     }
 }
