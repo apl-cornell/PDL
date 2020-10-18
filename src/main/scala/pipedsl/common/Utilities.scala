@@ -230,6 +230,7 @@ object Utilities {
     case (None, Some(_)) => condR
   }
 
+
   implicit class RichOption[A](opt: Option[A]) {
     def getOrThrow[T <: Throwable](except: T): A = opt match {
       case Some(v) => v

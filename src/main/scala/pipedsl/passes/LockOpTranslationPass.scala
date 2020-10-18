@@ -58,7 +58,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
     stg.setCmds(notlockCmds ++ newlockcmds)
   }
 
-  private def eliminateLockRegions(stg: PStage): Unit = {
+  def eliminateLockRegions(stg: PStage): Unit = {
     //get all ids that we start or stop regions for in this stage
     val (startedRegions, endedRegions) = stg.getCmds.foldLeft(
       (Set[Id](), Set[Id]()))((s:(Set[Id], Set[Id]), c) => c match {

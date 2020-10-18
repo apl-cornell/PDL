@@ -40,6 +40,8 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
         int<32> result <- call m(a1+a1, a2);
         release(m);
         end(m);
+        int<1> zzz = 1<1>;
+        int<1> aaa = 1<1>;
         ---
      } else {
         int<32> result = 10<32>;

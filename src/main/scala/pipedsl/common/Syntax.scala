@@ -226,6 +226,8 @@ object Syntax {
   case class ICheckLockOwned(mem: Id, handle: EVar) extends InternalCommand
   case class IReserveLock(handle: EVar, mem: Id) extends InternalCommand
   case class IReleaseLock(mem: Id, handle: EVar) extends InternalCommand
+  //needed for internal compiler passes to track branches with explicitly no lockstate change
+  case class ILockNoOp(mem: Id) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 

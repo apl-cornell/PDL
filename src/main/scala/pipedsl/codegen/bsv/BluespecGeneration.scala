@@ -339,7 +339,7 @@ object BluespecGeneration {
     /**
      * If any commands could cause blocking conditions that prevent
      * the rule from running, place those here (e.g. checking if locks can be acquired)
-     *
+     * The list is treated as a conjunction of conditions.
      * @param cmds The list of commands to translate
      * @return The list of translated blocking commands
      */
@@ -354,6 +354,17 @@ object BluespecGeneration {
         case IRecv(handle, sender, _) =>
           l :+ BluespecInterfaces.getModCheckHandle(modParams(sender), translator.toBSVExpr(handle))
         case COutput(_) => if (mod.isRecursive) List(busyReg) else List()
+        case ICondCommand(cond, cs) =>
+          val condconds = getBlockingConds(cs)
+          if (condconds.nonEmpty) {
+            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
+              BBOp("&&", exp, n)
+            })
+            val newCond = BBOp("||", BUOp("!", translator.toBSVExpr(cond)), nestedConds)
+            l :+ newCond
+          } else {
+            l
+          }
         case _ => l
       })
     }
@@ -584,11 +595,11 @@ object BluespecGeneration {
       case ICondCommand(cond: Expr, cs) =>
         val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
           getCombinationalCommand(c) match {
-            case Some(bc) => l :+ BIf(translator.toBSVExpr(cond), List(bc), List())
+            case Some(bc) => l :+ bc
             case None => l
           }
         })
-        if (stmtlist.nonEmpty) Some(BStmtSeq(stmtlist)) else None
+        if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
       case CExpr(exp) => Some(BExprStmt(translator.toBSVExpr(exp)))
       case IMemRecv(mem: Id, _: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toBSVVar(v), BluespecInterfaces.getMemPeek(modParams(mem))))
@@ -686,11 +697,11 @@ object BluespecGeneration {
       case ICondCommand(cond: Expr, cs) =>
         val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
           getEffectCmd(c) match {
-            case Some(bc) => l :+ BIf(translator.toBSVExpr(cond), List(bc), List())
+            case Some(bc) => l :+ bc
             case None => l
           }
         })
-        if (stmtlist.nonEmpty) Some(BStmtSeq(stmtlist)) else None
+        if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
       case CLockOp(mem, op) => op match {
         case pipedsl.common.Locks.Free => None
         case pipedsl.common.Locks.Reserved =>
@@ -752,6 +763,7 @@ object BluespecGeneration {
       case CLockEnd(mod) => None
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
+      case _: ILockNoOp => None
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty => None
