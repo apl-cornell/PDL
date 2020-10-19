@@ -1,7 +1,6 @@
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Syntax
 import pipedsl.common.Syntax.{Command, ICondCommand, ILockNoOp}
 import pipedsl.passes.Passes.StagePass
 
@@ -16,6 +15,8 @@ object LockEliminationPass extends StagePass[List[PStage]] {
     stgs
   }
 
+  //Lock No-Ops were introduced by prior passes to track sets of
+  //possible lock states. They're no longer needed at this point.
   private def removeNops(stg: PStage): Unit = {
     stg.setCmds(stg.getCmds.foldLeft(List[Command]())((l, c) => c match {
       case ICondCommand(cond, cs) =>
