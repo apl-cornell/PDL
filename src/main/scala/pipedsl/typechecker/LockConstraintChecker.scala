@@ -19,7 +19,7 @@ import scala.collection.mutable.Stack
  * possible, the type checking fails.
  */
 //TODO: Make error case classes
-object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
+class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, LockType]) extends TypeChecks[LockArg, Z3AST] {
   
   val ctx: Z3Context = new Z3Context()
   val solver: Z3Solver = ctx.mkSolver()
@@ -29,17 +29,13 @@ object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
   
   var incrementer = 0
   
-  override def emptyEnv(): Environment[Id, Z3AST] = ConditionalLockEnv(ctx = ctx)
+  override def emptyEnv(): Environment[LockArg, Z3AST] = ConditionalLockEnv(ctx = ctx)
   //Functions can't interact with locks or memories right now.
   //Could add that to the function types explicitly to be able to check applications
-  override def checkFunc(f: FuncDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+  override def checkFunc(f: FuncDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
 
-  override def checkModule(m: ModuleDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
-    val nenv = m.modules.foldLeft[Environment[Id, Z3AST]](env)( (e, m) => m.typ match {
-      case TMemType(_, _, _, _) => e.add(m.name, makeEquals(m.name, Free))
-      case TModType(_, _, _, _) => e.add(m.name, makeEquals(m.name, Free))
-      case _ => throw UnexpectedCase(m.pos)
-    })
+  override def checkModule(m: ModuleDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
+    val nenv = lockMap(m.name).foldLeft[Environment[LockArg, Z3AST]](env)((e, mem) => e.add(mem, makeEquals(mem, Free)))
     val finalenv = checkCommand(m.body, nenv)
     //At end of execution all locks must be free or released
     finalenv.getMappedKeys().foreach(id => {
@@ -52,7 +48,7 @@ object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
     env //no change to lock map after checking module
   }
   
-  def checkCommand(c: Command, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
+  def checkCommand(c: Command, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
     c match {
       case CSeq(c1, c2) => {
         val l1 = checkCommand(c1, env)
@@ -78,7 +74,7 @@ object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
         val lt = checkCommand(cons, env)
         //makes new environment with all locks implied by true branch
         val tenv = ConditionalLockEnv(lt.getMappedKeys()
-          .foldLeft[Map[Id, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), lt(id)))),
+          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), lt(id)))),
           ctx)
         val trueBranch = predicates.pop()
         
@@ -86,7 +82,7 @@ object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
         val lf = checkCommand(alt, env)
         //makes new environment with all locks implied by false branch
         val fenv = ConditionalLockEnv(lf.getMappedKeys()
-          .foldLeft[Map[Id, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), lf(id)))),
+          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), lf(id)))),
           ctx)
         predicates.pop()
         
@@ -98,69 +94,51 @@ object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
         env
       }
       case CAssign(lhs, rhs) => (lhs, rhs) match {
-        case (_, EMemAccess(mem,_)) => {
-          checkState(mem, env, Acquired.order) match {
-            case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
-            case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
-          }
-          env
+        case (_, EMemAccess(mem, expr)) => {
+          checkAcquired(mem, expr, env)
         }
         case _ => env
       }
       case CRecv(lhs, rhs) => (lhs, rhs) match {
-        case (EMemAccess(mem,_), _) => {
-          checkState(mem, env, Acquired.order) match {
-            case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
-            case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
-            case _ => env
-          }
-          env
+        case (EMemAccess(mem, expr), _) => {
+          checkAcquired(mem, expr, env)
         }
-        case (_, EMemAccess(mem,_)) => {
-          checkState(mem, env, Acquired.order) match {
-            case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
-            case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
-            case _ => env
-          }
-          env
+        case (_, EMemAccess(mem, expr)) => {
+          checkAcquired(mem, expr, env)
         }
-        case (_, ECall(mod,_)) => {
-          checkState(mod, env, Acquired.order) match {
-            case Some(value) if value => throw new RuntimeException(" A possible thread of execution can cause this to fail: modules needs to be acquired before accessing")
-            case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
-            case _ => env
-          }
-          env
+        case (_, ECall(mod, _)) => {
+          //TODO Maybe just from null
+          checkAcquired(mod, null, env)
         }
         case _ => throw UnexpectedCase(c.pos)
       }
       //TODO don't just use id
       case CLockOp(mem, op) => op match {
-        case Locks.Reserved => checkState(mem.id, env, Free.order) match {
+        case Locks.Reserved => checkState(mem, env, Free.order) match {
           case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be free before reserving")
-          case Some(value) if !value => env.add(mem.id,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem.id, Reserved)))
+          case Some(value) if !value => env.add(mem,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Reserved)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
-        case Locks.Acquired => checkState(mem.id, env, Reserved.order) match {
+        case Locks.Acquired => checkState(mem, env, Reserved.order) match {
           case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be reserved before acquiring")
-          case Some(value) if !value => env.add(mem.id,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem.id, Acquired)))
+          case Some(value) if !value => env.add(mem,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Acquired)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
-        case Locks.Released => checkState(mem.id, env, Acquired.order) match {
+        case Locks.Released => checkState(mem, env, Acquired.order) match {
           case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
-          case Some(value) if !value => env.add(mem.id,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem.id, Released)))
+          case Some(value) if !value => env.add(mem,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Released)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
       } //logic inside the lock environment class
       case _ => env
     }
   }
-  override def checkCircuit(c: Circuit, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+  override def checkCircuit(c: Circuit, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
   
-  private def checkState(mem: Id, env: Environment[Id, Z3AST], lockStateOrders: Int*): Option[Boolean] = {
+  private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], lockStateOrders: Int*): Option[Boolean] = {
     //Makes an OR of all given lock states
     val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) => ctx.mkOr(ast, ctx.mkEq(
-      ctx.mkIntConst(mem.v),
+      ctx.mkIntConst(constructVarName(mem)),
       ctx.mkInt(
         order,
         ctx.mkIntSort()))))
@@ -177,7 +155,25 @@ object LockConstraintChecker extends TypeChecks[Id, Z3AST] {
     check
   }
   
-  private def makeEquals(mem: Id, lockState: LockState): Z3AST = {
-    ctx.mkEq(ctx.mkIntConst(mem.v), ctx.mkInt(lockState.order, ctx.mkIntSort()))
+  private def makeEquals(mem: LockArg, lockState: LockState): Z3AST = {
+    ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(lockState.order, ctx.mkIntSort()))
+  }
+  
+  private def constructVarName(mem: LockArg): String = {
+    mem.id + (if (mem.evar.isDefined) "[" + mem.evar.get.id.v + "]" else "")
+  }
+  
+  private def checkAcquired(mem: Id, expr: Expr, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
+    if (lockTypeMap(mem).equals(Specific) && !expr.isInstanceOf[EVar]) {
+      throw new RuntimeException("We expect the argument in the memory access to be a variable")
+    }
+    checkState(if (lockTypeMap(mem).equals(General)) LockArg(mem, None) else LockArg(mem, Some(expr.asInstanceOf[EVar])), 
+      env, 
+      Acquired.order) 
+    match {
+      case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
+      case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
+      case _ => env
+    }
   }
 }

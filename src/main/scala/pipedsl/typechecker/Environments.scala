@@ -145,24 +145,24 @@ object Environments {
             BoolEnv(boolSet.union(other.getMappedKeys()))
     }
     
-    case class ConditionalLockEnv(lockMap: Map[Id, Z3AST] = Map(), ctx: Z3Context) 
-      extends Environment[Id, Z3AST] {
-        override def apply(id: Id) = this.get(id).getOrThrow(MissingType(id.pos, id.v))
-        private def updateMapping(n: Id, ns: Z3AST): Environment[Id, Z3AST] = {
+    case class ConditionalLockEnv(lockMap: Map[LockArg, Z3AST] = Map(), ctx: Z3Context) 
+      extends Environment[LockArg, Z3AST] {
+        override def apply(key: LockArg) = this.get(key).getOrThrow(MissingType(key.pos, key.id.v))
+        private def updateMapping(n: LockArg, ns: Z3AST): Environment[LockArg, Z3AST] = {
             this.copy(lockMap = lockMap + (n -> ns))
         }
         //only allow legal lock state transitions
-        override def add(name: Id, ns: Z3AST): Environment[Id, Z3AST] = 
+        override def add(name: LockArg, ns: Z3AST): Environment[LockArg, Z3AST] = 
             updateMapping(name, ns)
 
-        override def remove(key: Id): Environment[Id, Z3AST] = ConditionalLockEnv(lockMap - key, ctx)
+        override def remove(key: LockArg): Environment[LockArg, Z3AST] = ConditionalLockEnv(lockMap - key, ctx)
 
-        override def get(name: Id): Option[Z3AST] = lockMap.get(name)
+        override def get(name: LockArg): Option[Z3AST] = lockMap.get(name)
 
-        override def getMappedKeys(): Set[Id] = lockMap.keySet
+        override def getMappedKeys(): Set[LockArg] = lockMap.keySet
 
-        override def intersect(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
-            var newMap: Map[Id, Z3AST] = Map()
+        override def intersect(other: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
+            var newMap: Map[LockArg, Z3AST] = Map()
             for (key <- other.getMappedKeys()) {
                 this.get(key) match {
                     case Some(value) => {
@@ -178,7 +178,7 @@ object Environments {
         }
 
         //This is filler code, I don't think we ever actually need this
-        override def union(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = other
+        override def union(other: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = other
         
     }
 }

@@ -82,7 +82,7 @@ class PredicateGenerator(ctx: Z3Context) {
     evar.typ match {
       case Some(value) => value match {
         case Syntax.TSizedInt(len, unsigned) => ctx.mkIntConst(evar.id.v); 
-        case Syntax.TBool() => println(evar); ctx.mkBoolConst(evar.id.v)
+        case Syntax.TBool() => ctx.mkBoolConst(evar.id.v)
         case Syntax.TMemType(elem, addrSize, readLatency, writeLatency) => ctx.mkConst(evar.id.v, array)
         case _ => throw new RuntimeException("Unexpected type")
       }
