@@ -199,6 +199,11 @@ object BluespecGeneration {
       locks + (m.name -> BVar(genLockName(m.name),
         BluespecInterfaces.getLockType(BluespecInterfaces.getDefaultLockHandleType)))
     })
+    private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
+      locks + (m.name -> BVar(genLockRegionName(m.name),
+        BluespecInterfaces.getLockRegionType))
+    })
+
     //Generate statements and rules for each stage
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
       m + (s -> getStageCode(s))
@@ -296,6 +301,10 @@ object BluespecGeneration {
       mem.v + "_lock"
     }
 
+    private def genLockRegionName(mem: Id): String = {
+      mem.v + "_lock_region"
+    }
+
     /**
      * Given a pipeline stage and the necessary edge info,
      * generate a BSV module definition.
@@ -345,6 +354,8 @@ object BluespecGeneration {
      */
     private def getBlockingConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
+        case CLockStart(mod) =>
+          l :+ BluespecInterfaces.getCheckStart(lockRegions(mod))
         case ICheckLockFree(mem) =>
           l :+ BluespecInterfaces.getCheckEmpty(lockParams(mem))
         case ICheckLockOwned(mem, handle) =>
@@ -461,6 +472,10 @@ object BluespecGeneration {
       val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
         m + (id -> BModInst(lockParams(id), BluespecInterfaces.getLockModule))
       })
+      //Instantiate a lock regions for each memory:
+      val memRegions = lockRegions.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
+        m + (id -> BModInst(lockRegions(id), BluespecInterfaces.getLockRegionModule))
+      })
 
       //Instantiate each stage module
       val stgStmts = stgMap.keys.foldLeft(List[BStatement]())((l, s) => {
@@ -475,7 +490,7 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, BluespecInterfaces.getFifo)
       val threadInst = BModInst(BVar(threadIdName, BluespecInterfaces.getRegType(getThreadIdType)),
         BluespecInterfaces.getReg(BZero))
-      var stmts: List[BStatement] = edgeFifos.values.toList ++ memLocks.values.toList
+      var stmts: List[BStatement] = edgeFifos.values.toList ++ memLocks.values.toList ++ memRegions.values.toList
       if (mod.isRecursive) stmts = stmts :+ busyInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
@@ -759,8 +774,8 @@ object BluespecGeneration {
         BExprStmt(BluespecInterfaces.getRelease(lockParams(mem), translator.toBSVVar(handle)))
       )
         //TODO lock start and end
-      case CLockStart(mod) => None
-      case CLockEnd(mod) => None
+      case CLockStart(mod) => Some(BluespecInterfaces.getStart(lockRegions(mod)))
+      case CLockEnd(mod) => Some(BluespecInterfaces.getStop(lockRegions(mod)))
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None

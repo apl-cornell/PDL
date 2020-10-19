@@ -41,8 +41,19 @@ object BluespecInterfaces {
     BSizedType(lockHandleName, List(sz))
   }
 
+  private val lockRegionType = "Reg"
+  private val lockRegionModule = "mkReg"
   private val lockType = "Lock"
   private val lockModuleName = "mkLock"
+
+  def getLockRegionType: BInterface = {
+    BInterface(lockRegionType, List(BVar("busy", BBool)))
+  }
+
+  //lock regions are, by default, available
+  def getLockRegionModule: BModule = {
+    BModule(lockRegionModule, List(BBoolLit(true)))
+  }
 
   def getLockType(ht: BSVType): BInterface = {
     BInterface(lockType, List(BVar("idsize", ht)))
@@ -50,6 +61,20 @@ object BluespecInterfaces {
 
   def getLockModule: BModule = {
     BModule(lockModuleName, List())
+  }
+
+  def getStart(mod: BVar): BStatement = {
+    BModAssign(mod, BBoolLit(false))
+  }
+
+  def getStop(mod: BVar): BStatement = {
+    BModAssign(mod, BBoolLit(true))
+  }
+
+  //the lockstate is represented by a boolean:
+  //true => available, false => busy
+  def getCheckStart(mod: BVar): BExpr = {
+    mod
   }
 
   private val lockEmptyName = "isEmpty"
