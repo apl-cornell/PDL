@@ -47,7 +47,7 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
         int<32> result = 10<32>;
      }
      ---
-     acquire(outputs);
+     block(outputs);
      outputs[0<1>] <- result;
      release(outputs);
      ---

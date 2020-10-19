@@ -16,10 +16,6 @@ object BluespecGeneration {
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false) {
 
-    //TODO compile functions into bsv functions into their own file
-    //fill in the function map by generating each function and using
-    //it to refer to prior functions
-    private val funcMap: Map[Id, BFuncDef] = Map()
 
     //for each module
     private val handleTyps: Map[Id, BSVType] = prog.moddefs.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
@@ -46,6 +42,10 @@ object BluespecGeneration {
     })
 
     private val translator = new BSVTranslator(modMap map { case (i, p) => (i, p.topModule.typ.get) }, modToHandle)
+
+    private val funcMap: Map[Id, BFuncDef] = prog.fdefs.foldLeft(Map[Id, BFuncDef]())((fmap, fdef) => {
+      fmap + (fdef.name -> translator.toBSVFunc(fdef))
+    })
 
     private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
       case CirSeq(c1, c2) =>
@@ -110,6 +110,10 @@ object BluespecGeneration {
 
     def getBSVPrograms: List[BProgram] = {
       modMap.values.toList :+ topProgram
+    }
+
+    def getBSVFunctions: List[BFuncDef] = {
+      funcMap.values.toList
     }
   }
 

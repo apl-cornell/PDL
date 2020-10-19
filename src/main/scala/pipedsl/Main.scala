@@ -80,8 +80,8 @@ object Main {
       TimingTypeChecker.check(nprog, Some(basetypes))
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
-      LockWellformedChecker.check(canonProg)
-    //  LockChecker.check(recvProg, None)
+      LockRegionChecker.check(recvProg, None)
+      LockWellformedChecker.check(recvProg)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
@@ -125,10 +125,14 @@ object Main {
     val prog_recv = runPasses(false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, debug)
+    val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/Functions.bsv"))
+    funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
+    funcWriter.close
     bsvgen.getBSVPrograms.foreach(p => {
       val outFile = new File(outDir.toString + "/" + p.name + ".bsv")
       val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outFile)
       bsvWriter.printBSVProg(p)
+      bsvWriter.close
     })
   }
 }

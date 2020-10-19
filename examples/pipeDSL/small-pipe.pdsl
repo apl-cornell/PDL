@@ -1,5 +1,7 @@
 pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<16>[32]<a,a>] {
+    start(imem);
     acquire(imem);
+    end(imem);
     int<16> insn <- imem[pc];
     release(imem);
     ---
@@ -7,9 +9,11 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<16>[32]<a,a>] {
     int<5> rs1 = insn{5:1};
     int<5> rs2 = insn{10:6};
     int<5> rd = insn{15:11};
+    start(rf);
     acquire(rf);
     int<32> arg1 = rf[rs1];
     int<32> arg2 = rf[rs2];
+    end(rf);
     ---
     int<32> offset = ((op_type == 0b0<1>) && (arg1 == arg2)) ? 0b0<27> ++ rd : 4<32>;
     int<32> npc = pc + offset;
