@@ -85,6 +85,9 @@ object BSVPrettyPrinter {
     case BMethodInvoke(mod, method, args) =>
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       toBSVExprStr(mod) + "." + method + "(" + argstring + ")"
+    case BFuncCall(func, args) =>
+      val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
+      func + "(" + argstring +")"
     case BDontCare => "?"
     case BZero => "0"
     case BOne => "1"
@@ -207,6 +210,23 @@ object BSVPrettyPrinter {
       w.write(mkIndentedExpr("endmethod\n"))
     }
 
+    def printBSVFunc(func: BFuncDef): Unit = {
+      val paramstr = func.params.map(p => toDeclString(p)).mkString(", ")
+      w.write(mkStatementString("function", toBSVTypeStr(func.rettyp), func.name, "(", paramstr, ")"))
+      incIndent()
+      func.body.foreach(s => printBSVStatement(s))
+      decIndent()
+      w.write(mkIndentedExpr("endfunction\n"))
+    }
+
+    def printBSVFuncModule(funcs: Iterable[BFuncDef]): Unit = {
+      funcs.foreach(f => {
+        val export = BExport(f.name, expFields = false)
+        printExport(export)
+        printBSVFunc(f)
+      })
+    }
+
     def printInterface(intdef: BInterfaceDef): Unit = {
       w.write(mkStatementString("interface", toBSVTypeStr(intdef.typ)))
       incIndent()
@@ -258,6 +278,10 @@ object BSVPrettyPrinter {
       w.write("\n")
       printModule(b.topModule)
       w.flush()
+    }
+
+    def close: Unit = {
+      w.close()
     }
   }
 

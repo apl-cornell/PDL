@@ -1,9 +1,8 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.Errors.{UnexpectedExpr, UnexpectedType}
-import pipedsl.common.Syntax
+import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Syntax.Latency.Combinational
-import pipedsl.common.Syntax.{BitOp, EApp, EBinop, EBitExtract, EBool, ECast, EInt, EMemAccess, ERecAccess, ERecLiteral, ETernary, EUop, EVar, Expr, Id, TBool, TFun, TMemType, TNamedType, TRecType, Type}
+import pipedsl.common.Syntax._
 
 object BSVSyntax {
 
@@ -44,15 +43,15 @@ object BSVSyntax {
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
     def toBSVType(t: Type): BSVType = t match {
-      case Syntax.TMemType(elem, addrSize, rlat, _) =>
+      case TMemType(elem, addrSize, rlat, _) =>
         BluespecInterfaces.getMemType(isAsync = rlat != Combinational,
           BSizedInt(unsigned = true, addrSize), toBSVType(elem),
           Some(BluespecInterfaces.getDefaultMemHandleType))
-      case Syntax.TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
-      case Syntax.TBool() => BBool
-      case Syntax.TModType(_, _, _, Some(n)) => modmap(n)
-      case Syntax.TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
-      case Syntax.TRequestHandle(n, isLock) =>
+      case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
+      case TBool() => BBool
+      case TModType(_, _, _, Some(n)) => modmap(n)
+      case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
+      case TRequestHandle(n, isLock) =>
         if (isLock) {
           BluespecInterfaces.getDefaultLockHandleType
         } else {
@@ -68,7 +67,7 @@ object BSVSyntax {
             }
           }
         }
-      case Syntax.TVoid() => BVoid
+      case TVoid() => BVoid
       case TNamedType(name) => BTypeParam(name.v)
       //TODO implement function translation
       case TFun(_, _) => throw new RuntimeException
@@ -96,9 +95,7 @@ object BSVSyntax {
       case EBitExtract(num, start, end) => BUnpack(BBitExtract(BPack(toBSVExpr(num)), start, end))
       case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
       case e@EVar(_) => toBSVVar(e)
-      //TODO functions
-      //case EApp(func, args) => throw new UnexpectedExpr(e)
-      case EApp(_, _) => BIntLit(0, 10, 1)
+      case EApp(func, args) => BFuncCall(func.v, args.map(a => toBSVExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index) => BluespecInterfaces.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
@@ -119,6 +116,33 @@ object BSVSyntax {
     def toBSVBop(b: EBinop): BExpr = b.op match {
       case BitOp("++", _) => BUnpack(BConcat(BPack(toBSVExpr(b.e1)), List(BPack(toBSVExpr(b.e2)))))
       case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
+    }
+
+    //This updates the translator's map of already defined functions
+    //so that they can be used by later translation operations
+    def toBSVFunc(b: FuncDef): BFuncDef = {
+      val rettype = toBSVType(b.ret)
+      val params = b.args.foldLeft(List[BVar]())((ps, arg) => {
+        ps :+ BVar(arg.name.v, toBSVType(arg.typ))
+      })
+      val fdef = BFuncDef(b.name.v, rettype, params, translateFuncBody(b.body))
+      fdef
+    }
+
+    private def translateFuncBody(c: Command): List[BStatement] = c match {
+      case CSeq(c1, c2) =>
+        translateFuncBody(c1) ++ translateFuncBody(c2)
+      case CIf(cond, cons, alt) =>
+        List(BIf(toBSVExpr(cond), translateFuncBody(cons), translateFuncBody(alt)))
+      case CAssign(lhs, rhs) =>
+        List(BDecl(toBSVVar(lhs), Some(toBSVExpr(rhs))))
+      case CReturn(exp) =>
+        List(BReturnStmt(toBSVExpr(exp)))
+      case CExpr(exp) =>
+        List(BExprStmt(toBSVExpr(exp)))
+      //TODO case Syntax.CSplit(cases, default) =>
+      case CEmpty => List()
+      case _ => throw UnexpectedCommand(c)
     }
   }
 
@@ -159,40 +183,24 @@ object BSVSyntax {
   sealed trait BExpr
 
   case object BDontCare extends BExpr
-
   case object BZero extends BExpr
-
   case object BOne extends BExpr
-
   case object BTime extends BExpr
-
   case class BPack(e: BExpr) extends BExpr
-
   case class BUnpack(e: BExpr) extends BExpr
-
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
-
   case class BBoolLit(v: Boolean) extends BExpr
-
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
-
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
-
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
-
   case class BVar(name: String, typ: BSVType) extends BExpr
-
   case class BBOp(op: String, lhs: BExpr, rhs: BExpr) extends BExpr
-
   case class BUOp(op: String, expr: BExpr) extends BExpr
-
   case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
-
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
-
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
-
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
+  case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
 
   sealed trait BStatement
 
@@ -225,7 +233,8 @@ object BSVSyntax {
 
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
 
-  case class BFuncDef(name: String) //TODO the rest of this
+  case class BFuncDef(name: String, rettyp: BSVType, params: List[BVar], body: List[BStatement])
+
   case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
 
   case class BModuleDef(name: String, typ: Option[BInterface],

@@ -14,12 +14,11 @@ object BluespecGeneration {
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
 
-  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false) {
+  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false,
+    funcmodname: String = "Functions") {
 
-    //TODO compile functions into bsv functions into their own file
-    //fill in the function map by generating each function and using
-    //it to refer to prior functions
-    private val funcMap: Map[Id, BFuncDef] = Map()
+    val funcModule = funcmodname
+    private val funcImport = BImport(funcmodname)
 
     //for each module
     private val handleTyps: Map[Id, BSVType] = prog.moddefs.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
@@ -34,7 +33,8 @@ object BluespecGeneration {
         m + (mtyp._2 -> handleTyps(mtyp._1))
       })
       val newmod = new BluespecModuleGenerator(
-        mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, modHandles, debug
+        mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, modHandles,
+        debug, funcImport
       ).getBSV
       mapping + ( mod.name -> newmod )
     })
@@ -46,6 +46,11 @@ object BluespecGeneration {
     })
 
     private val translator = new BSVTranslator(modMap map { case (i, p) => (i, p.topModule.typ.get) }, modToHandle)
+
+    private val funcMap: Map[Id, BFuncDef] = prog.fdefs.foldLeft(Map[Id, BFuncDef]())((fmap, fdef) => {
+      fmap + (fdef.name -> translator.toBSVFunc(fdef))
+    })
+
 
     private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
       case CirSeq(c1, c2) =>
@@ -105,11 +110,15 @@ object BluespecGeneration {
     }
 
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList, exports = List(),
+      imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(), modules = List())
 
     def getBSVPrograms: List[BProgram] = {
       modMap.values.toList :+ topProgram
+    }
+
+    def getBSVFunctions: List[BFuncDef] = {
+      funcMap.values.toList
     }
   }
 
@@ -131,7 +140,8 @@ object BluespecGeneration {
    */
   private class BluespecModuleGenerator(val mod: ModuleDef,
     val firstStage: PStage, val otherStages: List[PStage],
-    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val debug:Boolean = false) {
+    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val debug:Boolean = false,
+    val funcImport: BImport) {
 
     private val translator = new BSVTranslator(bsvMods, bsvHandles)
 
@@ -233,7 +243,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)) ++
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
