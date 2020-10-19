@@ -125,7 +125,7 @@ object Main {
     val prog_recv = runPasses(false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, debug)
-    val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/Functions.bsv"))
+    val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close
     bsvgen.getBSVPrograms.foreach(p => {
