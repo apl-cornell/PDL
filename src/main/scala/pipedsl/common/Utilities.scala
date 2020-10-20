@@ -230,6 +230,29 @@ object Utilities {
     case (None, Some(_)) => condR
   }
 
+  def updateSetMap[K, V](m: Map[K, Set[V]], k: K, v: V): Map[K, Set[V]] = {
+    if (m.contains(k)) {
+      m.updated(k, m(k) + v)
+    } else {
+      m.updated(k, Set(v))
+    }
+  }
+
+  def updateListMap[K,V](m: Map[K,List[V]], k: K, v: V): Map[K, List[V]] = {
+    if (m.contains(k)) {
+      m.updated(k, m(k) :+ v)
+    } else {
+      m.updated(k, List(v))
+    }
+  }
+
+  def updateListMap[K,V](m: Map[K,List[V]], k: K, vs: List[V]): Map[K, List[V]] = {
+    if (m.contains(k)) {
+      m.updated(k, m(k) ++ vs)
+    } else {
+      m.updated(k, vs)
+    }
+  }
 
   implicit class RichOption[A](opt: Option[A]) {
     def getOrThrow[T <: Throwable](except: T): A = opt match {

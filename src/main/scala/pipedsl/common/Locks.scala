@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
-import pipedsl.common.Syntax.{CLockOp, Id}
+import pipedsl.common.Syntax.{CLockOp, Command, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id}
 
 import scala.util.parsing.input.Position
 
@@ -57,6 +57,40 @@ object Locks {
         k -> join(m.get(k), stgstates.get(k))
       }).toMap
     })
+  }
+
+  /**
+   * This takes a memory identifier and a set of lock operations
+   * for that identifier. If certain combinations of operations
+   * are present, this returns a condensed set of new operations.
+   * Otherwise, they are left unmodified.
+   * @param mod The memory that is being considered
+   * @param lops A set of lock operations relevant to mod
+   * @return A new merged set of lock operations if any merges apply
+   */
+  def mergeLockOps(mod: Id, lops: Iterable[Command]): Iterable[Command] = {
+    //res + rel -> checkfree
+    //res + checkowned -> res + checkfree
+    //else same
+    val rescmd = lops.find {
+      case _:IReserveLock => true
+      case _ => false
+    }
+    val relcmd = lops.find {
+      case _:IReleaseLock => true
+      case _ => false
+    }
+    val checkownedCmd = lops.find {
+      case _:ICheckLockOwned => true
+      case _ => false
+    }
+    if (rescmd.isDefined && relcmd.isDefined) {
+      List(ICheckLockFree(mod))
+    } else if (rescmd.isDefined && checkownedCmd.isDefined) {
+      List(rescmd.get, ICheckLockFree(mod))
+    } else {
+      lops
+    }
   }
 
   /**

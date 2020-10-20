@@ -68,14 +68,14 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File) = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File): Prog = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".typecheck"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
     
-    val prog = parse(false, false, inputFile, outDir)
+    val prog = parse(debug = false, printOutput = false, inputFile, outDir)
     try {
       val canonProg = CanonicalizePass.run(prog)
       val basetypes = BaseTypeChecker.check(canonProg, None)
@@ -84,9 +84,9 @@ object Main {
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockRegionChecker.check(recvProg, None)
-      val lockWellformedChecker = new LockWellformedChecker(new immutable.HashMap[Id, LockType]())
+      val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getLockTypeMap())
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getLockTypeMap)
       lockChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
@@ -113,14 +113,15 @@ object Main {
     val stageInfo: Map[Id, List[PStage]] = new SplitStagesPass().run(prog)
     //Run the transformation passes on the stage representation
     stageInfo map { case (n, stgs) =>
+      //Change Recv statements into send + recv pairs
       new ConvertAsyncPass(n).run(stgs)
+      //Convert lock ops into ops that track explicit handles
       LockOpTranslationPass.run(stgs)
       //Must be done after all passes that introduce new variables
       AddEdgeValuePass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
       val newstgs = CollapseStagesPass.run(stgs)
-      //after merging stages we need to eliminate some lock ops that
-      //don't make sense anymore
+      //clean up lock ops that need to be merged at this point
       LockEliminationPass.run(newstgs)
       if (printStgGraph) new PrettyPrinter(None).printStageGraph(n.v, newstgs)
       n -> newstgs

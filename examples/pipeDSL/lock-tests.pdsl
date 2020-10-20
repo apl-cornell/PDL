@@ -230,15 +230,26 @@ pipe test18(input: int<32>)[rf: int<32>[5]] {
 pipe test19(input: int<32>)[rf: int<32>[5]] {
 
     start(rf);
-    if (input{0:0} == 1) {
+    bool b1 = cast(input{0:0} == 1, bool);
+    bool b2 = cast(input{1:1} == 1, bool);
+    if (b1) {
         reserve(rf);
     } else {
         reserve(rf);
     }
     end(rf);
-    if (input{0:0} == 1) {
+    if (b1) {
         block(rf);
-        if (input{1:1} == 1) {
+        if (b2) {
+            release(rf);
+        }
+    }
+    ---
+    if (b1 && (!b2)) {
+        release(rf);
+    } else {
+        if(!b1) {
+            block(rf);
             release(rf);
         }
     }

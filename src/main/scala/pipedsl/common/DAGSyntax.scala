@@ -1,6 +1,9 @@
 package pipedsl.common
 
+import pipedsl.common.Errors.UnexpectedCommand
+import pipedsl.common.Locks.mergeLockOps
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities.updateListMap
 
 /**
  * This file contains syntax for the intermediate language which
@@ -149,23 +152,6 @@ object DAGSyntax {
       this.cmds = cmds.toList
     }
 
-
-    private def updateListMap[K,V](m: Map[K,List[V]], k: K, v: V): Map[K, List[V]] = {
-      if (m.contains(k)) {
-        m.updated(k, m(k) :+ v)
-      } else {
-        m.updated(k, List(v))
-      }
-    }
-
-    private def updateListMap[K,V](m: Map[K,List[V]], k: K, vs: List[V]): Map[K, List[V]] = {
-      if (m.contains(k)) {
-        m.updated(k, m(k) ++ vs)
-      } else {
-        m.updated(k, vs)
-      }
-    }
-
     //returns lock cmds on left and non lock commands on right
     //non lock commands are stored as a map from the relevant lock ID to the set of commands
     private def splitLockCmds(cmds: Iterable[Command]): (Map[Id, List[Command]], List[Command]) = {
@@ -231,11 +217,13 @@ object DAGSyntax {
           })
           newCondLockCmds.foreach(ent => {
             lockIds.foreach(l => {
-              mergedCmds = mergedCmds :+ ICondCommand(ent._1, mergeLockOps(l, ent._2).toList)
+              val lockops = ent._2.filter(p => getLockId(p) == l)
+              mergedCmds = mergedCmds :+ ICondCommand(ent._1, mergeLockOps(l, lockops).toList)
             })
           })
           lockIds.foreach(l => {
-            mergedCmds = mergedCmds ++ mergeLockOps(l, newUnCondLockCmds)
+            val lockops = newUnCondLockCmds.filter(p => getLockId(p) == l)
+            mergedCmds = mergedCmds ++ mergeLockOps(l, lockops)
           })
         }}
       })
@@ -267,32 +255,9 @@ object DAGSyntax {
     case IReserveLock(_, l) => l
     case IReleaseLock(l, _) => l
     case ILockNoOp(l) => l
+    case _ => throw UnexpectedCommand(c)
   }
 
-  private def mergeLockOps(mod: Id, lops: Iterable[Command]): Iterable[Command] = {
-    //res + rel -> checkfree
-    //res + checkowned -> res + checkfree
-    //else same
-    val rescmd = lops.find {
-      case IReserveLock(_, mem) if mem == mod => true
-      case _ => false
-    }
-    val relcmd = lops.find {
-      case IReleaseLock(mem, _) if mem == mod => true
-      case _ => false
-    }
-    val checkownedCmd = lops.find {
-      case ICheckLockOwned(mem, _) if mem == mod => true
-      case _ => false
-    }
-    if (rescmd.isDefined && relcmd.isDefined) {
-      List(ICheckLockFree(mod))
-    } else if (rescmd.isDefined && checkownedCmd.isDefined) {
-      List(rescmd.get, ICheckLockFree(mod))
-    } else {
-      lops.filter(lc => getLockId(lc) == mod)
-    }
-  }
 
   class SpecStage(n: Id, val specVar: EVar, val specVal: Expr,
     val verifyStages: List[PStage],
