@@ -14,12 +14,11 @@ object BluespecGeneration {
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
 
-  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false) {
+  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false,
+    funcmodname: String = "Functions") {
 
-    //TODO compile functions into bsv functions into their own file
-    //fill in the function map by generating each function and using
-    //it to refer to prior functions
-    private val funcMap: Map[Id, BFuncDef] = Map()
+    val funcModule = funcmodname
+    private val funcImport = BImport(funcmodname)
 
     //for each module
     private val handleTyps: Map[Id, BSVType] = prog.moddefs.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
@@ -34,7 +33,8 @@ object BluespecGeneration {
         m + (mtyp._2 -> handleTyps(mtyp._1))
       })
       val newmod = new BluespecModuleGenerator(
-        mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, modHandles, debug
+        mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, modHandles,
+        debug, funcImport
       ).getBSV
       mapping + ( mod.name -> newmod )
     })
@@ -46,6 +46,11 @@ object BluespecGeneration {
     })
 
     private val translator = new BSVTranslator(modMap map { case (i, p) => (i, p.topModule.typ.get) }, modToHandle)
+
+    private val funcMap: Map[Id, BFuncDef] = prog.fdefs.foldLeft(Map[Id, BFuncDef]())((fmap, fdef) => {
+      fmap + (fdef.name -> translator.toBSVFunc(fdef))
+    })
+
 
     private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
       case CirSeq(c1, c2) =>
@@ -105,11 +110,15 @@ object BluespecGeneration {
     }
 
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList, exports = List(),
+      imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(), modules = List())
 
     def getBSVPrograms: List[BProgram] = {
       modMap.values.toList :+ topProgram
+    }
+
+    def getBSVFunctions: List[BFuncDef] = {
+      funcMap.values.toList
     }
   }
 
@@ -131,7 +140,8 @@ object BluespecGeneration {
    */
   private class BluespecModuleGenerator(val mod: ModuleDef,
     val firstStage: PStage, val otherStages: List[PStage],
-    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val debug:Boolean = false) {
+    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val debug:Boolean = false,
+    val funcImport: BImport) {
 
     private val translator = new BSVTranslator(bsvMods, bsvHandles)
 
@@ -199,6 +209,11 @@ object BluespecGeneration {
       locks + (m.name -> BVar(genLockName(m.name),
         BluespecInterfaces.getLockType(BluespecInterfaces.getDefaultLockHandleType)))
     })
+    private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
+      locks + (m.name -> BVar(genLockRegionName(m.name),
+        BluespecInterfaces.getLockRegionType))
+    })
+
     //Generate statements and rules for each stage
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
       m + (s -> getStageCode(s))
@@ -228,7 +243,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib)) ++
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
@@ -296,6 +311,10 @@ object BluespecGeneration {
       mem.v + "_lock"
     }
 
+    private def genLockRegionName(mem: Id): String = {
+      mem.v + "_lock_region"
+    }
+
     /**
      * Given a pipeline stage and the necessary edge info,
      * generate a BSV module definition.
@@ -339,12 +358,14 @@ object BluespecGeneration {
     /**
      * If any commands could cause blocking conditions that prevent
      * the rule from running, place those here (e.g. checking if locks can be acquired)
-     *
+     * The list is treated as a conjunction of conditions.
      * @param cmds The list of commands to translate
      * @return The list of translated blocking commands
      */
     private def getBlockingConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
+        case CLockStart(mod) =>
+          l :+ BluespecInterfaces.getCheckStart(lockRegions(mod))
         case ICheckLockFree(mem) =>
           l :+ BluespecInterfaces.getCheckEmpty(lockParams(mem))
         case ICheckLockOwned(mem, handle) =>
@@ -354,6 +375,17 @@ object BluespecGeneration {
         case IRecv(handle, sender, _) =>
           l :+ BluespecInterfaces.getModCheckHandle(modParams(sender), translator.toBSVExpr(handle))
         case COutput(_) => if (mod.isRecursive) List(busyReg) else List()
+        case ICondCommand(cond, cs) =>
+          val condconds = getBlockingConds(cs)
+          if (condconds.nonEmpty) {
+            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
+              BBOp("&&", exp, n)
+            })
+            val newCond = BBOp("||", BUOp("!", translator.toBSVExpr(cond)), nestedConds)
+            l :+ newCond
+          } else {
+            l
+          }
         case _ => l
       })
     }
@@ -450,6 +482,10 @@ object BluespecGeneration {
       val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
         m + (id -> BModInst(lockParams(id), BluespecInterfaces.getLockModule))
       })
+      //Instantiate a lock regions for each memory:
+      val memRegions = lockRegions.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
+        m + (id -> BModInst(lockRegions(id), BluespecInterfaces.getLockRegionModule))
+      })
 
       //Instantiate each stage module
       val stgStmts = stgMap.keys.foldLeft(List[BStatement]())((l, s) => {
@@ -464,7 +500,7 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, BluespecInterfaces.getFifo)
       val threadInst = BModInst(BVar(threadIdName, BluespecInterfaces.getRegType(getThreadIdType)),
         BluespecInterfaces.getReg(BZero))
-      var stmts: List[BStatement] = edgeFifos.values.toList ++ memLocks.values.toList
+      var stmts: List[BStatement] = edgeFifos.values.toList ++ memLocks.values.toList ++ memRegions.values.toList
       if (mod.isRecursive) stmts = stmts :+ busyInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
@@ -530,23 +566,29 @@ object BluespecGeneration {
     private def getCombinationalDeclarations(cmds: Iterable[Command]): List[BDecl] = {
       var result = List[BDecl]()
       var decls = Set[BVar]()
-      cmds.foreach(c => {
-        val decopt = getCombinationalDeclaration(c)
-        if (decopt.isDefined) {
-          val dec = decopt.get
-          if (!decls.contains(dec.lhs)) {
-            result = result :+ dec
-            decls = decls + dec.lhs
+      cmds.foreach {
+        case ICondCommand(_, cmds) =>
+          val nresult = getCombinationalDeclarations(cmds)
+          nresult.foreach(stmt => {
+            if (!decls.contains(stmt.lhs)) {
+              result = result :+ stmt
+              decls = decls + stmt.lhs
+            }
+          })
+        case c => val decopt = getCombinationalDeclaration(c)
+          if (decopt.isDefined) {
+            val dec = decopt.get
+            if (!decls.contains(dec.lhs)) {
+              result = result :+ dec
+              decls = decls + dec.lhs
+            }
           }
-        }
-      })
+      }
       result
     }
 
-    @tailrec
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toBSVVar(lhs), None))
-      case ICondCommand(_, cmd) => getCombinationalDeclaration(cmd)
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toBSVVar(v), None))
         case None => None
@@ -575,10 +617,14 @@ object BluespecGeneration {
     private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
       case CAssign(lhs, rhs) =>
         Some(BAssign(translator.toBSVVar(lhs), translator.toBSVExpr(rhs)))
-      case ICondCommand(cond: Expr, c: Command) => getCombinationalCommand(c) match {
-        case Some(bc) => Some(BIf(translator.toBSVExpr(cond), List(bc), List()))
-        case None => None
-      }
+      case ICondCommand(cond: Expr, cs) =>
+        val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
+          getCombinationalCommand(c) match {
+            case Some(bc) => l :+ bc
+            case None => l
+          }
+        })
+        if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
       case CExpr(exp) => Some(BExprStmt(translator.toBSVExpr(exp)))
       case IMemRecv(mem: Id, _: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toBSVVar(v), BluespecInterfaces.getMemPeek(modParams(mem))))
@@ -587,6 +633,8 @@ object BluespecGeneration {
       case IRecv(_, sender, outvar) => Some(
         BAssign(translator.toBSVVar(outvar), BluespecInterfaces.getModPeek(modParams(sender)))
       )
+      case CLockStart(_) => None
+      case CLockEnd(_) => None
       case CLockOp(_, _) => None
       case CCheck(_) => None
       case CEmpty => None
@@ -607,13 +655,28 @@ object BluespecGeneration {
     }
 
     //Helper to accumulate geteffectdecl results into a single list
-    private def getEffectDecls(cmds: Iterable[Command]): List[BStatement] = {
-      cmds.foldLeft(List[BStatement]())((l, c) => {
-        getEffectDecl(c) match {
-          case Some(bs) => l :+ bs
-          case None => l
-        }
-      })
+    private def getEffectDecls(cmds: Iterable[Command]): List[BDecl] = {
+      var result = List[BDecl]()
+      var decls = Set[BVar]()
+      cmds.foreach {
+        case ICondCommand(_, cmds) =>
+          val nresult = getEffectDecls(cmds)
+          nresult.foreach(stmt => {
+            if (!decls.contains(stmt.lhs)) {
+              result = result :+ stmt
+              decls = decls + stmt.lhs
+            }
+          })
+        case c => val decopt = getEffectDecl(c)
+          if (decopt.isDefined) {
+            val dec = decopt.get
+            if (!decls.contains(dec.lhs)) {
+              result = result :+ dec
+              decls = decls + dec.lhs
+            }
+          }
+      }
+      result
     }
 
     /**
@@ -625,9 +688,7 @@ object BluespecGeneration {
      * @param cmd - The commands to be checked
      * @return
      */
-    @tailrec
-    private def getEffectDecl(cmd: Command): Option[BStatement] = cmd match {
-      case ICondCommand(_: Expr, c: Command) => getEffectDecl(c)
+    private def getEffectDecl(cmd: Command): Option[BDecl] = cmd match {
       case ISend(handle, rec, _) => if (rec != mod.name) {
         Some(BDecl(translator.toBSVVar(handle), None))
       } else { None }
@@ -658,10 +719,14 @@ object BluespecGeneration {
      * @return Some(translation) if cmd is effectful, else None
      */
     private def getEffectCmd(cmd: Command): Option[BStatement] = cmd match {
-      case ICondCommand(cond: Expr, c: Command) => getEffectCmd(c) match {
-        case Some(bc) => Some(BIf(translator.toBSVExpr(cond), List(bc), List()))
-        case None => None
-      }
+      case ICondCommand(cond: Expr, cs) =>
+        val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
+          getEffectCmd(c) match {
+            case Some(bc) => l :+ bc
+            case None => l
+          }
+        })
+        if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
       case CLockOp(mem, op) => op match {
         case pipedsl.common.Locks.Free => None
         case pipedsl.common.Locks.Reserved =>
@@ -718,8 +783,12 @@ object BluespecGeneration {
       case IReleaseLock(mem, handle) => Some(
         BExprStmt(BluespecInterfaces.getRelease(lockParams(mem), translator.toBSVVar(handle)))
       )
+        //TODO lock start and end
+      case CLockStart(mod) => Some(BluespecInterfaces.getStart(lockRegions(mod)))
+      case CLockEnd(mod) => Some(BluespecInterfaces.getStop(lockRegions(mod)))
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
+      case _: ILockNoOp => None
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty => None

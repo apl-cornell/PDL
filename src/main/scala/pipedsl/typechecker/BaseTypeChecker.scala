@@ -252,6 +252,16 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
+    case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+      {
+        case _: TModType => tenv
+        case _: TMemType => tenv
+      }
+    case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+      {
+        case _: TModType => tenv
+        case _: TMemType => tenv
+      }
     case CLockOp(mem, _) => {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case _: TModType => tenv
@@ -419,13 +429,14 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
     case EVar(id) => e.typ match {
-      case Some(t) if tenv.get(id).isEmpty => (t, tenv.add(id, t))
+      case Some(t) if tenv.get(id).isEmpty => id.typ = Some(t); (t, tenv.add(id, t))
       case Some(t) => if (areEqual(t,tenv(id))) {
+        id.typ = Some(t)
         (t, tenv)
       } else {
         throw UnexpectedType(id.pos, "variable", "variable type set to new conflicting type", t)
       }
-      case None => (tenv(id), tenv)
+      case None => id.typ = Some(tenv(id)); (tenv(id), tenv)
     }
     //TODO some other rules for casting
     case ECast(ctyp, exp) =>

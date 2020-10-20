@@ -83,9 +83,9 @@ object Main {
       TimingTypeChecker.check(nprog, Some(basetypes))
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
+      LockRegionChecker.check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker(new immutable.HashMap[Id, LockType]())
       val locks = lockWellformedChecker.check(canonProg)
-     // LockChecker.check(recvProg, None)
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getLockTypeMap())
       lockChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
@@ -119,6 +119,9 @@ object Main {
       AddEdgeValuePass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
       val newstgs = CollapseStagesPass.run(stgs)
+      //after merging stages we need to eliminate some lock ops that
+      //don't make sense anymore
+      LockEliminationPass.run(newstgs)
       if (printStgGraph) new PrettyPrinter(None).printStageGraph(n.v, newstgs)
       n -> newstgs
     }
@@ -128,10 +131,14 @@ object Main {
     val prog_recv = runPasses(false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, debug)
+    val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
+    funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
+    funcWriter.close
     bsvgen.getBSVPrograms.foreach(p => {
       val outFile = new File(outDir.toString + "/" + p.name + ".bsv")
       val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outFile)
       bsvWriter.printBSVProg(p)
+      bsvWriter.close
     })
   }
 }

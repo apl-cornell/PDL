@@ -37,7 +37,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
     stg.outEdges.foreach(e => {
       val nstg = e.to
       val nrecvs = if (e.condRecv.isDefined) {
-        newRecvs.map(t => ICondCommand(e.condRecv.get, t._2))
+        newRecvs.map(t => ICondCommand(e.condRecv.get, List(t._2)))
       } else {
         newRecvs.map(t => t._2)
       }

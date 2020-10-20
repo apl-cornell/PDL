@@ -13,9 +13,13 @@ pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: i
     if (counter < 100<8>) {
         call sum(counter + 1<8>);
         //acquire(memA[counter]);
+        start(memA);
         acquire(memA);
+        end(memA);
+        start(memB);
         //acquire(memB[counter]);
         acquire(memB);
+        end(memB);
         int<32> argA <- memA[counter];
         int<32> argB <- memB[counter];
         //release(memA[counter]);
@@ -26,7 +30,9 @@ pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: i
         int<32> d = argA - argB; //could split into multiple cycles as in HLS examples
         if (d > 0<32>) {
             ---
+            start(total);
             acquire(total);
+            end(total);
             int<32> s = total[0] + d; //could split into multiple cycles as in HLS
             total[0] <- s;
             release(total);

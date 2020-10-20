@@ -22,8 +22,12 @@ pipe mult(d1: int<32>, d2: int<32>)[]: int<32> {
 //This is an example client that might use the multiplier.
 
 pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: mult] {
+     start(inputs);
+     start(outputs);
      acquire(inputs);
      reserve(outputs);
+     end(inputs);
+     end(outputs);
      int<32> a1 <- inputs[pc];
      call client(pc + 1<32>);
      ---
@@ -31,15 +35,19 @@ pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>, outputs: int<32>[1]<a,a>, m: 
      ---
      release(inputs);
      if (cast (pc{0:0}, bool)) {
+        start(m);
         acquire(m);
         int<32> result <- call m(a1+a1, a2);
         release(m);
+        end(m);
+        int<1> zzz = 1<1>;
+        int<1> aaa = 1<1>;
         ---
      } else {
         int<32> result = 10<32>;
      }
      ---
-     acquire(outputs);
+     block(outputs);
      outputs[0<1>] <- result;
      release(outputs);
      ---

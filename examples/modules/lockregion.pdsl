@@ -1,0 +1,14 @@
+pipe client(pc: int<32>)[inputs: int<32>[32]<a,a>] {
+    start(inputs);
+    acquire(inputs);
+    int<32> x <- inputs[pc];
+    ---
+    end(inputs);
+    release(inputs);
+}
+
+circuit {
+   ins = memory(int<32>, 32);
+   p = new client[ins];
+   call p(0<32>);
+}

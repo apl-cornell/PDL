@@ -9,9 +9,10 @@ pipe test1(input: int<32>)[rf: int<32>[5]] {
 // Expected Success
 pipe test2(input: int<32>)[rf: int<32>[5]] {
     if (input{0:0} == 1) {
-        reserve(rf);
+        start(rf);
         acquire(rf);
         release(rf);
+        end(rf);
     }
 }
 /* Expected failure since not released in both branches
@@ -41,14 +42,16 @@ pipe test4(input: int<32>)[rf: int<32>[5]] {
 } */
 //Expected Success
 pipe test5(input: int<32>)[rf: int<32>[5]] {
-    reserve(rf);
+    start(rf);
     acquire(rf);
+    end(rf);
     ---
     if (input{0:0} == 1) {
         release(rf);
     } else {
         int<32> arg <- rf[input{31:27}];
         release(rf);
+        ---
     }
 }
 /* Expected Failure, must acquire before mem op
@@ -73,30 +76,35 @@ pipe test7(input: int<32>)[rf: int<32>[5]] {
 } */
 //Expected success since reserve is before branch
 pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
+    start(rf);
     reserve(rf);
+    end(rf);
     if (input{0:0} == 1) {
         ---
-        acquire(rf);
+        block(rf);
         int<32> out <- rf[0<5>];
     } else {
         ---
-        acquire(rf);
+        block(rf);
         int<32> out <- rf[1<5>];
     }
     ---
     rf[2<5>] <- out;
     release(rf);
-
+    ---
 }
 //Expected success
 pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    start(dmem);
     reserve(dmem);
+    end(dmem);
     if (input{0:0} == 1) {
-        reserve(rf);
+        start(rf);
         acquire(rf);
         release(rf);
+        end(rf);
     }
-    acquire(dmem);
+    block(dmem);
     release(dmem);
 }
 //Expected success
@@ -156,11 +164,13 @@ pipe test14(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
 //Expected Success
 pipe test15(input: int<32>)[rf: int<32>[5]] {
     bool a = true;
+    start(rf);
     if (a) {
         reserve(rf);
     }
+    end(rf);
     if (a) {
-        acquire(rf);
+        block(rf);
     }
     if (a) {
         release(rf);
@@ -171,12 +181,14 @@ pipe test15(input: int<32>)[rf: int<32>[5]] {
 pipe test16(input: int<32>)[rf: int<32>[5]] {
     int<32> y = 3<32>;
     int<32> x = 0<32>;
+    start(rf);
     if (x == y + 3<32>) {
       reserve(rf);
     }
     if (x == 10<32>) {
       reserve(rf);
     }
+    end(rf);
 }
 */
 
@@ -186,21 +198,51 @@ pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
     bool b = false;
     if (randomBool == a) {
         if (randomBool2 == b){
+            start(rf);
             reserve(rf);
+            end(rf);
         }
     }
     if (randomBool == a) {
         if (randomBool2 == b){
-            acquire(rf);
+            block(rf);
         }
     }
     if (randomBool == a) {
         if (randomBool2 == b){
-            release(rf);
+        release(rf);
         }
     }
 }
 
+pipe test18(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
+    if (input{0:0} == 1) {
+        reserve(rf);
+    } else {
+        reserve(rf);
+    }
+    end(rf);
+    block(rf);
+    release(rf);
+}
+
+pipe test19(input: int<32>)[rf: int<32>[5]] {
+
+    start(rf);
+    if (input{0:0} == 1) {
+        reserve(rf);
+    } else {
+        reserve(rf);
+    }
+    end(rf);
+    if (input{0:0} == 1) {
+        block(rf);
+        if (input{1:1} == 1) {
+            release(rf);
+        }
+    }
+}
 
 circuit {
     r = memory(int<32>, 5);

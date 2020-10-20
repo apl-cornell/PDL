@@ -10,7 +10,9 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<2>): int<32> {
     }
 }
 pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, dmem: int<32>[32]<a,a>] {
+    start(imem);
     acquire(imem);
+    end(imem);
     int<32> insn <- imem[pc];
     release(imem);
     ---
@@ -20,12 +22,19 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, dmem: int<32>
     int<5> rs2 = insn{13:9};
     int<5> rd = insn{18:14};
     int<13> imm = insn{31:19};
+    start(rf);
     acquire(rf);
+    end(rf);
     int<32> arg1 = rf[rs1];
     int<32> arg2 = rf[rs2];
     ---
     //do some long operation here that doesn't use arg1 or arg2
-    int<7> x = imm{6:0};
+    if (imm{0:0} == 1<1>) {
+        int<7> x = imm{6:0};
+    } else {
+        int<7> x = imm{12:6};
+    }
+
     //hello
     ---
     //op_type == BR;
@@ -38,6 +47,7 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, dmem: int<32>
     rf[rd] <- alu_res;
     release(rf);
     call cpu(npc);
+    ---
 }
 
 circuit {

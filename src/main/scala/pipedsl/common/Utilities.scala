@@ -46,6 +46,8 @@ object Utilities {
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
     case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CLockStart(mod) => Set(mod)
+    case CLockEnd(mod) => Set(mod)
     //TODO update for location specific locs
     case CLockOp(mem, _) => Set(mem.id)
     case CSpeculate(predVar, predVal, verify, body) =>
@@ -54,7 +56,7 @@ object Utilities {
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case ICondCommand(cond, c2) => getUsedVars(cond) ++ getAllVarNames(c2)
+    case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
     case ISpeculate(specId, specVar, value) => getUsedVars(value) + specId ++ getUsedVars(specVar)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty => Set()
@@ -227,6 +229,7 @@ object Utilities {
     case (Some(_), None) => condL
     case (None, Some(_)) => condR
   }
+
 
   implicit class RichOption[A](opt: Option[A]) {
     def getOrThrow[T <: Throwable](except: T): A = opt match {
