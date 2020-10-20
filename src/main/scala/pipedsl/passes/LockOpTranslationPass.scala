@@ -1,12 +1,10 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.{PStage, getLockId}
-import pipedsl.common.Dataflow._
-import pipedsl.common.Errors.{InvalidLockState, UnexpectedCommand}
+import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Locks._
-import pipedsl.common.{Locks, Syntax}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, updateListMap, updateSetMap}
+import pipedsl.common.Utilities.{flattenStageList, updateListMap}
 import pipedsl.passes.Passes.StagePass
 
 object LockOpTranslationPass extends StagePass[List[PStage]] {
@@ -21,6 +19,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   override def run(stgs: List[PStage]): List[PStage] = {
     flattenStageList(stgs).foreach(s => {
+      eliminateLockRegions(s)
       translateLockOps(s)
     })
     stgs
@@ -46,10 +45,10 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   }
 
   private def translateOp(c: CLockOp): Command = c.op match {
-    case Locks.Free => ICheckLockFree(c.mem.id)
-    case Locks.Reserved => IReserveLock(lockVar(c.mem.id), c.mem.id)
-    case Locks.Acquired => ICheckLockOwned(c.mem.id, lockVar(c.mem.id))
-    case Locks.Released => IReleaseLock(c.mem.id, lockVar(c.mem.id))
+    case Free => ICheckLockFree(c.mem.id)
+    case Reserved => IReserveLock(lockVar(c.mem.id), c.mem.id)
+    case Acquired => ICheckLockOwned(c.mem.id, lockVar(c.mem.id))
+    case Released => IReleaseLock(c.mem.id, lockVar(c.mem.id))
   }
 
 }
