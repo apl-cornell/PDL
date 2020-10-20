@@ -8,11 +8,14 @@ import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.BSVPrettyPrinter
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.Locks.LockType
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter}
 import pipedsl.passes._
 import pipedsl.test.TestingMain
 import pipedsl.typechecker._
+
+import scala.collection.immutable
 
 object Main {
   val logger: Logger = Logger("main")
@@ -81,7 +84,10 @@ object Main {
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockRegionChecker.check(recvProg, None)
-      LockWellformedChecker.check(recvProg)
+      val lockWellformedChecker = new LockWellformedChecker(new immutable.HashMap[Id, LockType]())
+      val locks = lockWellformedChecker.check(canonProg)
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getLockTypeMap())
+      lockChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)

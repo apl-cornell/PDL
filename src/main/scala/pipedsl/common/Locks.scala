@@ -29,6 +29,10 @@ object Locks {
   }
 
 
+  sealed trait LockType
+  case object Specific extends LockType
+  case object General extends LockType
+  
   case object Free extends LockState("free", 0)
   case object Reserved extends LockState("reserved", 1)
   case object Acquired extends LockState("acquired", 2)

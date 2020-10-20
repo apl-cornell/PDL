@@ -1,0 +1,189 @@
+/* Expected Failure
+pipe test10(input: int<32>)[rf: int<32>[5]] {
+    int<32> y = 3<32>;
+    int<32> x = 0<32>;
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs2]);
+    if (x == y + 3<32>) {
+      reserve(rf[rs1]);
+    }
+    if (x == 10<32>) {
+      reserve(rf[rs1]);
+    }
+    acquire(rf[rs1]);
+    release(rf[rs1]);
+    acquire(rf[rs2]);
+    release(rf[rs2]);
+}
+*/
+
+//Expected Success
+pipe test1(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs1]);
+    acquire(rf[rs1]);
+    reserve(rf[rs2]);
+    int<32> arg1 <- rf[rs1]; 
+    acquire(rf[rs2]);
+    int<32> arg2 <- rf[rs2]; 
+    release(rf[rs1]);
+    release(rf[rs2]);
+} 
+
+//Expected Success
+pipe test2(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    if (input{0:0} == 1) {
+        reserve(rf[rs1]);
+        acquire(rf[rs1]);
+        int<32> arg1 <- rf[rs1]; 
+        release(rf[rs1]);
+    }
+    reserve(rf[rs2]);
+    acquire(rf[rs2]);
+    int<32> arg2 <- rf[rs2]; 
+    release(rf[rs2]);
+} 
+
+//Expected Success
+pipe test3(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs1]);
+    acquire(rf[rs1]);
+    reserve(rf[rs2]);
+    acquire(rf[rs2]);
+    if (input{0:0} == 1) {
+        int<32> arg1 <- rf[rs1]; 
+        int<32> arg2 <- rf[rs2]; 
+        release(rf[rs1]);
+        release(rf[rs2]);
+    } else {
+        int<32> arg1 <- rf[rs1]; 
+        int<32> arg2 <- rf[rs2]; 
+        release(rf[rs1]);
+        release(rf[rs2]);
+    }
+} 
+
+//Expected success
+pipe test4(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(dmem);
+    if (input{0:0} == 1) {
+        reserve(rf[rs1]);
+        acquire(rf[rs1]);
+        release(rf[rs1]);
+        reserve(rf[rs2]);
+        acquire(rf[rs2]);
+        release(rf[rs2]);
+    }
+    acquire(dmem);
+    release(dmem);
+}
+
+//Expected Success
+pipe test5(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    bool a = true;
+    bool b = false;
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs2]);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            reserve(rf[rs1]);
+        }
+    }
+    acquire(rf[rs2]);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            acquire(rf[rs1]);
+        }
+    }
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            release(rf[rs1]);
+        }
+    }
+    release(rf[rs2]);
+}
+
+/*Expected Failure
+pipe test6(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs2]);
+    acquire(rf[rs2]);
+    int<32> arg2 <- rf[rs2]; 
+    reserve(rf[rs1]);
+    int<32> arg1 <- rf[rs1]; 
+    acquire(rf[rs1]);
+    release(rf[rs1]);
+    release(rf[rs2]);
+} */
+
+/*Expected Failure
+pipe test7(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs1]);
+    if (input{0:0} == 1) {
+        reserve(rf[rs2]);
+    }
+    acquire(rf[rs2]);
+    acquire(rf[rs1]);
+    release(rf[rs1]);
+    release(rf[rs2]);
+} */
+
+/* Expected Failure
+pipe test8(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs1]);
+    reserve(rf[rs2]);
+    acquire(rf[rs2]);
+    acquire(rf[rs1]);
+    release(rf[rs1]);
+    if (input{0:0} == 1) {
+        release(rf[rs2]);
+    }
+} */
+
+/* Expected Failure
+pipe test9(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    bool a = true;
+    bool b = false;
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    reserve(rf[rs2]);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            reserve(rf[rs1]);
+        }
+    }
+    acquire(rf[rs2]);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            acquire(rf[rs1]);
+        }
+    }
+    int<32> c <- rf[rs1];
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            release(rf[rs1]);
+        }
+    }
+    release(rf[rs2]);
+} */
+
+
+
+
+circuit {
+    r = memory(int<32>, 5);
+}
