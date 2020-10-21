@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
-import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id}
+import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id, LockArg}
 
 import scala.util.parsing.input.Position
 
@@ -39,19 +39,18 @@ object Locks {
   case object Released extends LockState("released", 3)
 
 
-  def transferLockStates(node: PStage, instates: Map[Id, LockState]): Map[Id, LockState] = {
+  def transferLockStates(node: PStage, instates: Map[LockArg, LockState]): Map[LockArg, LockState] = {
     var newMap = instates
     node.getCmds.foreach {
-      //TODO Unique locks update
-      case CLockOp(mem, op) => newMap = newMap.updated(mem.id, op)
+      case CLockOp(mem, op) => newMap = newMap.updated(mem, op)
       case _ => ()
     }
     newMap
   }
 
   //Need the node argument to fit the Dataflow signature
-  def mergeLockStates(node: PStage, instates: DFMap[Map[Id, LockState]]): Map[Id, LockState] = {
-    instates.keys.foldLeft(Map[Id, LockState]())((m, stg) => {
+  def mergeLockStates(node: PStage, instates: DFMap[Map[LockArg, LockState]]): Map[LockArg, LockState] = {
+    instates.keys.foldLeft(Map[LockArg, LockState]())((m, stg) => {
       val stgstates = instates(stg)
       (m.keySet ++ stgstates.keySet).map(k => {
         k -> join(m.get(k), stgstates.get(k))
@@ -92,7 +91,7 @@ object Locks {
    * @param lops A set of lock operations relevant to mod
    * @return A new merged set of lock operations if any merges apply
    */
-  def mergeLockOps(mod: Id, lops: Iterable[Command]): Iterable[Command] = {
+  def mergeLockOps(mod: LockArg, lops: Iterable[Command]): Iterable[Command] = {
     //res + rel -> checkfree
     //res + checkowned -> res + checkfree
     //else same

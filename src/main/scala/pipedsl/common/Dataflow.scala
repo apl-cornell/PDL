@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import DAGSyntax._
-import Syntax.Id
+import Syntax.{Id, LockArg}
 import Utilities._
 import pipedsl.common.Locks._
 
@@ -105,6 +105,6 @@ object Dataflow {
 
   val UsedInLaterStages: Analysis[Set[Id]] =
     Analysis[Set[Id]](isForward = false, Set(), mergeUsedVars, transferUsedVars)
-  val LockStateInfo: Analysis[Map[Id, LockState]] =
-    Analysis[Map[Id, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
+  val LockStateInfo: Analysis[Map[LockArg, LockState]] =
+    Analysis[Map[LockArg, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
 }

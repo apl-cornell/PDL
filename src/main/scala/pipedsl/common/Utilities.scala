@@ -48,8 +48,7 @@ object Utilities {
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
-    //TODO update for location specific locs
-    case CLockOp(mem, _) => Set(mem.id)
+    case CLockOp(mem, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
     case CSpeculate(predVar, predVal, verify, body) =>
      getUsedVars(predVal) ++ getAllVarNames(verify) ++ getAllVarNames(body) + predVar.id
     case CCheck(predVar) => Set(predVar)
@@ -108,6 +107,7 @@ object Utilities {
       case e:EMemAccess => getUsedVars(e)
       case _ => Set()
     })
+    case CLockOp(mem, _) => if (mem.evar.isDefined) Set(mem.evar.get.id) else Set()
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
@@ -125,9 +125,14 @@ object Utilities {
     case IMemWrite(_, addr, data) => Set(addr.id, data.id)
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
+    case IReserveLock(_, _) => Set()
     case ICheckLockOwned(_, handle) => Set(handle.id)
     case IReleaseLock(_, handle) => Set(handle.id)
-    case _ => Set()
+    case ILockNoOp(_) => Set()
+    case ICheckLockFree(_) => Set()
+    case CLockStart(_) => Set()
+    case CLockEnd(_) => Set()
+    case CEmpty => Set()
   }
 
   /**

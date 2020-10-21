@@ -222,12 +222,12 @@ object Syntax {
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand
   //used for sequential memories that don't commit writes immediately
   case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand
-  case class ICheckLockFree(mem: Id) extends InternalCommand
-  case class ICheckLockOwned(mem: Id, handle: EVar) extends InternalCommand
-  case class IReserveLock(handle: EVar, mem: Id) extends InternalCommand
-  case class IReleaseLock(mem: Id, handle: EVar) extends InternalCommand
+  case class ICheckLockFree(mem: LockArg) extends InternalCommand
+  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand
+  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand
+  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand
   //needed for internal compiler passes to track branches with explicitly no lockstate change
-  case class ILockNoOp(mem: Id) extends InternalCommand
+  case class ILockNoOp(mem: LockArg) extends InternalCommand
 
   case class CaseObj(cond: Expr, body: Command) extends Positional
 

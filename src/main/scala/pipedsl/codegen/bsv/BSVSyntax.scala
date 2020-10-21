@@ -7,33 +7,21 @@ import pipedsl.common.Syntax._
 object BSVSyntax {
 
   sealed trait MethodType
-
   case object Action extends MethodType
-
   case class Value(rtyp: BSVType) extends MethodType
-
   case class ActionValue(rtyp: BSVType) extends MethodType
 
   sealed trait BSVType
-
+  case class BNumericType(sz: Int) extends BSVType
   case class BCombMemType(elem: BSVType, addrSize: Int) extends BSVType
-
   case class BAsyncMemType(elem: BSVType, addrSize: Int) extends BSVType
-
   case class BStruct(name: String, fields: List[BVar]) extends BSVType
-
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
-
   case class BSizedType(name: String, sizeParams: List[Integer] = List()) extends BSVType
-
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
-
   case class BTypeParam(name: String) extends BSVType
-
   case object BBool extends BSVType
-
   case object BVoid extends BSVType
-
   case object BEmptyModule extends BSVType
 
   class BSVTranslator(val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map()) {
@@ -69,7 +57,7 @@ object BSVSyntax {
         }
       case TVoid() => BVoid
       case TNamedType(name) => BTypeParam(name.v)
-      //TODO implement function translation
+      //TODO implement function type translation
       case TFun(_, _) => throw new RuntimeException
       //TODO better error
       case TRecType(_, _) => throw new RuntimeException
@@ -87,6 +75,15 @@ object BSVSyntax {
       toBSVVar(v.id)
     }
 
+    def toBSVVar(v: Option[EVar]): Option[BVar] = v match {
+      case Some(value) => Some(toBSVVar(value))
+      case None => None
+    }
+
+    def toBSVExpr(e: Option[Expr]): Option[BExpr] = e match {
+      case Some(value) => Some(toBSVExpr(value))
+      case None => None
+    }
     def toBSVExpr(e: Expr): BExpr = e match {
       case EInt(v, base, bits) => BIntLit(v, base, bits)
       case EBool(v) => BBoolLit(v)
@@ -103,7 +100,7 @@ object BSVSyntax {
       case _ => throw UnexpectedExpr(e)
     }
 
-    //TODO handle this better
+    //TODO handle casts better
     def translateCast(e: ECast): BExpr = {
       e.ctyp match {
         case TBool() => toBSVExpr(e.exp)

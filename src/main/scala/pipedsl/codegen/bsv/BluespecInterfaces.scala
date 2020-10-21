@@ -45,6 +45,8 @@ object BluespecInterfaces {
   private val lockRegionModule = "mkReg"
   private val lockType = "Lock"
   private val lockModuleName = "mkLock"
+  private val addrLockType = "AddrLock"
+  private val addrLockModuleName = "mkFAAddrLock"
 
   def getLockRegionType: BInterface = {
     BInterface(lockRegionType, List(BVar("busy", BBool)))
@@ -59,8 +61,15 @@ object BluespecInterfaces {
     BInterface(lockType, List(BVar("idsize", ht)))
   }
 
-  def getLockModule: BModule = {
-    BModule(lockModuleName, List())
+  def getAddrLockType(ht: BSVType, elemtyp: BSVType, sz: Int = 4): BInterface = {
+    BInterface(addrLockType,
+      List(BVar("idsize", ht), BVar("addrtyp", elemtyp), BVar("numentries", BNumericType(sz))))
+  }
+
+  def getLockModule(typ: BSVType): BModule = typ match {
+    case BInterface(lt, _) if lt == lockType => BModule(lockModuleName, List())
+    case BInterface(lt, _) if lt == addrLockType => BModule(addrLockModuleName, List())
+    case _ => throw UnexpectedBSVType("Expected a lock interface type")
   }
 
   def getStart(mod: BVar): BStatement = {
@@ -82,17 +91,19 @@ object BluespecInterfaces {
   private val lockResName = "res"
   private val lockRelName = "rel"
 
-  def getCheckEmpty(mod: BVar): BMethodInvoke = {
-    BMethodInvoke(mod, lockEmptyName, List())
+  def getCheckEmpty(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
+    BMethodInvoke(mod, lockEmptyName, if (addr.isDefined) List(addr.get) else List())
   }
-  def getCheckOwns(mod: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mod, lockOwnsName, List(handle))
+  def getCheckOwns(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
+    val args = if (addr.isDefined) List(handle, addr.get) else List(handle)
+    BMethodInvoke(mod, lockOwnsName, args)
   }
-  def getReserve(mod: BVar): BMethodInvoke = {
-    BMethodInvoke(mod, lockResName, List())
+  def getReserve(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
+    BMethodInvoke(mod, lockResName, if (addr.isDefined) List(addr.get) else List())
   }
-  def getRelease(mod: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mod, lockRelName, List(handle))
+  def getRelease(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
+    val args = if (addr.isDefined) List(handle, addr.get) else List(handle)
+    BMethodInvoke(mod, lockRelName, args)
   }
 
   private val memHandleName = "MemId"

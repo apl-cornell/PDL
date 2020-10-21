@@ -11,8 +11,6 @@ import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency}
  * - Checks that variables set by receive statements
  *   are not used until after a `---` separator (additionally checking
  *   that any reference to a variable happens after it has been assigned).
- * - Variables introduced via speculation can only be used inside the body
- *   of speculate blocks and as LHS references for Check and Resolve statements
  * - Checks that any noncombinational access to memory or an external module happens as part of a
  *   "receive" statement rather than a normal assign or other combinational expression.
  * - Ensures that no pipeline splitting operations are conducted inside an if statement
@@ -92,7 +90,11 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       }
     case CLockStart(_) => (vars, nextVars)
     case CLockEnd(_) => (vars, nextVars)
-    case CLockOp(_, _) => (vars, nextVars)
+    case CLockOp(mem, _) =>
+      if (mem.evar.isDefined) {
+        checkExpr(mem.evar.get, vars, isRhs = true)
+      }
+      (vars, nextVars)
     case CSpeculate(predVar, predVal, verify, body) =>
       if(checkExpr(predVal, vars) != Combinational) {
         throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")

@@ -73,6 +73,11 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    Vector#(numlocks, Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
+   rule invalidateLocks;
+      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
+	 if (entryVec[idx] matches tagged Valid.t &&& lockVec[idx].isEmpty())
+	    entryVec[idx] <= tagged Invalid;
+   endrule
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);
@@ -138,8 +143,8 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	 begin
 	    Lock#(LockId#(d)) lock = lockVec[idx];
 	    lock.rel(tid);
-	    //disassociated the lock from the address once its empty
-	    if (lock.isEmpty()) entryVec[idx] <= tagged Invalid;
+//	    $display("Address %d released %t", loc, $time());
+	    //disassociate the lock from the address once its empty in a separate rule
 	 end
       //else no lock is associated with loc, do nothing
    endmethod
@@ -149,6 +154,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       if (addrLock matches tagged Valid.lock)
 	 begin
 	    let nid <- lock.res();
+//	    $display("Address %d reserved %t", loc, $time());
             return nid;
 	 end
       else
@@ -158,6 +164,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	            begin
 		            entryVec[idx] <= tagged Valid loc;
 		            let nid <- lockVec[idx].res();
+//		       	    $display("Address %d reserved %t", loc, $time());
 		            return nid;
 	            end
 	        else return ?;

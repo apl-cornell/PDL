@@ -23,10 +23,14 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, dmem: int<32>
     int<5> rd = insn{18:14};
     int<13> imm = insn{31:19};
     start(rf);
-    acquire(rf);
+    acquire(rf[rs1]);
+    acquire(rf[rs2]);
+    reserve(rf[rd]);
     end(rf);
     int<32> arg1 = rf[rs1];
     int<32> arg2 = rf[rs2];
+    release(rf[rs1]);
+    release(rf[rs2]);
     ---
     //do some long operation here that doesn't use arg1 or arg2
     if (imm{0:0} == 1<1>) {
@@ -44,8 +48,9 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, dmem: int<32>
     int<32> add_arg2 = (op_type == 0b1<2>) ? arg2 : 0x0<19> ++ imm;
     int<32> alu_res = alu(arg1, add_arg2, op);
     ---
+    block(rf[rd]);
     rf[rd] <- alu_res;
-    release(rf);
+    release(rf[rd]);
     call cpu(npc);
     ---
 }

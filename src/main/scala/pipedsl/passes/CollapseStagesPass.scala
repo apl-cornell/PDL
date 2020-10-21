@@ -1,6 +1,5 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax
 import pipedsl.common.DAGSyntax._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{andExpr, getReachableStages}
@@ -106,7 +105,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
    */
   private def mergeStages(target: PStage, srcs: Iterable[PStage]): Unit = {
     var newstmts = List[Command]()
-    val lockids = srcs.foldLeft(Set[Id]())((ids, s) => {
+    val lockids = srcs.foldLeft(Set[LockArg]())((ids, s) => {
       ids ++ getLockIds(s.getCmds)
     })
     srcs.foreach(src => {
