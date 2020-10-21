@@ -57,7 +57,7 @@ object BSVSyntax {
         }
       case TVoid() => BVoid
       case TNamedType(name) => BTypeParam(name.v)
-      //TODO implement function translation
+      //TODO implement function type translation
       case TFun(_, _) => throw new RuntimeException
       //TODO better error
       case TRecType(_, _) => throw new RuntimeException
@@ -100,7 +100,7 @@ object BSVSyntax {
       case _ => throw UnexpectedExpr(e)
     }
 
-    //TODO handle this better
+    //TODO handle casts better
     def translateCast(e: ECast): BExpr = {
       e.ctyp match {
         case TBool() => toBSVExpr(e.exp)

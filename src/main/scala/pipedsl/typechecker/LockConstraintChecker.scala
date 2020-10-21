@@ -115,7 +115,6 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
         }
         case _ => throw UnexpectedCase(c.pos)
       }
-      //TODO don't just use id
       case CLockOp(mem, op) => op match {
         case Locks.Free => env //unreachable
         case Locks.Reserved => checkState(mem, env, Free.order) match {
@@ -132,7 +131,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
         case Locks.Released => checkState(mem, env, Acquired.order) match {
           case Some(value) if value =>
             throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
-          case Some(value) if !value => env.add(mem,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Released)))
+          case Some(value) if !value => env.add(mem, ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Released)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
       } //logic inside the lock environment class

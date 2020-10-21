@@ -8,23 +8,10 @@ import Environments.Environment
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 
 
-//TODO kinds of typechecking we need to do:
-
-//Normal stuff
+//  This checks the 'Normal stuff' with base types.
 //  Assignment
 //  Function calls and returns
 //  Module Instantiations
-//
-//Pipeline Stuff
-//  Call statment exactly once in each path w/ typed args
-//  Dynamic Lock Checking
-//  More complex lock types (indexed / dependent)
-//  Speculation Restrictions
-//
-//Security Types
-//  Normal IFC
-//  How to Check "call"s
-//  Speculation Labels
 object BaseTypeChecker extends TypeChecks[Id, Type] {
   
   override def emptyEnv(): Environment[Id,Type] = Environments.EmptyTypeEnv
@@ -264,7 +251,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     case CLockOp(mem, _) => {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
-      { case _: TModType => tenv
+      { case t: TModType =>
+          if (mem.evar.isDefined) throw UnexpectedType(t.pos, "address lock operation", "Memory Type", t)
+          else tenv
         case memt: TMemType => {
           if(mem.evar.isEmpty) tenv
           else {
@@ -403,7 +392,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
           }
-          (tret, tenv) //TODO check return env
+          (tret, tenv)
         }
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }

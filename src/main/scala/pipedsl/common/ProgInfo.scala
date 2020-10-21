@@ -3,6 +3,8 @@ package pipedsl.common
 import pipedsl.common.Locks.LockType
 import pipedsl.common.Syntax.{Id, Prog}
 
+//A holder class for metadata about programs that we want to pass between stages, etc.
+//TODO move other metadata here from the various random ways that it's currently stored.
 class ProgInfo(val p: Prog) {
 
   private val modInfo: Map[Id, ModInfo] = p.moddefs.foldLeft(Map[Id, ModInfo]())((map, mod) => {

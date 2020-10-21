@@ -3,6 +3,8 @@ package pipedsl.passes
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
 
+import scala.annotation.tailrec
+
 /**
  * This pass updates the 'isRecursive' annotation on the
  * module definition. Modules are by default assumed to be
@@ -36,6 +38,7 @@ object MarkNonRecursiveModulePass extends ModulePass[ModuleDef] with ProgPass[Pr
 
   //Call expressions can only appear inside cast expressions,
   //no other subexpressions - the Timing Type Checker ensures this
+  @tailrec
   private def hasRecCall(e: Expr, m: Id): Boolean = e match {
     case ECall(mod, _) => mod == m
     case ECast(_, exp) => hasRecCall(exp, m)

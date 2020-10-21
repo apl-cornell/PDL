@@ -1,79 +1,65 @@
-//BAD - acquires addresses potentially out of order
-pipe a1()[imem: int<32>[32], rf: int<32>[5]] {
-     acquire(imem);
-     int<32> insn <- imem[0];
-     release(imem);
-     ---
-     int<5> rs1 = insn{4:0};
-     int<5> rs2 = insn{9:5};
-     acquire(rf[rs1]);
-     ---
-     acquire(rf[rs2]); //bad, instruction in previous stage could acquire this lock (rs1_2 == rs1_1) where subscript indicates thread ID.
-     ---
-     release(rf[rs1]);
-     release(rf[rs2]);
+pipe good(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
+    start(r1);
+    start(r2);
+    int<5> addr = 1<5>;
+    if (in) {
+        reserve(r1[addr]);
+    } else {
+        reserve(r2[addr]);
+    }
+    end(r1);
+    end(r2);
+    ---
+    if (in) {
+        block(r1[addr]);
+        r1[addr] <- 32<32>;
+        release(r1[addr]);
+    }
+    ---
+    if (!in) {
+        block(r2[addr]);
+        r2[addr] <- 32<32>;
+        release(r2[addr]);
+    }
 }
+/*
+pipe bad(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
+    start(r1);
+    start(r2);
+    int<5> addr = 1<5>;
+    if (in) {
+        reserve(r1[addr]);
+    } else {
+        reserve(r2[addr]);
+    }
+    end(r1);
+    end(r2);
+    ---
+    if (in) {
+        block(r1[addr]);
+        r1[addr] <- 32<32>;
+        release(r1[addr]);
+    }
+    ---
+    block(r2[addr]);
+    r2[addr] <- 32<32>;
+    release(r2[addr]);
+} */
+/*
+pipe bad2(in: bool)[r1: int<32>[5]] {
+    start(r1);
+    int<5> addr = 1<5>;
+    int<5> addr2 = 1<5>;
+    reserve(r1[addr]);
+    reserve(r1[addr2]);
+    end(r1);
+    ---
+    block(r1[addr2]);
+    r1[addr2] <- 32<32>;
+    release(r1[addr2]);
+    ---
+} */
 
-//GOOD - should work OK assuming we have a conditional acquire statement
-pipe a2()[imem: int<32>[32], rf: int<32>[5]] {
-     acquire(imem);
-     int<32> insn <- imem[0];
-     release(imem);
-     ---
-     int<5> rs1 = insn{4:0};
-     int<5> rs2 = insn{9:5};
-     acquire(rf[rs1]);
-     //TODO conditional acquire syntax
-     rs1 != rs2 ? acquire(rf[rs2]);
-     ---
-     release(rf[rs1]);
-     rs1 != rs2 ? release(rf[rs2]);
-}
-
-//BAD - no conditional checking to ensure rs1 and rs2 don't alias
-pipe a3()[imem: int<32>[32], rf: int<32>[5]] {
-     acquire(imem);
-     int<32> insn <- imem[0];
-     release(imem);
-     ---
-     int<5> rs1 = insn{4:0};
-     int<5> rs2 = insn{9:5};
-     acquire(rf[rs1]);
-     acquire(rf[rs2]);
-     ---
-     release(rf[rs1]);
-     release(rf[rs2]);
-}
-
-//PROBLEM - no way to use address specific locks here :/
-pipe a4(pc: int<32>)[mem: int<32>[32]] {
-     call a4(pc + 1);
-     acquire(mem[pc]);
-     int<32> next <- mem[pc];
-     ---
-     acquire(mem[next]);
-     int<32> val <- mem[next];
-     release(mem[next]);
-     release(mem[pc]);
-     ---
-}
-//TR: ac(0, t1); ac(1, t2); ac(1, t1)...deadlock
-
-//idea, acquire a global lock on lock acquisition
-pipe a4v2(pc: int<32>)[mem: int<32>[32]] {
-     call a4(pc + 1);
-     acquire(mem);             //acquire global lock on mem (this is the lock for acquiring locks)
-     acquire(mem[pc]);         //specifically acquire the lock for mem[pc]
-     int<32> next <- mem[pc];
-     ---
-     next != pc ? release(mem[pc]);         //if I need a new lock, acquire it
-     next != pc ? acquire(mem[next]);       //specifically acquire the lock for mem[next] iff I don't need it anymore
-     release(mem);	       //release the global lock(so I may no longer acquire locks)
-     mem[next] <- pc;
-     ---
-     release(mem[next]);       //release the mem[next] lock
-     
-}
 circuit {
     r = memory(int<32>, 5);
 }
