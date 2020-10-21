@@ -38,6 +38,7 @@ object BSVPrettyPrinter {
     case BAsyncMemType(elem, addrSize) => "AsyncMem#(" + toBSVTypeStr(elem) + "," +
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BSizedType(name, sizeParams) => name + "#(" + sizeParams.map(i => i.toString).mkString(",") + ")"
+    case BNumericType(sz) => sz.toString
     case BTypeParam(name) => name
   }
 

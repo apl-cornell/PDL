@@ -2,11 +2,11 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
-import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
+import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.{Locks, ProgInfo}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
 
-import scala.annotation.tailrec
 
 object BluespecGeneration {
 
@@ -14,10 +14,10 @@ object BluespecGeneration {
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
 
-  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], debug: Boolean = false,
-    funcmodname: String = "Functions") {
+  class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
+    debug: Boolean = false, funcmodname: String = "Functions") {
 
-    val funcModule = funcmodname
+    val funcModule: String = funcmodname
     private val funcImport = BImport(funcmodname)
 
     //for each module
@@ -34,7 +34,7 @@ object BluespecGeneration {
       })
       val newmod = new BluespecModuleGenerator(
         mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, modHandles,
-        debug, funcImport
+        pinfo, debug, funcImport
       ).getBSV
       mapping + ( mod.name -> newmod )
     })
@@ -122,17 +122,10 @@ object BluespecGeneration {
     }
   }
 
-  class BluespecFunctionGenerator() {
-  }
-
   /**
    * Given a list of pipeline stages that describe a pipeline module
    * and the interface to that module, generate a
    * BSV Module that represents the entire pipeline.
-   *
-   * This comment and top-level function are still TODO,
-   * we need to refactor a bit.
-   *
    * @param firstStage  - The first stage in the pipeline that accepts inputs from
    *                    a single channel (unlike the other stages).
    * @param otherStages - The full remaining list of pipeline stages.
@@ -140,9 +133,10 @@ object BluespecGeneration {
    */
   private class BluespecModuleGenerator(val mod: ModuleDef,
     val firstStage: PStage, val otherStages: List[PStage],
-    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val debug:Boolean = false,
-    val funcImport: BImport) {
+    val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val progInfo: ProgInfo,
+    val debug:Boolean = false, val funcImport: BImport) {
 
+    private val modInfo = progInfo.getModInfo(mod.name)
     private val translator = new BSVTranslator(bsvMods, bsvHandles)
 
     private val threadIdName = "_threadID"
@@ -206,8 +200,17 @@ object BluespecGeneration {
     })
     //mapping memory ids to their associated locks
     private val lockParams: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
-      locks + (m.name -> BVar(genLockName(m.name),
-        BluespecInterfaces.getLockType(BluespecInterfaces.getDefaultLockHandleType)))
+      val locktype = modInfo.getLockTypes.get(m.name) match {
+        case Some(Locks.Specific) =>
+          val addrType = m.typ match {
+            case TMemType(_, addrSize, _, _) =>  BSizedInt(unsigned = true, addrSize)
+            case _ => throw UnexpectedType(m.pos, "Address Lock", "Memory Type", m.typ)
+          }
+          BluespecInterfaces.getAddrLockType(BluespecInterfaces.getDefaultLockHandleType, addrType)
+        case Some(Locks.General) | None =>
+          BluespecInterfaces.getLockType(BluespecInterfaces.getDefaultLockHandleType)
+      }
+      locks + (m.name -> BVar(genLockName(m.name), locktype))
     })
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
       locks + (m.name -> BVar(genLockRegionName(m.name),
@@ -367,9 +370,11 @@ object BluespecGeneration {
         case CLockStart(mod) =>
           l :+ BluespecInterfaces.getCheckStart(lockRegions(mod))
         case ICheckLockFree(mem) =>
-          l :+ BluespecInterfaces.getCheckEmpty(lockParams(mem))
+          l :+ BluespecInterfaces.getCheckEmpty(lockParams(mem.id),
+            translator.toBSVVar(mem.evar))
         case ICheckLockOwned(mem, handle) =>
-          l :+ BluespecInterfaces.getCheckOwns(lockParams(mem), translator.toBSVExpr(handle))
+          l :+ BluespecInterfaces.getCheckOwns(lockParams(mem.id),
+            translator.toBSVExpr(handle), translator.toBSVVar(mem.evar))
         case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) if data.isDefined =>
           l :+ BluespecInterfaces.getCheckMemResp(modParams(mem), translator.toBSVVar(handle))
         case IRecv(handle, sender, _) =>
@@ -480,7 +485,7 @@ object BluespecGeneration {
       })
       //Instantiate a lock for each memory:
       val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
-        m + (id -> BModInst(lockParams(id), BluespecInterfaces.getLockModule))
+        m + (id -> BModInst(lockParams(id), BluespecInterfaces.getLockModule(lockParams(id).typ)))
       })
       //Instantiate a lock regions for each memory:
       val memRegions = lockRegions.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
@@ -778,12 +783,13 @@ object BluespecGeneration {
           BExprStmt(BluespecInterfaces.getFifoEnq(outputQueue, outstruct))
         )))
       case IReserveLock(handle, mem) => Some(
-        BInvokeAssign(translator.toBSVVar(handle), BluespecInterfaces.getReserve(lockParams(mem)))
+        BInvokeAssign(translator.toBSVVar(handle),
+          BluespecInterfaces.getReserve(lockParams(mem.id), translator.toBSVVar(mem.evar)))
       )
       case IReleaseLock(mem, handle) => Some(
-        BExprStmt(BluespecInterfaces.getRelease(lockParams(mem), translator.toBSVVar(handle)))
+        BExprStmt(BluespecInterfaces.getRelease(lockParams(mem.id),
+          translator.toBSVVar(handle), translator.toBSVVar(mem.evar)))
       )
-        //TODO lock start and end
       case CLockStart(mod) => Some(BluespecInterfaces.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(BluespecInterfaces.getStop(lockRegions(mod)))
       case _: ICheckLockFree => None

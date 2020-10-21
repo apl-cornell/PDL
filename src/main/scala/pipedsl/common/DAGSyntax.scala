@@ -154,14 +154,14 @@ object DAGSyntax {
 
     //returns lock cmds on left and non lock commands on right
     //non lock commands are stored as a map from the relevant lock ID to the set of commands
-    private def splitLockCmds(cmds: Iterable[Command]): (Map[Id, List[Command]], List[Command]) = {
-      var lockCmds = Map[Id, List[Command]]()
+    private def splitLockCmds(cmds: Iterable[Command]): (Map[LockArg, List[Command]], List[Command]) = {
+      var lockCmds = Map[LockArg, List[Command]]()
       var nonlockCmds = List[Command]()
       cmds.foreach {
         case ICondCommand(cond , cs) =>
           val (lcs, nlcs) = cs.partition(c => isLockStmt(c))
           if (lcs.nonEmpty) {
-            var tempMap = Map[Id, List[Command]]()
+            var tempMap = Map[LockArg, List[Command]]()
             lcs.foreach(lc => {
               val lockiden = getLockId(lc)
               tempMap = updateListMap(tempMap, lockiden, lc)
@@ -173,10 +173,9 @@ object DAGSyntax {
           if (nlcs.nonEmpty) {
             nonlockCmds = nonlockCmds :+ ICondCommand(cond, nlcs)
           }
-        case c if isLockStmt(c) => {
+        case c if isLockStmt(c) =>
           val lockiden = getLockId(c)
           lockCmds = updateListMap(lockCmds, lockiden, c)
-        }
         case c => nonlockCmds = nonlockCmds :+ c
       }
       (lockCmds, nonlockCmds)
@@ -196,21 +195,18 @@ object DAGSyntax {
         case (true, false) => mergedCmds = mergedCmds ++ srcCmds.get
         case (false, true) => mergedCmds = mergedCmds ++ newCmds.get
         case (false, false) => ()
-        case (true, true) => {
+        case (true, true) =>
           var newCondLockCmds = Map[Expr, List[Command]]()
           var newUnCondLockCmds = List[Command]()
           srcCmds.get.foreach(l => {
             newCmds.get.foreach(cl => {
               (l, cl) match {
-                case (ICondCommand(lcond, lcs), ICondCommand(rcond, rcs)) => {
+                case (ICondCommand(lcond, lcs), ICondCommand(rcond, rcs)) =>
                   newCondLockCmds = updateListMap(newCondLockCmds, AndOp(lcond, rcond), lcs ++ rcs)
-                }
-                case (ICondCommand(cond, lcs), _) => {
+                case (ICondCommand(cond, lcs), _) =>
                   newCondLockCmds = updateListMap(newCondLockCmds, cond, lcs :+ cl)
-                }
-                case (_, ICondCommand(cond, lcs)) => {
+                case (_, ICondCommand(cond, lcs)) =>
                   newCondLockCmds = updateListMap(newCondLockCmds, cond, l +: lcs)
-                }
                 case (cl, cr) => newUnCondLockCmds = newUnCondLockCmds ++ List(cl, cr)
               }
             })
@@ -225,7 +221,7 @@ object DAGSyntax {
             val lockops = newUnCondLockCmds.filter(p => getLockId(p) == l)
             mergedCmds = mergedCmds ++ mergeLockOps(l, lockops)
           })
-        }}
+        }
       })
       //mergedCmds is the new set of lock cmds
       this.setCmds(srcNonLock ++ mergedCmds ++ newNonLock)
@@ -239,8 +235,8 @@ object DAGSyntax {
     case _ => false
   }
 
-  def getLockIds(cs: Iterable[Command]): List[Id] = {
-    cs.foldLeft(List[Id]())((l, c) => {
+  def getLockIds(cs: Iterable[Command]): List[LockArg] = {
+    cs.foldLeft(List[LockArg]())((l, c) => {
       if (isLockStmt(c)) {
         l :+ getLockId(c)
       } else {
@@ -249,7 +245,7 @@ object DAGSyntax {
     })
   }
 
-  private def getLockId(c: Command): Id = c match {
+  private def getLockId(c: Command): LockArg = c match {
     case ICheckLockFree(l) => l
     case ICheckLockOwned(l, _) => l
     case IReserveLock(_, l) => l
@@ -288,12 +284,16 @@ object DAGSyntax {
   }
 
   /**
-   *
-   * @param n
-   * @param cond
-   * @param trueStages
-   * @param falseStages
-   * @param joinStage
+   * This subclass is used to represent conditional execution as a set of stages,
+   * coordinated by this stage. This stage will generate the conditional expression
+   * and send that to the join stage to indicate which of the branches were followed.
+   * Additionally, it will send data to the head of either the true or false stages based
+   * on the result of the condition
+   * @param n The unique identifier for this stage
+   * @param cond The conditional expression
+   * @param trueStages The list of stages to execute if cond is true
+   * @param falseStages The list of stages to execute if cond is false
+   * @param joinStage The stage to execute after one of the branches.
    */
   class IfStage(n: Id, val cond: Expr, var trueStages: List[PStage],
     var falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {

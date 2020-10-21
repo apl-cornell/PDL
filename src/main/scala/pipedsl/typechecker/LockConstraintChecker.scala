@@ -1,6 +1,6 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalLockRelease, InvalidLockState, UnexpectedCase}
+import pipedsl.common.Errors.UnexpectedCase
 import pipedsl.common.Locks
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
@@ -8,7 +8,7 @@ import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
 import z3.scala.{Z3AST, Z3Context, Z3Solver}
 
-import scala.collection.mutable.Stack
+import scala.collection.mutable
 
 /**
  * This checks that all reads and writes to memories
@@ -19,22 +19,25 @@ import scala.collection.mutable.Stack
  * possible, the type checking fails.
  */
 //TODO: Make error case classes
-class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, LockType]) extends TypeChecks[LockArg, Z3AST] {
+class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, Map[Id, LockType]]) extends TypeChecks[LockArg, Z3AST] {
   
-  val ctx: Z3Context = new Z3Context()
-  val solver: Z3Solver = ctx.mkSolver()
+  private val ctx: Z3Context = new Z3Context()
+  private val solver: Z3Solver = ctx.mkSolver()
 
-  val predicates: Stack[Z3AST] = Stack(ctx.mkTrue())
-  val predicateGenerator = new PredicateGenerator(ctx)
+  private val predicates: mutable.Stack[Z3AST] = mutable.Stack(ctx.mkTrue())
+  private val predicateGenerator = new PredicateGenerator(ctx)
   
-  var incrementer = 0
-  
+  private var incrementer = 0
+
+  private var currentMod = Id("-invalid-")
+
   override def emptyEnv(): Environment[LockArg, Z3AST] = ConditionalLockEnv(ctx = ctx)
   //Functions can't interact with locks or memories right now.
   //Could add that to the function types explicitly to be able to check applications
   override def checkFunc(f: FuncDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
 
   override def checkModule(m: ModuleDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
+    currentMod = m.name
     val nenv = lockMap(m.name).foldLeft[Environment[LockArg, Z3AST]](env)((e, mem) => e.add(mem, makeEquals(mem, Free)))
     val finalenv = checkCommand(m.body, nenv)
     //At end of execution all locks must be free or released
@@ -167,10 +170,10 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
   }
   
   private def checkAcquired(mem: Id, expr: Expr, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
-    if (lockTypeMap(mem).equals(Specific) && !expr.isInstanceOf[EVar]) {
+    if (lockTypeMap(currentMod)(mem).equals(Specific) && !expr.isInstanceOf[EVar]) {
       throw new RuntimeException("We expect the argument in the memory access to be a variable")
     }
-    checkState(if (lockTypeMap(mem).equals(General)) LockArg(mem, None) else LockArg(mem, Some(expr.asInstanceOf[EVar])), 
+    checkState(if (lockTypeMap(currentMod)(mem).equals(General)) LockArg(mem, None) else LockArg(mem, Some(expr.asInstanceOf[EVar])),
       env, 
       Acquired.order) 
     match {

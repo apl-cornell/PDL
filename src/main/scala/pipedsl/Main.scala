@@ -10,7 +10,7 @@ import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Locks.LockType
 import pipedsl.common.Syntax.{Id, Prog}
-import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter}
+import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
 import pipedsl.test.TestingMain
 import pipedsl.typechecker._
@@ -68,14 +68,15 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File): Prog = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File): (Prog, ProgInfo) = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".typecheck"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
-    
+
     val prog = parse(debug = false, printOutput = false, inputFile, outDir)
+    val pinfo = new ProgInfo(prog)
     try {
       val canonProg = CanonicalizePass.run(prog)
       val basetypes = BaseTypeChecker.check(canonProg, None)
@@ -86,7 +87,8 @@ object Main {
       LockRegionChecker.check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getLockTypeMap)
+      pinfo.addLockInfo(lockWellformedChecker.getModLockTypeMap)
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockTypeMap)
       lockChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
@@ -94,7 +96,7 @@ object Main {
         writer.write("Passed")
         writer.close()
       }
-      recvProg
+      (recvProg, pinfo)
     } catch {
       case t: Throwable => {
         //If fails, print the error to the file
@@ -129,9 +131,9 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false): Unit = {
-    val prog_recv = runPasses(false, inputFile, outDir)
+    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, debug)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close

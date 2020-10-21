@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
-import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id}
+import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id, LockArg}
 
 import scala.util.parsing.input.Position
 
@@ -92,7 +92,7 @@ object Locks {
    * @param lops A set of lock operations relevant to mod
    * @return A new merged set of lock operations if any merges apply
    */
-  def mergeLockOps(mod: Id, lops: Iterable[Command]): Iterable[Command] = {
+  def mergeLockOps(mod: LockArg, lops: Iterable[Command]): Iterable[Command] = {
     //res + rel -> checkfree
     //res + checkowned -> res + checkfree
     //else same

@@ -11,12 +11,21 @@ import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Com
  */
 class LockWellformedChecker() {
 
-  private var memLockTypeMap: Map[Id, LockType] = Map()
+  private var memLockTypeMap: Map[Id, Map[Id, LockType]] = Map().withDefaultValue(Map())
+  private var currentMod: Id = Id("-invalid-")
 
-  def getLockTypeMap: Map[Id, LockType] = {
+  def getModLockTypeMap: Map[Id, Map[Id, LockType]] = {
     memLockTypeMap
   }
-  
+
+  private def getLockTypeMap: Map[Id, LockType] = {
+    memLockTypeMap(currentMod)
+  }
+
+  private def updateLockTypeMap(lid: Id, lt: LockType): Unit = {
+    memLockTypeMap = memLockTypeMap.updated(currentMod, getLockTypeMap + (lid -> lt))
+  }
+
   /** 
    * Checks if the program has well formed locks
    * as defined in the comment at the top of this class.
@@ -30,6 +39,7 @@ class LockWellformedChecker() {
   }
   
   private def checkModule(moduleDef: ModuleDef, set: Set[LockArg]): Set[LockArg] = {
+    currentMod = moduleDef.name
     checkCommand(moduleDef.body, set)
   }
   
@@ -42,9 +52,9 @@ class LockWellformedChecker() {
       val s1 = cases.foldLeft[Set[LockArg]](lockArgs)((s, c) => checkCommand(c.body, s))
       checkCommand(default, s1)
     case CLockOp(mem, _) =>
-      if (memLockTypeMap.contains(mem.id) && !memLockTypeMap(mem.id).equals(getLockType(mem)))
+      if (getLockTypeMap.contains(mem.id) && !getLockTypeMap(mem.id).equals(getLockType(mem)))
         throw MalformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
-      else memLockTypeMap = memLockTypeMap + (mem.id -> getLockType(mem));
+      else updateLockTypeMap(mem.id, getLockType(mem))
       lockArgs + mem
     case _ => lockArgs
   }
