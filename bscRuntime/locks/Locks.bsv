@@ -93,12 +93,12 @@ module mkBypassLock(BypassLock#(LockId#(d), elem)) provisos(Bits#(elem, szElem))
 
    //Returns True if thread `tid` already owns the lock
    method Bool owns(LockId#(d) tid);
-      return !isEmpty() && owner == tid;
+      return !lockFree && owner == tid;
    endmethod
 
    //Releases the lock iff thread `tid` owns it already
    method Action rel(LockId#(d) tid);
-       if (!isEmpty() && owner == tid) tail <= tail + 1;
+       if (!lockFree && owner == tid) tail <= tail + 1;
    endmethod
 
    //Reserves the lock and returns the associated id
@@ -235,7 +235,7 @@ endmodule: mkFAAddrLock
 module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) provisos(Bits#(addr, szAddr), Eq#(addr), Bits#(elem, szElem));
 
 
-   Vector#(numlocks, BypassLock#(LockId#(d))) lockVec <- replicateM( mkBypassLock() );
+   Vector#(numlocks, BypassLock#(LockId#(d), elem)) lockVec <- replicateM( mkBypassLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
    rule invalidateLocks;
@@ -257,7 +257,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
 
 
 
-   function Maybe#(Lock#(LockId#(d))) getLock(addr loc);
+   function Maybe#(BypassLock#(LockId#(d), elem)) getLock(addr loc);
     if (getLockIndex(loc) matches tagged Valid.idx)
        return tagged Valid lockVec[idx];
     else
@@ -282,7 +282,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
 
    //true if no lock is associated w/ addr and there is a lock lockation free
    method Bool isEmpty(addr loc);
-        Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
+        Maybe#(BypassLock#(LockId#(d), elem)) addrLock = getLock(loc);
         if (addrLock matches tagged Invalid)
             return isFreeLock();
         else
@@ -290,7 +290,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
    endmethod
 
    method Bool owns(LockId#(d) tid, addr loc);
-      Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
+      Maybe#(BypassLock#(LockId#(d), elem)) addrLock = getLock(loc);
       Bool hasFree = isFreeLock();
       if (addrLock matches tagged Valid.lock)
 	    //in this case loc is associated with lockVec[idx]
@@ -307,7 +307,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
       Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
 	 begin
-	    Lock#(LockId#(d)) lock = lockVec[idx];
+	    BypassLock#(LockId#(d), elem) lock = lockVec[idx];
 	    lock.rel(tid);
 //	    $display("Address %d released %t", loc, $time());
 	    //disassociate the lock from the address once its empty in a separate rule
@@ -316,7 +316,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
    endmethod
 
    method ActionValue#(LockId#(d)) res(addr loc);
-      Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
+      Maybe#(BypassLock#(LockId#(d), elem)) addrLock = getLock(loc);
       if (addrLock matches tagged Valid.lock)
 	 begin
 	    let nid <- lock.res();
@@ -337,25 +337,25 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
 	    end
    endmethod
 
-   method Action commit(id tid, addr loc, elem data);
+   method Action commit(LockId#(d) tid, addr loc, elem data);
     Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
 	    begin
-	      Lock#(LockId#(d)) lock = lockVec[idx];
-          lock.commit(tid, data);
-          //	$display("Address %d commited val %d, %t", loc, data, $time());
+	     BypassLock#(LockId#(d), elem) lock = lockVec[idx];
+             lock.commit(tid, data);
+             //	$display("Address %d commited val %d, %t", loc, data, $time());
 	    end
 	  //else do nothing
    endmethod
 
-   method Maybe#(elem) read(id tid, addr loc);
+   method Maybe#(elem) read(LockId#(d) tid, addr loc);
     Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
 	    begin
-	      Lock#(LockId#(d)) lock = lockVec[idx];
-          return lock.read(tid);
+	      BypassLock#(LockId#(d), elem) lock = lockVec[idx];
+              return lock.read(tid);
 	    end
-	  else return tagged Invalid
+      else return tagged Invalid;
    endmethod
 
 endmodule
