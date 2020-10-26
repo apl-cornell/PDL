@@ -18,6 +18,15 @@ interface Lock#(type id);
    method ActionValue#(id) res();
 endinterface
 
+interface BypassLock#(type id, type elem);
+    method Bool isEmpty();
+    method Bool owns(id tid);
+    method Action rel(id tid);
+    method ActionValue#(id) res();
+    method Action commit(id tid, elem val);
+    method Maybe#(elem) read(id tid);
+endinterface
+
 interface AddrLock#(type id, type addr, numeric type size);
    method Bool isEmpty(addr loc);
    method Bool owns(id tid, addr loc);
@@ -30,8 +39,8 @@ interface BypassAddrLock#(type id, type addr, numeric type size, type elem);
    method Bool owns(id tid, addr loc);
    method Action rel(id tid, addr loc);
    method ActionValue#(id) res(addr loc);
-   method Action commit(addr loc, elem data);
-   method elem read(addr loc);
+   method Action commit(id tid, addr loc, elem data);
+   method Maybe#(elem) read(id tid, addr loc);
 endinterface
 
 module mkLock(Lock#(LockId#(d)));
@@ -65,6 +74,54 @@ module mkLock(Lock#(LockId#(d)));
    
 endmodule: mkLock
 
+
+module mkBypassLock(BypassLock#(LockId#(d), elem));
+
+   Reg#(LockId#(d)) head <- mkReg(0);
+   Reg#(LockId#(d)) tail <- mkReg(0);
+   Vector#(d, Reg#(Maybe#(elem))) lockVec <- replicateM( mkReg(tagged Invalid) );
+
+   Bool lockFree = head == tail;
+   Bool lockFull = tail == head + 1;
+   LockId#(d) owner = lockVec[tail];
+
+   method Bool isEmpty();
+      return lockFree;
+   endmethod
+
+   //Returns True if thread `tid` already owns the lock
+   method Bool owns(LockId#(d) tid);
+      return owner == tid;
+   endmethod
+
+   //Releases the lock iff thread `tid` owns it already
+   method Action rel(LockId#(d) tid);
+       if (owner == tid) tail <= tail + 1;
+   endmethod
+
+   //Reserves the lock and returns the associated id
+   method ActionValue#(LockId#(d)) res() if (!lockFull);
+      lockVec[head] <= tagged Invalid;
+      head <= head + 1;
+      return head;
+   endmethod
+
+    //Updates the saved value for a particular lock index
+    method Action commit(LockId#(d) tid, elem val);
+        lockVec[tid] <= tagged Valid val;
+    endmethod
+
+    //Return the value that this observer SHOULD read
+    //a.k.a. one entry OLDER than tid
+    method elem read(LockId#(d) tid);
+       if (owner == tid) return tagged Invalid;
+       else
+       begin
+        return lockVec[tid - 1];
+       end
+    endmethod
+
+endmodule: mkBypassLock
 
 typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
 
