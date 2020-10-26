@@ -93,12 +93,12 @@ module mkBypassLock(BypassLock#(LockId#(d), elem)) provisos(Bits#(elem, szElem))
 
    //Returns True if thread `tid` already owns the lock
    method Bool owns(LockId#(d) tid);
-      return owner == tid;
+      return !isEmpty() && owner == tid;
    endmethod
 
    //Releases the lock iff thread `tid` owns it already
    method Action rel(LockId#(d) tid);
-       if (owner == tid) tail <= tail + 1;
+       if (!isEmpty() && owner == tid) tail <= tail + 1;
    endmethod
 
    //Reserves the lock and returns the associated id
