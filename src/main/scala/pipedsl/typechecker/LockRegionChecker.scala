@@ -2,7 +2,7 @@ package pipedsl.typechecker
 
 import pipedsl.common.Errors.{IllegalLockAcquisition, InvalidLockState, UnexpectedCase}
 import pipedsl.common.Locks._
-import pipedsl.common.Syntax
+import pipedsl.common.{Locks, Syntax}
 import pipedsl.common.Syntax._
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
@@ -28,7 +28,11 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       case TModType(_, _, _, _) => e.add(m.name, Free)
       case _ => throw UnexpectedCase(m.pos)
     })
-    checkLockRegions(m.body, nenv)
+    val finalStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+    finalStates.getMappedKeys().foreach(m => finalStates(m) match {
+      case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
+      case _ => ()
+    })
     env //no change to lock map after checking module
   }
 
