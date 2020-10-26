@@ -4,9 +4,11 @@ import FIFOF :: * ;
 import Vector :: *;
 
 export Lock(..);
+export BypassLock(..);
 export AddrLock(..);
 export LockId(..);
 export mkLock;
+export mkBypassLock;
 export mkFAAddrLock;
 
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
@@ -75,7 +77,7 @@ module mkLock(Lock#(LockId#(d)));
 endmodule: mkLock
 
 
-module mkBypassLock(BypassLock#(LockId#(d), elem));
+module mkBypassLock(BypassLock#(LockId#(d), elem)) provisos(Bits#(elem, szElem));
 
    Reg#(LockId#(d)) head <- mkReg(0);
    Reg#(LockId#(d)) tail <- mkReg(0);
@@ -83,7 +85,7 @@ module mkBypassLock(BypassLock#(LockId#(d), elem));
 
    Bool lockFree = head == tail;
    Bool lockFull = tail == head + 1;
-   LockId#(d) owner = lockVec[tail];
+   LockId#(d) owner = tail;
 
    method Bool isEmpty();
       return lockFree;
@@ -113,7 +115,7 @@ module mkBypassLock(BypassLock#(LockId#(d), elem));
 
     //Return the value that this observer SHOULD read
     //a.k.a. one entry OLDER than tid
-    method elem read(LockId#(d) tid);
+    method Maybe#(elem) read(LockId#(d) tid);
        if (owner == tid) return tagged Invalid;
        else
        begin
