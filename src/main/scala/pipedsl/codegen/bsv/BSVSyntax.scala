@@ -97,6 +97,9 @@ object BSVSyntax {
       case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index) => BluespecInterfaces.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
+      case EIsValid(ex) => BIsValid(toBSVExpr(ex))
+      case EInvalid => BInvalid
+      case EFromMaybe(ex) => BFromMaybe(BDontCare, toBSVExpr(ex))
       case _ => throw UnexpectedExpr(e)
     }
 
@@ -183,6 +186,9 @@ object BSVSyntax {
   case object BZero extends BExpr
   case object BOne extends BExpr
   case object BTime extends BExpr
+  case object BInvalid extends BExpr
+  case class BFromMaybe(default: BExpr, exp: BExpr) extends BExpr
+  case class BIsValid(exp: BExpr) extends BExpr
   case class BPack(e: BExpr) extends BExpr
   case class BUnpack(e: BExpr) extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr

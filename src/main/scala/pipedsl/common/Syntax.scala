@@ -123,7 +123,9 @@ object Syntax {
   case class BitUOp(op: String) extends UOp
 
   def NotOp(): BoolUOp = BoolUOp("!")
-  def AndOp(e1: Expr,e2: Expr) = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
+  def AndOp(e1: Expr,e2: Expr): EBinop = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
+  def OrOp(e1: Expr, e2: Expr): EBinop = EBinop(BoolOp("||", OpConstructor.or), e1, e2)
+  def EqOp(e1: Expr, e2: Expr): EBinop = EBinop(EqOp("=="), e1, e2)
 
   sealed trait BOp extends Positional {
     val op: String;
@@ -171,6 +173,9 @@ object Syntax {
   
   case class LockArg(id: Id, evar: Option[EVar]) extends Positional
 
+  case object EInvalid extends Expr
+  case class EIsValid(ex: Expr) extends Expr
+  case class EFromMaybe(ex: Expr) extends Expr
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class EBool(v: Boolean) extends Expr
   case class EUop(op: UOp, ex: Expr) extends Expr
@@ -225,6 +230,7 @@ object Syntax {
   case class ICheckLockFree(mem: LockArg) extends InternalCommand
   case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand
   case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand
+  case class IAssignLock(handle: EVar, src: Expr) extends InternalCommand
   case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand
   //needed for internal compiler passes to track branches with explicitly no lockstate change
   case class ILockNoOp(mem: LockArg) extends InternalCommand

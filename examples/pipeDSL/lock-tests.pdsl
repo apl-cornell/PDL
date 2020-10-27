@@ -255,6 +255,21 @@ pipe test19(input: int<32>)[rf: int<32>[5]] {
     }
 }
 
+pipe test20(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
+    int<5> addr1 = input{4:0};
+    int<5> addr2 = input{9:5};
+    acquire(rf[addr1]);
+    ---
+    //{ rf: addr1}
+    acquire(rf[addr2]); // if ( addr1 == addr2 ) lid_2 = lid_1 else { lid_2 = acquire(addr2) }
+    end(rf);
+    ---
+    release(rf[addr2]);
+    ---
+    release(rf[addr1]);
+}
+
 circuit {
     r = memory(int<32>, 5);
 }

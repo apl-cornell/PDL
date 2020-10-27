@@ -105,6 +105,10 @@ object Dataflow {
 
   val UsedInLaterStages: Analysis[Set[Id]] =
     Analysis[Set[Id]](isForward = false, Set(), mergeUsedVars, transferUsedVars)
-  val LockStateInfo: Analysis[Map[LockArg, LockState]] =
+  val LockStateInfo: Analysis[Map[LockArg, LockState]] = {
     Analysis[Map[LockArg, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
+  }
+  val MaybeReservedHandles: Analysis[Map[Id, Set[LockHandleInfo]]] =
+    Analysis[Map[Id, Set[LockHandleInfo]]](isForward = true, Map(),
+      Locks.mergeMaybeReserved, Locks.transferMaybeReserved)
 }

@@ -1,4 +1,4 @@
-pipe good(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
+pipe ex1(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
     start(r1);
     start(r2);
     int<5> addr = 1<5>;
@@ -22,43 +22,98 @@ pipe good(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
         release(r2[addr]);
     }
 }
-/*
-pipe bad(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
-    start(r1);
-    start(r2);
+
+pipe ex2(in: bool)[rf: int<32>[5]] {
+    start(rf);
     int<5> addr = 1<5>;
     if (in) {
-        reserve(r1[addr]);
-    } else {
-        reserve(r2[addr]);
+        reserve(rf[addr]);
     }
-    end(r1);
-    end(r2);
+    //maybe reserved = { addr, addr_handle }
+    ---
+    int<5> addr2 = 2<5>;
+    bool cond2 = true;
+    if (cond2) {
+        reserve(rf[addr2]);
+        //if(addr_handle_valid && addr == addr2) addr2_handle = addr_handle
+    }
+    //maybe reserved = { addr, addr_handle; addr2, addr2_handle }
     ---
     if (in) {
-        block(r1[addr]);
-        r1[addr] <- 32<32>;
-        release(r1[addr]);
+        block(rf[addr]); //no change
+        release(rf[addr]);
+        //if(addr2_handle_valid && addr == addr2) { addr_1_handle = invalid } else { release(addr_handle) };
     }
+    //maybe reserved = { addr, addr_handle; addr2, addr2_handle }
+    end(rf);
     ---
-    block(r2[addr]);
-    r2[addr] <- 32<32>;
-    release(r2[addr]);
-} */
-/*
-pipe bad2(in: bool)[r1: int<32>[5]] {
-    start(r1);
-    int<5> addr = 1<5>;
+    if (cond2) {
+        block(rf[addr2]); //no change
+        release(rf[addr2]);
+        //if(addr_handle_valid && addr == addr2) { No-Op } else {release(addr2_handle) };
+    }
+}
+
+pipe ex3(in: bool)[rf: int<32>[5]] {
+    start(rf);
+    int<5> addr1 = 0<5>;
     int<5> addr2 = 1<5>;
-    reserve(r1[addr]);
-    reserve(r1[addr2]);
-    end(r1);
+    int<5> addr3 = 2<5>;
+    acquire(rf[addr1]); //checkfree
+    acquire(rf[addr2]); //checkfree && reserve
+    reserve(rf[addr3]); //reserve
+    release(rf[addr1]);
+    end(rf);
+    //becomes:
+    //checkfree(addr1) && checkfree(addr2)
+    //reserve(addr2)
+    //if (addr2 == addr3) addr3_handle = addr2_handle else reserve(addr3)
+    //maybe reserved = { addr2, addr2_handle; addr3, addr3_handle }
     ---
-    block(r1[addr2]);
-    r1[addr2] <- 32<32>;
-    release(r1[addr2]);
+    release(rf[addr2]);
+    //if (addr2 == addr3 && addr3_handle_valid) { addr2_handle = invalid } else { release(addr2_handle) };
+    block(rf[addr3]);
     ---
-} */
+    release(rf[addr3]);
+}
+
+pipe ex4(input: int<32>)[rf: int<32>[5]] {
+
+    start(rf);
+    int<5> a1 = 0<5>;
+    int<5> a2 = 1<5>;
+    bool b1 = cast(input{0:0} == 1, bool);
+    bool b2 = cast(input{1:1} == 1, bool);
+    reserve(rf[a2]);
+    if (b1) {
+        reserve(rf[a1]);
+    } else {
+        reserve(rf[a1]);
+    }
+    end(rf);
+    if (b1) {
+        block(rf[a1]);
+        if (b2) {
+            release(rf[a1]);
+        }
+    }
+    ---
+    if(b1) {
+        block(rf[a2]);
+        release(rf[a2]);
+    } else {
+        block(rf[a2]);
+        release(rf[a2]);
+    }
+    if (b1 && (!b2)) {
+        release(rf[a1]);
+    } else {
+        if(!b1) {
+            block(rf[a1]);
+            release(rf[a1]);
+        }
+    }
+}
 
 circuit {
     r = memory(int<32>, 5);
