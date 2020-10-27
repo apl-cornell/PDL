@@ -32,7 +32,7 @@ object BluespecInterfaces {
   private val fifoEnqueueMethodName = "enq"
   private val fifoFirstMethodName = "first"
 
-  private val lockHandleName = "MaybeLockId"
+  private val lockHandleName = "LockId"
   private val defaultLockHandleSize = 4
 
   def getDefaultLockHandleType: BSizedType = getLockHandleType(defaultLockHandleSize)
