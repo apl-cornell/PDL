@@ -32,7 +32,7 @@ object BluespecInterfaces {
   private val fifoEnqueueMethodName = "enq"
   private val fifoFirstMethodName = "first"
 
-  private val lockHandleName = "LockId"
+  private val lockHandleName = "MaybeLockId"
   private val defaultLockHandleSize = 4
 
   def getDefaultLockHandleType: BSizedType = getLockHandleType(defaultLockHandleSize)
@@ -95,14 +95,14 @@ object BluespecInterfaces {
     BMethodInvoke(mod, lockEmptyName, if (addr.isDefined) List(addr.get) else List())
   }
   def getCheckOwns(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
-    val args = if (addr.isDefined) List(handle, addr.get) else List(handle)
+    val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
     BMethodInvoke(mod, lockOwnsName, args)
   }
   def getReserve(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
     BMethodInvoke(mod, lockResName, if (addr.isDefined) List(addr.get) else List())
   }
   def getRelease(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
-    val args = if (addr.isDefined) List(handle, addr.get) else List(handle)
+    val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
     BMethodInvoke(mod, lockRelName, args)
   }
 
