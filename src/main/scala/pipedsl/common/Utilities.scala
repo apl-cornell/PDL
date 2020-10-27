@@ -80,6 +80,7 @@ object Utilities {
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
+    case IAssignLock(handle, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -126,6 +127,7 @@ object Utilities {
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, _) => Set()
+    case IAssignLock(_, src) => getUsedVars(src)
     case ICheckLockOwned(_, handle) => Set(handle.id)
     case IReleaseLock(_, handle) => Set(handle.id)
     case ILockNoOp(_) => Set()
@@ -154,6 +156,8 @@ object Utilities {
     case ECall(id, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
     case EVar(id) => id.typ = e.typ; Set(id)
     case ECast(_, exp) => getUsedVars(exp)
+    case EFromMaybe(ex) => getUsedVars(ex)
+    case EIsValid(ex) => getUsedVars(ex)
     case _ => Set()
   }
 

@@ -40,6 +40,18 @@ pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: i
     } //else done, do nothing
 }
 
+/*
+    start(total);
+    reserve(total[0]);
+    int<32> t0 = bypass(total[0]);
+    int<32> s = t0 + d;
+    end(total);
+    ---
+    acquire(total[0]);
+    total[0] <- s;
+    release(total);
+
+*/
 circuit {
     total = regfile(int<32>, 1);
     memA = memory(int<32>, 8);
