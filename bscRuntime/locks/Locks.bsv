@@ -12,7 +12,6 @@ export mkBypassLock;
 export mkFAAddrLock;
 
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
-typedef Maybe#(LockId#(n)) MaybeLockId#(numeric type n);
 
 interface Lock#(type id);
    method Bool isEmpty();
@@ -69,7 +68,7 @@ module mkLock(Lock#(LockId#(d)));
    endmethod
    
    //Reserves the lock and returns the associated id
-   method ActionValue#(LockId#(d)) res();
+   method ActionValue#(Maybe#(LockId#(d))) res();
       held.enq(nextId);
       nextId <= nextId + 1;
       return tagged Valid nextId;
@@ -103,7 +102,7 @@ module mkBypassLock(BypassLock#(LockId#(d), elem)) provisos(Bits#(elem, szElem))
    endmethod
 
    //Reserves the lock and returns the associated id
-   method ActionValue#(LockId#(d)) res() if (!lockFull);
+   method ActionValue#(Maybe#(LockId#(d))) res() if (!lockFull);
       lockVec[head] <= tagged Invalid;
       head <= head + 1;
       return tagged Valid head;
@@ -209,7 +208,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       //else no lock is associated with loc, do nothing
    endmethod
    
-   method ActionValue#(LockId#(d)) res(addr loc);
+   method ActionValue#(Maybe#(LockId#(d))) res(addr loc);
       Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
       if (addrLock matches tagged Valid.lock)
 	 begin
@@ -316,7 +315,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
       //else no lock is associated with loc, do nothing
    endmethod
 
-   method ActionValue#(LockId#(d)) res(addr loc);
+   method ActionValue#(Maybe#(LockId#(d))) res(addr loc);
       Maybe#(BypassLock#(LockId#(d), elem)) addrLock = getLock(loc);
       if (addrLock matches tagged Valid.lock)
 	 begin
