@@ -785,7 +785,8 @@ object BluespecGeneration {
           //place the result in the output queue
           BExprStmt(BluespecInterfaces.getFifoEnq(outputQueue, outstruct))
         )))
-      case IReserveLock(handle, mem) => Some(
+      case IReserveLock(handle, mem) =>
+        Some(
         BInvokeAssign(translator.toBSVVar(handle),
           BluespecInterfaces.getReserve(lockParams(mem.id), translator.toBSVVar(mem.evar)))
       )

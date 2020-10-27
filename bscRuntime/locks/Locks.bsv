@@ -12,19 +12,20 @@ export mkBypassLock;
 export mkFAAddrLock;
 
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
+typedef Maybe#(LockId#(n)) MaybeLockId#(numeric type n);
 
 interface Lock#(type id);
    method Bool isEmpty();
    method Bool owns(id tid);
    method Action rel(id tid);
-   method ActionValue#(id) res();
+   method ActionValue#(Maybe#(id)) res();
 endinterface
 
 interface BypassLock#(type id, type elem);
     method Bool isEmpty();
     method Bool owns(id tid);
     method Action rel(id tid);
-    method ActionValue#(id) res();
+    method ActionValue#(Maybe#(id)) res();
     method Action commit(id tid, elem val);
     method Maybe#(elem) read(id tid);
 endinterface
@@ -33,14 +34,14 @@ interface AddrLock#(type id, type addr, numeric type size);
    method Bool isEmpty(addr loc);
    method Bool owns(id tid, addr loc);
    method Action rel(id tid, addr loc);
-   method ActionValue#(id) res(addr loc);
+   method ActionValue#(Maybe#(id)) res(addr loc);
 endinterface
 
 interface BypassAddrLock#(type id, type addr, numeric type size, type elem);
    method Bool isEmpty(addr loc);
    method Bool owns(id tid, addr loc);
    method Action rel(id tid, addr loc);
-   method ActionValue#(id) res(addr loc);
+   method ActionValue#(Maybe#(id)) res(addr loc);
    method Action commit(id tid, addr loc, elem data);
    method Maybe#(elem) read(id tid, addr loc);
 endinterface
@@ -71,7 +72,7 @@ module mkLock(Lock#(LockId#(d)));
    method ActionValue#(LockId#(d)) res();
       held.enq(nextId);
       nextId <= nextId + 1;
-      return nextId;
+      return tagged Valid nextId;
    endmethod
    
 endmodule: mkLock
@@ -105,7 +106,7 @@ module mkBypassLock(BypassLock#(LockId#(d), elem)) provisos(Bits#(elem, szElem))
    method ActionValue#(LockId#(d)) res() if (!lockFull);
       lockVec[head] <= tagged Invalid;
       head <= head + 1;
-      return head;
+      return tagged Valid head;
    endmethod
 
     //Updates the saved value for a particular lock index
@@ -226,7 +227,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 //		       	    $display("Address %d reserved %t", loc, $time());
 		            return nid;
 	            end
-	        else return ?;
+	        else return tagged Invalid;
 	    end
    endmethod
 
@@ -333,7 +334,7 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
 //		       	    $display("Address %d reserved %t", loc, $time());
 		            return nid;
 	            end
-	        else return ?;
+	        else return tagged Invalid;
 	    end
    endmethod
 
