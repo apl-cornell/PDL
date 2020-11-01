@@ -118,6 +118,9 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       checkExpr(exp, vars)
       (vars, nextVars)
     case Syntax.CEmpty => (vars, nextVars)
+    case CPrint(evar) => 
+      checkExpr(evar, vars)
+      (vars, nextVars)
     case _ => throw UnexpectedCommand(c)
   }
 

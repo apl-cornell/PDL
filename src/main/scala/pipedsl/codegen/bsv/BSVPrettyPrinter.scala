@@ -40,6 +40,7 @@ object BSVPrettyPrinter {
     case BSizedType(name, sizeParams) => name + "#(" + sizeParams.map(i => i.toString).mkString(",") + ")"
     case BNumericType(sz) => sz.toString
     case BTypeParam(name) => name
+    case BString => "String"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -182,6 +183,7 @@ object BSVPrettyPrinter {
       case BDisplay(fmt, args) => w.write(mkStatementString("$display(\"" + fmt + "\",",
         args.map(a => toBSVExprStr(a)).mkString(","), ")"))
       case BFinish => w.write(mkStatementString("$finish()"))
+      case BDisplayVar(bvar) => w.write(mkStatementString("$display(" + toBSVExprStr(bvar) + ")"))
       case BEmpty => ()
     }
 

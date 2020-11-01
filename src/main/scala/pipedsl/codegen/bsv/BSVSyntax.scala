@@ -21,6 +21,7 @@ object BSVSyntax {
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
   case class BTypeParam(name: String) extends BSVType
   case object BBool extends BSVType
+  case object BString extends BSVType
   case object BVoid extends BSVType
   case object BEmptyModule extends BSVType
 
@@ -38,6 +39,7 @@ object BSVSyntax {
           Some(bsints.getDefaultMemHandleType))
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
+      case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TRequestHandle(n, isLock) =>
@@ -88,6 +90,7 @@ object BSVSyntax {
     def toBSVExpr(e: Expr): BExpr = e match {
       case EInt(v, base, bits) => BIntLit(v, base, bits)
       case EBool(v) => BBoolLit(v)
+      case EString(v) => BStringLit(v)
       case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
       case eb@EBinop(_, _, _) => toBSVBop(eb)
       case EBitExtract(num, start, end) =>
@@ -245,9 +248,12 @@ object BSVSyntax {
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
 
   case class BDisplay(fmt: String, args: List[BExpr]) extends BStatement
-  case object BFinish extends BStatement
-  case object BEmpty extends BStatement
 
+  case object BFinish extends BStatement
+  
+  case class BDisplayVar(BVar: BVar) extends BStatement
+  
+  case object BEmpty extends BStatement
 
   case class BStructDef(typ: BStruct, derives: List[String])
 

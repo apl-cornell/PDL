@@ -694,6 +694,7 @@ object BluespecGeneration {
       case _: ISend => None
       case _: InternalCommand => None
       case COutput(_) => None
+      case CPrint(_) => None
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
@@ -843,6 +844,7 @@ object BluespecGeneration {
       )
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
+      case CPrint(evar) => Some(BDisplayVar(translator.toBSVVar(evar)))
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
