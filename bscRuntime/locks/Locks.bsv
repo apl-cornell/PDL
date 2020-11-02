@@ -74,7 +74,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
    rule invalidateLocks;
-      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
+      for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
 	 if (entryVec[idx] matches tagged Valid.t &&& lockVec[idx].isEmpty())
 	    entryVec[idx] <= tagged Invalid;
    endrule
@@ -82,10 +82,10 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
-      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
+      for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
 	    if (result matches tagged Invalid &&& 
 	       entryVec[idx] matches tagged Valid.t &&& t == loc)
-	       result = tagged Valid idx;
+	       result = tagged Valid fromInteger(idx);
       return result;
    endfunction
 
@@ -102,10 +102,10 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    //returns invalid if all locks are in use
    function Maybe#(LockIdx#(numlocks)) getFreeLock();
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
-      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
+      for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
 	    if (result matches tagged Invalid &&& 
 	       entryVec[idx] matches tagged Invalid)
-	       result = tagged Valid idx;
+	       result = tagged Valid fromInteger(idx);
       return result;
    endfunction
 
