@@ -224,7 +224,7 @@ object DAGSyntax {
         }
       })
       //mergedCmds is the new set of lock cmds
-      this.setCmds(srcNonLock ++ mergedCmds ++ newNonLock)
+      this.setCmds(srcNonLock ++ newNonLock ++ mergedCmds)
     }
   }
 
