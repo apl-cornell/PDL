@@ -90,6 +90,7 @@ object BluespecInterfaces {
   private val lockOwnsName = "owns"
   private val lockResName = "res"
   private val lockRelName = "rel"
+  private val lockCanResName = "canRes"
 
   def getCheckEmpty(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
     BMethodInvoke(mod, lockEmptyName, if (addr.isDefined) List(addr.get) else List())
@@ -100,6 +101,11 @@ object BluespecInterfaces {
   }
   def getReserve(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
     BMethodInvoke(mod, lockResName, if (addr.isDefined) List(addr.get) else List())
+  }
+  def getCanReserve(mod: BVar, addr: Option[BVar]): Option[BMethodInvoke] = {
+    if (addr.isDefined) {
+      Some(BMethodInvoke(mod, lockCanResName, List(addr.get)))
+    } else None
   }
   def getRelease(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
     val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))

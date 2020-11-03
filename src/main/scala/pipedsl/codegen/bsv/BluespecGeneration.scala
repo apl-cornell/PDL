@@ -2,7 +2,7 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
-import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.{Locks, ProgInfo}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
@@ -372,6 +372,11 @@ object BluespecGeneration {
         case ICheckLockFree(mem) =>
           l :+ BluespecInterfaces.getCheckEmpty(lockParams(mem.id),
             translator.toBSVVar(mem.evar))
+        case IReserveLock(_, mem) =>
+          BluespecInterfaces.getCanReserve(lockParams(mem.id), translator.toBSVVar(mem.evar)) match {
+            case Some(m) => l :+ m
+            case None => l
+          }
         case ICheckLockOwned(mem, handle) =>
           l :+ BluespecInterfaces.getCheckOwns(lockParams(mem.id),
             translator.toBSVExpr(handle), translator.toBSVVar(mem.evar))

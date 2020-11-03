@@ -70,6 +70,7 @@ object Locks {
           case (Some(s1), Some(s2)) => s1 ++ s2
           case (Some(s1), None) => s1
           case (None, Some(s2)) => s2
+          case (None, None) => throw new RuntimeException("unreachable")
         })
       }).toMap
     })
