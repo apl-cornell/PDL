@@ -386,4 +386,35 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
 
 endmodule
 
+module mkDMBypassAddrLock(BypassAddrLock#(LockId#(d), addr, unused, elem)) provisos(PrimIndex#(addr, szAddr), Bits#(elem, szElem));
+   
+   Vector#(TExp#(szAddr), BypassLock#(LockId#(d), elem)) lockVec <- replicateM( mkBypassLock() );
+
+   method Bool isEmpty(addr loc);
+      return lockVec[loc].isEmpty();
+   endmethod
+
+   method Bool owns(LockId#(d) tid, addr loc);
+      return lockVec[loc].owns(tid);
+   endmethod
+   
+   method Action rel(LockId#(d) tid, addr loc);
+      lockVec[loc].rel(tid);
+   endmethod
+   
+   method ActionValue#(Maybe#(LockId#(d))) res(addr loc);
+      let id <- lockVec[loc].res();
+      return id;
+   endmethod
+   
+   method Action commit(LockId#(d) tid, addr loc, elem data);
+      lockVec[loc].commit(tid, data);
+   endmethod
+   
+   method Maybe#(elem) read(LockId#(d) tid, addr loc);
+      return lockVec[loc].read(tid);
+   endmethod
+   
+endmodule: mkDMBypassAddrLock
+
 endpackage
