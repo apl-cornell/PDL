@@ -32,14 +32,15 @@ endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
    method Bool isEmpty(addr loc);
+   method Bool canRes(addr loc);
    method Bool owns(id tid, addr loc);
    method Action rel(id tid, addr loc);
    method ActionValue#(Maybe#(id)) res(addr loc);
 endinterface
 
-
 interface BypassAddrLock#(type id, type addr, numeric type size, type elem);
    method Bool isEmpty(addr loc);
+   method Bool canRes(addr loc);
    method Bool owns(id tid, addr loc);
    method Action rel(id tid, addr loc);
    method ActionValue#(Maybe#(id)) res(addr loc);
@@ -135,11 +136,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    Vector#(numlocks, Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
-   rule invalidateLocks;
-      for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
-	 if (entryVec[idx] matches tagged Valid.t &&& lockVec[idx].isEmpty())
-	    entryVec[idx] <= tagged Invalid;
-   endrule
+
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);
@@ -151,8 +148,6 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       return result;
    endfunction
 
-
-   
    function Maybe#(Lock#(LockId#(d))) getLock(addr loc);
     if (getLockIndex(loc) matches tagged Valid.idx)
        return tagged Valid lockVec[idx];
@@ -160,14 +155,19 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
        return tagged Invalid;
    endfunction
    
-   //gets the first index where an address is not assigned to the lock
+   //gets the first index where an address is not assigned to the lock OR the lock is empty
    //returns invalid if all locks are in use
    function Maybe#(LockIdx#(numlocks)) getFreeLock();
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
       for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
-	    if (result matches tagged Invalid &&& 
-	       entryVec[idx] matches tagged Invalid)
-	       result = tagged Valid fromInteger(idx);
+	    if (result matches tagged Invalid)
+	       begin
+	       if (entryVec[idx] matches tagged Valid.e)
+		  begin
+		     if (lockVec[idx].isEmpty) result = tagged Valid fromInteger(idx);
+		  end
+	       else result = tagged Valid fromInteger(idx);
+	       end
       return result;
    endfunction
 
@@ -176,13 +176,20 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       return isValid(getFreeLock());
    endfunction   
 
-   //true if no lock is associated w/ addr and there is a lock lockation free
+   //true if lock is associated w/ addr or there is a location free
+   method Bool canRes(addr loc);
+      let lockAddr = getLock(loc);
+      if (lockAddr matches tagged Valid.l) return True;
+      else return isFreeLock();
+   endmethod
+   
+   //true if lock associated w/ address is empty or there is a lock lockation free
    method Bool isEmpty(addr loc);
         Maybe#(Lock#(LockId#(d))) addrLock = getLock(loc);
-        if (addrLock matches tagged Invalid)
-            return isFreeLock();
+        if (addrLock matches tagged Valid.l)
+           return l.isEmpty();
         else
-            return False;
+           return isFreeLock();
    endmethod
 
    method Bool owns(LockId#(d) tid, addr loc);
@@ -247,6 +254,10 @@ module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(add
       return lockVec[loc].owns(tid);
    endmethod
    
+   method Bool canRes(addr loc);
+      return True;
+   endmethod
+   
    method Action rel(LockId#(d) tid, addr loc);
       lockVec[loc].rel(tid);
    endmethod
@@ -264,11 +275,6 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
    Vector#(numlocks, BypassLock#(LockId#(d), elem)) lockVec <- replicateM( mkBypassLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
-   rule invalidateLocks;
-      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
-	 if (entryVec[idx] matches tagged Valid.t &&& lockVec[idx].isEmpty())
-	    entryVec[idx] <= tagged Invalid;
-   endrule
 
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
@@ -290,14 +296,19 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
        return tagged Invalid;
    endfunction
 
-   //gets the first index where an address is not assigned to the lock
+   //gets the first index where an address is not assigned to the lock OR the lock is empty
    //returns invalid if all locks are in use
    function Maybe#(LockIdx#(numlocks)) getFreeLock();
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
-      for (LockIdx#(numlocks) idx = 0; idx < fromInteger(valueOf(numlocks) - 1); idx = idx + 1)
-	    if (result matches tagged Invalid &&&
-	       entryVec[idx] matches tagged Invalid)
-	       result = tagged Valid idx;
+      for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
+	    if (result matches tagged Invalid)
+	       begin
+	       if (entryVec[idx] matches tagged Valid.e)
+		  begin
+		     if (lockVec[idx].isEmpty) result = tagged Valid fromInteger(idx);
+		  end
+	       else result = tagged Valid fromInteger(idx);
+	       end
       return result;
    endfunction
 
@@ -306,13 +317,20 @@ module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) pro
       return isValid(getFreeLock());
    endfunction
 
-   //true if no lock is associated w/ addr and there is a lock lockation free
+   //true if lock is associated w/ addr or there is a location free
+   method Bool canRes(addr loc);
+      let lockAddr = getLock(loc);
+      if (lockAddr matches tagged Valid.l) return True;
+      else return isFreeLock();
+   endmethod
+   
+   //true if lock associated w/ address is empty or there is a lock lockation free
    method Bool isEmpty(addr loc);
         Maybe#(BypassLock#(LockId#(d), elem)) addrLock = getLock(loc);
-        if (addrLock matches tagged Invalid)
-            return isFreeLock();
+        if (addrLock matches tagged Valid.l)
+           return l.isEmpty();
         else
-            return False;
+           return isFreeLock();
    endmethod
 
    method Bool owns(LockId#(d) tid, addr loc);
@@ -396,6 +414,10 @@ module mkDMBypassAddrLock(BypassAddrLock#(LockId#(d), addr, unused, elem)) provi
 
    method Bool owns(LockId#(d) tid, addr loc);
       return lockVec[loc].owns(tid);
+   endmethod
+   
+   method Bool canRes(addr loc);
+      return True;
    endmethod
    
    method Action rel(LockId#(d) tid, addr loc);
