@@ -13,7 +13,7 @@ module mkTop();
    
    
 
-   AddrLock#(LockId#(4), Address, 4) l1 <- mkFAAddrLock();
+   AddrLock#(LockId#(4), Address, 4) l1 <- mkDMAddrLock();
    function Action dorel(LockId#(4) l, ThreadID t, Address a);
       return action
 		if (l1.owns(l, a))
@@ -46,12 +46,9 @@ module mkTop();
 
    ThreadID t1 = 0;
    ThreadID t2 = 3;
-   Address a1 = 15;
-   Address a2 = 17;
 
    Reg#(Address) tolock <- mkReg(0);
    Reg#(Address) tofree <- mkReg(0);
-   Reg#(LockId#(4)) lockreg1 <- mkReg(0);
    FIFO#(LockId#(4)) lockids <- mkSizedFIFO(10);
    //TODO acquire more than 1 location per cycle
    rule acq(l1.canRes(tolock));
@@ -61,9 +58,14 @@ module mkTop();
    endrule
    
    rule rel1(l1.owns(lockids.first, tofree));
-      dorel(lockids.first, t1, tofree);
+      dorel(lockids.first, t2, tofree);
       tofree <= tofree + 1;
       lockids.deq();
    endrule      
    
+   Reg#(UInt#(10)) c <- mkReg(0);
+   rule cnt;
+      c <= c + 1;
+      if (c >= 100) $finish();
+   endrule
 endmodule
