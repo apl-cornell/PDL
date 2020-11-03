@@ -12,20 +12,16 @@ return s;
 pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: int<32>[1]<c,s>] {
     if (counter < 100<8>) {
         call sum(counter + 1<8>);
-        //acquire(memA[counter]);
         start(memA);
-        acquire(memA);
+        acquire(memA[counter]);
         end(memA);
         start(memB);
-        //acquire(memB[counter]);
-        acquire(memB);
+        acquire(memB[counter]);
         end(memB);
         int<32> argA <- memA[counter];
         int<32> argB <- memB[counter];
-        //release(memA[counter]);
-        release(memA);
-        //release(memB[counter]);
-        release(memB);
+        release(memA[counter]);
+        release(memB[counter]);
         ---
         int<32> d = argA - argB; //could split into multiple cycles as in HLS examples
         if (d > 0<32>) {

@@ -3,7 +3,7 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
 
-object BluespecInterfaces {
+class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   private val requestMethodName = "req"
   private val responseMethodName = "resp"
@@ -46,7 +46,7 @@ object BluespecInterfaces {
   private val lockType = "Lock"
   private val lockModuleName = "mkLock"
   private val addrLockType = "AddrLock"
-  private val addrLockModuleName = "mkFAAddrLock"
+  private val addrLockModuleName = if (addrlockmod.isDefined) addrlockmod.get else "mkFAAddrLock"
 
   def getLockRegionType: BInterface = {
     BInterface(lockRegionType, List(BVar("busy", BBool)))
@@ -216,10 +216,10 @@ object BluespecInterfaces {
     handleTyp: BSVType, retTyp: Option[BSVType]): BInterfaceDef = {
     var methods: List[BMethodSig] =
       List( requestMethod(inputs, handleTyp),
-        BluespecInterfaces.responseMethod,
-        BluespecInterfaces.checkHandleMethod(handleTyp))
+        responseMethod,
+        checkHandleMethod(handleTyp))
     if (retTyp.isDefined) {
-      methods = methods :+ BluespecInterfaces.peekMethod(retTyp.get)
+      methods = methods :+ peekMethod(retTyp.get)
     }
     BInterfaceDef(BInterface(intName.capitalize), methods)
   }

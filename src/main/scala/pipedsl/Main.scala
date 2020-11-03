@@ -5,7 +5,7 @@ import java.nio.file.{Files, Paths}
 
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.io.FilenameUtils
-import pipedsl.codegen.bsv.BSVPrettyPrinter
+import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Locks.LockType
@@ -29,15 +29,16 @@ object Main {
         (config.mode, config.test) match {
           case ("parse", false) => parse(debug = true, printOutput = true, config.file, config.out)
           case ("parse", true) => TestingMain.test(
-            parse(true, true, _: File, _: File),
+            parse(debug = true, printOutput = true, _: File, _: File),
             config.mode,
             config.file,
             config.testResultDir)
           case ("interpret", false) => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
-          case ("gen", false) => gen(config.out, config.file, config.printStageGraph, config.debug)
-          case ("typecheck", false) => runPasses(true, config.file, config.out)
+          case ("gen", false) => gen(config.out, config.file, config.printStageGraph,
+            config.debug, config.defaultAddrLock)
+          case ("typecheck", false) => runPasses(printOutput = true, config.file, config.out)
           case ("typecheck", true) => TestingMain.test(
-            runPasses(true, _: File, _: File),
+            runPasses(printOutput = true, _: File, _: File),
             config.mode,
             config.file,
             config.testResultDir)
@@ -132,10 +133,13 @@ object Main {
     }
   }
   
-  def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false): Unit = {
+  def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
+    addrLockMod: Option[String] = None): Unit = {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug)
+    //TODO better way to pass configurations to the BSInterfaces object
+    val bsints = new BluespecInterfaces(addrLockMod)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug, bsints)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close

@@ -16,7 +16,8 @@ object CommandLineParser {
     printStageGraph: Boolean = false,
     test: Boolean = false,
     testInputDir: File = new File("."),
-    testResultDir: File = new File(".")
+    testResultDir: File = new File("."),
+    defaultAddrLock: Option[String] = None
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -69,7 +70,12 @@ object CommandLineParser {
           ),
         cmd("gen")
           .text("generates code for the provided pdsl file and writes the generated bluespec in the 'out' directory\n")
-          .action((_, c) => c.copy(mode = "gen")),
+          .action((_, c) => c.copy(mode = "gen"))
+          .children(
+            opt[String]("addrLockModule")
+              .text("The BSV Module to use for address locks")
+              .action((s, c) => c.copy(defaultAddrLock = Some(s)))
+          ),
         cmd("typecheck") 
           .text("parses and type checks the resulting AST")
           .action((_, c) => c.copy(mode = "typecheck"))
