@@ -9,6 +9,7 @@ export AddrLock(..);
 export LockId(..);
 export mkLock;
 export mkBypassLock;
+export mkDMAddrLock;
 export mkFAAddrLock;
 
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
@@ -35,6 +36,7 @@ interface AddrLock#(type id, type addr, numeric type size);
    method Action rel(id tid, addr loc);
    method ActionValue#(Maybe#(id)) res(addr loc);
 endinterface
+
 
 interface BypassAddrLock#(type id, type addr, numeric type size, type elem);
    method Bool isEmpty(addr loc);
@@ -129,6 +131,7 @@ typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
 
 module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, szAddr), Eq#(addr));
 
+   
    Vector#(numlocks, Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
@@ -231,6 +234,29 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    endmethod
 
 endmodule: mkFAAddrLock
+
+module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(addr, szAddr));
+   
+   Vector#(TExp#(szAddr), Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
+
+   method Bool isEmpty(addr loc);
+      return lockVec[loc].isEmpty();
+   endmethod
+
+   method Bool owns(LockId#(d) tid, addr loc);
+      return lockVec[loc].owns(tid);
+   endmethod
+   
+   method Action rel(LockId#(d) tid, addr loc);
+      lockVec[loc].rel(tid);
+   endmethod
+   
+   method ActionValue#(Maybe#(LockId#(d))) res(addr loc);
+      let id <- lockVec[loc].res();
+      return id;
+   endmethod
+   
+endmodule: mkDMAddrLock
 
 module mkFABypassAddrLock(BypassAddrLock#(LockId#(d), addr, numlocks, elem)) provisos(Bits#(addr, szAddr), Eq#(addr), Bits#(elem, szElem));
 
