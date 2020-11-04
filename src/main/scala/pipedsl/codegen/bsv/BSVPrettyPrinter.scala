@@ -51,6 +51,9 @@ object BSVPrettyPrinter {
   }
 
   private def toBSVExprStr(expr: BExpr): String = expr match {
+    case BIsValid(exp) => mkExprString("isValid(",toBSVExprStr(exp), ")")
+    case BFromMaybe(d, exp) => mkExprString("fromMaybe(",toBSVExprStr(d), ",", toBSVExprStr(exp), ")")
+    case BInvalid => mkExprString("tagged", "Invalid")
     case BTernaryExpr(cond, trueex, falseex) => mkExprString("(", toBSVExprStr(cond), "?",
       toBSVExprStr(trueex), ":", toBSVExprStr(falseex), ")")
     case BBoolLit(v) => if (v) {

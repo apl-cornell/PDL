@@ -24,7 +24,8 @@ object BSVSyntax {
   case object BVoid extends BSVType
   case object BEmptyModule extends BSVType
 
-  class BSVTranslator(val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map()) {
+  class BSVTranslator(val bsints: BluespecInterfaces,
+    val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map()) {
 
     private var variablePrefix = ""
 
@@ -32,16 +33,16 @@ object BSVSyntax {
 
     def toBSVType(t: Type): BSVType = t match {
       case TMemType(elem, addrSize, rlat, _) =>
-        BluespecInterfaces.getMemType(isAsync = rlat != Combinational,
+        bsints.getMemType(isAsync = rlat != Combinational,
           BSizedInt(unsigned = true, addrSize), toBSVType(elem),
-          Some(BluespecInterfaces.getDefaultMemHandleType))
+          Some(bsints.getDefaultMemHandleType))
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TModType(_, _, _, Some(n)) => modmap(n)
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TRequestHandle(n, isLock) =>
         if (isLock) {
-          BluespecInterfaces.getDefaultLockHandleType
+          BInterface("Maybe", List(BVar("basehandletyp", bsints.getDefaultLockHandleType)))
         } else {
           val modtyp = toBSVType(n.typ.get)
           if (handleMap.contains(modtyp)) {
@@ -50,7 +51,7 @@ object BSVSyntax {
             //if not in the handle map, use the appropriate default handle size. If the
             //handle is for a normal module then there is no default
             n.typ.get match {
-              case _: TMemType => BluespecInterfaces.getDefaultMemHandleType
+              case _: TMemType => bsints.getDefaultMemHandleType
               case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
             }
           }
@@ -95,8 +96,11 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toBSVExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index) => BluespecInterfaces.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
+      case EMemAccess(mem, index) => bsints.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
+      case EIsValid(ex) => BIsValid(toBSVExpr(ex))
+      case EInvalid => BInvalid
+      case EFromMaybe(ex) => BFromMaybe(BDontCare, toBSVExpr(ex))
       case _ => throw UnexpectedExpr(e)
     }
 
@@ -183,6 +187,9 @@ object BSVSyntax {
   case object BZero extends BExpr
   case object BOne extends BExpr
   case object BTime extends BExpr
+  case object BInvalid extends BExpr
+  case class BFromMaybe(default: BExpr, exp: BExpr) extends BExpr
+  case class BIsValid(exp: BExpr) extends BExpr
   case class BPack(e: BExpr) extends BExpr
   case class BUnpack(e: BExpr) extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr

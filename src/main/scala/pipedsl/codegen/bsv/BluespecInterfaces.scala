@@ -3,7 +3,7 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
 
-object BluespecInterfaces {
+class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   private val requestMethodName = "req"
   private val responseMethodName = "resp"
@@ -46,7 +46,7 @@ object BluespecInterfaces {
   private val lockType = "Lock"
   private val lockModuleName = "mkLock"
   private val addrLockType = "AddrLock"
-  private val addrLockModuleName = "mkFAAddrLock"
+  private val addrLockModuleName = if (addrlockmod.isDefined) addrlockmod.get else "mkFAAddrLock"
 
   def getLockRegionType: BInterface = {
     BInterface(lockRegionType, List(BVar("busy", BBool)))
@@ -90,19 +90,25 @@ object BluespecInterfaces {
   private val lockOwnsName = "owns"
   private val lockResName = "res"
   private val lockRelName = "rel"
+  private val lockCanResName = "canRes"
 
   def getCheckEmpty(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
     BMethodInvoke(mod, lockEmptyName, if (addr.isDefined) List(addr.get) else List())
   }
   def getCheckOwns(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
-    val args = if (addr.isDefined) List(handle, addr.get) else List(handle)
+    val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
     BMethodInvoke(mod, lockOwnsName, args)
   }
   def getReserve(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
     BMethodInvoke(mod, lockResName, if (addr.isDefined) List(addr.get) else List())
   }
+  def getCanReserve(mod: BVar, addr: Option[BVar]): Option[BMethodInvoke] = {
+    if (addr.isDefined) {
+      Some(BMethodInvoke(mod, lockCanResName, List(addr.get)))
+    } else None
+  }
   def getRelease(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
-    val args = if (addr.isDefined) List(handle, addr.get) else List(handle)
+    val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
     BMethodInvoke(mod, lockRelName, args)
   }
 
@@ -210,10 +216,10 @@ object BluespecInterfaces {
     handleTyp: BSVType, retTyp: Option[BSVType]): BInterfaceDef = {
     var methods: List[BMethodSig] =
       List( requestMethod(inputs, handleTyp),
-        BluespecInterfaces.responseMethod,
-        BluespecInterfaces.checkHandleMethod(handleTyp))
+        responseMethod,
+        checkHandleMethod(handleTyp))
     if (retTyp.isDefined) {
-      methods = methods :+ BluespecInterfaces.peekMethod(retTyp.get)
+      methods = methods :+ peekMethod(retTyp.get)
     }
     BInterfaceDef(BInterface(intName.capitalize), methods)
   }

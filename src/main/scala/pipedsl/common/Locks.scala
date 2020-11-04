@@ -3,7 +3,8 @@ package pipedsl.common
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
-import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id, LockArg}
+import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, EVar, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id, LockArg}
+import pipedsl.common.Utilities.updateSetMap
 
 import scala.util.parsing.input.Position
 
@@ -38,6 +39,42 @@ object Locks {
   case object Acquired extends LockState("acquired", 2)
   case object Released extends LockState("released", 3)
 
+
+  type LockHandleInfo = (EVar, EVar) //left = address variable, right = handle variable
+  /**
+   * After executing the current 'basic block' returns which locked
+   * addresses may be reserved.
+   * @param node
+   * @param instates
+   * @return
+   */
+  def transferMaybeReserved(node: PStage, instates: Map[Id, Set[LockHandleInfo]]): Map[Id, Set[LockHandleInfo]] = {
+    var newMap = instates
+    node.getCmds.foreach {
+      case IReserveLock(handle, larg) if larg.evar.isDefined =>
+        newMap = updateSetMap(newMap, larg.id, (larg.evar.get, handle))
+      case IReleaseLock(larg, handle) if larg.evar.isDefined =>
+        newMap.get(larg.id) match {
+          case Some(s) => newMap = newMap.updated(larg.id, s.filter(info => info._1 != larg.evar.get))
+          case None => ()
+        }
+      case _ => ()
+    }
+    newMap
+  }
+  def mergeMaybeReserved(node: PStage, instates: DFMap[Map[Id, Set[LockHandleInfo]]]): Map[Id, Set[LockHandleInfo]] = {
+    instates.keys.foldLeft(Map[Id, Set[LockHandleInfo]]())((res, sid) => {
+      val stgReserved = instates(sid)
+      (res.keySet ++ stgReserved.keySet).map(k => {
+        k-> ((res.get(k), stgReserved.get(k)) match {
+          case (Some(s1), Some(s2)) => s1 ++ s2
+          case (Some(s1), None) => s1
+          case (None, Some(s2)) => s2
+          case (None, None) => throw new RuntimeException("unreachable")
+        })
+      }).toMap
+    })
+  }
 
   def transferLockStates(node: PStage, instates: Map[LockArg, LockState]): Map[LockArg, LockState] = {
     var newMap = instates

@@ -2,7 +2,7 @@ package pipedsl.passes
 
 import pipedsl.common.DAGSyntax._
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{andExpr, getReachableStages}
+import pipedsl.common.Utilities.{andExpr, getReachableStages, updateListMap}
 import pipedsl.passes.Passes.StagePass
 
 /**
@@ -77,18 +77,10 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     stmts.foreach {
       case ICondCommand(cex, cs) =>
         val mapcondition = andExpr(Some(cond), Some(cex)).get
-        if (condMap.contains(mapcondition)) {
-          condMap = condMap.updated(mapcondition, condMap(mapcondition) ++ cs)
-        } else {
-          condMap = condMap.updated(mapcondition, cs)
-        }
+        condMap = updateListMap(condMap, mapcondition, cs)
       case c =>
         val mapcondition = cond
-        if (condMap.contains(mapcondition)) {
-          condMap = condMap.updated(mapcondition, condMap(mapcondition) :+ c)
-        } else {
-          condMap = condMap.updated(mapcondition, List(c))
-        }
+        condMap = updateListMap(condMap, mapcondition, c)
     }
     condMap.keys.foldLeft(List[Command]())((l, k) => {
         l :+ ICondCommand(k, condMap(k))

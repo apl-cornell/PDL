@@ -31,7 +31,8 @@ module mkTop();
       return actionvalue
 		      let l <- l1.res(a);
 		      $display("Thread %d reserved lock for address %d", t, a);
-		      return l;
+		if (l matches tagged Valid.l2) return l2;
+		else return 0;
 	     endactionvalue;
    endfunction
 
