@@ -104,15 +104,19 @@ object BluespecGeneration {
       val initCond = BUOp("!", startedReg)
       val setStartReg = BModAssign(startedReg, BBoolLit(true))
       val debugStart = if (debug) { BDisplay("Starting Pipeline %t", List(BTime)) } else BEmpty
-      val initrule = BRuleDef(name = "init", conds = List(initCond),
-        body = initCircuit(prog.circ, argmap) :+ setStartReg :+ debugStart)
-      BModuleDef(name = "mkCircuit", typ = None, params = List(),
-        body = cirstmts :+ startedRegInst, rules = List(initrule), methods = List())
+      val initmethod = BMethodDef(
+        sig = bsInts.topModInit,
+        cond =  Some(initCond),
+        body = initCircuit(prog.circ, argmap) :+ setStartReg :+ debugStart
+      )
+      BModuleDef(name = "mkCircuit", typ = Some(bsInts.topModTyp), params = List(),
+        body = cirstmts :+ startedRegInst, rules = List(), methods = List(initmethod))
     }
 
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
-      structs = List(), interfaces = List(), modules = List())
+      structs = List(), interfaces = List(bsInts.topModInterface),
+      modules = List(bsInts.tbModule(BModule(topLevelModule.name, List()))))
 
     def getBSVPrograms: List[BProgram] = {
       modMap.values.toList :+ topProgram

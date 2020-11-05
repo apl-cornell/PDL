@@ -5,6 +5,35 @@ import pipedsl.common.Errors.UnexpectedBSVType
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
+  val topModTyp: BInterface = BInterface("TopMod")
+  private val topModInitMethod = "init"
+
+  val topModInit: BMethodSig = BMethodSig(
+    name = topModInitMethod,
+    typ = Action,
+    params = List())
+
+  val topModInterface: BInterfaceDef = BInterfaceDef(
+    typ = topModTyp,
+    methods = List(
+      topModInit
+    )
+  )
+   def tbModule(testMod: BModule): BModuleDef = BModuleDef(
+    name = "mkTB",
+    typ = None,
+    params = List(),
+    body = List(BModInst(BVar("m", topModTyp), testMod)),
+    rules = List(BRuleDef(
+      name = "start",
+      conds = List(),
+      body = List(
+        BExprStmt(BMethodInvoke(BVar("m", topModTyp), topModInitMethod, List()))
+      )
+    )),
+    methods = List()
+  )
+
   private val requestMethodName = "req"
   private val responseMethodName = "resp"
   private val peekMethodName = "peek"
