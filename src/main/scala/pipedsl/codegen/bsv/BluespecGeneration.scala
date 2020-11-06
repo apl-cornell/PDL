@@ -110,10 +110,17 @@ object BluespecGeneration {
         body = cirstmts ++ assignInts, rules = List(), methods = List())
     }
 
+    private val modarg = "m"
+    private val intargs = argmap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
-      modules = List(bsInts.tbModule(BModule(topLevelModule.name), initCircuit(prog.circ, argmap), bsInts, debug)))
+      modules = List(bsInts.tbModule(
+        modarg, BModule(topLevelModule.name),
+        initCircuit(prog.circ, intargs),
+        bsInts,
+        debug
+      )))
 
     def getBSVPrograms: List[BProgram] = {
       modMap.values.toList :+ topProgram

@@ -21,7 +21,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     typ = Action,
     params = List())
 
-  def tbModule(testMod: BModule, initStmts: List[BStatement],
+  def tbModule(modName: String, testMod: BModule, initStmts: List[BStatement],
     bsInts: BluespecInterfaces,debug: Boolean): BModuleDef = {
     val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
       bsInts.getReg(BBoolLit(false)))
@@ -38,7 +38,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       name = "mkTB",
       typ = None,
       params = List(),
-      body = List(startedRegInst, BModInst(BVar("m", topModTyp), testMod)),
+      body = List(startedRegInst, BModInst(BVar(modName, topModTyp), testMod)),
       rules = List(initRule),
       methods = List()
     )
