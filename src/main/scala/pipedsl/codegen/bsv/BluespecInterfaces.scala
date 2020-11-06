@@ -6,33 +6,43 @@ import pipedsl.common.Errors.UnexpectedBSVType
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   val topModTyp: BInterface = BInterface("TopMod")
-  private val topModInitMethod = "init"
 
-  val topModInit: BMethodSig = BMethodSig(
-    name = topModInitMethod,
+  def toIntVar(v: BVar): BVar = {
+    BVar("_int" + v.name, v.typ)
+  }
+  def topModInterface(submods: Iterable[BVar]): BInterfaceDef = BInterfaceDef(
+    typ = topModTyp,
+    methods = List(),
+    subints = submods.map(v => toIntVar(v)).toList
+  )
+  private val tbInitMethod = "init"
+  val tbInit: BMethodSig = BMethodSig(
+    name = tbInitMethod,
     typ = Action,
     params = List())
 
-  val topModInterface: BInterfaceDef = BInterfaceDef(
-    typ = topModTyp,
-    methods = List(
-      topModInit
+  def tbModule(testMod: BModule, initStmts: List[BStatement],
+    bsInts: BluespecInterfaces,debug: Boolean): BModuleDef = {
+    val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
+      bsInts.getReg(BBoolLit(false)))
+    val startedReg = startedRegInst.lhs
+    val initCond = BUOp("!", startedReg)
+    val setStartReg = BModAssign(startedReg, BBoolLit(true))
+    val debugStart = if (debug) { BDisplay("Starting Pipeline %t", List(BTime)) } else BEmpty
+    val initRule = BRuleDef(
+      name = "initTB",
+      conds = List(initCond),
+      body = initStmts :+ setStartReg :+ debugStart
     )
-  )
-   def tbModule(testMod: BModule): BModuleDef = BModuleDef(
-    name = "mkTB",
-    typ = None,
-    params = List(),
-    body = List(BModInst(BVar("m", topModTyp), testMod)),
-    rules = List(BRuleDef(
-      name = "start",
-      conds = List(),
-      body = List(
-        BExprStmt(BMethodInvoke(BVar("m", topModTyp), topModInitMethod, List()))
-      )
-    )),
-    methods = List()
-  )
+    BModuleDef(
+      name = "mkTB",
+      typ = None,
+      params = List(),
+      body = List(startedRegInst, BModInst(BVar("m", topModTyp), testMod)),
+      rules = List(initRule),
+      methods = List()
+    )
+  }
 
   private val requestMethodName = "req"
   private val responseMethodName = "resp"

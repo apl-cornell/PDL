@@ -156,6 +156,9 @@ object BSVPrettyPrinter {
       case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
+      case BIntAssign(lhs, rhs) =>
+        val intname = lhs.typ.matchOrError() { case BInterface(n, _) => n }
+        w.write(mkStatementString("interface", intname, lhs.name, "=", toBSVExprStr(rhs)))
       case BDecl(lhs, rhs) =>
         w.write(mkStatementString(toDeclString(lhs), "=", if (rhs.isDefined) toBSVExprStr(rhs.get) else "?"))
       case BIf(cond, trueBranch, falseBranch) =>
@@ -238,6 +241,9 @@ object BSVPrettyPrinter {
         //don't print conditions in the interface definition
         printBSVMethodSig(m, None)
       })
+      intdef.subints.foreach(i => {
+        w.write(mkStatementString("interface", toDeclString(i)))
+      })
       decIndent()
       w.write(mkIndentedExpr("endinterface\n"))
     }
@@ -284,7 +290,7 @@ object BSVPrettyPrinter {
       w.flush()
     }
 
-    def close: Unit = {
+    def close(): Unit = {
       w.close()
     }
   }

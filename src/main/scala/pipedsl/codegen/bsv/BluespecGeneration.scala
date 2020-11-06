@@ -93,30 +93,27 @@ object BluespecGeneration {
       case _ => List() //TODO if/when memories can be initialized it goes here
     }
 
+    //Get the body of the top level circuit and the list of modules it instantiates
+    private val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
+    private val topInterface: BInterfaceDef = bsInts.topModInterface(argmap.values)
+
     //Create a top level module that is synthesizable, takes no parameters
     //and instantiates all of the required memories and pipeline modules
     //TODO generate other debugging/testing rules
     private val topLevelModule: BModuleDef = {
-      val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
-      val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
-        bsInts.getReg(BBoolLit(false)))
-      val startedReg = startedRegInst.lhs
-      val initCond = BUOp("!", startedReg)
-      val setStartReg = BModAssign(startedReg, BBoolLit(true))
-      val debugStart = if (debug) { BDisplay("Starting Pipeline %t", List(BTime)) } else BEmpty
-      val initmethod = BMethodDef(
-        sig = bsInts.topModInit,
-        cond =  Some(initCond),
-        body = initCircuit(prog.circ, argmap) :+ setStartReg :+ debugStart
-      )
+
+
+      val assignInts = argmap.values.foldLeft(List[BStatement]())((l, a) => {
+        l :+ BIntAssign(bsInts.toIntVar(a), a)
+      })
       BModuleDef(name = "mkCircuit", typ = Some(bsInts.topModTyp), params = List(),
-        body = cirstmts :+ startedRegInst, rules = List(), methods = List(initmethod))
+        body = cirstmts ++ assignInts, rules = List(), methods = List())
     }
 
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
-      structs = List(), interfaces = List(bsInts.topModInterface),
-      modules = List(bsInts.tbModule(BModule(topLevelModule.name, List()))))
+      structs = List(), interfaces = List(topInterface),
+      modules = List(bsInts.tbModule(BModule(topLevelModule.name), initCircuit(prog.circ, argmap), bsInts, debug)))
 
     def getBSVPrograms: List[BProgram] = {
       modMap.values.toList :+ topProgram

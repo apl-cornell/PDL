@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
@@ -222,6 +222,8 @@ object BSVSyntax {
 
   case class BInvokeAssign(lhs: BVar, rhs: BExpr) extends BStatement
 
+  case class BIntAssign(lhs: BVar, rhs: BVar) extends BStatement
+
   case class BDecl(lhs: BVar, rhs: Option[BExpr]) extends BStatement
 
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
@@ -244,7 +246,7 @@ object BSVSyntax {
   case class BModuleDef(name: String, typ: Option[BInterface],
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])
 
-  case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig])
+  case class BInterfaceDef(typ: BInterface, methods: List[BMethodSig], subints: List[BVar] = List())
 
   case class BImport(name: String)
 
@@ -253,4 +255,17 @@ object BSVSyntax {
   case class BProgram(name: String, topModule: BModuleDef, imports: List[BImport], exports: List[BExport], structs: List[BStructDef],
     interfaces: List[BInterfaceDef], modules: List[BModuleDef])
 
+
+  /**
+   * Define common helper methods implicit classes.
+   */
+  implicit class RichType(typ: BSVType) {
+    def matchOrError[A]()
+      (andThen: PartialFunction[BSVType, A]): A = {
+      val mismatchError: PartialFunction[BSVType, A] = {
+        case _ => throw UnexpectedBSVType(s"Didn't expect BSV Type $typ")
+      }
+      andThen.orElse(mismatchError)(typ)
+    }
+  }
 }
