@@ -1,8 +1,9 @@
 LABNAME = Stages Stuff
 
-BSC=bsc -no-show-timestamps -no-show-version -aggressive-conditions
+BSC=bsc -no-show-timestamps -no-show-version --aggressive-conditions
 B_IN=Memories.bsv
-
+B_LIB=Memories.bo
+B_SIM=tb.bsv
 OUT=Top
 
 ## Default simulator is iverilog
@@ -33,6 +34,8 @@ ifdef modelsim
 endif
 
 
+$(B_LIB): $(B_IN)
+	$(BSC) -show-schedule $<
 verilog: mk$(OUT).v
 
 %.v: %.bsv
@@ -42,9 +45,9 @@ mk$(OUT).v: $(B_IN)
 	$(BSC) -show-schedule -verilog $(B_IN)
 
 .PHONY: sim
-sim: $(B_IN)
+sim: $(B_LIB) $(B_SIM)
 
-	$(BSC) -sim $(B_IN)
+	$(BSC) -show-schedule -sim $(B_SIM)
 	$(BSC) -sim -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
 	./mk$(OUT).bexe > smoke_test_bluesim.out 
 
