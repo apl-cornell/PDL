@@ -56,12 +56,13 @@ module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, 
     elem nextOut = rf.sub(reqs.first.addr);
     MemId#(inflight) respId = reqs.first.id;
 
+
     method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
         nextId <= nextId + 1;
         reqs.enq(MemReq { isWrite: isWrite, addr: a, data: b, id: nextId} );
         return nextId;
     endmethod
-
+   
     method Bool checkRespId(MemId#(inflight) a);
         return respId == a;
     endmethod
@@ -205,8 +206,8 @@ module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, s
    BRAM_PORT #(addr, elem) memory <- mkBRAMCore1(memSize, hasOutputReg);
    
    let outDepth = valueOf(inflight);
-   FIFOF#(elem) outData <- mkSizedBypassFIFOF(outDepth);
-   FIFOF#(MemId#(inflight)) outReqs <- mkSizedBypassFIFOF(outDepth);
+   FIFOF#(elem) outData <- mkSizedFIFOF(outDepth);
+   FIFOF#(MemId#(inflight)) outReqs <- mkSizedFIFOF(outDepth + 1);
    
    Reg#(MemId#(inflight)) curId <- mkReg(0);
    SizedReg cnt <- mkSizedReg(outDepth, 0); //sizedreg lets us increment and decrement in the same cycle if necessary
@@ -216,7 +217,7 @@ module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, s
    rule moveToOutFifo (dataReady);
       outData.enq(memory.read);
    endrule
-   
+      
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite) if (okToRequest);
       memory.put(isWrite, a, b);
       curId <= curId + 1;
@@ -239,6 +240,7 @@ module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, s
       outData.deq();
       cnt.addB(-1);
    endmethod
+   
 endmodule
 
 
