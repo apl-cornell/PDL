@@ -1,0 +1,11 @@
+pipe cpu(pc:int<32>)[rf: int<32>[5]] {
+    acquire(rf);
+    rf[0<5>] <- rf[0<5>] + 1<32>;
+    release(rf);
+    call cpu(0<32>);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+    c = new cpu(0<32>)[r];
+}

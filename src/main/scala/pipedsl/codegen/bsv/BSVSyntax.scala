@@ -210,6 +210,7 @@ object BSVSyntax {
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
+  case class BStringLit(v: String) extends BExpr
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
   case class BVar(name: String, typ: BSVType) extends BExpr

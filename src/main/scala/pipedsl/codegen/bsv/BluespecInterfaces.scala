@@ -183,10 +183,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
-  def getMem(memtyp: BInterface): BModule = {
+  def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
-      case `asyncMemType` => BModule(asyncMemMod, List())
-      case `combMemName` => BModule(combMemMod, List())
+      case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
+      case `combMemName` => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case _ => throw UnexpectedBSVType(s"${memtyp.name} is not an supported memory interface")
     }
   }

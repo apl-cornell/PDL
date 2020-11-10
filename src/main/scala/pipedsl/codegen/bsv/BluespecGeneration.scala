@@ -15,7 +15,8 @@ object BluespecGeneration {
   private val fifoLib = "FIFOF"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
-    debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions") {
+    debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions", memInit:Map[String, String] = Map()) {
+
 
     val funcModule: String = funcmodname
     private val funcImport = BImport(funcmodname)
@@ -59,22 +60,23 @@ object BluespecGeneration {
         val (stmts2, env2) = instantiateModules(c2, env1)
         (stmts1 ++ stmts2, env2)
       case CirConnect(name, c) =>
-        val (modtyp, mod) = cirExprToModule(c, env)
+        val initFile = memInit.get(name.v)
+        val (modtyp, mod) = cirExprToModule(c, env, initFile)
         val modvar = BVar(name.v, modtyp)
         (List(BModInst(modvar, mod)), env + (name -> modvar))
         //These don't instantiate modules
       case CirExprStmt(_) => (List(), env)
     }
 
-    private def cirExprToModule(c: CirExpr, env: Map[Id, BVar]): (BSVType, BModule) = c match {
+    private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
       case CirMem(elemTyp, addrSize) =>
         val memtyp = bsInts.getMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
           translator.toBSVType(elemTyp), Some(bsInts.getDefaultMemHandleType))
-        (memtyp, bsInts.getMem(memtyp))
+        (memtyp, bsInts.getMem(memtyp, initFile))
       case CirRegFile(elemTyp, addrSize) =>
         val memtyp = bsInts.getMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
           translator.toBSVType(elemTyp), None)
-        (memtyp, bsInts.getMem(memtyp))
+        (memtyp, bsInts.getMem(memtyp, initFile))
       case CirNew(mod, mods) =>
         (bsInts.getInterface(modMap(mod)),
           BModule(name = bsInts.getModuleName(modMap(mod)), args = mods.map(m => env(m))))

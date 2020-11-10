@@ -32,9 +32,9 @@ interface AsyncMem#(type elem, type addr, type id);
 endinterface
 
 //wrapper around the built-in register file
-module mkCombMem(CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+module mkCombMem#(parameter Bool init, parameter String fileInit) (CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
-    RegFile#(addr, elem) rf <- mkRegFileFull();
+    RegFile#(addr, elem) rf <- (init) ? mkRegFileFullLoad(fileInit) : mkRegFileFull();
 
     method elem read(addr a);
        return rf.sub(a);
@@ -52,6 +52,12 @@ endmodule
 //     Reg#(MemId#(inflight)) nextId <- mkReg(0);
 //     RegFile#(addr, elem) rf <- mkRegFileFull();
 //     FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
+//typedef struct { Bool isWrite; a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
+//module mkAsyncMem#(parameter Bool init, parameter String fileInit) (AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+    
+   // Reg#(MemId#(inflight)) nextId <- mkReg(0);
+  //  RegFile#(addr, elem) rf <- (init)  ?  mkRegFileFullLoad(fileInit) : mkRegFileFull();
+  //  FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
 
 //     elem nextOut = rf.sub(reqs.first.addr);
 //     MemId#(inflight) respId = reqs.first.id;
