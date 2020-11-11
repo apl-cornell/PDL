@@ -32,9 +32,10 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>, row: int<5>[5]<c,s>, col: 
      int<9> x_out_idx = (20<9> * (0<4> ++ k)) + (0<4> ++ row_p);
      start(x);
      acquire(x[x_in_idx]);
-     reserve(x[x_out_idx]);
+     acquire(x[x_out_idx]);
      end(x);
      int<32> x_in_val = x[x_in_idx];
+     int<32> x_out_val_read = x[x_out_idx];
      release(x[x_in_idx]);
      start(a);
      acquire(a);
@@ -42,8 +43,7 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>, row: int<5>[5]<c,s>, col: 
      release(a);
      end(a);
      ---
-     block(x[x_out_idx]);
-     int<32> nval = a_val * x_in_val;
+     int<32> nval = x_out_val_read + (a_val * x_in_val);
      x[x_out_idx] <- nval;
      release(x[x_out_idx]);
      ---

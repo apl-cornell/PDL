@@ -159,7 +159,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
 
   private val asyncMemType = "AsyncMem"
-  private val asyncMemMod = "mkAsyncMem"
+  private val asyncMemMod = "mkLat1Mem"
   private val combMemName = "CombMem"
   private val combMemMod = "mkCombMem"
 
@@ -193,8 +193,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val memAsyncRespName = "resp"
   private val memAsyncCheckName = "checkRespId"
 
-  def getMemPeek(mem: BVar): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncPeekName, List())
+  def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
+    BMethodInvoke(mem, memAsyncPeekName, List(handle))
   }
   def getCombRead(mem: BVar, addr: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombReadName, List(addr))
@@ -208,8 +208,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memAsyncCheckName, List(handle))
   }
-  def getMemResp(mem: BVar): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncRespName, List())
+  def getMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
+    BMethodInvoke(mem, memAsyncRespName, List(handle))
   }
 
   /**

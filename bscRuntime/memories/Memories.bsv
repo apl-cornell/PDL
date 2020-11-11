@@ -5,12 +5,12 @@ import FIFOF :: *;
 import SpecialFIFOs :: *;
 import BRAMCore::*;
 import DReg :: *;
+import Vector :: *;
 
 export CombMem(..);
 export AsyncMem(..);
 export MemId(..);
 export mkCombMem;
-export mkAsyncMem;
 export mkLat1Mem;
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
@@ -26,9 +26,9 @@ endinterface
 //this one is used for asynchronous reads which involve a request and response
 interface AsyncMem#(type elem, type addr, type id);
     method ActionValue#(id) req(addr a, elem b, Bool isWrite);
-    method elem peekResp();
+    method elem peekResp(id i);
     method Bool checkRespId(id i);
-    method Action resp();
+    method Action resp(id i);
 endinterface
 
 //wrapper around the built-in register file
@@ -46,37 +46,37 @@ module mkCombMem(CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr,
 
 endmodule
 
-typedef struct { Bool isWrite; a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
-module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+// typedef struct { Bool isWrite; a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
+// module mkAsyncMem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
-    Reg#(MemId#(inflight)) nextId <- mkReg(0);
-    RegFile#(addr, elem) rf <- mkRegFileFull();
-    FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
+//     Reg#(MemId#(inflight)) nextId <- mkReg(0);
+//     RegFile#(addr, elem) rf <- mkRegFileFull();
+//     FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
 
-    elem nextOut = rf.sub(reqs.first.addr);
-    MemId#(inflight) respId = reqs.first.id;
+//     elem nextOut = rf.sub(reqs.first.addr);
+//     MemId#(inflight) respId = reqs.first.id;
 
 
-    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
-        nextId <= nextId + 1;
-        reqs.enq(MemReq { isWrite: isWrite, addr: a, data: b, id: nextId} );
-        return nextId;
-    endmethod
+//     method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
+//         nextId <= nextId + 1;
+//         reqs.enq(MemReq { isWrite: isWrite, addr: a, data: b, id: nextId} );
+//         return nextId;
+//     endmethod
    
-    method Bool checkRespId(MemId#(inflight) a);
-        return respId == a;
-    endmethod
+//     method Bool checkRespId(MemId#(inflight) a);
+//         return respId == a;
+//     endmethod
 
-    method elem peekResp();
-        return nextOut;
-    endmethod
+//     method elem peekResp();
+//         return nextOut;
+//     endmethod
 
-     method Action resp();
-        if (reqs.first.isWrite) rf.upd(reqs.first.addr, reqs.first.data);
-	reqs.deq();
-     endmethod
+//      method Action resp();
+//         if (reqs.first.isWrite) rf.upd(reqs.first.addr, reqs.first.data);
+// 	reqs.deq();
+//      endmethod
 
-endmodule
+// endmodule
 
 //SizedReg is totally stolen from the BSC source library (BRAM.bsv) - its just not an exported interface/module
 //////////////////////////////////////////////////////////////////////////////////
@@ -198,47 +198,49 @@ endmodule
 
 //this is a wrapper for a bram module with exactly 1 cycle latency
 module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
-   
-   Reg#(elem) r <- mkReg(unpack(0));
-   
+  
    let memSize = 2 ** valueOf(szAddr);
    let hasOutputReg = False;
    BRAM_PORT #(addr, elem) memory <- mkBRAMCore1(memSize, hasOutputReg);
    
    let outDepth = valueOf(inflight);
-   FIFOF#(elem) outData <- mkSizedFIFOF(outDepth);
-   FIFOF#(MemId#(inflight)) outReqs <- mkSizedFIFOF(outDepth + 1);
    
-   Reg#(MemId#(inflight)) curId <- mkReg(0);
-   SizedReg cnt <- mkSizedReg(outDepth, 0); //sizedreg lets us increment and decrement in the same cycle if necessary
-   Bool okToRequest = cnt.isLessThan (outDepth);
-   Reg#(Bool) dataReady <- mkDReg(False);
+   Vector#(inflight, Reg#(elem)) outData <- replicateM( mkReg(unpack(0)) );
+   Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkReg(False) );
    
-   rule moveToOutFifo (dataReady);
-      outData.enq(memory.read);
+   Reg#(MemId#(inflight)) head <- mkReg(0);
+   Reg#(MemId#(inflight)) tail <- mkReg(0);
+   Bool empty = head == tail;
+   Bool full = tail == head + 1;
+   Bool okToRequest = !full;
+   
+   Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
+   rule moveToOutFifo (nextData matches tagged Valid.idx);
+      outData[idx] <= memory.read;
+      valid[idx] <= True;
    endrule
-      
+   
+   rule updateTail(valid[tail] == False && !empty);
+      tail <= tail + 1;
+   endrule
+   
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite) if (okToRequest);
       memory.put(isWrite, a, b);
-      curId <= curId + 1;
-      cnt.addA(+1);
-      outReqs.enq(curId);
-      dataReady <= True;
-      return curId;
+      head <= head + 1;
+      nextData <= tagged Valid head;
+      return head;
    endmethod
    
-   method elem peekResp();
-      return outData.first();
+   method elem peekResp(MemId#(inflight) a);
+      return outData[a];
    endmethod
    
    method Bool checkRespId(MemId#(inflight) a);
-      return outData.notEmpty() && outReqs.first() == a;
+      return valid[a] == True;
    endmethod
    
-   method Action resp();
-      outReqs.deq();
-      outData.deq();
-      cnt.addB(-1);
+   method Action resp(MemId#(inflight) a);
+      valid[a] <= False;
    endmethod
    
 endmodule

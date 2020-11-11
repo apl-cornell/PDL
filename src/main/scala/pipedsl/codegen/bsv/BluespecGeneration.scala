@@ -645,8 +645,10 @@ object BluespecGeneration {
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
       case CExpr(exp) => Some(BExprStmt(translator.toBSVExpr(exp)))
-      case IMemRecv(mem: Id, _: EVar, data: Option[EVar]) => data match {
-        case Some(v) => Some(BAssign(translator.toBSVVar(v), bsInts.getMemPeek(modParams(mem))))
+      case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
+        case Some(v) => Some(BAssign(translator.toBSVVar(v),
+          bsInts.getMemPeek(modParams(mem), translator.toBSVVar(handle))
+        ))
         case None => None
       }
       case IRecv(_, sender, outvar) => Some(
@@ -764,8 +766,8 @@ object BluespecGeneration {
             data.map(e => translator.toBSVExpr(e)))
       ))
       //This is an effectful op b/c is modifies the mem queue its reading from
-      case IMemRecv(mem: Id, _: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem))))
+      case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
+        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toBSVVar(handle))))
       case IMemWrite(mem, addr, data) => Some(
         BExprStmt(
           bsInts.getCombWrite(modParams(mem), translator.toBSVExpr(addr), translator.toBSVExpr(data))
