@@ -21,8 +21,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     typ = Action,
     params = List())
 
-  def tbModule(modName: String, testMod: BModule, initStmts: List[BStatement],
-    bsInts: BluespecInterfaces,debug: Boolean): BModuleDef = {
+  def tbModule(modName: String, testMod: BModule, initStmts: List[BStatement], modDone: List[BExpr], doneRegs: List[BStatement],
+    bsInts: BluespecInterfaces, debug: Boolean): BModuleDef = {
     val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
       bsInts.getReg(BBoolLit(false)))
     val startedReg = startedRegInst.lhs
@@ -34,12 +34,17 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       conds = List(initCond),
       body = initStmts :+ setStartReg :+ debugStart
     )
+    val doneRule = BRuleDef(
+      name = "stopTB",
+      conds = modDone,
+      body = List(BFinish)
+    )
     BModuleDef(
       name = "mkTB",
       typ = None,
       params = List(),
-      body = List(startedRegInst, BModInst(BVar(modName, topModTyp), testMod)),
-      rules = List(initRule),
+      body = doneRegs ++ List(startedRegInst, BModInst(BVar(modName, topModTyp), testMod)),
+      rules = List(initRule, doneRule),
       methods = List()
     )
   }

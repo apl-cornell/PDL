@@ -82,15 +82,29 @@ object BluespecGeneration {
     }
 
     private var freshCnt = 0
-    private def initCircuit(c: Circuit, env: Map[Id, BVar]): List[BStatement] = c match {
-      case CirSeq(c1, c2) => initCircuit(c1, env) ++ initCircuit(c2, env)
+    private def varToReg(b: BVar): BVar = {
+      BVar("reg" + b.name, bsInts.getRegType(b.typ))
+    }
+    //TODO put in a good comment here that describes the return values
+    private def initCircuit(c: Circuit, env: Map[Id, BVar]): (List[BStatement], List[BExpr], List[BStatement]) = c match {
+      case CirSeq(c1, c2) =>
+        val left = initCircuit(c1, env)
+        val right = initCircuit(c2, env)
+        (left._1 ++ right._1, left._2 ++ right._2, left._3 ++ right._3)
       case CirExprStmt(CirCall(m, args)) =>
         val freshVar = BVar("_unused_" + freshCnt, modToHandle(env(m).typ))
+        val varReg = varToReg(freshVar)
         freshCnt += 1
-        List(BDecl(freshVar, None),
-          BInvokeAssign(freshVar, bsInts.getModRequest(env(m), args.map(a => translator.toBSVExpr(a)))
-        ))
-      case _ => List() //TODO if/when memories can be initialized it goes here
+        (
+          List(
+            BDecl(freshVar, None),
+            BInvokeAssign(freshVar, bsInts.getModRequest(env(m), args.map(a => translator.toBSVExpr(a)))),
+            BModAssign(varReg, freshVar)
+          ),
+          List(bsInts.getModCheckHandle(env(m), varReg)),
+          List(BModInst(varReg, bsInts.getReg(BZero)))
+        )
+      case _ => (List(), List(), List()) //TODO if/when memories can be initialized it goes here
     }
 
     //Get the body of the top level circuit and the list of modules it instantiates
@@ -112,12 +126,15 @@ object BluespecGeneration {
 
     private val modarg = "m"
     private val intargs = argmap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
+    private val circuitstart = initCircuit(prog.circ, intargs)
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
       modules = List(bsInts.tbModule(
         modarg, BModule(topLevelModule.name),
-        initCircuit(prog.circ, intargs),
+        circuitstart._1,
+        circuitstart._2,
+        circuitstart._3,
         bsInts,
         debug
       )))

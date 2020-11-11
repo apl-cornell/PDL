@@ -178,6 +178,7 @@ object BSVPrettyPrinter {
         }
       case BDisplay(fmt, args) => w.write(mkStatementString("$display(\"" + fmt + "\",",
         args.map(a => toBSVExprStr(a)).mkString(","), ")"))
+      case BFinish => w.write(mkStatementString("$finish()"))
       case BEmpty => ()
     }
 
