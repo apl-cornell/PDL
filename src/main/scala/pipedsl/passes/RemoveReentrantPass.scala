@@ -36,8 +36,8 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
         //then update the set of maybe reserved addrs
         newRes = updateSetMap(newRes, larg.id, (larg.evar.get, handle))
       case c@ICheckLockFree(larg) if larg.evar.isDefined =>
-        //checkowned if alias, otherwise still checkfree
-        val aliases = newRes.getOrElse(larg.id, Set()).filterNot(alias => alias._1 == larg.evar.get)
+        //checkowned if alias with locks acquired before this cycle, otherwise still checkfree
+        val aliases = maybeRes.getOrElse(larg.id, Set()).filterNot(alias => alias._1 == larg.evar.get)
         if (aliases.nonEmpty) {
           val aliasnone = aliasNone(larg.evar.get, aliases)
           //if none are valid aliases then run original command
