@@ -1,9 +1,9 @@
-pipe multi_stg_mul(a1: int<32>, a2: int<32>)[]: int<32> {
+pipe multi_stg_mul(a1: int<16>, a2: int<16>)[]: int<16> {
      --- //TODO actually implement
      output(a1 * a2);
 }
 
-pipe multi_stg_div(a1: int<32>, a2: int<32>)[]: int<32> {
+pipe multi_stg_div(a1: int<16>, a2: int<16>)[]: int<16> {
      --- //TODO actually implement
      ---
      ---
@@ -11,13 +11,13 @@ pipe multi_stg_div(a1: int<32>, a2: int<32>)[]: int<32> {
      output(a1 / a2);
 }
 
-pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, m: multi_stg_mul, f: multi_stg_div] {
+pipe cpu(pc: int<16>)[rf: int<16>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_mul, f: multi_stg_div] {
  start(imem);
  acquire(imem);
  int<32> insn <- imem[pc];
  release(imem);
  end(imem);
- call cpu(pc + 4<32>);
+ call cpu(pc + 1<16>);
  ---
  int<2> op = insn{1:0};
  int<5> rs1 = insn{6:2};
@@ -26,8 +26,8 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, m: multi_stg_
  start(rf);
  acquire(rf[rs1]);
  acquire(rf[rs2]);
- int<32> rf1 = rf[rs1];
- int<32> rf2 = rf[rs2];
+ int<16> rf1 = rf[rs1];
+ int<16> rf2 = rf[rs2];
  release(rf[rs1]);
  release(rf[rs2]);
  reserve(rf[rd]);
@@ -35,19 +35,19 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, m: multi_stg_
  ---
  if (op == 0<2>) {   
     ---
-    int<32> res = rf1 + rf2;
+    int<16> res = rf1 + rf2;
  } else {
  if (op == 1<2>) {
     start(m);
     acquire(m);
-    int<32> res <- call m(rf1, rf2);
+    int<16> res <- call m(rf1, rf2);
     release(m);
     end(m);
     ---
  } else {
     start(f);
     acquire(f);
-    int<32> res <- call f(rf1, rf2);
+    int<16> res <- call f(rf1, rf2);
     release(f);
     end(f);
     ---
@@ -59,10 +59,10 @@ pipe cpu(pc: int<32>)[rf: int<32>[5]<c,s>, imem: int<32>[32]<a,a>, m: multi_stg_
 }
 
 circuit {
- i = memory(int<32>, 32);
- r = regfile(int<32>, 5);
+ i = memory(int<32>, 16);
+ r = regfile(int<16>, 5);
  m = new multi_stg_mul[];
  fp = new multi_stg_div[];
  c = new cpu[r, i, m, fp];
- call c(0<32>);
+ call c(0<16>);
 }
