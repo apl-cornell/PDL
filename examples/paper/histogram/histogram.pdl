@@ -13,25 +13,26 @@ void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
 pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>, weight: int<32>[10]<c,s>, h: int<32>[10]<c,s>]: bool {
     if (counter < 1000<10>) {
         call hist(counter + 1<10>);
-    start(feature);
-    acquire(feature[counter]);
-    end(feature);
-    start(weight);
-    acquire(weight[counter]);
-    end(weight);
-    int<10> m = feature[counter];
-    int<32> wt = weight[counter];
-    release(feature[counter]);
-    release(weight[counter]);
-    ---
-    start(h);
-    acquire(h[m]);
-    end(h);
-    int<32> nm = h[m] + wt;
-    ---
-    h[m] <- nm;
-    release(h[m]);
-    ---
+        start(feature);
+        acquire(feature[counter]);
+        end(feature);
+        start(weight);
+        acquire(weight[counter]);
+        end(weight);
+        int<10> m = feature[counter];
+        int<32> wt = weight[counter];
+        release(feature[counter]);
+        release(weight[counter]);
+        ---
+        start(h);
+        acquire(h[m]);
+        end(h);
+        int<32> nm = h[m] + wt;
+        print(nm);
+        ---
+        h[m] <- nm;
+        release(h[m]);
+        ---
     } else {
       output(true);
     }

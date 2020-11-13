@@ -18,7 +18,7 @@ object GenTestFiles {
       val bw = new BufferedWriter(new FileWriter(file))
       val r = scala.util.Random
       //Max possible value that the int can be + 1
-      val maxInt = scala.math.pow(2, memType.toInt).asInstanceOf[Long] 
+      val maxInt = if(args.size == 5) args(4).toLong else scala.math.pow(2, memType.toInt).asInstanceOf[Long]
       val str = new StringBuilder()
       var a = 0;
       val hexDigits = memType.toInt / 4 + (if(memType.toInt % 4 == 0) 0 else 1)
