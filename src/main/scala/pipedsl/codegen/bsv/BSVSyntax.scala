@@ -126,7 +126,7 @@ object BSVSyntax {
           case BUnpack(e) => e
           case e => BPack(e)
         }
-        val right = toBSVExpr(b.e1) match {
+        val right = toBSVExpr(b.e2) match {
           case BUnpack(e) => e
           case e => BPack(e)
         }
