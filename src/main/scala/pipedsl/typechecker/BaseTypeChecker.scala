@@ -324,7 +324,16 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val (t2, env2) = checkExpression(e2, env1)
       op match {
         case BitOp("++", _) => (t1, t2) match {
-          //handle concatenation separately since it doesn't require equal operands
+          case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
+        }
+        case BitOp("<<", _) => (t1, t2) match {
+          case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+        }
+        case BitOp(">>", _) => (t1, t2) match {
+          case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+        }
+        case NumOp("*", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
           case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
         }

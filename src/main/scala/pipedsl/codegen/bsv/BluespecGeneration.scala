@@ -210,8 +210,8 @@ object BluespecGeneration {
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true)
     //First stage should have exactly one input edge by definition
-    private val firstStageStruct = getEdgeStructInfo(List(firstStage), addTId = true).values.head
-    private val inputFields = getEdgeStructInfo(List(firstStage), addTId = false).values.head.typ.fields
+    private val firstStageStruct = getFirstEdgeStructInfo(firstStage, mod.inputs.map(i => i.name))
+    private val inputFields = firstStageStruct.typ.fields.init
     //This map returns the correct struct type based on the destination stage
     private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
     val allEdges: Set[PipelineEdge] = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
@@ -300,6 +300,15 @@ object BluespecGeneration {
           ms + (e -> structdef)
         })
       })
+    }
+
+    private def getFirstEdgeStructInfo(stg: PStage, fieldOrder: Iterable[Id]): BStructDef = {
+      val inedge = stg.inEdges.head //must be only one for the first stage
+      val sfields = fieldOrder.foldLeft(List[BVar]())((l, id) => {
+        l :+ BVar(id.v, translator.toBSVType(id.typ.get))
+      }) :+ threadIdVar
+      val styp = BStruct(genStructName(inedge), sfields)
+      BStructDef(styp, List("Bits", "Eq"))
     }
 
     //Helper functions that cannonically generate names from pipeline structures.
