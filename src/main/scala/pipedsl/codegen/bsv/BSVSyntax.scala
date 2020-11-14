@@ -90,7 +90,13 @@ object BSVSyntax {
       case EBool(v) => BBoolLit(v)
       case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
       case eb@EBinop(_, _, _) => toBSVBop(eb)
-      case EBitExtract(num, start, end) => BUnpack(BBitExtract(BPack(toBSVExpr(num)), start, end))
+      case EBitExtract(num, start, end) =>
+          val bnum = toBSVExpr(num)
+        //remove nested pack/unpacks
+          bnum match {
+            case BUnpack(e) => BUnpack(BBitExtract(e, start, end))
+            case e => BUnpack(BBitExtract(BPack(e), start, end))
+          }
       case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
       case e@EVar(_) => toBSVVar(e)
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toBSVExpr(a)))
@@ -115,7 +121,16 @@ object BSVSyntax {
 
     //TODO a better way to translate operators
     def toBSVBop(b: EBinop): BExpr = b.op match {
-      case BitOp("++", _) => BUnpack(BConcat(BPack(toBSVExpr(b.e1)), List(BPack(toBSVExpr(b.e2)))))
+      case BitOp("++", _) =>
+        val left = toBSVExpr(b.e1) match {
+          case BUnpack(e) => e
+          case e => BPack(e)
+        }
+        val right = toBSVExpr(b.e1) match {
+          case BUnpack(e) => e
+          case e => BPack(e)
+        }
+        BUnpack(BConcat(left, List(right)))
       case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
     }
 
