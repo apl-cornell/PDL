@@ -53,6 +53,8 @@ module mkLock(Lock#(LockId#(d)));
    Reg#(LockId#(d)) nextId <- mkReg(0);
    FIFOF#(LockId#(d)) held <- mkSizedFIFOF(valueOf(d));
    
+   Reg#(LockId#(d)) cnt <- mkReg(0);
+   
    Bool lockFree = !held.notEmpty;
    LockId#(d) owner = held.first;
 
@@ -64,16 +66,20 @@ module mkLock(Lock#(LockId#(d)));
    method Bool owns(LockId#(d) tid);
       return owner == tid;
    endmethod
-      
+         
    //Releases the lock iff thread `tid` owns it already
    method Action rel(LockId#(d) tid);
-       if (owner == tid) held.deq();
+      if (owner == tid)
+	 begin
+	    held.deq();
+	 end
    endmethod
    
    //Reserves the lock and returns the associated id
    method ActionValue#(Maybe#(LockId#(d))) res();
       held.enq(nextId);
       nextId <= nextId + 1;
+      cnt <= cnt + 1;
       return tagged Valid nextId;
    endmethod
    
@@ -136,7 +142,15 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    Vector#(numlocks, Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
 
-
+   //Allow each lock entry to be freed once it's no longer used,
+   //but tagged as valid
+   for (Integer i = 0; i < valueOf(numlocks); i = i + 1) begin      
+      rule freelock;
+	 if (lockVec[i].isEmpty && isValid(entryVec[i]))
+	    entryVec[i] <= tagged Invalid;
+      endrule
+   end
+      
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);
@@ -160,14 +174,9 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    function Maybe#(LockIdx#(numlocks)) getFreeLock();
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
       for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
-	    if (result matches tagged Invalid)
-	       begin
-	       if (entryVec[idx] matches tagged Valid.e)
-		  begin
-		     if (lockVec[idx].isEmpty) result = tagged Valid fromInteger(idx);
-		  end
-	       else result = tagged Valid fromInteger(idx);
-	       end
+	    if (result matches tagged Invalid &&&
+		entryVec[idx] matches tagged Invalid)
+		  result = tagged Valid fromInteger(idx);		  
       return result;
    endfunction
 
