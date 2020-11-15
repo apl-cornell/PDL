@@ -10,7 +10,7 @@ void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
 }
 */
 
-pipe hist(counter: int<10>)[feature: int<10>[10]<a,a>, weight: int<32>[10]<a,a>, h: int<32>[10]<a,a>]: bool {
+pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>, weight: int<32>[10]<c,s>, h: int<32>[10]<c,s>]: bool {
     if (counter < 1000<10>) {
         call hist(counter + 1<10>);
     start(feature);
@@ -19,28 +19,26 @@ pipe hist(counter: int<10>)[feature: int<10>[10]<a,a>, weight: int<32>[10]<a,a>,
     start(weight);
     acquire(weight[counter]);
     end(weight);
-    int<10> m <- feature[counter];
-    int<32> wt <- weight[counter];
+    int<10> m = feature[counter];
+    int<32> wt = weight[counter];
     release(feature[counter]);
     release(weight[counter]);
-    ---
     start(h);
     acquire(h[m]);
     end(h);
-    int<32> oldh <- h[m];
+    int<32> nm = h[m] + wt;
     ---
-    h[m] <- oldh + wt;
+    print(nm);
+    h[m] <- nm;
     release(h[m]);
     ---
-    } else {
-      output(true);
     }
 }
 
 circuit {
-    f = memory(int<10>, 10);
-    w = memory(int<32>, 10);
-    h = memory(int<32>, 10);
+    f = regfile(int<10>, 10);
+    w = regfile(int<32>, 10);
+    h = regfile(int<32>, 10);
     hg = new hist[f, w, h];
     call hg(0<10>);
 }

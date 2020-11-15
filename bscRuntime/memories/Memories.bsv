@@ -203,11 +203,11 @@ endmodule
 
 
 //this is a wrapper for a bram module with exactly 1 cycle latency
-module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+module mkLat1Mem#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
   
    let memSize = 2 ** valueOf(szAddr);
    let hasOutputReg = False;
-   BRAM_PORT #(addr, elem) memory <- mkBRAMCore1(memSize, hasOutputReg);
+   BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
    
    let outDepth = valueOf(inflight);
    
