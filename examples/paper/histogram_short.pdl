@@ -23,7 +23,6 @@ pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>, weight: int<32>[10]<c,s>,
     int<32> wt = weight[counter];
     release(feature[counter]);
     release(weight[counter]);
-    ---
     start(h);
     acquire(h[m]);
     end(h);
