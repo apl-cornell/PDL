@@ -210,26 +210,20 @@ module mkLat1Mem#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem
    BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
    
    let outDepth = valueOf(inflight);
-   
+
+   //this must be at least size 2 to work correctly (safe bet)
    Vector#(inflight, Reg#(elem)) outData <- replicateM( mkReg(unpack(0)) );
    Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkReg(False) );
-   
+
    Reg#(MemId#(inflight)) head <- mkReg(0);
-   Reg#(MemId#(inflight)) tail <- mkReg(0);
-   Bool empty = head == tail;
-   Bool full = tail == head + 1;
-   Bool okToRequest = !full;
+   Bool okToRequest = valid[head] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
    rule moveToOutFifo (nextData matches tagged Valid.idx);
       outData[idx] <= memory.read;
       valid[idx] <= True;
    endrule
-   
-   rule updateTail(valid[tail] == False && !empty);
-      tail <= tail + 1;
-   endrule
-   
+      
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite) if (okToRequest);
       memory.put(isWrite, a, b);
       head <= head + 1;
