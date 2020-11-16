@@ -1,41 +1,51 @@
-def alu(arg1: int<32>, arg2: int<32>, op: int<3>, op: int<1> flip): int<32> {
+def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
     if (op == 0<3>) {  //000 == ADD , flip == sub
        if (flip == 0<1>) {
          return arg1 + arg2;
        } else {
          return arg1 - arg2;
        }
-    } else if (op == 1<3>) { //001 == SLL
+    } else {
+    if (op == 1<3>) { //001 == SLL
         return arg1 << arg2{4:0};
-    } else if (op == 2<3>) { //010 == SLT 
+    } else {
+    if (op == 2<3>) { //010 == SLT 
         return (arg1 < arg2) ? 1<32> : 0<32>; //todo signed vs unsigned
-    } else if (op == 3<3>) { //011 == SLTU
+    } else {
+    if (op == 3<3>) { //011 == SLTU
         return (arg1 < arg2) ? 1<32> : 0<32>;
-    } else if (op == 4<3>) { //100 == XOR
+    } else {
+    if (op == 4<3>) { //100 == XOR
         return arg1 ^ arg2;
-    } else if (op == 5<3>) { //101 == SRL / SRA
+    } else {
+    if (op == 5<3>) { //101 == SRL / SRA
       if (flip == 0<1>) {
         return arg1 >> arg2{4:0}; //SRL
       } else {
         return arg1 >> arg2{4:0}; //SRA todo support difference here
       }
-    } else if (op == 6<3>) { //110 == OR
+    } else {
+    if (op == 6<3>) { //110 == OR
         return arg1 ^ arg2;
     } else { //111 == AND
         return arg1 & arg2;
-    }
+    }}}}}}}
+    
 }
 
 def br(pc: int<16>, off:int<16>, op:int<3>, arg1:int<32>, arg2:int<32>): int<16> {
     return 0<16>;
 }
 
+
 pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>] {
+    start(imem);
     acquire(imem[pc]);
     int<32> insn <- imem[pc];
     release(imem[pc]);
+    end(imem);
     ---
-    int<2> opcode = insn{6:0};
+    int<7> opcode = insn{6:0};
     int<5> rs1 = insn{19:15};
     int<5> rs2 = insn{24:20};
     int<5> rd = insn{11:7};
@@ -83,32 +93,33 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>
        int<16> npc = pc + 1<16>; //todo
     } else {
        int<16> npc = pc + 1<16>;
-    }
-    }
+    }}
     call cpu(npc);
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
     int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
     if (isStore) {
-       int<16> memaddr = (immS + rf1){15:0};
+       int<32> tmp = (immS + rf1);
+       int<16> memaddr = tmp{15:0};
     } else {
     if (isLoad) {
-       int<16> memaddr = (immI + rf1){15:0};
+       int<32> tmp = (immI + rf1);
+       int<16> memaddr = tmp{15:0};
     } else {
       int<16> memaddr = 0<16>;
-    }
-    }
+    }}
+    ---
     start(dmem);
     if (isStore || isLoad) {
-       acquire(rf[memaddr]);
+       acquire(dmem[memaddr]);
        if (isStore) {
-      	 int<32> wdata = 0<32>;
-	 dmem[memaddr] <- rf2;
+      	 int<32> wdata <- 0<32>;
+    	 dmem[memaddr] <- rf2;
        } else {
        	 int<32> wdata <- dmem[memaddr];       	 
        }
-       release(rf[memaddr]);
+       release(dmem[memaddr]);
     } else {
-      int<32> wdata = 0<32>;
+      int<32> wdata <- 0<32>;
     }
     end(dmem);
     ---
@@ -120,11 +131,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>
        	  rf[rd] <- alu_res;
        }
        release(rf[rd]);
-    }
+    }    
 }
+
 circuit {
     i = memory(int<32>, 16);
     d = memory(int<32>, 16);
     r = regfile(int<32>, 5);
-    c = new cpu(0<16>)[r, i, d];
+    c = new cpu[r, i, d];
+    call c(0<16>);
 }
