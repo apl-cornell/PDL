@@ -157,7 +157,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
 
   private val memHandleName = "MemId"
-  private val defaultMemHandleSize = 2
+  private val defaultMemHandleSize = 8
   def getDefaultMemHandleType: BSizedType = getMemHandleType(defaultMemHandleSize)
   def getMemHandleType(sz: Integer): BSizedType = {
     BSizedType(memHandleName, List(sz))
