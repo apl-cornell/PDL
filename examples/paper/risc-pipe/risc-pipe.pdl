@@ -1,4 +1,5 @@
 def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
+    int<5> shamt = arg2{4:0};
     if (op == 0<3>) {  //000 == ADD , flip == sub
        if (flip == 0<1>) {
          return arg1 + arg2;
@@ -7,7 +8,7 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
        }
     } else {
     if (op == 1<3>) { //001 == SLL
-        return arg1 << arg2{4:0};
+        return arg1 << shamt;
     } else {
     if (op == 2<3>) { //010 == SLT 
         return (arg1 < arg2) ? 1<32> : 0<32>; //todo signed vs unsigned
@@ -20,9 +21,9 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
     } else {
     if (op == 5<3>) { //101 == SRL / SRA
       if (flip == 0<1>) {
-        return arg1 >> arg2{4:0}; //SRL
+        return arg1 >> shamt; //SRL
       } else {
-        return arg1 >> arg2{4:0}; //SRA todo support difference here
+        return arg1 >> shamt; //SRA todo support difference here
       }
     } else {
     if (op == 6<3>) { //110 == OR
