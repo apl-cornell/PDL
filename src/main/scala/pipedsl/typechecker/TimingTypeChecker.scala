@@ -78,13 +78,11 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
     case CRecv(lhs, rhs) =>
       val rhsLat = checkExpr(rhs, vars)
       val lhsLat = checkExpr(lhs, vars, isRhs = false)
-      if (rhsLat == Combinational && lhsLat == Combinational) {
-        throw UnexpectedSyncReference(c.pos, s"<- statements expect a noncombinational reference")
-      }
-      (lhs, rhs) match {
+        (lhs, rhs) match {
+        //TODO rewrite to reduce code maybe?
         case (EVar(id), EMemAccess(_, _)) => (vars, nextVars + id)
         case (EVar(id), ECall(_,_)) => (vars, nextVars + id)
-        case (EVar(id), _) => throw UnexpectedAsyncReference(lhs.pos, s"rhs of '$id <-' but be a memory or module reference")
+        case (EVar(id), _) => (vars, nextVars + id)
         case (EMemAccess(_,_), EMemAccess(_,_)) => throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
         case _ => (vars, nextVars)
       }
