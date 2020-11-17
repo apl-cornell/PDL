@@ -298,6 +298,9 @@ object DAGSyntax {
   class IfStage(n: Id, val cond: Expr, var trueStages: List[PStage],
     var falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
 
+    override def succs: Set[PStage] = {
+      super.succs + joinStage
+    }
     val condVar = EVar(Id("__cond" + n.v))
     condVar.typ = Some(TBool())
     condVar.id.typ = condVar.typ
