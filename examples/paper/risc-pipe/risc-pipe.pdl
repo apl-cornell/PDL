@@ -109,21 +109,24 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>
       int<16> memaddr = 0<16>;
     }}
     ---
-    start(dmem);
     if (isStore || isLoad) {
+       start(dmem);
        acquire(dmem[memaddr]);
+       end(dmem);
        if (isStore) {
-      	 int<32> wdata <- 0<32>;
     	 dmem[memaddr] <- rf2;
+    	 release(dmem[memaddr]);
+    	 ---
+    	 int<32> wdata = 0<32>;
        } else {
-       	 int<32> wdata <- dmem[memaddr];       	 
+       	 int<32> wdata <- dmem[memaddr];
+       	 release(dmem[memaddr]);
+       	 ---
        }
-       release(dmem[memaddr]);
     } else {
-      int<32> wdata <- 0<32>;
+      ---
+      int<32> wdata = 0<32>;
     }
-    end(dmem);
-    ---
     if (writerd) {
        block(rf[rd]);
        if (isLoad) {
