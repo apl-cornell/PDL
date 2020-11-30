@@ -69,6 +69,7 @@ object Syntax {
     override def toString: String = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
+      case _: TString => "String"
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
@@ -82,6 +83,7 @@ object Syntax {
   sealed trait IntType
   case class TSizedInt(len: Int, unsigned: Boolean) extends Type with IntType
   // Use case class instead of case object to get unique positions
+  case class TString() extends Type
   case class TVoid() extends Type
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
@@ -177,6 +179,7 @@ object Syntax {
   case class EIsValid(ex: Expr) extends Expr
   case class EFromMaybe(ex: Expr) extends Expr
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
+  case class EString(v: String) extends Expr
   case class EBool(v: Boolean) extends Expr
   case class EUop(op: UOp, ex: Expr) extends Expr
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
@@ -203,7 +206,7 @@ object Syntax {
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-
+  case class CPrint(evar: EVar) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command

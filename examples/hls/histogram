@@ -14,24 +14,25 @@ pipe hist(counter: int<7>)[feature: int<32>[7]<c,s>, weight: int<32>[7]<c,s>, h:
     if (counter < 127<7>) {
         call hist(counter + 1<7>);
     } //else no next loop iteration, done
-    //acquire(feature[counter]);
-    //acquire(weight[counter]);
-    acquire(feature);
-    acquire(weight);
+    start(feature);
+    start(weight);
+    acquire(feature[counter]);
+    acquire(weight[counter]);
     int<32> m = feature[counter];
     int<32> wt = weight[counter];
-    release(feature);
-    release(weight);
-   // release(feature[counter]);
-   // release(weight[counter]);
+    release(feature[counter]);
+    release(weight[counter]);
+    end(feature);
+    end(weight);
     ---
-   // acquire(h[m]);
-    acquire(h);
+    start(h);
+    acquire(h[m]);
+    end(h);
+   
     int<32> nm = h[m] + wt; //many ways to break this section up for scheduling
     ---
     h[m] <- nm;
-    release(h);
-   // release(h[m]);
+    release(h[m]);
 }
 
 circuit {

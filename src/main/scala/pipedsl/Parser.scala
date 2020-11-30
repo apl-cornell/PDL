@@ -27,8 +27,8 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val posint: Parser[Int] = "[0-9]+".r ^^ { n => n.toInt } | err("Expected positive number")
 
-  lazy val stringVal: P[String] =
-    "\"" ~> "[^\"]*".r <~ "\""
+  lazy val stringVal: P[Expr] =
+    "\"" ~> "[^\"]*".r <~ "\"" ^^ {n => EString(n)}
 
   // Atoms
   lazy val uInt: P[Expr] = "[0-9]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(n.toInt, 10, if (bits.isDefined) bits.get else log2(n.toInt)) }
@@ -87,6 +87,7 @@ class Parser extends RegexParsers with PackratParsers {
       octal |
       binary |
       uInt |
+      stringVal | 
       boolean ^^ (b => EBool(b)) |
       iden ~ parens(repsep(expr, ",")) ^^ { case f ~ args => EApp(f, args) } |
       variable |
@@ -155,7 +156,8 @@ class Parser extends RegexParsers with PackratParsers {
       "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released)} |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => COutput(e)) |
-      expr ^^ (e => CExpr(e))
+      "print" ~> parens(variable) ^^ (e => CPrint(e)) |
+      expr ^^ (e => CExpr(e)) 
   }
   
   lazy val lockArg: P[LockArg] = positioned { 
@@ -223,7 +225,8 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
-  lazy val baseTyp: P[Type] = memory | sizedInt | bool
+  lazy val string: P[Type] = "String".r ^^ {_ => TString() }
+  lazy val baseTyp: P[Type] = memory | sizedInt | bool | string
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp

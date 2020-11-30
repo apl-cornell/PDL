@@ -291,6 +291,16 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       checkExpression(exp, tenv)
       tenv
     }
+    case CPrint(evar) => {
+      val (t, _) = checkExpression(evar, tenv)
+      t match {
+        case TSizedInt(len, unsigned) => tenv
+        case TString() => tenv
+        case TBool() => tenv
+        case _ => throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
+      }
+    }
+      
     case CEmpty => tenv
     case _ => throw UnexpectedCommand(c)
   }
@@ -311,6 +321,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   private def _checkE(e: Expr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = e match {
     case EInt(v, base, bits) => (TSizedInt(bits, unsigned = true), tenv)
     case EBool(v) => (TBool(), tenv)
+    case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
       val (t1, env1) = checkExpression(e, tenv)
       op match {

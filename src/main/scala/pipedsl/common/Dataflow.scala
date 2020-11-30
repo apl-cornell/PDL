@@ -100,6 +100,13 @@ object Dataflow {
       val specNeeds = used(stg.specStages.head.name)
       val specWritten = joinNeeds -- joinNeeds.intersect(specNeeds)
       specNeeds.union(verifNeeds) -- specWritten -- verifWritten
+    case stg: IfStage =>
+      val joinNeeds = used(stg.joinStage.name)
+      val trueNeeds = used(stg.trueStages.head.name)
+      val trueWritten = joinNeeds -- joinNeeds.intersect(trueNeeds)
+      val falseNeeds = used(stg.falseStages.head.name)
+      val falseWritten = joinNeeds -- joinNeeds.intersect(falseNeeds) 
+      trueNeeds.union(falseNeeds) -- trueWritten -- falseWritten
     case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
   }
 

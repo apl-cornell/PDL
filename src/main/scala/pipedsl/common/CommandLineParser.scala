@@ -17,7 +17,8 @@ object CommandLineParser {
     test: Boolean = false,
     testInputDir: File = new File("."),
     testResultDir: File = new File("."),
-    defaultAddrLock: Option[String] = None
+    defaultAddrLock: Option[String] = None,
+    memInit: Map[String, String] = Map()
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -74,7 +75,10 @@ object CommandLineParser {
           .children(
             opt[String]("addrLockModule")
               .text("The BSV Module to use for address locks")
-              .action((s, c) => c.copy(defaultAddrLock = Some(s)))
+              .action((s, c) => c.copy(defaultAddrLock = Some(s))),
+            opt[Map[String, String]]("memInit")
+              .valueName("<memName1>=<fileName1>,<memName2>=<fileName2>...")
+              .action((x, c) => c.copy(memInit = x))
           ),
         cmd("typecheck") 
           .text("parses and type checks the resulting AST")

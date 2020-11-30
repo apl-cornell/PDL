@@ -47,6 +47,7 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>, row: int<5>[5]<c,s>, col: 
      ---
      int<64> nmul = a_val * x_in_val;
      int<32> nval = x_out_val_read + nmul{31:0};
+     print(nval);
      x[x_out_idx] <- nval;
      release(x[x_out_idx]);
      ---

@@ -32,9 +32,9 @@ interface AsyncMem#(type elem, type addr, type id);
 endinterface
 
 //wrapper around the built-in register file
-module mkCombMem(CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+module mkCombMem#(parameter Bool init, parameter String fileInit) (CombMem#(elem, addr)) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
 
-    RegFile#(addr, elem) rf <- mkRegFileFull();
+    RegFile#(addr, elem) rf <- (init) ? mkRegFileFullLoad(fileInit) : mkRegFileFull();
 
     method elem read(addr a);
        return rf.sub(a);
@@ -52,6 +52,12 @@ endmodule
 //     Reg#(MemId#(inflight)) nextId <- mkReg(0);
 //     RegFile#(addr, elem) rf <- mkRegFileFull();
 //     FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
+//typedef struct { Bool isWrite; a addr; d data; i id; } MemReq#(type a, type d, type i) deriving (Eq, Bits);
+//module mkAsyncMem#(parameter Bool init, parameter String fileInit) (AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+    
+   // Reg#(MemId#(inflight)) nextId <- mkReg(0);
+  //  RegFile#(addr, elem) rf <- (init)  ?  mkRegFileFullLoad(fileInit) : mkRegFileFull();
+  //  FIFOF#(MemReq#(addr, elem, MemId#(inflight))) reqs <- mkSizedFIFOF(valueOf(inflight));
 
 //     elem nextOut = rf.sub(reqs.first.addr);
 //     MemId#(inflight) respId = reqs.first.id;
@@ -197,33 +203,27 @@ endmodule
 
 
 //this is a wrapper for a bram module with exactly 1 cycle latency
-module mkLat1Mem(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
+module mkLat1Mem#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, addr, MemId#(inflight))) provisos(Bits#(elem, szElem), Bits#(addr, szAddr), Bounded#(addr));
   
    let memSize = 2 ** valueOf(szAddr);
    let hasOutputReg = False;
-   BRAM_PORT #(addr, elem) memory <- mkBRAMCore1(memSize, hasOutputReg);
+   BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
    
    let outDepth = valueOf(inflight);
-   
+
+   //this must be at least size 2 to work correctly (safe bet)
    Vector#(inflight, Reg#(elem)) outData <- replicateM( mkReg(unpack(0)) );
    Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkReg(False) );
-   
+
    Reg#(MemId#(inflight)) head <- mkReg(0);
-   Reg#(MemId#(inflight)) tail <- mkReg(0);
-   Bool empty = head == tail;
-   Bool full = tail == head + 1;
-   Bool okToRequest = !full;
+   Bool okToRequest = valid[head] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
    rule moveToOutFifo (nextData matches tagged Valid.idx);
       outData[idx] <= memory.read;
       valid[idx] <= True;
    endrule
-   
-   rule updateTail(valid[tail] == False && !empty);
-      tail <= tail + 1;
-   endrule
-   
+      
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite) if (okToRequest);
       memory.put(isWrite, a, b);
       head <= head + 1;

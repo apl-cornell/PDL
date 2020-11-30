@@ -157,7 +157,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
 
   private val memHandleName = "MemId"
-  private val defaultMemHandleSize = 2
+  private val defaultMemHandleSize = 8
   def getDefaultMemHandleType: BSizedType = getMemHandleType(defaultMemHandleSize)
   def getMemHandleType(sz: Integer): BSizedType = {
     BSizedType(memHandleName, List(sz))
@@ -183,10 +183,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
-  def getMem(memtyp: BInterface): BModule = {
+  def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
-      case `asyncMemType` => BModule(asyncMemMod, List())
-      case `combMemName` => BModule(combMemMod, List())
+      case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
+      case `combMemName` => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case _ => throw UnexpectedBSVType(s"${memtyp.name} is not an supported memory interface")
     }
   }

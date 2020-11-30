@@ -9,27 +9,31 @@ for(int i = 0; i < 100; i++) {
 return s;
 */
 
-pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: int<32>[1]<c,s>] {
-    if (counter < 100<8>) {
-        call sum(counter + 1<8>);
+pipe sum(counter: int<7>)[memA: int<30>[7]<a,a>, memB: int<30>[7]<a,a>, total: int<30>[1]<c,s>] {
+    if (counter < 100<7>) {
+        call sum(counter + 1<7>);
+        //acquire(memA[counter]);
         start(memA);
-        acquire(memA[counter]);
+        acquire(memA);
         end(memA);
         start(memB);
-        acquire(memB[counter]);
+        acquire(memB);
         end(memB);
-        int<32> argA <- memA[counter];
-        int<32> argB <- memB[counter];
-        release(memA[counter]);
-        release(memB[counter]);
+        int<30> argA <- memA[counter];
+        int<30> argB <- memB[counter];
+        //release(memA[counter]);
+        release(memA);
+        //release(memB[counter]);
+        release(memB);
         ---
-        int<32> d = argA - argB; //could split into multiple cycles as in HLS examples
-        if (d > 0<32>) {
+        int<30> d = 1<30>; //could split into multiple cycles as in HLS examples
+        if (d > 0<30>) {
             ---
             start(total);
             acquire(total);
             end(total);
-            int<32> s = total[0] + d; //could split into multiple cycles as in HLS
+            int<30> s = total[0] + d; //could split into multiple cycles as in HLS
+            print(s);
             total[0] <- s;
             release(total);
         }
@@ -49,9 +53,9 @@ pipe sum(counter: int<8>)[memA: int<32>[8]<a,a>, memB: int<32>[8]<a,a>, total: i
 
 */
 circuit {
-    total = regfile(int<32>, 1);
-    memA = memory(int<32>, 8);
-    memB = memory(int<32>, 8);
+    total = regfile(int<30>, 1);
+    memA = memory(int<30>, 7);
+    memB = memory(int<30>, 7);
     s = new sum[memA, memB, total];
-    call s(0<8>);
+    call s(0<7>);
 }

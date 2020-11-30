@@ -87,6 +87,8 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
         })
         CSeq(argAssgns._1, CRecv(lhs, ECall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
+      case (l@EVar(_), _) =>
+        CAssign(l, rhs).setPos(c.pos)
       case _ => throw UnexpectedCase(c.pos)
     }
     //calls also get translated to send statements later

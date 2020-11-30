@@ -8,14 +8,11 @@ import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Locks.LockType
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
 import pipedsl.test.TestingMain
 import pipedsl.typechecker._
-
-import scala.collection.immutable
 
 object Main {
   val logger: Logger = Logger("main")
@@ -35,7 +32,7 @@ object Main {
             config.testResultDir)
           case ("interpret", false) => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
           case ("gen", false) => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock)
+            config.debug, config.defaultAddrLock, config.memInit)
           case ("typecheck", false) => runPasses(printOutput = true, config.file, config.out)
           case ("typecheck", true) => TestingMain.test(
             runPasses(printOutput = true, _: File, _: File),
@@ -134,12 +131,12 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None): Unit = {
+    addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
     val bsints = new BluespecInterfaces(addrLockMod)
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug, bsints)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug, bsints, memInit = memInit)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close

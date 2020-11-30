@@ -22,12 +22,14 @@ pipe multi_stg_div(num: int<32>, denom: int<32>, quot: int<32>, acc: int<32>, cn
 }
 
 pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_mul, f: multi_stg_div] {
+ if (pc < 14<16>) { 
+  call cpu(pc + 1<16>);
+ }
  start(imem);
  acquire(imem);
  int<32> insn <- imem[pc];
  release(imem);
  end(imem);
- call cpu(pc + 1<16>);
  ---
  int<2> op = insn{1:0};
  int<5> rs1 = insn{6:2};
@@ -44,11 +46,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
  end(rf);
  ---
  if (op == 0<2>) {   
-    int<32> res = rf1 + rf2;
     ---
-    block(rf[rd]);
-    rf[rd] <- res;
-    release(rf[rd]);
+    int<32> res = rf1 + rf2;
  } else {
  if (op == 1<2>) {
     start(m);
@@ -57,9 +56,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
     release(m);
     end(m);
     ---
-    block(rf[rd]);
-    rf[rd] <- res;
-    release(rf[rd]);
  } else {
     start(f);
     acquire(f);
@@ -67,10 +63,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
     release(f);
     end(f);
     ---
-    block(rf[rd]);
-    rf[rd] <- res;
-    release(rf[rd]);
  }}
+ block(rf[rd]);
+ print(res);
+ rf[rd] <- res;
+ release(rf[rd]);
+ ---
 }
 
 circuit {
