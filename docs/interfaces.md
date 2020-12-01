@@ -304,6 +304,7 @@ The read points for these bypass values are implicitly associated with the point
 
 ```
 int<32> arg1 = reserve(rf[rs1]); //block until the lock can be acquired, or a bypass value is available
+reserve(rf[rd]); //doesn't block, just makes the reservation
 ```
 or, for an asynchronous memory:
 ```
@@ -311,6 +312,59 @@ int<32> data <- reserve(dmem[addr]);
 ```
 As shown above, this implies new semantics for `reserve` where it can also return the value for the associated location.
 In this case, `reserve` _will block_ until the  bypass data is available, but the lock is still not considered `acquired` yet at that point.
+
+_N.B._ This seems wrong somehow -> really bypass points should be associated w/ the stage that _acquires_ the lock, not the one that reserves it. If something reserves a lock it doesn't need the bypass value right away by definition.
+However, we need to do this since receiving a bypass value doesn't imply that the thread owns the lock yet.
+
+Perhaps a better way of doing this is treating them as "read locks" vs. "write locks".
+In which case, you don't need to acquire a lock to do read operations, you can _instead_ receive a bypass value.
+But in order to write something you definitely have to reserve a lock.
+
+......
+
+Another question is "do we want bypassing to be explicit, or implicit?"
+Implicit is kind of OK I think, but I'm still not sure.
+
+Other examples of (potential) bypassing syntax:
+
+
+```
+int<32> arg1 = bypass(rf[rs1]); //explicitly imply we will read from the fifo if available, otherwise block and then read from mem
+                                //no lock acquisition for rf[rs1] in this case, we just get a value
+```
+
+W/ more context:
+```
+int<32> arg1 = bypass(rf[rs1]);
+reserve(rf[rd])
+---
+...
+commit(rf[rd], result);
+---
+block(rf[rd]);
+rf[rd] <- result;
+release(rf[rd]);
+```
+
+What if we have something where we read + write same loc?
+```
+reserve(rf[rs1]);
+---
+int<32> arg1 = bypass(rf[rs1]); //either read from the lock if available, else read from memory
+int<32> res = arg + 1;
+commit(rf[rs1], res);
+---
+block(rf[rs1]);
+rf[rs1] <= res;
+release(rf[rs1]);
+```
+
+How do we handle bypassing w/ asynchronous memories, since bypassing happens
+combinationally, but requests are not?
+
+One option is to say that bypass(x) has the same latency as (x),
+but compilation is a little tricky (i.e., we send requests only when the bypass fails,
+and then need to send data b/w stages that says whether or not the bypass value was valid).
 
 ### Runtime Semantics
 
