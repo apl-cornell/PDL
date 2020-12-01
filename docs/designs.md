@@ -61,6 +61,62 @@ make such an assignment, but finding an optimal one (that minimizes leaving port
 There are no checks that prevent bad code (i.e., trying to execute multiple `req` or `resp`
 methods per cycle) from being generated.
 
+### Response Ordering
+
+Memories (and submodules) are guaranteed to receive conflicting requests in the
+correct order - this is guaranteed by our locking mechanisms.
+However, there is no guarantee that _non-conflicting_ requests are sent in any
+particular order. This can lead to deadlock scenarios caused by scheduling problems.
+
+Consider this sequence of stages (locks omitted):
+
+```
+x <- m[a];
+---
+y <- m[b];
+```
+In this case, let's imagine that the memory module can enqueue up only a single response.
+Now, some thread requests `m[a]` and cannot execute stage 2 until it receives
+the response. However, it also _can't execute stage 2_ until the memory module is ready
+to receive another response. Currently, this module can't both receive a request and send
+a response in the same cycle if it is full, so this deadlocks.
+
+This problem _seems_ to be solved by increasing the memory's queue size s.t. it is never full.
+However, it is difficult (maybe reasonable though) to determine that max possible number of outstanding requests in general.
+
+Another possibility in the prior example is that the _next threads_ all fill up
+the memory's request queue before the first thread can execute stage 2. Even if the thread in stage 2 can
+dequeue its data (e.g., by separating dequeue from stage execution into two separate rules),
+then its possible that it can't execute b/c it is blocking the next threads from
+dequeing, but there are no spaces left in the memory queue to make a request.
+
+The last problem related to this is that, since requests are made out-of-order (if they don't conflict)
+then responses will be out-of-order and so the response 'queue' can't be a queue. It needs to
+be able to dequeue items in any order. The current implementation supports this out-of-order
+response by keeping a window of pending requests and valid bits (for whether or not they've been dequeued).
+
+#### Potential Solutions
+
+The Dynamically scheduled HLS folks generate LSQs with a single port
+for each access in the design and those get serviced via some sort of arbiter (e.g., round-robin).
+This would solve the problem, but is potentially a heavyweight design.
+
+Another option is to disallow this behavior and align it with the original
+port question: one thread may only access each port of a memory once.
+This sounds restrictive, but is potentially reasonable and allows the designer
+to "solve" the scheduling problem themselves by deciding which stages use which ports.
+I don't mind this at all since modern processors tend to access main memories (or caches)
+a small number of times through a small number of ports.
+
+### Current implementation
+
+The current implementation provides no real guarantees here
+and can lead to deadlock due to resource contention, but does allow for
+out-of-order response retrieval in order to alleviate this a bit.
+As long as queues in the system are balanced (i.e. the memory queue is _never full_)
+then deadlock will not occur.
+
+
 ## Locks
 
 ### Lock Ports
