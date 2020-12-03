@@ -427,4 +427,98 @@ to verify that some methods are combinational so that we could support combinati
 
 ## Speculation
 
-TODO
+entry <- speculate(var, predval); //adds entry to speculation table
+...
+var = realval; //update entry in table w/ Y or N
+---
+
+```
+pipe cpu(pc: spec<int<32>>)[rf, imem, dmem] {
+speculate(npc, pc + 4); //adds entry to speculation table
+insn <- imem[pc];
+call cpu(npc); //speculative call
+---
+...
+npc = //realnpc -- updates spec table w/ correct or not based on predVal for entry
+...
+verify(pc); //checks that *my pc* isn't speculative *a.k.a* my parent isn't speculative
+//if pc isn't spec, this is NOP. if _is_ spec, this checks the spec table
+//if wrong, just end execution.
+//if right, keep going.
+//free entry???
+rf[rd] <- result;
+}
+```
+
+#### Speculation Table
+
+Table is a circular buffer, head points at "oldest" speculation, tail points a "newest".
+
+| predVal     | valid | correctSpec | Parent Entry |
+| ----------- | ----- | ----------- | ------------ |
+| 7           | 1     | 1           | 0 (self)     |
+| 8           | 1     | ?           | 0 ( ^^ )     |
+| ?           | 0     | ?           | ?            |
+
+
+Methods:
+
+```
+speculate(predVal T, parent Maybe(idxtyp)): idxtyp
+```
+Adds a new entry for some prediction. If the current
+thread is speculative, then it should pass Some(idxtyp) which
+is the source of its own speculation.
+
+```
+isCorrect(realVal T, entry idxtyp): bool
+update(isCorrect bool, entry idxtyp): void
+```
+isCorrect allows a thread to check if a given value
+matches the predicted value for some entry.
+update changes the table to reflect the correctness of that
+speculative event (these should be used together).
+
+```
+checkSpec(entry idxtyp): Maybe(bool)
+```
+This lets a child of the speculation check
+whether or not some entry is still speculative ->
+None means not yet resolve, Some(True) is correct and Some(false) is misspeculated.
+
+
+
+Options for "free-ing" entries:
+
+1) Parent updates all child speculations once it determines itself to
+ be either "correct" or "incorrect" -> this is how it works in BOOM (except
+ it's a broadcast across the pipeline rather than a table update).
+ Then parent entry can be freed immediately.
+
+2) Parent updates only its own state. Once no child entries
+ refer to that row as parent it can be freed.
+
+------
+
+Different Idea for branch speculation:
+
+If a pipeline has a speculative label (i.e., it is "call"ed speculatively)
+then "calling" it creates an entry in a table that tracks
+the speculative information related to that call.
+
+e.g.
+
+```
+id = speculate(npc = pc + 4);
+call cpu(npc); //create entry { specId = id, val = npc, isMispredict = ? }
+```
+Then, later in the pipeline, the code:
+```
+update(npc, realnpc, id);
+```
+updates the relevant entry: {specId = id, isMispredict = (val == realnpc) }.
+
+```
+checkSpeculation();
+```
+is used by a thread to verify that it itself is not speculative.
