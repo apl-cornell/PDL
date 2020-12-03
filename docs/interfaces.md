@@ -522,3 +522,51 @@ updates the relevant entry: {specId = id, isMispredict = (val == realnpc) }.
 checkSpeculation();
 ```
 is used by a thread to verify that it itself is not speculative.
+
+#### Speculative Call
+
+New Idea: treat forward speculation (i.e., speculation about values used _by this thread_)
+differently from speculatively starting new threads.
+
+```
+spec pipe cpu(pc: int<32>)[rf, imem, dmem] {
+
+ insn <- imem[pc];
+ sid <- spec_call cpu(pc + 4); //creates entry in speculative table && sends data to beginning of pipeline
+ ---
+ ...
+ npc = brunit(op, arg1, arg2, pc);
+ speculation_barrier(); //ensure this thread is _not_ speculative by looking at my entry
+                        //in the speculation table and free-ing it.
+			//problem -> entry could have been created _speculatively_
+ verify(npc, sid); //checks speculative table entry -> update bit marking correctness
+ //and execute a "call cpu(npc)" if not correct.
+ ---
+ rf[rd] <- result;
+}
+```
+
+Idea -> create one entry per speculative call.
+
+The thread that *does the call* is responsible for updating the result in that entry
+_and_ for re-executing the call.
+The _callee_ is responsible for checking the result of that entry.
+
+Potentially we could have two kinds of checks: non-blocking and blocking.
+When the check occurs, the thread will remove the entry from the table
+and either a) continue executing, or b) stop execution b/c it was a misspeculation.
+Non-blocking checks don't guarantee anything about the state, but can provide
+"early termination" optimizations; so any implementation must always have a
+blocking check, before it can be considered non-speculative.
+
+
+Question: if a _speculative_ thread makes a speculative call,
+what happens? It creates an entry with its prediction.
+If it is a misspeculation, it _may_ update the entry it
+creates with "valid", causing its (misspeculative) child to
+erroneously continue.
+
+Therefore, we want to track speculative provenance in some way.
+ONE way, is requiring speculation of _this thread_ to be resolved
+before validating you're child's speculation -> this implies IN-ORDER resolution.
+ANOTHER way is to make the speculation table much more complicated.
