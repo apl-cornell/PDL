@@ -570,3 +570,67 @@ Therefore, we want to track speculative provenance in some way.
 ONE way, is requiring speculation of _this thread_ to be resolved
 before validating you're child's speculation -> this implies IN-ORDER resolution.
 ANOTHER way is to make the speculation table much more complicated.
+
+
+### Speculation Problems
+
+If we allow threads to speculate while speculative (in an unbounded way)
+then we can run into issues where clearly misspeculated state will
+never leave the pipeline and can deadlock it.
+
+E.g., Consider a 5-stage pipeline: `F, D, E, M, W`
+
+Our current model for speculation has 3 operations,
+2 are exeucted by the parent thread (for some given speculative call):
+ 1) Spawn child speculatively (spec)
+ 2) Verify correctness of speculation (verify)
+
+The third is executed by the child:
+ 3) check speculation table and stop execution if invalid. (check)
+
+In practice, every thread does all 3, since it can be both a parent and a child.
+
+
+For some implementation, we assign each of these operations to a stage:
+```
+F -> spec;
+E -> check, verify;
+```
+
+In this example, we predict the next instruction in the first stage,
+and in the third stage we both check whether or not we're speculative
+and update the speculative state of any _nested_ speculation that we caused.
+
+
+Since the `check` operation happens _after_ the `spec` operation, we do
+support _nested speculation_ but we also have _misspeculated threads_
+executing when we _know_ they're useless. This leads to issues because
+the _nesting_ never stops happening; since a thread will always speculate before
+it checks its own status.
+
+#### Solutions???
+
+One idea is to (statically) track each stages' speculative state as "unknown" until
+otherwise confirmed. Then certain operations can only be executed when the state
+is explicitly "maybe speculative" or "not speculative". Then we use the idea of blocking vs. non-blocking
+`check` statements to derive, for a given stage, some knowledge about the state.
+Once you use a blocking `check` that information is preserved across the next stages.
+
+In this way, we can prevent threads from speculating if they're _definitely misspeculated themselves_.
+However, this still runs into a timing issue -> we may _never_ know that a thread is misspeculated
+in time since we're statically limiting our speculation state updates to certain stages.
+
+
+Therefore, another idea is to actually utilize some form of broadcast to
+kill multiple stages at once. Since the "call speculation" is ordered,
+marking a particular entry as "misspeculative" could automatically
+mark _all children of that speculation_ as "misspeculated" immediately
+(needs to be visible on _the same cycle_). This + the earlier restriction
+solves our earlier problem.
+
+We _could_ implement a proper broadcast that clears all of the FIFOs that we
+know must be misspeculative instead of waiting for them all to execute individually
+and clean themselves up. But I'm not sure if that's a good idea.
+
+
+
