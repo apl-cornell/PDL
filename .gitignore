@@ -9,3 +9,4 @@
 *.typecheck
 *.interpret
 testOutputs/*
+miscnotes
