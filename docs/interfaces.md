@@ -633,4 +633,39 @@ know must be misspeculative instead of waiting for them all to execute individua
 and clean themselves up. But I'm not sure if that's a good idea.
 
 
+-----------------------
 
+
+The above ideas end up with a pipeline that has the following checks:
+
+```
+F -> nb check, spec
+E -> b. check, verify
+```
+
+Optionally, we could also add `D -> nb check` or `D -> b check` if we wanted to.
+
+
+---------------
+
+#### Killing Threads
+
+Threads which are killed may hold _locks_.
+Therefore, killing them needs to _release_ those locks.
+
+However, they may also not actually _own_ the locks yet (i.e., they are reserved but not owned).
+The current lock API doesn't support _releasing_ unacquired reservations.
+This would significantly complicate the lock implementation
+(since it no longer has a nice FIFO API, but would need to update internal entries, becoming more of a circular buffer).
+
+
+One option is _don't_ allow any `check` operations while locks are reserved (but not acquired).
+This is....somewhat problematic since it doesn't allow our example implementation
+above (the `rf[rd]` lock is reserved but not necessarily acquired in the `E` stage).
+With this restriction, you would have to implement it as:
+
+```
+F -> nb check, spec
+D -> b check (same stage that lock reservation happens in)
+E -> verify
+```
