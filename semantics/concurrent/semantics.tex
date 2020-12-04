@@ -1,0 +1,262 @@
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{mathpartir}
+\usepackage{ttquot}
+\usepackage{pl-syntax}
+\newcommand{\step}[0]{\ensuremath{\rightarrow}}
+\newcommand{\bstep}[0]{\ensuremath{\Downarrow}}
+\newcommand{\pstep}[0]{\ensuremath{\rightarrow_{\mathcal{S}}}}
+\newcommand{\skips}[0]{~\textsf{skip}~}
+\newcommand{\outputs}[0]{~\textsf{output}~}
+\newcommand{\spawns}[0]{~\textsf{spawn}~}
+\newcommand{\bop}{~\textsf{bop}~}
+\newcommand{\uop}{~\textsf{uop}~}
+\makeatletter
+\newcommand{\conf}[1]{\langle #1\@confx}
+\newcommand\@confx{\@ifnextchar\stopconf{\@confend}{\@confi}}
+\newcommand\@confend[1]{\rangle}
+\newcommand\@confi[1]{,#1 \@confx}
+\makeatother
+
+\begin{document}
+
+\title{Concurrent Semantics for Pipeline DSL}
+\author{Drew Zagieboylo}
+\maketitle
+
+It may be better to not define a new semantics - how about
+we just use CHP (communicating sequential processes - https://avlsi.csl.yale.edu/act/doku.php?id=language:langs:chp).
+
+The main features we care about in CHP are parallel composition ($\parallel$), sequential composition ($;$),
+send ($C!V$), receive ($C?V$) and guarded execution ($@[G_1 \implies B_1 ... G_N \implies B_N]$)
+where $G$ are guards and $B$ are programs.
+
+\section{MetaVariables}
+\begin{align*}
+  \begin{array}{lc}
+    \mbox{Integers} & n \\
+    \mbox{Variables} & v,f\\
+    \mbox{Expressions} & e\\
+    \mbox{Statements} & c\\
+    \mbox{Functions} & \mathcal{F}\\
+    \mbox{Objects} & \mathcal{O}\\
+  \end{array}
+\end{align*}
+
+Here is the intuition behind the syntax of this intermediate representation:\newline
+Program:
+
+List of Module Definition and Module Instantiations w/ Initial Conditions\newline
+Module:
+
+List of Stages, List of Locks, List of Formal Parameters (used to set initial conditions)\newline
+Lock:
+
+A special lock object with a few methods (acquire(), release(), reserve())\newline
+Stage:
+
+A set of receive statements, a sequential program generating combinational assignments,
+and a set of guarded send statements\newline
+
+TODOs:
+\begin{itemize}
+\item Make the data along channels be "Values" rather than just numbers, since 
+we will actually be sending records along channels and reading out records into multiple variables.
+\item Make "pred" (a.k.a. receives) conditional as well. This is tricky; since we haven't
+received yet, we don't have any data that tells us whether or not to execute the receive.
+Maybe we allow for conditional receives as commands? That makes things pretty ugly.
+\item In general, I'm not super happy with how the communication semantics work right now;
+need to clean them up.
+\item Include Locks - they probably fit best as a different kind of channel;
+so "succ" contains ``Lock.acquire()'' and "pred" contains ``Lock.release'' and
+``Lock.reserve()''. See the point on conditional receives for handling the issue
+of acquiring locks only if we need to.
+\end{itemize}
+
+\begin{figure}[h]
+\begin{syntax}
+  \abstractCategory[Variables]{v, x, z}
+  \abstractCategory[Arrays]{v[], x[], z[]}
+  \abstractCategory[Integers]{n, m}
+  \abstractCategory[Locks]{L}
+  \abstractCategory[Channels]{C}
+  
+  \category[Programs]{P}
+  \alternative{ \{ List(M), List(v \mapsto n) \}} %Set of module declarations, Set of module instantiations, Set of Initial Conditions for each instantiated module
+
+  \category[Modules]{M}
+  \alternative{ \{List(S), List("Mem"), List(v)\}} %List of stages, first element is root stage; List of Locks; List of formal parameters set by initial conditions
+
+  \category[Memories]{"mem"}
+  \alternative{ \{L, v[]\}}
+
+  \category[Stages]{S}
+  \alternative{ \{List("pred"), "com", List("succ") \}}
+
+  \category[Expressions]{e}
+  \alternative{ e " binop " e }
+  \alternativeLine{ " unop " e }
+  \alternativeLine{ e " ? " e " : " e }
+  \alternativeLine{ v }
+  \alternative{ n }
+  \alternative{ b }
+
+  \category[Predecessors]{"pred"}
+  \alternative{ v = "recv " C }
+
+  \category[Commands]{"com"}
+  \alternative{ "skip" }
+  \alternative{ "com " ; " com" }
+  \alternative{ v = e }
+  \alternativeLine{ L".acquire()"}
+  \alternative{ L".release()"}
+  \alternative{ L".reserve()"}
+
+  \category[Successors]{"succ"}
+  \alternative{ "if ("v") send(" v, C")" }
+  \alternative{ "if ("v") read mem("v")" }
+  \alternative{ "if ("v") write mem("v, v")" }
+
+\end{syntax}
+\end{figure}
+\section{Notes}
+
+This language consists of a DAG of pipeline stages.
+Every cycle, each stage will, in parallel, check their
+predecessors for data. This is analagous to the idea
+that registers and ready-valid transactions occur at the beginning
+of clock boundaries, thus making the data available right away.
+Then, all stages will, in parallel, execute combinational circuits
+to compute output values and output guards. The values will
+be sent along channels to successors and the guards will determine
+which successors have data sent to them.
+Then, each stage will, in parallel, send data along
+the appropriate successor channels, iff it has received
+data from all of its predecessors. If there is any predecessor
+from which it hasn't received data, the sends will be skipped.
+In the next cycle, this process will repeat except that stages
+will remember which channels they have already received from and
+will not receive from them again in the next cycle, until they
+have sent data out on all expected channels.
+
+Additionally, this language has a notion of locks or barriers,
+which provide further requirements before a stage can send data.
+For instance, some stage may execute acquire a lock
+on a memory and then also send a request to read that memory.
+Or it may simply acquire the lock without reading the memory.
+They are separate notions in the semantics.
+
+TODO:add these to the semantics and figure out if they should
+be commands in the second phase of execution or extra guards in the send phase.
+
+\begin{figure}
+  \[\begin{array}{r|l} \hline
+    \text{Variable Mappings} & \Sigma: S \rightarrow \sigma \\
+    \text{State Variable Mappings} & \sigma: v \rightarrow n \\
+    \text{Receive Status} & \Pi: S \rightarrow \pi \\
+    \text{State Receive Status} & \pi: C \rightarrow b \\
+    \text{Send Status} & \Delta: S \rightarrow \delta \\
+    \text{State Send Status} & \delta: (C + "mem") \rightarrow b \\ \hline
+  \end{array}\]
+  \caption{Environment Types}
+\end{figure}
+
+\section{Operational Semantics}
+Expression Semantics
+\begin{mathpar}
+  \inferrule*[Left={Uop}]{\conf{\sigma}{e}\stopconf \bstep n' \\ \uop n' = n''}
+             {\conf{\sigma}{\uop n}\stopconf \bstep n''}\\
+  \inferrule*[Left={Binop}]{\conf{\sigma}{e_1}\stopconf \bstep n \\ \conf{\sigma}{e_2}\stopconf \bstep n' \\ n \bop n' = n''}
+             {\conf{\sigma}{e_1 \bop e_2}\stopconf \bstep n''}\\
+  \inferrule*[Left={Int-Lookup}]{\sigma(v) = n}{\conf{\sigma}{v}\stopconf \bstep n}\\
+  \inferrule*[Left={Ternary}]{\conf{\sigma}{e_b}\stopconf \bstep n_c \\ \conf{\sigma}{e_t}\stopconf \bstep n_t \\
+  \conf{\sigma}{e_f}\stopconf \bstep n_f \\ n_c \neq 0 " ? " n_t " : " n_f}
+             {\conf{\sigma}{e_b " ? " e_t " : " e_f}\stopconf \bstep n}\\
+\end{mathpar}
+Receive Semantics
+\begin{mathpar}
+  \inferrule*[Left={Block-Recv}]{ C.isEmpty() " or " \pi(C) = "true"}
+             {\conf{\sigma}{\pi}{v = "recv " C}\stopconf \step \conf{\sigma}{\pi}\stopconf}\\
+  \inferrule*[Left={Accept-Recv}]{!C.isEmpty() \\ \pi(C) = "false" \\ \sigma' = \sigma[v \mapsto C.peek()] \\
+    \pi' = \pi[C \mapsto "true"]}
+             {\conf{\sigma}{v = "recv " C}\stopconf \step \conf{\sigma'}{\pi'}\stopconf}\\
+  \inferrule*[Left={Recv-List}]{
+    \mathcal{P} = \{"pred"_0..."pred"_n\} \\
+    \forall p \in \mathcal{P}. \conf{\sigma}{\pi}{p}\stopconf \step \conf{\sigma_p'}{\pi_p'}\stopconf \\
+    \sigma' = \bigcup_{p \in \mathcal{P}} \sigma_p' \\ \pi' = \bigcup_{p \in \mathcal{P}} \pi_p'}
+             {\conf{\sigma}{\pi}{\mathcal{P}}\stopconf \step \conf{\sigma'}{\pi'}\stopconf}\\
+\end{mathpar}
+
+Command Semantics
+\begin{mathpar}
+  \inferrule*[Left={Seq-Skip}]{ }
+             {\conf{\sigma}{\skips ; "com"_2}\stopconf \step \conf{\sigma}{"com"_2}\stopconf}\\
+  \inferrule*[Left={Seq}]{ \conf{\sigma}{"com"_1}\stopconf \step \conf{\sigma'}{"com"_1'}\stopconf}
+             {\conf{\sigma}{"com"_1" ; com"_2}\stopconf \step \conf{\sigma'}{"com"_1'" ; com"_2}\stopconf}\\
+  \inferrule*[Left={Assign}]{ v \not\in "dom"(\sigma) \\ \conf{\sigma}{e}\stopconf \bstep n \\ \sigma' = \sigma[v \mapsto n]}
+             {\conf{\sigma}{v = e}\stopconf \step \conf{\sigma'}{\skips}\stopconf}\\
+\end{mathpar}
+Send Semantics
+\begin{mathpar}
+%  \boxed{\conf{\sigma}{\delta}{"if ("v_g") send(" v_v, C")"}\stopconf
+%    \step \conf{\delta'}\stopconf}\\
+  \inferrule*[Left={-Guard-False}]{  \sigma(v_g) = 0  \\ \delta' = \delta[C \mapsto "true"]}
+             {\conf{\sigma}{\delta}{"if ("v_g")" ...}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send-Blocked}]{ \sigma(v_g) \neq 0 \\ C.isFull() " or " \delta(C) = "true"}
+             {\conf{\sigma}{\delta}{"if ("v_g" send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send}]{ \sigma(v_g) \neq 0 \\ !C.isFull() \\ \delta(C) = "false"
+    \\ \delta' = \delta[C \mapsto "true"] \\ C.push(\sigma(v_v))}
+             {\conf{\sigma}{\delta}{"if ("v_g" send(" v_v, C")"}\stopconf \step \conf{\delta}\stopconf}\\
+  \inferrule*[Left={Send-List}]
+             { \forall c \in "dom"(\pi). \pi(c) = "true" \\
+               \mathcal{S} = \{"succ"_0..."succ"_n\} \\
+               \forall s \in \mathcal{S}. \conf{\sigma}{\delta}{s}\stopconf \step \conf{\delta_s'}\stopconf \\
+             \delta' = \bigcup_{s \in \mathcal{S}} \delta_s' }
+             {\conf{\sigma}{\pi}{\delta}{\mathcal{S}}\stopconf \step \conf{\delta'}\stopconf}\\
+  \inferrule*[Left={Wait-List}]
+             { \exists c \in "dom"(\pi). \pi(c) = "false" }
+             {\conf{\sigma}{\pi}{\delta}{\mathcal{S}}\stopconf \step \conf{\delta}\stopconf}\\
+\end{mathpar}
+
+End of Cycle Semantics
+\begin{mathpar}
+  \inferrule*[Left={Retry}] {\exists c \in "dom"(\delta). \delta(c) = "false" }
+             {\conf{\pi}{\delta}\stopconf \step \conf{\pi}{\delta}\stopconf} \\
+  \inferrule*[Left={Reset}] {\delta = \{c_1 \mapsto "true"...c_n \mapsto "true"\} \\
+    \pi = \{C_1 \mapsto "true"...C_n \mapsto "true"\} \\ \forall C_i. C_i.pop() \\
+    \pi' = \{C_1 \mapsto "false"...C_n \mapsto "false" \} \\
+    \delta' = \{c_1 \mapsto "false"..c_n \mapsto "false"\}}
+             {\conf{\pi}{\delta}\stopconf \step \conf{\pi'}{\delta'}\stopconf}\\
+\end{mathpar}
+Module Semantics
+\begin{mathpar}
+  \inferrule*[Left={Execute-Recvs}]{
+    \forall s \in S. \conf{\Sigma(s)}{\Pi(s)}{s."recv"}\stopconf \step
+    \conf{\sigma_s'}{\pi_s'}\stopconf \\
+    \Sigma' = \bigcup_{s\in S} \sigma_s' \\ \Pi' = \bigcup_{s \in S} \pi_s'}
+             {\conf{\Sigma}{\Pi}{\Delta}{List(S)}\stopconf \step
+               \conf{\Sigma'}{\Pi'}{\Delta}{\{List(S), "exec"\}}\stopconf} \\
+  \inferrule*[Left={Execute-Commands}]{\forall s \in S. \conf{\Sigma(s)}{s."com"}\stopconf \step^*
+    \conf{\sigma_s'}{\skips}\stopconf \\ \forall s \in S. \Sigma'[s \mapsto \sigma_s']}
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "exec"\}}\stopconf \step
+              \conf{\Sigma'}{\Pi}{\Delta}{\{List(S), "send"\}}\stopconf}\\
+  \inferrule*[Left={Execute-Sends}]{\forall s \in S. \conf{\Sigma(s)}{\Pi(s)}{\Delta(s)}{s."send"}\stopconf \step
+    \conf{\delta_s'}\stopconf \\ \Delta' = \bigcup_{s \in S} \delta_s'}
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S),"send"\}}\stopconf \step
+             \conf{\Sigma}{\Pi}{\Delta'}{\{List(S), "endcycle"\}}\stopconf}\\
+  \inferrule*[Left={End-Cycles}]{ \forall s \in S. \conf{\Pi(s)}{\Delta(s)}\stopconf \step
+  \conf{\pi_s'}{\delta_s'}\stopconf \\ \Pi' = \bigcup_{s \in S} \pi_s' \\ \Delta' = \bigcup_{s \in S} \delta_s' }
+             {\conf{\Sigma}{\Pi}{\Delta}{\{List(S), "endcycle"\}}\stopconf \step
+             \conf{\emptyset}{\Pi'}{\Delta'}{\{List(S), "recv"\}}\stopconf}\\
+\end{mathpar}
+\end{document}
+
+
+In this semantics, each module is comprised of a set of stages.
+In each cycle, every stage will, in parallel, check for inputs for validity
+and outputs for readiness. If all of its inputs are ready, then it
+will compute the values of its outpus and send any which are ready this cycle.
+Every cycle, this procedure is repeated until all outputs have been sent.
+On the cycle when a stage has sent all of its outputs, it will mark its
+inputs as used (by popping them off of its input queues) and none
+of its outputs as sent.
