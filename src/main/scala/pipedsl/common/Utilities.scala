@@ -225,6 +225,18 @@ object Utilities {
   }
 
   /**
+   * Utility function for finding _internal commands_ that correspond
+   * to receive statements (i.e., those that wait for an asynchronous response from some
+   * other hardware)
+   * @param c The command to check
+   * @return True if c is such a receiving command, else false
+   */
+  def isReceivingCmd(c: Command): Boolean = c match {
+    case _: IRecv | _:IMemRecv => true
+    case _ => false
+  }
+
+  /**
    * Produces a new Expression object that
    * represents the conjunction of the arguments.
    * If either argument is missing then the result

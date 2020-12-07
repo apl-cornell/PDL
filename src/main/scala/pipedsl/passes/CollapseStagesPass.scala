@@ -2,7 +2,7 @@ package pipedsl.passes
 
 import pipedsl.common.DAGSyntax._
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{andExpr, getReachableStages, updateListMap}
+import pipedsl.common.Utilities.{andExpr, getReachableStages, isReceivingCmd, updateListMap}
 import pipedsl.passes.Passes.StagePass
 
 /**
@@ -72,6 +72,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     result
   }
 
+  //Ensures that ICondCommands don't contain any ICondCommands
   private def flattenCondStmts(cond: Expr, stmts: Iterable[Command]): List[Command] = {
     var condMap: Map[Expr, List[Command]] = Map()
     stmts.foreach {
@@ -87,6 +88,25 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     })
   }
 
+  //split the given commands into a pair (receiving, normal) commands
+  //also properly splits conditional commands into multiple conditional commands
+  private def splitReceivingStmts(stmts: Iterable[Command]): (List[Command], List[Command]) = {
+    var receivingList = List[Command]()
+    var normalList = List[Command]()
+    stmts.foreach {
+      case ICondCommand(cex, cs) =>
+        val (rs, ns) = splitReceivingStmts(cs)
+        if (rs.nonEmpty) receivingList = receivingList :+ ICondCommand(cex, rs)
+        if (ns.nonEmpty) normalList = normalList :+ ICondCommand(cex, ns)
+      case c =>
+        if (isReceivingCmd(c)) {
+          receivingList = receivingList :+ c
+        } else {
+          normalList = normalList :+ c
+        }
+    }
+    (receivingList, normalList)
+  }
   /**
    * Merge src into target, but execute it conditionally based on the
    * condition of their connecting edge.
@@ -111,25 +131,39 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       }
       val cond = existingedges.head.condSend
       //merge in the commands
+      var receivingStmts = List[Command]()
       if (cond.isDefined) {
         val needIds = lockids.diff(getLockIds(src.getCmds).toSet)
         val noops = needIds.foldLeft(List[Command]())((l, id) => {
           l :+ ILockNoOp(id)
         })
         val flattenedCmds = flattenCondStmts(cond.get, src.getCmds ++ noops)
-        newstmts = newstmts ++ flattenedCmds
+        val (recvstmts, normalstmts) = splitReceivingStmts(flattenedCmds)
+        newstmts = newstmts ++ normalstmts
+        receivingStmts = recvstmts
       } else {
-        newstmts = newstmts ++ src.getCmds
+        val (recvstmts, normalstmts) = splitReceivingStmts(src.getCmds)
+        newstmts = newstmts ++ normalstmts
+        receivingStmts = recvstmts
       }
       //merge in the output edge from src with target as the new from stage
       //use the old condsend to src as the new condsend
       target.removeEdgesTo(src)
       val outedges = src.outEdges
       val outdests = outedges.foldLeft(Set[PStage]())((s, e) => s + e.to)
-      outdests.foreach(dest => src.removeEdgesTo(dest))
+      outdests.foreach(dest => {
+        src.removeEdgesTo(dest)
+      })
       outedges.foreach(e => {
         val newedge = PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values)
         target.addEdge(newedge)
+        // also move recv stmts into each of the successors
+        // merge conditional receive from the edge into the recv statements
+        if (e.condRecv.isDefined) {
+          e.to.addCmds(flattenCondStmts(e.condRecv.get, receivingStmts))
+        } else {
+          e.to.addCmds(receivingStmts)
+        }
       })
     })
     //merge all subsequent stages at the same time
