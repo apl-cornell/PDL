@@ -2,7 +2,7 @@ package pipedsl.passes
 
 import pipedsl.common.DAGSyntax._
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{andExpr, getReachableStages, isReceivingCmd, updateListMap}
+import pipedsl.common.Utilities.{andExpr, getReachableStages, getUsedVars, isReceivingCmd, updateListMap}
 import pipedsl.passes.Passes.StagePass
 
 /**
@@ -155,15 +155,17 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         src.removeEdgesTo(dest)
       })
       outedges.foreach(e => {
-        val newedge = PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values)
-        target.addEdge(newedge)
         // also move recv stmts into each of the successors
         // merge conditional receive from the edge into the recv statements
-        if (e.condRecv.isDefined) {
-          e.to.addCmds(flattenCondStmts(e.condRecv.get, receivingStmts))
+        val nstmts = if (e.condRecv.isDefined) {
+         flattenCondStmts(e.condRecv.get, receivingStmts)
         } else {
-          e.to.addCmds(receivingStmts)
+          receivingStmts
         }
+        e.to.addCmds(nstmts)
+        //also add necessary values to this edge
+        val newedge = PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values ++ getUsedVars(nstmts))
+        target.addEdge(newedge)
       })
     })
     //merge all subsequent stages at the same time
