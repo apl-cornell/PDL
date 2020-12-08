@@ -23,5 +23,9 @@ clean:
 	@echo "Cleaning compiler"
 	@sbt clean
 	@echo
+	@echo "Cleaning BSV Libraries"
+	@$(MAKE) -C $(BSV_LOCKS) clean
+	@$(MAKE) -C $(BSV_MEMS) clean
+	@echo
 
 .PHONY: clean, compiler
