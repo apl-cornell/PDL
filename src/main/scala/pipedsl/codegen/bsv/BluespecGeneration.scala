@@ -481,6 +481,9 @@ object BluespecGeneration {
      */
     private def getStageBody(stg: PStage): List[BStatement] = {
       var body: List[BStatement] = List()
+      var declaredVars: Set[BVar] = Set() //to avoid duplicate declarations maintain a set
+      //these come up b/c variables may be sent both conditionally and unconditionally
+      //(this happens when one branch has a combinational computation but the other receives a value from elsewhere)
       //Define all of the variables read unconditionally
       val uncondIn = stg.inEdges.filter(e => e.condRecv.isEmpty)
       //unconditional reads are just variable declarations w/ values
@@ -490,9 +493,10 @@ object BluespecGeneration {
         e.values.foreach(v => {
           //rename variables declared in this stage
           val pvar = translator.toBSVVar(v)
-          body = body :+ BDecl(pvar, Some(BStructAccess(paramExpr,
-            //but don't rename the struct field names
-            BVar(v.v, translator.toBSVType(v.typ.get)))))
+            body = body :+ BDecl(pvar, Some(BStructAccess(paramExpr,
+              //but don't rename the struct field names
+              BVar(v.v, translator.toBSVType(v.typ.get)))))
+          declaredVars = declaredVars + pvar
         })
         //only read threadIDs from an unconditional edge
         body = body :+ BDecl(translator.toBSVVar(threadIdVar),
@@ -512,10 +516,15 @@ object BluespecGeneration {
             BStructAccess(paramExpr, BVar(v.v, translator.toBSVType(v.typ.get))),
             expr)
         })
-        body = body :+ BDecl(translator.toBSVVar(v), Some(condEdgeExpr))
+        val bvar = translator.toBSVVar(v)
+        body = body :+ BDecl(bvar, Some(condEdgeExpr))
+        declaredVars = declaredVars + bvar
       })
+      //only add declarations for recv statements that don't confliect w/ those
+      //received on the input edges.
+      val recvdecls = getCombinationalDeclarations(stg.getCmds).filter(dec => !declaredVars.contains(dec.lhs))
       //And now add all of the combinational connections
-      body ++ getCombinationalDeclarations(stg.getCmds) ++ getCombinationalCommands(stg.getCmds)
+      body ++ recvdecls ++ getCombinationalCommands(stg.getCmds)
     }
 
     private def getTopModule: BModuleDef = {
