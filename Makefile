@@ -5,7 +5,11 @@ export COMPILER_JAR := target/scala-$(SCALA_V)/pdsl.jar
 export BSV_LOCKS := $(realpath bscRuntime/locks)
 export BSV_MEMS := $(realpath bscRuntime/memories)
 
-all: compiler runtime
+all: setup compiler runtime
+
+setup:
+	@echo "--- Checking setup ---"
+	@./scripts/check-setup.sh
 
 compiler: $(COMPILER_JAR)
 
@@ -28,4 +32,4 @@ clean:
 	@$(MAKE) -C $(BSV_MEMS) clean
 	@echo
 
-.PHONY: clean, compiler
+.PHONY: setup, clean, compiler
