@@ -1,7 +1,7 @@
 package pipedsl
 
 import java.io.{File, PrintWriter}
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Paths, StandardCopyOption}
 
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.io.FilenameUtils
@@ -135,8 +135,16 @@ object Main {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
+    //copies mem initialization to output directory 
+    for(fileName <- memInit.values) {
+      val targetPath = Paths.get(outDir.getAbsolutePath, new File(fileName).getName)
+      Files.copy(Paths.get(fileName), targetPath, StandardCopyOption.REPLACE_EXISTING)
+    }
+    //Need to transform map passes into the program generator
+    val memInitFileNames = memInit.foldLeft[Map[String,String]](Map())((map, kv) => map + (kv._1 -> new File(kv._2).getName))
+    
     val bsints = new BluespecInterfaces(addrLockMod)
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug, bsints, memInit = memInit)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug, bsints, memInit = memInitFileNames)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close
