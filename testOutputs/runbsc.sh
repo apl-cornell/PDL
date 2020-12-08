@@ -3,7 +3,8 @@
 TOP=Circuit
 TB="mkTB"
 ARGS="-no-show-timestamps -no-show-version --aggressive-conditions"
-BPATH="-p  .:%/Prelude:%/Libraries:/Users/kevinzhang/Documents/SpecLang/bscRuntime/memories:/Users/kevinzhang/Documents/SpecLang/bscRuntime/locks:/Users/kevinzhang/Documents/SpecLang/bscRuntime/stages"
+BSC_LIB_DIR=$(realpath ../bscRuntime/locks)":"$(realpath ../bscRuntime/memories)
+BPATH="-p .:"$BSC_LIB_DIR":"$BLUESPECDIR/inst/lib/Libraries/
 #Compiling Base Module
 #bsc $ARGS $BPATH -show-schedule -verilog $FILE
 #Compile test bench
