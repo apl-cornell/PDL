@@ -417,7 +417,7 @@ object BluespecGeneration {
         case ICheckLockOwned(mem, handle) =>
           l :+ bsInts.getCheckOwns(lockParams(mem.id),
             translator.toBSVExpr(handle), translator.toBSVVar(mem.evar))
-        case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) =>
+        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
           l :+ bsInts.getCheckMemResp(modParams(mem), translator.toBSVVar(handle))
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toBSVExpr(handle))
