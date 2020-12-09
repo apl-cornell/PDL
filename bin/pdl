@@ -1,0 +1,6 @@
+#!/bin/bash
+
+JARNAME=pdsl.jar
+JARPATH=target/scala-2.13/"$JARNAME"
+SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+java -jar "$SCRIPTPATH"/../"$JARPATH" "$@"

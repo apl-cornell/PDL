@@ -9,7 +9,7 @@ all: setup compiler runtime
 
 setup:
 	@echo "--- Checking setup ---"
-	@./scripts/check-setup.sh
+	@./bin/check-setup.sh
 
 compiler: $(COMPILER_JAR)
 
