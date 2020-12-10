@@ -1,4 +1,3 @@
-
 export SCALA_V := 2.13
 export COMPILER_JAR := target/scala-$(SCALA_V)/pdsl.jar
 
