@@ -1,0 +1,8 @@
+#!/bin/bash
+
+#execute the pdl compiler
+JARNAME=pdsl.jar
+JARPATH=target/scala-2.13/"$JARNAME"
+SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+#pass through all cmds except fist
+java -jar "$SCRIPTPATH"/../"$JARPATH" "$@"
