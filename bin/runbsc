@@ -26,13 +26,13 @@ fi
 
 if [ -d "$WDIR" ]
 then
-    pushd "WDIR"
+    pushd "$WDIR"
 else
     echo "$WDIR"" does not exist"
     exit 1
 fi
 
-SCRIPTPATH="$( cd "$ dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 TOP=Circuit
 TB="mkTB"
 ARGS="-no-show-timestamps -no-show-version --aggressive-conditions"
