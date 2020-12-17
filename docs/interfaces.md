@@ -366,6 +366,11 @@ One option is to say that bypass(x) has the same latency as (x),
 but compilation is a little tricky (i.e., we send requests only when the bypass fails,
 and then need to send data b/w stages that says whether or not the bypass value was valid).
 
+### Idea 
+
+Read from regfile anyway (regardless of lock state) and then fix w/ bypass later?
+Its own type? (e.g., speculative type on the data)
+
 ### Runtime Semantics
 
 The main question becomes how to efficiently provide a bypass interface to locks that allows storing
