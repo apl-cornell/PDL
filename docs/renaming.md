@@ -120,3 +120,35 @@ With reads this is less important in the Renaming API since they'll just get the
 name. Ideally, I'd say that the rename semantics provide some clear ordering s.t.,
 in the event of an alias, one of the writes is ordered before the other. This lets the user
 de-alias themselves, or just ignore that and have some behavior that doesn't really do anything.
+
+
+## A NEW Lock API
+
+Let's imagine a new lock API that has the _same_ expressivity as the Rename API;
+in other words, it differentiates _reads_ and _writes_.
+
+1. reserve(w|r) | same old reserve, but you get to specify the type of operations this lock allows you to do
+2. block        | establishes that the operations this lock lets you do are do-able
+3. release      | indicates you're done w/ the lock
+
+This new API has a different set of restrictions than the old one:
+
+1. reserves must happen in thread order, regardless of operation type
+2. block is only required for reads
+3. write locks must be released in thread order
+4. all read locks must be released _before_ write locks the thread holds
+
+We can translate this API into the rename API as follows:
+
+1. reserve(r) => read physical name
+2. reserve(w) => allocate new physical name
+3. block(r) => check data valid
+4. block(w) => nop
+5. release(r) => nop -> implies static checks but no runtime behavior
+6. release(w) => free physical name
+
+Reads and writes must also obviously go through this API since
+the "names" returned need to be interpreted in _some_ way.
+Therefore reads and writes don't use the original address, but the lock identifier
+returned from the API (a.k.a. the underlying name).
+
