@@ -1,7 +1,7 @@
 # Renaming Abstraction
 
 Renaming may be a more general form of the lock abstraction from the early version of PDL,
-which also may be able to provide an interface over lots of different data dependency breaking violations.
+which also may be able to provide an interface over many different data dependency breaking violations.
 
 ## Operations
 
@@ -12,7 +12,7 @@ The notion of "explicit renaming" in hardware architecture involves the followin
 3. Checking data validity, given a name
 4. Reading data, given a name
 5. Writing data, given a name
-6. Free-ing an old physcial name, once it is no longer in use
+6. Freeing an old physical name, once it is no longer in use
 
 
 "Explicit renaming" involves maintaining a map from architectural names to physical names;
@@ -24,11 +24,11 @@ This makes it somewhat attractive as an abstraction.
 
 ## Restrictions
 
-Like locking in our original language there are restrictions on the ordering
+Like locking in our original language, there are restrictions on the ordering
 of these operations necessary for correct execution:
 
 1. Reading names and allocating new names must occur in thread order.
-2. A thread should always read names before allocating new ones (i.e., thread should read only old names, not ones it allocates)
+2. A thread should always read names before allocating new ones (i.e., a thread should read only old names, not ones it allocates)
 3. Only "new names" can be used as write targets
 4. Only "old names" can be used as read targets
 5. Data can only be read if the name refers to valid data. (i.e., can only execute `read(name)` iff `isValid(name)`)
@@ -54,7 +54,7 @@ There are some parallels between these abstractions.
 ### Reservation
 
 Lock reservation returns a unique lock identifier, which names the reservation.
-This is analagous to allocating a new name for a location.
+This is analogous to allocating a new name for a location.
 The main differences are that name allocation must also return the _old_ name so
 that the old name can be `freed` later (it is possible to hide this from the programmer
 and just have the internals of the abstraction keep track of this association);
@@ -77,8 +77,12 @@ writes don't run ahead of reads.
 
 With renaming, only _old names_ need to be released,
 indicating they will never be used again (read or written).
-This is basically analagous to freeing locks that are used for writes,
+This is basically analogous to freeing locks that are used for writes,
 since typically no reads happen after w/in a single thread.
+
+Andrew: I'm confused about what ensures that there is just one
+canonical value for a given renamed resource ultimately. Weren't the
+locks providing some functionality there?
 
 
 ### Translation
@@ -121,6 +125,7 @@ name. Ideally, I'd say that the rename semantics provide some clear ordering s.t
 in the event of an alias, one of the writes is ordered before the other. This lets the user
 de-alias themselves, or just ignore that and have some behavior that doesn't really do anything.
 
+Andrew: are there any realistic cases where this happens?
 
 ## A NEW Lock API
 
