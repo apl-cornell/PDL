@@ -14,9 +14,6 @@ object CommandLineParser {
     memoryInput: Seq[String] = Seq(),
     maxIterations: Int = 0,
     printStageGraph: Boolean = false,
-    test: Boolean = false,
-    testInputDir: File = new File("."),
-    testResultDir: File = new File("."),
     defaultAddrLock: Option[String] = None,
     memInit: Map[String, String] = Map()
   )
@@ -42,15 +39,6 @@ object CommandLineParser {
         arg[File]("<file>...")
           .action((x, c) => c.copy(file = x))
           .text("pdsl files to parse"),
-        opt[Unit]('t', "test")
-          .action((_,c) => c.copy(test = true))
-          .text("Testing flag")
-          .children(
-            opt[String]('r', "testResultDir")
-              .action((x, c) => c.copy(testResultDir = new File(x)))
-              .required()
-              .text("directory of the expected test output files"),
-          ),
         cmd("parse")
           .text("parses the provided pdsl file and prints to the out file\n")
           .action((_, c) => c.copy(mode = "parse")),

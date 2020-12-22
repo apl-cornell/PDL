@@ -11,7 +11,6 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
-import pipedsl.test.TestingMain
 import pipedsl.typechecker._
 
 object Main {
@@ -23,22 +22,12 @@ object Main {
       case Some(config) => {
         //In case directories don't exist
         config.out.mkdirs()
-        (config.mode, config.test) match {
-          case ("parse", false) => parse(debug = true, printOutput = true, config.file, config.out)
-          case ("parse", true) => TestingMain.test(
-            parse(debug = true, printOutput = true, _: File, _: File),
-            config.mode,
-            config.file,
-            config.testResultDir)
-          case ("interpret", false) => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
-          case ("gen", false) => gen(config.out, config.file, config.printStageGraph,
+        (config.mode) match {
+          case ("parse") => parse(debug = true, printOutput = true, config.file, config.out)
+          case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
+          case ("gen") => gen(config.out, config.file, config.printStageGraph,
             config.debug, config.defaultAddrLock, config.memInit)
-          case ("typecheck", false) => runPasses(printOutput = true, config.file, config.out)
-          case ("typecheck", true) => TestingMain.test(
-            runPasses(printOutput = true, _: File, _: File),
-            config.mode,
-            config.file,
-            config.testResultDir)
+          case ("typecheck") => runPasses(printOutput = true, config.file, config.out)
           case _ =>
         }
       }
