@@ -23,7 +23,7 @@ then
 else
     WDIR="$2"
 fi
-
+SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [ -d "$WDIR" ]
 then
     pushd "$WDIR"
@@ -31,13 +31,11 @@ else
     echo "$WDIR"" does not exist"
     exit 1
 fi
-
-SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 TOP=Circuit
 TB="mkTB"
 ARGS="-no-show-timestamps -no-show-version --aggressive-conditions"
 BSC_LIB_DIR=$(realpath "$SCRIPTPATH"/../bscRuntime/locks)":"$(realpath "$SCRIPTPATH"/../bscRuntime/memories)
-BPATH="-p .:"$BSC_LIB_DIR":"$BLUESPECDIR/inst/lib/Libraries/
+BPATH="-p .:"$BSC_LIB_DIR":"$BLUESPECDIR/inst/lib/Libraries/":%/Libraries"
 VDIR="$TOP"_verilog
 SDIR="$TOP"_sim
 mkdir -p $VDIR

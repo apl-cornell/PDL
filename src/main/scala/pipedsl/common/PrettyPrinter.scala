@@ -94,12 +94,15 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
       case Syntax.CLockOp(mem, op) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" + 
         printExprToString(mem.evar.get) + "]" else "") +  ");"
+      case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
+      case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
       case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
         printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + 
         printExprToString(predVal) + ", {\n" +
         printCmdToString(verify, indent + 4) + "\n" + ins + "}, {\n" +
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
+      case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
       case Syntax.CEmpty => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +
         cmd.foldLeft("")((s, c) => s + printCmdToString(c))
@@ -151,6 +154,7 @@ class PrettyPrinter(output: Option[File]) {
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
     case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
     case TModType(_, _, _, _) => "TODO MOD TYPE"
+    case TNamedType(name) =>  name.v
     case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)
   }
 
