@@ -65,5 +65,5 @@ case "$CMD" in
 	usage
 	;;
 esac
+eval "popd ; exit $?"
 
-popd

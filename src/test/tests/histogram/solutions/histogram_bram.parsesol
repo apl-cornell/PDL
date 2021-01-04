@@ -30,6 +30,7 @@ pipe hist(counter:int<10>)[feature:int<10>[10]<a, a>,weight:int<32>[10]<a, a>,h:
       ---
       
   } else {
+      output true;
       
   }
   
