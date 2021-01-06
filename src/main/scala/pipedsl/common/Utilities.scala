@@ -212,14 +212,14 @@ object Utilities {
 
   def flattenStageList(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
-      case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
+      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.map(stg => flattenStageList(stg)).flatten ++ flattenStageList(s.defaultStages)
       case s: DAGSyntax.SpecStage => (l :+ s) ++ flattenStageList(s.verifyStages) ++ flattenStageList(s.specStages)
       case _ => l :+ stg
     })
   }
   def flattenIfStages(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
-      case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
+      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.map(stg => flattenStageList(stg)).flatten ++ flattenStageList(s.defaultStages)
       case _ => l :+ stg
     })
   }

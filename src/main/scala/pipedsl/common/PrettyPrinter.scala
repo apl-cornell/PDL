@@ -171,10 +171,11 @@ class PrettyPrinter(output: Option[File]) {
         pline("style=filled;")
         pline("color=lightgrey;")
         pline("node [style=filled,color=white];")
-        pline("label = \"IF(" + printExprToString(s.cond) + ")\";")
+        // TODO: Not sure how to change this line
+        // pline("label = \"IF(" + printExprToString(s.conds(0)) + ")\";")
         s.outEdges.foreach(e => printEdge(e))
-        printStagesForDot(s.trueStages)
-        printStagesForDot(s.falseStages)
+        s.condStages.foreach(stg => printStagesForDot(stg))
+        printStagesForDot(s.defaultStages)
         pline("}")
       case s: SpecStage =>
         pline("  subgraph cluster__" + s.name + " {")
@@ -212,11 +213,11 @@ class PrettyPrinter(output: Option[File]) {
       })
       stg match {
         case s:IfStage =>
-          pline("condition = " + printExprToString(s.cond))
+          pline("condition = " + printExprToString(s.conds(0)))
           pline("True block:")
-          printStages(s.trueStages)
+          printStages(s.condStages(0))
           pline("False block:")
-          printStages(s.falseStages)
+          printStages(s.defaultStages)
         case s:SpecStage =>
           pline("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
           pline("Verify Block: ")

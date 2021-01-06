@@ -44,8 +44,8 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
           addValues(usedIns(e.to.name), e)
         })
         s.setEdges(s.inEdges ++ newOutEdges + choiceEdge)
-        s.trueStages.foreach(st => addEdgeValues(st, usedIns, dontSends + s.condVar.id))
-        s.falseStages.foreach(sf => addEdgeValues(sf, usedIns, dontSends + s.condVar.id))
+        s.condStages.foreach(sc => sc.foreach(stg => addEdgeValues(stg, usedIns, dontSends + s.condVar.id)))
+        s.defaultStages.foreach(sf => addEdgeValues(sf, usedIns, dontSends + s.condVar.id))
       case s: SpecStage =>
         //Split input of join stage into two sets of inputs to be expected
         //current split algo is send everything from verify, except outputs only produced by spec

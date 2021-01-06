@@ -68,7 +68,14 @@ class SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PSt
       val firstFalseStage = new PStage(nextStageId())
       val falseStages = splitToStages(alt, firstFalseStage)
       val joinStage = new PStage(nextStageId())
-      val ifStage = new IfStage(nextStageId(), cond, trueStages, falseStages, joinStage)
+      val ifStage = new IfStage(nextStageId(), List(cond), List(trueStages), falseStages, joinStage)
+      curStage.addEdgeTo(ifStage)
+      List(curStage, ifStage, joinStage)
+    case CSplit(cases, default) =>
+      val condStages = cases.map(c => splitToStages(c.body, new PStage(nextStageId())))
+      val defaultStage = splitToStages(default, new PStage(nextStageId()))
+      val joinStage = new PStage(nextStageId())
+      val ifStage = new IfStage(nextStageId(), cases.map(c => c.cond), condStages, defaultStage, joinStage)
       curStage.addEdgeTo(ifStage)
       List(curStage, ifStage, joinStage)
     case CSeq(c1, c2) =>

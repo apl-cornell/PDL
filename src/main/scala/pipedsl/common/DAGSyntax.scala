@@ -295,21 +295,27 @@ object DAGSyntax {
    * @param falseStages The list of stages to execute if cond is false
    * @param joinStage The stage to execute after one of the branches.
    */
-  class IfStage(n: Id, val cond: Expr, var trueStages: List[PStage],
-    var falseStages: List[PStage], val joinStage: PStage) extends PStage(n) {
+  class IfStage(n: Id, val conds: List[Expr], var condStages: List[List[PStage]],
+    var defaultStages: List[PStage], val joinStage: PStage) extends PStage(n) {
 
     override def succs: Set[PStage] = {
       super.succs + joinStage
     }
     val condVar = EVar(Id("__cond" + n.v))
-    condVar.typ = Some(TBool())
+    condVar.typ = Some(TSizedInt(32, true))
     condVar.id.typ = condVar.typ
-    val notCond = EUop(NotOp(), condVar)
-    this.addCmd(CAssign(condVar, cond))
-    this.addEdgeTo(trueStages.head, condSend = Some(condVar))
-    this.addEdgeTo(falseStages.head, condSend = Some(notCond))
-    trueStages.last.addEdgeTo(joinStage, condRecv =  Some(condVar))
-    falseStages.last.addEdgeTo(joinStage, condRecv = Some(notCond))
+    val defaultNum = conds.size
+    var eTernary = ETernary(conds(defaultNum - 1), EInt(defaultNum - 1), EInt(defaultNum))
+    for(i <- defaultNum-2 to 0 by -1 ) {
+      eTernary = ETernary(conds(i), EInt(i), eTernary.copy())
+    }
+    this.addCmd(CAssign(condVar, eTernary))
+    for (i <- 0 until defaultNum) {
+      this.addEdgeTo(condStages(i).head, condSend = Some (EBinop(EqOp("=="), condVar, EInt(i))))
+      condStages(i).last.addEdgeTo(joinStage, condRecv = Some (EBinop(EqOp("=="), condVar, EInt(i))))
+    }
+    this.addEdgeTo(defaultStages.head, condSend = Some( EBinop(EqOp("=="), condVar, EInt(defaultNum))))
+    defaultStages.last.addEdgeTo(joinStage, condRecv = Some( EBinop(EqOp("=="), condVar, EInt(defaultNum))))
   }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {
