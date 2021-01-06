@@ -27,6 +27,17 @@ interface CombMem#(type elem, type addr, type name);
 endinterface
 
 
+//TODO
+//this one is used for asynchronous reads which involve a request and response
+interface AsyncMem#(type elem, type addr, type name);
+   method ActionValue#(name) reserveEntry(addr a, Bool isWrite); //reserve an operational slot for either loading or storing
+   method Action write(name n, elem b); //start executing the write
+   method Bool isValid(name n); //check if reading the value returns a valid value
+   method elem read(name n); //do the read
+   method Action commit(name n); //indicate we're done reading/writing this location
+endinterface
+
+
 module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem, addr, name)) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Literal#(name), Bounded#(name),
     PrimIndex#(addr, an), PrimIndex#(name, nn));
@@ -91,19 +102,12 @@ module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem
    endmethod
    
    //Frees register that this one overwrote
+   //And reset its busy status
    method Action commit(name n);
       freeList[oldNames[n]] <= True;
+      busyfile[oldNames[n]] <= True;
    endmethod
    
 endmodule
-
-//TODO
-//this one is used for asynchronous reads which involve a request and response
-interface AsyncMem#(type elem, type addr, type id);
-    method ActionValue#(id) req(addr a, elem b, Bool isWrite);
-    method elem peekResp(id i);
-    method Bool checkRespId(id i);
-    method Action resp(id i);
-endinterface
 
 endpackage
