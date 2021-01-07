@@ -1,0 +1,150 @@
+// Expected Success
+pipe test2(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
+    if (input{0:0} == 1) {
+        acquire(rf);
+        release(rf);
+    }
+    end(rf);
+}
+//Expected Success
+pipe test4(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
+    if (input{0:0} == 1) {
+        acquire(rf);
+        int<32> arg <- rf[input{4:0}];
+        release(rf);
+    } else {
+        ---
+        acquire(rf);
+        ---
+        release(rf);
+    }
+    end(rf);
+}
+//Expected Success
+pipe test5(input: int<32>)[rf: int<32>[5]] {
+
+    start(rf);
+    acquire(rf);
+    ---
+    if (input{0:0} == 1) {
+        release(rf);
+    } else {
+        int<32> arg <- rf[input{31:27}];
+        release(rf);
+    }
+    end(rf);
+}
+//Expected success since reserve is before branch
+pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
+    start(rf);
+    if (input{0:0} == 1) {
+        ---
+        acquire(rf);
+        int<32> out <- rf[0<5>];
+    } else {
+        ---
+        acquire(rf);
+        int<32> out <- rf[1<5>];
+    }
+    ---
+    rf[2<5>] <- out;
+    release(rf);
+    end(rf);
+}
+//Expected success
+pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    start(dmem);
+    start(rf);
+    if (input{0:0} == 1) {
+        acquire(rf);
+        release(rf);
+    }
+    end(rf);
+    acquire(dmem);
+    release(dmem);
+    end(dmem);
+}
+//Expected Success
+pipe test15(input: int<32>)[rf: int<32>[5]] {
+    bool a = true;
+    start(rf);
+    if (a) {
+        acquire(rf);
+    }
+    if (a) {
+        release(rf);
+    }
+    end(rf);
+}
+
+//Expected Success
+pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    bool a = true;
+    bool b = false;
+    start(rf);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            acquire(rf);
+        }
+    }
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            release(rf);
+        }
+    }
+    end(rf);
+}
+
+
+//ExpectedSuccess
+pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    start(rf);
+    split {
+        case: randomBool {
+            acquire(rf);
+        }
+        case: randomBool2 {
+            acquire(rf);
+
+        }
+        case: (input{0:0} == 1) {
+            acquire(rf);
+        }
+        default: {
+            acquire(rf);
+        }
+    }
+    release(rf);
+    end(rf);
+}
+
+//ExpectedSuccess
+pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    start(rf);
+    split {
+        case: randomBool {
+            acquire(rf);
+            release(rf);
+        }
+        case: randomBool2 {
+            acquire(rf);
+            release(rf);
+
+        }
+        case: (input{0:0} == 1) {
+            acquire(rf);
+            release(rf);
+        }
+        default: {
+            acquire(rf);
+            release(rf);
+        }
+    }
+    end(rf);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

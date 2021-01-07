@@ -239,6 +239,40 @@ class MainSuite extends AnyFunSuite{
         "r" -> "src/test/tests/multiExec/memInputs/r"))
   }
 
+  test("Multiple Execution Split Parse Test") {
+    testParse(new File("src/test/tests/multiExec"),
+      new File("src/test/tests/multiExec/multiexec_split.pdl"))
+  }
+
+  test("Multiple Execution Split Typecheck Test") {
+    testTypecheck(new File("src/test/tests/multiExec"),
+      new File("src/test/tests/multiExec/multiexec_split.pdl"))
+  }
+
+  test("Multiple Execution Split Compilation Test") {
+    testBlueSpecCompile(new File( "src/test/tests/multiExec"),
+      new File("src/test/tests/multiExec/multiexec_split.pdl"),
+      None,
+      Map("i" -> "src/test/tests/multiExec/memInputs/i",
+        "r" -> "src/test/tests/multiExec/memInputs/r"))
+  }
+
+  test("Multiple Execution Split Simulation Test") {
+    testBlueSpecSim(new File( "src/test/tests/multiExec"),
+      new File("src/test/tests/multiExec/multiexec_split.pdl"),
+      None,
+      Map("i" -> "src/test/tests/multiExec/memInputs/i",
+        "r" -> "src/test/tests/multiExec/memInputs/r"))
+  }
+
+
+  test("Lock Typechecking Tests") {
+    val testDir = new File("src/test/tests/typecheckTests")
+    for (file <- testDir.listFiles().filter(f => f.isFile)) {
+      testTypecheck(testDir, file)
+    }
+  }
+
   def testParse(testDir:File, inputFile: File): Unit = {
     Main.parse(false, true, inputFile, testDir)
     compareFiles(testDir, inputFile, "parse")
@@ -246,7 +280,11 @@ class MainSuite extends AnyFunSuite{
   }
   
   def testTypecheck(testDir:File, inputFile: File): Unit = {
-    Main.runPasses(true, inputFile, testDir)
+    try {
+      Main.runPasses(true, inputFile, testDir)
+    } catch {
+      case _ =>
+    }
     compareFiles(testDir, inputFile, "typecheck")
     deleteGeneratedFiles(testDir)
   }

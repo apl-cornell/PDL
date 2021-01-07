@@ -89,7 +89,7 @@ object Main {
         //If fails, print the error to the file
         if (printOutput) {
           val writer = new PrintWriter(outputFile)
-          writer.write(t.toString)
+          writer.write("Failed")
           writer.close()
         }
         throw t
