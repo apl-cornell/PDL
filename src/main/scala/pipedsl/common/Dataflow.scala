@@ -102,11 +102,10 @@ object Dataflow {
       specNeeds.union(verifNeeds) -- specWritten -- verifWritten
     case stg: IfStage =>
       val joinNeeds = used(stg.joinStage.name)
-      val trueNeeds = stg.condStages.foldLeft[Set[Id]](Set())((set, stgs) => set ++ used(stgs.head.name))
-      val trueWritten = joinNeeds -- joinNeeds.intersect(trueNeeds)
-      val falseNeeds = used(stg.defaultStages.head.name)
-      val falseWritten = joinNeeds -- joinNeeds.intersect(falseNeeds) 
-      trueNeeds.union(falseNeeds) -- trueWritten -- falseWritten
+      val caseNeeds = stg.condStages.foldLeft[Set[Id]](Set())((set, stgs) => set ++ used(stgs.head.name)) ++
+        used(stg.defaultStages.head.name)
+      val caseWritten = joinNeeds -- caseNeeds
+      caseNeeds -- caseWritten
     case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
   }
 
