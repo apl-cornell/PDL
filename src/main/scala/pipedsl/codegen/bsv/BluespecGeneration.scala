@@ -16,7 +16,7 @@ object BluespecGeneration {
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
     debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
-    memInit:Map[String, String] = Map(), addMemInts: Boolean = false) {
+    memInit:Map[String, String] = Map(), addSubInts: Boolean = false) {
 
 
     val funcModule: String = funcmodname
@@ -69,6 +69,17 @@ object BluespecGeneration {
       case CirExprStmt(_) => (List(), env)
     }
 
+    //returns a map from variable names to bsv vars that represent all modules which
+    // _need_ to be exposed at the top level (this correlates to those that are Called w/ some initial value
+    private def getTopLevelModules(c: Circuit, env: Map[Id, BVar]): Map[Id, BVar] = c match {
+      case CirSeq(c1, c2) =>
+        val t1 = getTopLevelModules(c1, env)
+        val t2 = getTopLevelModules(c2, env)
+        t1 ++ t2
+      case CirConnect(_, _) => Map()
+      case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
+    }
+
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
       case CirMem(elemTyp, addrSize) =>
         val memtyp = bsInts.getMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
@@ -88,6 +99,7 @@ object BluespecGeneration {
     private def varToReg(b: BVar): BVar = {
       BVar("reg" + b.name, bsInts.getRegType(b.typ))
     }
+
     //TODO put in a good comment here that describes the return values
     private def initCircuit(c: Circuit, env: Map[Id, BVar]): (List[BStatement], List[BExpr], List[BStatement]) = c match {
       case CirSeq(c1, c2) =>
@@ -112,7 +124,7 @@ object BluespecGeneration {
 
     //Get the body of the top level circuit and the list of modules it instantiates
     private val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
-    private val finalArgMap = if (addMemInts) argmap else argmap.filterNot(entry => bsInts.isMemType(entry._2.typ))
+    private val finalArgMap = if (addSubInts) argmap else getTopLevelModules(prog.circ, argmap)
 
     private val topInterface: BInterfaceDef = bsInts.topModInterface(finalArgMap.values)
 
