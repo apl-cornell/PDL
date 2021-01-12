@@ -15,7 +15,8 @@ object CommandLineParser {
     maxIterations: Int = 0,
     printStageGraph: Boolean = false,
     defaultAddrLock: Option[String] = None,
-    memInit: Map[String, String] = Map()
+    memInit: Map[String, String] = Map(),
+    addMemInts: Boolean = false
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -66,7 +67,10 @@ object CommandLineParser {
               .action((s, c) => c.copy(defaultAddrLock = Some(s))),
             opt[Map[String, String]]("memInit")
               .valueName("<memName1>=<fileName1>,<memName2>=<fileName2>...")
-              .action((x, c) => c.copy(memInit = x))
+              .action((x, c) => c.copy(memInit = x)),
+            opt[Unit]("addMemInts")
+              .action((_, c) => c.copy(addMemInts = true))
+              .text("add memory interfaces to generated top level module")
           ),
         cmd("typecheck") 
           .text("parses and type checks the resulting AST")

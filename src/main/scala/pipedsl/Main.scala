@@ -26,7 +26,7 @@ object Main {
           case ("parse") => parse(debug = true, printOutput = true, config.file, config.out)
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit)
+            config.debug, config.defaultAddrLock, config.memInit, config.addMemInts)
           case ("typecheck") => runPasses(printOutput = true, config.file, config.out)
           case _ =>
         }
@@ -120,7 +120,7 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
+    addrLockMod: Option[String] = None, memInit: Map[String, String], addMemInts: Boolean = false): Unit = {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
@@ -130,10 +130,12 @@ object Main {
       Files.copy(Paths.get(fileName), targetPath, StandardCopyOption.REPLACE_EXISTING)
     }
     //Need to transform map passes into the program generator
-    val memInitFileNames = memInit.foldLeft[Map[String,String]](Map())((map, kv) => map + (kv._1 -> new File(kv._2).getName))
+    val memInitFileNames = memInit.foldLeft[Map[String,String]](Map())((map, kv) =>
+      map + (kv._1 -> new File(kv._2).getName))
     
     val bsints = new BluespecInterfaces(addrLockMod)
-    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info, debug, bsints, memInit = memInitFileNames)
+    val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info,
+      debug, bsints, memInit = memInitFileNames, addMemInts = addMemInts)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close

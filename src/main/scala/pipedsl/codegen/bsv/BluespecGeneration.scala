@@ -15,7 +15,8 @@ object BluespecGeneration {
   private val fifoLib = "FIFOF"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
-    debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions", memInit:Map[String, String] = Map()) {
+    debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
+    memInit:Map[String, String] = Map(), addMemInts: Boolean = false) {
 
 
     val funcModule: String = funcmodname
@@ -111,7 +112,9 @@ object BluespecGeneration {
 
     //Get the body of the top level circuit and the list of modules it instantiates
     private val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
-    private val topInterface: BInterfaceDef = bsInts.topModInterface(argmap.values)
+    private val finalArgMap = if (addMemInts) argmap else argmap.filterNot(entry => bsInts.isMemType(entry._2.typ))
+
+    private val topInterface: BInterfaceDef = bsInts.topModInterface(finalArgMap.values)
 
     //Create a top level module that is synthesizable, takes no parameters
     //and instantiates all of the required memories and pipeline modules
@@ -119,7 +122,7 @@ object BluespecGeneration {
     private val topLevelModule: BModuleDef = {
 
 
-      val assignInts = argmap.values.foldLeft(List[BStatement]())((l, a) => {
+      val assignInts = finalArgMap.values.foldLeft(List[BStatement]())((l, a) => {
         l :+ BIntAssign(bsInts.toIntVar(a), a)
       })
       BModuleDef(name = "mkCircuit", typ = Some(bsInts.topModTyp), params = List(),
@@ -127,7 +130,7 @@ object BluespecGeneration {
     }
 
     private val modarg = "m"
-    private val intargs = argmap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
+    private val intargs = finalArgMap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     private val circuitstart = initCircuit(prog.circ, intargs)
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
