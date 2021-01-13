@@ -157,3 +157,21 @@ the "names" returned need to be interpreted in _some_ way.
 Therefore reads and writes don't use the original address, but the lock identifier
 returned from the API (a.k.a. the underlying name).
 
+## Interacting With Speculation
+
+An interesting question is how both our high level lock API and the low level rename API interact w/ speculation
+based on how we know speculative architectures need to be built.
+
+The lock API now needs to come with a dynamic identifier, which the requester uses to indicate
+whether or not it is speculative.
+In this way, reading / allocating physical names can happen speculatively and relies on the
+naming layer to track speculative state.
+Therefore, in order to _resolve_ speculation, we need to make further use of the "free" API call.
+We can imagine "free" being split into "commit" and "abort" which the compiler must ensure are
+only used when the thread is either _nonspeculative_ or _misspeculated_, respectively.
+
+"commit" has the behavior of finalizing writes or reads; in the latter case this is necessary
+for modules that might update internal state to track ordering of reads w.r.t writes.
+"abort" takes a name and 'rollsback' the state affected by
+that operation (including internal state, not just the memory). Likely, rollback will need to rollback
+everything "newer" than that point - or we may need multiple versions (one which rolls it all back, one which doesn't).
