@@ -21,7 +21,7 @@ pipe multi_stg_div(num: int<32>, denom: int<32>, quot: int<32>, acc: int<32>, cn
     }
 }
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_mul, f: multi_stg_div] {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_mul, f: multi_stg_div]: bool {
  if (pc < 14<16>) { 
   call cpu(pc + 1<16>);
  }
@@ -69,6 +69,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
  rf[rd] <- res;
  release(rf[rd]);
  ---
+ if (pc == 14<16>) {
+    output(true);
+ }
 }
 
 circuit {

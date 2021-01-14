@@ -96,6 +96,12 @@ pipe cpu(pc:int<16>)[rf:int<32>[5]<c, s>,imem:int<32>[16]<a, a>,m:multi_stg_mul,
       }
       
   }
+  if ( pc == 14<16> ) {
+      output true;
+      
+  } else {
+      
+  }
   
 }
 circuit {
