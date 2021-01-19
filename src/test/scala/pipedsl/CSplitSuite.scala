@@ -6,7 +6,7 @@ import java.io.File
 
 class CSplitSuite extends AnyFunSuite {
 
-  private val folder = "src/test/tests/branches_typecheck"
+  private val folder = "src/test/tests/branchesCheck"
   private val b1 = folder + "/branch-1.pdl"
   private val b2 = folder + "/branch-2.pdl"
   private val n1 = folder + "/nested-1.pdl"

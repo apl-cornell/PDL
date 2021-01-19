@@ -18,7 +18,7 @@ pipe test(input: int<32>)[rf: int<32>[5]] {
     acquire(rf[addr]);
     end(rf);
     ---
-    rf[addr] <- 0<5>;
+    rf[addr] <- 0<32>;
     release(rf[addr]);
     ---
     call test(input + 1<32>);

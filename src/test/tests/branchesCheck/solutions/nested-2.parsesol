@@ -1,0 +1,22 @@
+pipe test(input:int<32>)[] {
+  if ( cast(input{0:0},bool) ) {
+      if ( input{1:1} == 0<1> ) {
+          int<2> x = 0<2>;
+          
+      } else {
+          
+          ---
+          int<2> x = 1<2>;
+          
+      }
+      
+  } else {
+      int<2> x = 3<2>;
+      
+  }
+  call test(0<30> ++ x);
+  
+}
+circuit {
+  t = new test[];
+}
