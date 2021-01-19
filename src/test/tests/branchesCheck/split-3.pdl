@@ -1,0 +1,30 @@
+pipe test(input: int<32>)[rf: int<32>[5]] {
+    start(rf);
+    int<2> cond = input{1:0};
+    split {
+        case: (cond == 0<2>) {
+            acquire(rf[addr]);
+        }
+        case: (cond == 1<2>) {
+            int<5> addr = 1<5>;
+        }
+        case: (cond == 2<2>) {
+            int<5> addr = 2<5>;
+        }
+        default: {
+            int<5> addr = 0<5>;
+        }
+    }
+    end(rf);
+    ---
+    if (cond == 0<2>) {
+        rf[addr] <- 0<32>;
+        release(rf[addr]);
+    }
+    ---
+    call test(input + 1<32>);
+}
+
+circuit {
+    rf = regfile(int<32>, 5);
+}
