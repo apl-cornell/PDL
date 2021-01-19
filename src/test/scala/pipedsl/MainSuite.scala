@@ -1,268 +1,276 @@
 package pipedsl
 
 import java.io.File
-import java.nio.file.Paths
 
-import org.apache.commons.io.{FileUtils, FilenameUtils}
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.reflect.io.Directory
-import scala.sys.process._
 
-class MainSuite extends AnyFunSuite{
-  val pathToBluespecScript = "bin/runbsc"
-  val outputFileBS = "top.sim.out"
+
+class MainSuite extends AnyFunSuite {
+
+
+  private val histFolder = "src/test/tests/histogram"
+  private val histFile = histFolder + "/histogram.pdl"
+  private val histBram = histFolder + "/histogram_bram.pdl"
+  private val histShort = histFolder + "/histogram_short.pdl"
+  private val histInputs = histFolder + "/memInputs"
+  private val inputH = histInputs + "/h"
+  private val inputF = histInputs + "/f"
+  private val inputW = histInputs + "/w"
+  private val inputMap = Map("h" -> inputH, "f" -> inputF, "w" -> inputW)
 
   test("Histogram Parse Test") {
-    testParse(new File("src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram.pdl"))
+    testParse(new File(histFolder),
+      new File(histFile))
   }
 
   test("Histogram Typecheck Test") {
-    testTypecheck(new File("src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram.pdl"))
+    testTypecheck(new File(histFolder),
+      new File(histFile))
   }
 
   test("Histogram Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram.pdl"),
+    testBlueSpecCompile(new File(histFolder),
+      new File(histFile),
       None,
-      Map("h" -> "src/test/tests/histogram/memInputs/h",
-        "f" -> "src/test/tests/histogram/memInputs/f",
-        "w" -> "src/test/tests/histogram/memInputs/w"))
+      inputMap
+    )
   }
   
   test("Histogram Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/histogram"), 
-      new File("src/test/tests/histogram/histogram.pdl"),
+    testBlueSpecSim(new File(histFolder),
+      new File(histFile),
       None,
-      Map("h" -> "src/test/tests/histogram/memInputs/h",
-        "f" -> "src/test/tests/histogram/memInputs/f",
-        "w" -> "src/test/tests/histogram/memInputs/w"))
+      inputMap
+    )
   }
 
   test("Histogram BRAM Parse Test") {
-    testParse(new File("src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_bram.pdl"))
+    testParse(new File(histFolder),
+      new File(histBram))
   }
 
   test("Histogram BRAM Typecheck Test") {
-    testTypecheck(new File("src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_bram.pdl"))
+    testTypecheck(new File(histFolder),
+      new File(histBram))
   }
 
   test("Histogram BRAM Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_bram.pdl"),
+    testBlueSpecCompile(new File(histFolder),
+      new File(histBram),
       None,
-      Map("h" -> "src/test/tests/histogram/memInputs/h",
-        "f" -> "src/test/tests/histogram/memInputs/f",
-        "w" -> "src/test/tests/histogram/memInputs/w"))
+      inputMap
+    )
   }
 
   test("Histogram BRAM Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_bram.pdl"),
+    testBlueSpecSim(new File(histFolder),
+      new File(histBram),
       None,
-      Map("h" -> "src/test/tests/histogram/memInputs/h",
-        "f" -> "src/test/tests/histogram/memInputs/f",
-        "w" -> "src/test/tests/histogram/memInputs/w"))
+      inputMap
+    )
   }
 
   test("Histogram SHORT Parse Test") {
-    testParse(new File("src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_short.pdl"))
+    testParse(new File(histFolder),
+      new File(histShort))
   }
 
   test("Histogram SHORT Typecheck Test") {
-    testTypecheck(new File("src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_short.pdl"))
+    testTypecheck(new File(histFolder),
+      new File(histShort))
   }
 
   test("Histogram SHORT Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_short.pdl"),
+    testBlueSpecCompile(new File(histFolder),
+      new File(histShort),
       None,
-      Map("h" -> "src/test/tests/histogram/memInputs/h",
-        "f" -> "src/test/tests/histogram/memInputs/f",
-        "w" -> "src/test/tests/histogram/memInputs/w"))
+      inputMap
+    )
   }
 
   test("Histogram SHORT Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/histogram"),
-      new File("src/test/tests/histogram/histogram_short.pdl"),
+    testBlueSpecSim(new File( histFolder),
+      new File(histShort),
       None,
-      Map("h" -> "src/test/tests/histogram/memInputs/h",
-        "f" -> "src/test/tests/histogram/memInputs/f",
-        "w" -> "src/test/tests/histogram/memInputs/w"))
+      inputMap)
   }
-  
+
+  private val matpowFolder = "src/test/tests/matpow"
+  private val matpowFile = matpowFolder + "/matpow.pdl"
+  private val matpowBram = matpowFolder + "/matpow_bram.pdl"
+  private val matpowAlt = matpowFolder + "/matpow_alt.pdl"
+  private val matpowInputs = matpowFolder + "/memInputs"
+  private val matpowMap = Map("a" -> (matpowInputs + "/a_2"),
+    "x" -> (matpowInputs + "/x"),
+    "r" -> (matpowInputs + "/r"),
+    "c" -> (matpowInputs + "/c")
+  )
+
   test("Matrix Power Parse Test") {
-    testParse(new File("src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow.pdl"))
+    testParse(new File(matpowFolder),
+      new File(matpowFile))
   }
   
   test("Matrix Power Typecheck Test") {
-    testTypecheck(new File("src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow.pdl"))
+    testTypecheck(new File(matpowFolder),
+      new File(matpowFile))
   }
 
   test("Matrix Power Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow.pdl"),
+    testBlueSpecCompile(new File(matpowFolder),
+      new File(matpowFile),
       None,
-      Map("a" -> "src/test/tests/matpow/memInputs/a_2",
-        "x" -> "src/test/tests/matpow/memInputs/x",
-        "r" -> "src/test/tests/matpow/memInputs/r",
-        "c" -> "src/test/tests/matpow/memInputs/c"))
+      matpowMap
+    )
   }
   
   test("Matrix Power Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow.pdl"),
+    testBlueSpecSim(new File(matpowFolder),
+      new File(matpowFile),
       None,
-      Map("a" -> "src/test/tests/matpow/memInputs/a_2",
-        "x" -> "src/test/tests/matpow/memInputs/x",
-        "r" -> "src/test/tests/matpow/memInputs/r",
-        "c" -> "src/test/tests/matpow/memInputs/c"))
+      matpowMap
+    )
   }
 
   test("Matrix Power BRAM Parse Test") {
-    testParse(new File("src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_bram.pdl"))
+    testParse(new File(matpowFolder),
+      new File(matpowBram))
   }
 
   test("Matrix Power BRAM Typecheck Test") {
-    testTypecheck(new File("src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_bram.pdl"))
+    testTypecheck(new File(matpowFolder),
+      new File(matpowBram))
   }
 
   test("Matrix Power BRAM Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_bram.pdl"),
+    testBlueSpecCompile(new File(matpowFolder),
+      new File(matpowBram),
       None,
-      Map("a" -> "src/test/tests/matpow/memInputs/a_2",
-        "x" -> "src/test/tests/matpow/memInputs/x",
-        "r" -> "src/test/tests/matpow/memInputs/r",
-        "c" -> "src/test/tests/matpow/memInputs/c"))
+      matpowMap
+    )
   }
 
   test("Matrix Power BRAM Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_bram.pdl"),
+    testBlueSpecSim(new File(matpowFolder),
+      new File(matpowBram),
       None,
-      Map("a" -> "src/test/tests/matpow/memInputs/a_2",
-        "x" -> "src/test/tests/matpow/memInputs/x",
-        "r" -> "src/test/tests/matpow/memInputs/r",
-        "c" -> "src/test/tests/matpow/memInputs/c"))
+      matpowMap
+    )
   }
   
   test("Matrix Power ALT Parse Test") {
-    testParse(new File("src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_alt.pdl"))
+    testParse(new File(matpowFolder),
+      new File(matpowAlt))
   }
 
   test("Matrix Power ALT Typecheck Test") {
-    testTypecheck(new File("src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_alt.pdl"))
+    testTypecheck(new File(matpowFolder),
+      new File(matpowAlt))
   }
 
   test("Matrix Power ALT Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_alt.pdl"),
+    testBlueSpecCompile(new File( matpowFolder),
+      new File(matpowAlt),
       None,
-      Map("a" -> "src/test/tests/matpow/memInputs/a_2",
-        "x" -> "src/test/tests/matpow/memInputs/x",
-        "r" -> "src/test/tests/matpow/memInputs/r",
-        "c" -> "src/test/tests/matpow/memInputs/c"))
+      matpowMap
+    )
   }
 
   test("Matrix Power ALT Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/matpow"),
-      new File("src/test/tests/matpow/matpow_alt.pdl"),
+    testBlueSpecSim(new File(matpowFolder),
+      new File(matpowAlt),
       None,
-      Map("a" -> "src/test/tests/matpow/memInputs/a_2",
-        "x" -> "src/test/tests/matpow/memInputs/x",
-        "r" -> "src/test/tests/matpow/memInputs/r",
-        "c" -> "src/test/tests/matpow/memInputs/c"))
+      matpowMap
+    )
   }
-  
+
+  private val multiFolder = "src/test/tests/multiExec"
+  private val multiFile = multiFolder + "/multiexec.pdl"
+  private val multiAlt = multiFolder + "/multiexec_alt.pdl"
+  private val multiSplit = multiFolder + "/multiexec_split.pdl"
+  private val multiInputs = multiFolder + "/memInputs"
+  private val memMap = Map(
+    "i" -> (multiInputs + "/i"),
+    "r" -> (multiInputs + "/r")
+  )
+
   test("Multiple Execution Parse Test") {
-    testParse(new File("src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec.pdl"))
+    testParse(new File(multiFolder),
+      new File(multiFile))
   }  
   
   test("Multiple Execution Typecheck Test") {
-    testTypecheck(new File("src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec.pdl"))
+    testTypecheck(new File(multiFolder),
+      new File(multiFile))
   }
 
   test("Multiple Execution CompilationTest") {
-    testBlueSpecCompile(new File( "src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec.pdl"),
+    testBlueSpecCompile(new File(multiFolder),
+      new File(multiFile),
       None,
-      Map("i" -> "src/test/tests/multiExec/memInputs/i",
-        "r" -> "src/test/tests/multiExec/memInputs/r"))
+      memMap
+    )
   }
   
   test("Multiple Execution Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec.pdl"),
+    testBlueSpecSim(new File(multiFolder),
+      new File(multiFile),
       None,
-      Map("i" -> "src/test/tests/multiExec/memInputs/i",
-        "r" -> "src/test/tests/multiExec/memInputs/r"))
+      memMap
+    )
   }
 
   test("Multiple Execution OOO WB Parse Test") {
-    testParse(new File("src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_alt.pdl"))
+    testParse(new File(multiFolder),
+      new File(multiFile))
   }
   
   test("Multiple Execution OOO WB Typecheck Test") {
-    testTypecheck(new File("src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_alt.pdl"))
+    testTypecheck(new File(multiFolder),
+      new File(multiFile))
   }
 
   test("Multiple Execution OOO WB Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_alt.pdl"),
+    testBlueSpecCompile(new File(multiFolder),
+      new File(multiAlt),
       None,
-      Map("i" -> "src/test/tests/multiExec/memInputs/i",
-        "r" -> "src/test/tests/multiExec/memInputs/r"))
+      memMap
+    )
   }
 
   test("Multiple Execution OOO WB Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_alt.pdl"),
+    testBlueSpecSim(new File(multiFolder),
+      new File(multiAlt),
       None,
-      Map("i" -> "src/test/tests/multiExec/memInputs/i",
-        "r" -> "src/test/tests/multiExec/memInputs/r"))
+      memMap
+    )
   }
 
   test("Multiple Execution Split Parse Test") {
-    testParse(new File("src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_split.pdl"))
+    testParse(new File(multiFolder),
+      new File(multiSplit))
   }
 
   test("Multiple Execution Split Typecheck Test") {
-    testTypecheck(new File("src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_split.pdl"))
+    testTypecheck(new File(multiFolder),
+      new File(multiSplit))
   }
 
   test("Multiple Execution Split Compilation Test") {
-    testBlueSpecCompile(new File( "src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_split.pdl"),
+    testBlueSpecCompile(new File(multiFolder),
+      new File(multiSplit),
       None,
-      Map("i" -> "src/test/tests/multiExec/memInputs/i",
-        "r" -> "src/test/tests/multiExec/memInputs/r"))
+      memMap
+    )
   }
 
   test("Multiple Execution Split Simulation Test") {
-    testBlueSpecSim(new File( "src/test/tests/multiExec"),
-      new File("src/test/tests/multiExec/multiexec_split.pdl"),
+    testBlueSpecSim(new File(multiFolder),
+      new File(multiSplit),
       None,
-      Map("i" -> "src/test/tests/multiExec/memInputs/i",
-        "r" -> "src/test/tests/multiExec/memInputs/r"))
+      memMap
+    )
   }
 
 
@@ -273,74 +281,4 @@ class MainSuite extends AnyFunSuite{
     }
   }
 
-  def testParse(testDir:File, inputFile: File): Unit = {
-    Main.parse(false, true, inputFile, testDir)
-    compareFiles(testDir, inputFile, "parse")
-    deleteGeneratedFiles(testDir)
-  }
-  
-  def testTypecheck(testDir:File, inputFile: File): Unit = {
-    try {
-      Main.runPasses(true, inputFile, testDir)
-    } catch {
-      case _ =>
-    }
-    compareFiles(testDir, inputFile, "typecheck")
-    deleteGeneratedFiles(testDir)
-  }
-
-  def testBlueSpecCompile(testDir: File, inputFile: File, addrLockMod:Option[String] = None, memInit: Map[String, String]): Unit = {
-    val clean = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
-    Main.gen(testDir, inputFile, false, false, addrLockMod, memInit)
-    val exit = (pathToBluespecScript + " v " + testDir.getAbsolutePath).!
-    assert(exit == 0)
-    deleteGeneratedFiles(testDir)
-    memInit.values.foreach(memPath =>
-      new File(Paths.get(testDir.getAbsolutePath, FilenameUtils.getName(memPath)).toString).delete())
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).delete()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).delete()
-  }
-
-  def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod:Option[String] = None, memInit: Map[String, String]): Unit = {
-    val clean = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
-    Main.gen(testDir, inputFile, false, false, addrLockMod, memInit)
-    val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath).!
-    assert(exit == 0)
-    val blueSpecOutFile = new File(Paths.get(testDir.getAbsolutePath, outputFileBS).toString)
-    val expected = new File(Paths.get(testDir.getAbsolutePath, "solutions", FilenameUtils.getBaseName(inputFile.getName) + "."+ "simsol").toString)
-    println(expected)
-    FileUtils.contentEquals(blueSpecOutFile , expected)
-    assert(FileUtils.contentEqualsIgnoreEOL(blueSpecOutFile , expected, null))
-    deleteGeneratedFiles(testDir)
-    memInit.values.foreach(memPath => 
-      new File(Paths.get(testDir.getAbsolutePath, FilenameUtils.getName(memPath)).toString).delete())
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).delete()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).delete()
-  }
-  
-  def compareFiles(testDir:File, inputFile: File, fileExtension:String): Unit = {
-    val outputName = FilenameUtils.getBaseName(inputFile.getName) + "." + fileExtension
-    val outputFile = new File(Paths.get(testDir.getPath, outputName).toString)
-    val expected = new File(Paths.get(testDir.getPath, "solutions", outputName + "sol").toString)
-    assert(FileUtils.contentEqualsIgnoreEOL(outputFile, expected, null))
-  }
-  
-  def deleteGeneratedFiles(testDir: File): Unit = {
-    testDir.listFiles.filter(f => f.getName.endsWith(".bo")||
-      f.getName.endsWith(".bsv")||
-      f.getName.endsWith(".ba")||
-      f.getName.endsWith(".sched")||
-      f.getName.endsWith(".ba")||
-      f.getName.endsWith(".bexe")||
-      f.getName.endsWith(".so")||
-      f.getName.endsWith(".out") ||
-      f.getName.endsWith(".parse")||
-      f.getName.endsWith(".typecheck")||
-      f.getName.endsWith(".interpret")).foreach(f => f.delete())
-  }
-  
 }
