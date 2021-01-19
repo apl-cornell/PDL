@@ -35,18 +35,19 @@ interface AsyncMem#(type elem, type addr, type name);
    method Bool isValid(name n); //check if reading the value returns a valid value
    method elem read(name n); //do the read
    method Action commit(name n); //indicate we're done reading/writing this location
+   //method Action abort(name a); use for speculative threads that die so name a can be thrown out
 endinterface
-
-
+   
+//TODO make physical size a parameter (rather than dictated by type of name)
 module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem, addr, name)) provisos
-   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Literal#(name), Bounded#(name),
+   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
     PrimIndex#(addr, an), PrimIndex#(name, nn));
    
    RegFile#(name, elem) regfile <- (init) ? mkRegFileFullLoad(fileInit) : mkRegFileFull();
    
    //Initial mapping for all arch regs is identity
    module mkMapEntry#(Integer i)(Reg#(name));
-      let r <- mkReg(fromInteger(i));
+      let r <- mkReg(unpack(fromInteger(i)));
       return r;
    endmodule
 
@@ -108,6 +109,49 @@ module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem
       busyfile[oldNames[n]] <= True;
    endmethod
    
+endmodule
+
+//TODO make size of queues a parameter
+module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, addr, name)) provisos
+   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), Literal#(name));
+
+   let memSize = 2 ** valueOf(szAddr);
+   let hasOutputReg = False;
+   BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
+
+   //TODO make size of store queue parameter
+   Integer stSize = 5;
+   Vector#(5, Reg#(addr)) stQ <- replicateM( mkReg(unpack(0)));
+   Vector#(5, Reg#(Maybe#(elem))) stDQ <- replicateM (mkReg(tagged Invalid));
+   //TODO make size of ld queue parameter
+
+   function Maybe#(name) getMatchingStore(addr a);
+      Maybe#(name) result = tagged Invalid;
+      for (Integer i = 0; i < stSize; i = i + 1) begin
+	 if (result matches tagged Invalid &&& stQ[i] == a)
+	    result = tagged Valid fromInteger(i);
+      end
+      return result;
+   endfunction
+   
+   //TODO
+   method ActionValue#(name) reserveEntry(addr a, Bool isWrite);
+      return unpack(0);
+   endmethod
+   //TODO
+   method Action write(name n, elem b);
+   endmethod
+   //TODO
+   method Bool isValid(name n);
+      return False;
+   endmethod
+   //TODO
+   method elem read(name n);
+      return unpack(0);
+   endmethod
+   //TODO
+   method Action commit(name n);
+   endmethod
 endmodule
 
 endpackage

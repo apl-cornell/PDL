@@ -1,8 +1,9 @@
 LABNAME = Stages Stuff
 
 BSC=bsc -no-show-timestamps -no-show-version --aggressive-conditions
-B_IN=Memories.bsv
-B_LIB=Memories.bo
+BMOD=Memories
+B_IN=$(BMOD).bsv
+B_LIB=$(BMOD).bo
 B_SIM=tb.bsv
 OUT=Top
 
