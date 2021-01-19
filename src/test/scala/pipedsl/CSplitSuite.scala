@@ -13,6 +13,9 @@ class CSplitSuite extends AnyFunSuite {
   private val n2 = folder + "/nested-2.pdl"
   private val s1 = folder + "/split-1.pdl"
   private val s2 = folder + "/split-2.pdl"
+  private val s3 = folder + "/split-3.pdl"
+  private val s4 = folder + "/split-4.pdl"
+
 
   test("BranchOne Parse") {
     testParse(new File(folder), new File(b1))
@@ -60,5 +63,21 @@ class CSplitSuite extends AnyFunSuite {
 
   test("SplitTwo Typecheck") {
     testTypecheck(new File(folder), new File(s2))
+  }
+
+  test("SplitThree Parse") {
+    testParse(new File(folder), new File(s3))
+  }
+
+  test("SplitThree Typecheck") {
+    testTypecheck(new File(folder), new File(s3))
+  }
+
+  test("SplitFour Parse") {
+    testParse(new File(folder), new File(s4))
+  }
+
+  test("SplitFour Typecheck") {
+    testTypecheck(new File(folder), new File(s4))
   }
 }
