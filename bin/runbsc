@@ -1,5 +1,8 @@
 #!/bin/bash
 
+set -e
+
+SCRIPTPATH=$(cd "$(dirname "$0")" && pwd -P)
 
 usage () {
     echo "Usage: ./runbsc [v|s|c] <dir>"
@@ -32,12 +35,13 @@ else
     exit 1
 fi
 
-SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+RUNTIMEPATH=$(cd "$SCRIPTPATH/../bscRuntime" && pwd -P)
 TOP=Circuit
 TB="mkTB"
 ARGS="-no-show-timestamps -no-show-version --aggressive-conditions"
-BSC_LIB_DIR=$(realpath "$SCRIPTPATH"/../bscRuntime/locks)":"$(realpath "$SCRIPTPATH"/../bscRuntime/memories)
-BPATH="-p .:"$BSC_LIB_DIR":"$BLUESPECDIR/inst/lib/Libraries/
+BSC=$BLUESPECDIR/inst/bin/bsc
+BSC_LIB_DIR="$RUNTIMEPATH/locks:$RUNTIMEPATH/memories"
+BPATH="-p .:$BSC_LIB_DIR:$BLUESPECDIR/inst/lib/Libraries/"
 VDIR="$TOP"_verilog
 SDIR="$TOP"_sim
 mkdir -p $VDIR
@@ -46,12 +50,12 @@ mkdir -p $SDIR
 case "$CMD" in
     "v")
 	#Compile to Verilog
-	bsc $ARGS $BPATH -show-schedule -verilog -vdir $VDIR -u "$TOP".bsv
+	"$BSC" $ARGS $BPATH -show-schedule -verilog -vdir $VDIR -u "$TOP".bsv
 	;;
     "s")
 	#Run simulation
-	bsc $ARGS $BPATH -sim -simdir $SDIR -u "$TOP".bsv
-	bsc $ARGS -sim -simdir $SDIR -o "$TB".bexe -e "$TB" "$TB".ba	
+	"$BSC" $ARGS $BPATH -sim -simdir $SDIR -u "$TOP".bsv
+	"$BSC" $ARGS -sim -simdir $SDIR -o "$TB".bexe -e "$TB" "$TB".ba
 	timeout 10s ./"$TB".bexe > top.sim.out
 	;;
     "c")
