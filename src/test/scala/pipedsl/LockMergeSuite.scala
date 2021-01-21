@@ -4,9 +4,9 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
 
-class CSplitSuite extends AnyFunSuite {
+class LockMergeSuite extends AnyFunSuite {
 
-  private val folder = "src/test/tests/branchesCheck"
+  private val folder = "src/test/tests/lockTests"
   private val testFiles = getListOfTests(folder)
   private val simFiles =  getListOfSims(folder)
   private val testFolder = new File(folder)

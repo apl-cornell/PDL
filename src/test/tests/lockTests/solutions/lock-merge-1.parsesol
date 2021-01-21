@@ -1,0 +1,42 @@
+pipe ex1(in:bool)[r1:int<32>[5]<a, a>,r2:int<32>[5]<a, a>] {
+  start(r1);
+  start(r2);
+  int<5> addr = 1<5>;
+  if ( in ) {
+      reserved(r1[addr]);
+      
+  } else {
+      reserved(r2[addr]);
+      
+  }
+  end(r1);
+  end(r2);
+  
+  ---
+  if ( in ) {
+      acquired(r1[addr]);
+      r1[addr] <- 32<32>;
+      released(r1[addr]);
+      
+  } else {
+      
+  }
+  
+  ---
+  if ( !in ) {
+      acquired(r2[addr]);
+      r2[addr] <- 32<32>;
+      released(r2[addr]);
+      
+  } else {
+      
+  }
+  print(in);
+  
+}
+circuit {
+  r1 = memory(int<32>,5);
+  r2 = memory(int<32>,5);
+  e = new ex1[r1,r2];
+call e(false);
+}
