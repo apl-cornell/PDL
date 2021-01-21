@@ -1,6 +1,6 @@
-pipe test(input: int<32>)[] {
-    if (cast (input{0:0}, bool)) {
-        if (input{1:1} == 0) {
+pipe test(inarg: int<32>)[] {
+    if (cast (inarg{0:0}, bool)) {
+        if (inarg{1:1} == 0) {
             int<2> x = 0<2>;
         } else {
             ---

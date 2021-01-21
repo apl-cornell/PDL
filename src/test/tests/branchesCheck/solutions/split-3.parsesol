@@ -1,6 +1,6 @@
-pipe test(input:int<32>)[rf:int<32>[5]<a, a>] {
+pipe test(inarg:int<32>)[rf:int<32>[5]<a, a>] {
   start(rf);
-  int<2> cond = input{1:0};
+  int<2> cond = inarg{1:0};
   split {
     case: cond == 0<2> {
         int<5> addr = 7<5>;
@@ -33,7 +33,7 @@ pipe test(input:int<32>)[rf:int<32>[5]<a, a>] {
   }
   
   ---
-  call test(input + 1<32>);
+  call test(inarg + 1<32>);
   
 }
 circuit {

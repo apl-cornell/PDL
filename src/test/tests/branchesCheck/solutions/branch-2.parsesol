@@ -1,13 +1,13 @@
-pipe test(input:int<32>)[rf:int<32>[5]<a, a>] {
+pipe test(inarg:int<32>)[rf:int<32>[5]<a, a>] {
   start(rf);
   reserved(rf);
   acquired(rf);
   end(rf);
-  if ( input{0:0} == 1<1> ) {
+  if ( inarg{0:0} == 1<1> ) {
       int<32> y = 4<32>;
       
   } else {
-      int<32> y <- rf[input{4:0}];
+      int<32> y <- rf[inarg{4:0}];
       
       ---
       

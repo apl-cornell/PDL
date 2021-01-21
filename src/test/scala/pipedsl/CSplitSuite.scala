@@ -17,67 +17,34 @@ class CSplitSuite extends AnyFunSuite {
   private val s4 = folder + "/split-4.pdl"
 
 
-  test("BranchOne Parse") {
-    testParse(new File(folder), new File(b1))
-  }
+  private val testFiles = getListOfTests(folder)
+  private val simFiles =  getListOfSims(folder)
+  private val testFolder = new File(folder)
 
-  test("BranchOne Typecheck") {
-    testTypecheck(new File(folder), new File(b1))
-  }
+  testFiles.foreach(t => {
+    val testBaseName = getTestName(t)
+    val simFile = getSimFile(testFolder, testBaseName)
 
-  test("BranchTwo Parse") {
-    testParse(new File(folder), new File(b2))
-  }
+    //TODO find a way to only run the right set of tests
+    //based on whether we expect success or not
+    test((testBaseName + " Parse")) {
+      testParse(testFolder, t)
+    }
 
-  test("BranchTwo Typecheck") {
-    testTypecheck(new File(folder), new File(b2))
-  }
+    test((testBaseName + " Typecheck")) {
+      testTypecheck(testFolder, t)
+    }
 
-  test("NestedOne Parse") {
-    testParse(new File(folder), new File(n1))
-  }
 
-  test("NestedOne Typecheck") {
-    testTypecheck(new File(folder), new File(n1))
-  }
+    test((testBaseName + " BSV Compile")) {
+      testBlueSpecCompile(testFolder, t, None, Map())
+    }
 
-  test("NestedTwo Parse") {
-    testParse(new File(folder), new File(n2))
-  }
+    if (simFile.exists) {
+      test((testBaseName + " Simulation")) {
+        testBlueSpecSim(testFolder, t, None, Map())
+      }
+    }
+  })
 
-  test("NestedTwo Typecheck") {
-    testTypecheck(new File(folder), new File(n2))
-  }
-
-  test("SplitOne Parse") {
-    testParse(new File(folder), new File(s1))
-  }
-
-  test("SplitOne Typecheck") {
-    testTypecheck(new File(folder), new File(s1))
-  }
-
-  test("SplitTwo Parse") {
-    testParse(new File(folder), new File(s2))
-  }
-
-  test("SplitTwo Typecheck") {
-    testTypecheck(new File(folder), new File(s2))
-  }
-
-  test("SplitThree Parse") {
-    testParse(new File(folder), new File(s3))
-  }
-
-  test("SplitThree Typecheck") {
-    testTypecheck(new File(folder), new File(s3))
-  }
-
-  test("SplitFour Parse") {
-    testParse(new File(folder), new File(s4))
-  }
-
-  test("SplitFour Typecheck") {
-    testTypecheck(new File(folder), new File(s4))
-  }
 }

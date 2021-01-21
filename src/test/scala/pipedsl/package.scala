@@ -11,7 +11,34 @@ package object pipedsl {
   val outputFileBS = "top.sim.out"
 
 
-def testParse(testDir: File, inputFile: File): Unit = {
+  def getListOfFiles(dir: String, extension: String):List[File] = {
+    val d = new File(dir)
+    if (d.exists && d.isDirectory) {
+      d.listFiles.filter(_.isFile).toList.filter { f =>
+        f.getName.endsWith(extension)
+      }
+    } else {
+      List[File]()
+    }
+  }
+
+  def getListOfTests(dir: String): List[File] = {
+    getListOfFiles(dir, ".pdl")
+  }
+
+  def getListOfSims(dir: String): List[File] = {
+    getListOfFiles(dir + "/solutions", ".simsol")
+  }
+
+  def getTestName(f: File): String = {
+    FilenameUtils.removeExtension(f.getName)
+  }
+
+  def getSimFile(dir: File, name: String): File = {
+    new File(Paths.get(dir.getAbsolutePath, "solutions", name + ".simsol").toString)
+  }
+
+  def testParse(testDir: File, inputFile: File): Unit = {
     Main.parse(debug = false, printOutput = true, inputFile, testDir)
     compareFiles(testDir, inputFile, "parse")
     deleteGeneratedFiles(testDir)

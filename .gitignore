@@ -1,4 +1,4 @@
-*.~
+*~
 *.log
 *.aux
 *.pdf
@@ -10,3 +10,4 @@
 *.interpret
 testOutputs/*
 miscnotes
+\#*

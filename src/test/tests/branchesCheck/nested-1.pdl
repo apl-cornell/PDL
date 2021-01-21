@@ -1,13 +1,13 @@
-pipe test(input: int<32>)[] {
-    if (input{0:0} == 1) {
-        if (input{1:1} == 0) {
+pipe test(inarg: int<32>)[] {
+    if (inarg{0:0} == 1) {
+        if (inarg{1:1} == 0) {
             int<2> x = 0<2>;
             int<2> y = 1<2>;
         } else {
             int<2> x = 1<2>;
         }
     } else {
-        if (input{2:2} == 0) {
+        if (inarg{2:2} == 0) {
             int<2> x = 3<2>;
         } else {
             int<2> x = 4<2>;
