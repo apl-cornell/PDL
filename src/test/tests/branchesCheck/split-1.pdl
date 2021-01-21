@@ -8,7 +8,7 @@ pipe test(inarg: int<32>)[] {
             int<2> y = 1<2>;
         }
         case: (inarg{1:0} == 2<2>) {
-            int<2> x = 4<2>;
+            int<2> x = 2<2>;
         }
         default: {
             int<2> x = 1<2>;

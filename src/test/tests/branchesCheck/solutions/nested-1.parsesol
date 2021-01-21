@@ -14,7 +14,7 @@ pipe test(inarg:int<32>)[] {
           int<2> x = 3<2>;
           
       } else {
-          int<2> x = 4<2>;
+          int<2> x = 2<2>;
           
       }
       
