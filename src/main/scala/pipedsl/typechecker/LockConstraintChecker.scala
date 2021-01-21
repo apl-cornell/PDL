@@ -1,12 +1,12 @@
 package pipedsl.typechecker
 
+import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
 import pipedsl.common.Errors.UnexpectedCase
 import pipedsl.common.Locks
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
-import z3.scala.{Z3AST, Z3Context, Z3Solver}
 
 import scala.collection.mutable
 
@@ -53,85 +53,76 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
   
   def checkCommand(c: Command, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
     c match {
-      case CSeq(c1, c2) => {
+      case CSeq(c1, c2) =>
         val l1 = checkCommand(c1, env)
         checkCommand(c2, l1)
-      }
-      case CTBar(c1, c2) => {
+      case CTBar(c1, c2) =>
         val l1 = checkCommand(c1, env)
         checkCommand(c2, l1)
-      }
-      case CSplit(cases, default) => {
+      case CSplit(cases, default) =>
         val df = checkCommand(default, env)
         cases.foldLeft(df)((fenv, cs) => {
           fenv.intersect(checkCommand(cs.body, env))
         })
-      }
-      case CIf(expr, cons, alt) => {
+      case CIf(expr, cons, alt) =>
         predicateGenerator.abstractInterpExpr(expr) match {
           case Some(value) => predicates.push(value);
           case None => predicates.push(ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue()))
         }
         incrementer += 1
-        
+
         val lt = checkCommand(cons, env)
         //makes new environment with all locks implied by true branch
         val tenv = ConditionalLockEnv(lt.getMappedKeys()
-          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), lt(id)))),
+          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> mkImplies(mkAnd(predicates.toSeq: _*), lt(id)))),
           ctx)
         val trueBranch = predicates.pop()
-        
-        predicates.push(ctx.mkNot(trueBranch))
+
+        predicates.push(ctx.mkNot(trueBranch.asInstanceOf[Z3BoolExpr]))
         val lf = checkCommand(alt, env)
         //makes new environment with all locks implied by false branch
         val fenv = ConditionalLockEnv(lf.getMappedKeys()
-          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), lf(id)))),
+          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> mkImplies(mkAnd(predicates.toSeq: _*), lf(id)))),
           ctx)
         predicates.pop()
-        
+
         //Merge the two envs
         tenv.intersect(fenv) //real merge logic lives inside Envrionments.Z3AST
-      }
-      case CSpeculate(predVar, predVal, verify, body) => {
-        //TODO 
+      case _: CSpeculate =>
+        //TODO
         env
-      }
       case CAssign(lhs, rhs) => (lhs, rhs) match {
-        case (_, EMemAccess(mem, expr)) => {
+        case (_, EMemAccess(mem, expr)) =>
           checkAcquired(mem, expr, env)
-        }
         case _ => env
       }
       case CRecv(lhs, rhs) => (lhs, rhs) match {
-        case (EMemAccess(mem, expr), _) => {
+        case (EMemAccess(mem, expr), _) =>
           checkAcquired(mem, expr, env)
-        }
-        case (_, EMemAccess(mem, expr)) => {
+        case (_, EMemAccess(mem, expr)) =>
           checkAcquired(mem, expr, env)
-        }
-        case (_, ECall(mod, _)) => {
+        case (_, ECall(mod, _)) =>
           //TODO Maybe just from null
           checkAcquired(mod, null, env)
-        }
         case _ => throw UnexpectedCase(c.pos)
       }
       case CLockOp(mem, op) => op match {
         case Locks.Free => env //unreachable
         case Locks.Reserved => checkState(mem, env, Free.order) match {
           case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be free before reserving")
-          case Some(value) if !value => env.add(mem,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Reserved)))
+          case Some(value) if !value => env.add(mem,  mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, Reserved)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
         case Locks.Acquired => checkState(mem, env, Reserved.order) match {
           case Some(value) if value =>
             throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be reserved before acquiring")
-          case Some(value) if !value => env.add(mem,  ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Acquired)))
+          case Some(value) if !value => env.add(mem,  mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, Acquired)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
         case Locks.Released => checkState(mem, env, Acquired.order) match {
           case Some(value) if value =>
             throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
-          case Some(value) if !value => env.add(mem, ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), makeEquals(mem, Released)))
+          case Some(value) if !value => env.add(mem, mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, Released)))
           case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
         }
       } //logic inside the lock environment class
@@ -141,27 +132,27 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
   override def checkCircuit(c: Circuit, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
   
   private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], lockStateOrders: Int*): Option[Boolean] = {
-    //Makes an OR of all given lock states
-    val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) => ctx.mkOr(ast, ctx.mkEq(
-      ctx.mkIntConst(constructVarName(mem)),
-      ctx.mkInt(
-        order,
-        ctx.mkIntSort()))))
+    // Makes an OR of all given lock states
+    val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) =>
+      ctx.mkOr(ast, ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(order))))
     
     // Makes all the current predicates true
-    solver.assertCnstr(ctx.mkEq(ctx.mkAnd(predicates.toSeq: _*), ctx.mkTrue()))
+    solver.add(ctx.mkEq(mkAnd(predicates.toSeq: _*), ctx.mkTrue()))
     
-    //Asserts the state of the lock currently, and checks if its possible for the mem to NOT be in the expected lock states
-    solver.assertCnstr(ctx.mkAnd(
-      env(mem),
-      ctx.mkNot(stateAST)))
+    // Asserts the state of the lock currently, and checks if its possible for the mem to NOT be in the expected lock states
+    solver.add(mkAnd(env(mem), ctx.mkNot(stateAST)))
     val check = solver.check()
     solver.reset()
-    check
+    // TODO: it's better to use Z3Status directly.
+    check match {
+      case Z3Status.UNSATISFIABLE => Some(false)
+      case Z3Status.UNKNOWN => None
+      case Z3Status.SATISFIABLE => Some(true)
+    }
   }
   
   private def makeEquals(mem: LockArg, lockState: LockState): Z3AST = {
-    ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(lockState.order, ctx.mkIntSort()))
+    ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(lockState.order))
   }
   
   private def constructVarName(mem: LockArg): String = {
@@ -174,11 +165,19 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     }
     checkState(if (lockTypeMap(currentMod)(mem).equals(General)) LockArg(mem, None) else LockArg(mem, Some(expr.asInstanceOf[EVar])),
       env, 
-      Acquired.order) 
+      Acquired.order)
     match {
       case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
       case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
       case _ => env
     }
   }
+
+  /** Like [[Z3Context.mkAnd]], but automatically casts inputs to [[Z3BoolExpr]]s. */
+  private def mkAnd(expressions: Z3AST *): Z3BoolExpr =
+    ctx.mkAnd(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
+
+  /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
+  private def mkImplies(t1: Z3AST, t2: Z3AST): Z3BoolExpr =
+    ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
 }

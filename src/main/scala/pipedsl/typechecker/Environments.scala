@@ -1,10 +1,10 @@
 package pipedsl.typechecker
 
+import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
 import pipedsl.common.Errors._
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
-import z3.scala.{Z3AST, Z3Context}
 
 object Environments {
 
@@ -168,7 +168,7 @@ object Environments {
                     case Some(value) => {
                         //Just takes the and of both lock states to merge. This works because if lock state 
                         // is unchanged from a branch, it will be "cond implies a and (not cond) implies a"
-                        val and = ctx.mkAnd(value, other(key))
+                        val and = ctx.mkAnd(value.asInstanceOf[Z3BoolExpr] , other(key).asInstanceOf[Z3BoolExpr])
                         newMap = newMap + (key -> and)
                     }
                     case None => newMap = newMap + (key -> other(key))
