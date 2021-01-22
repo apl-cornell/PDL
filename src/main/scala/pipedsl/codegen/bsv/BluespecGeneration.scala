@@ -7,6 +7,8 @@ import pipedsl.common.{Locks, ProgInfo}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
 
+import scala.collection.immutable.ListMap
+
 
 object BluespecGeneration {
 
@@ -238,7 +240,8 @@ object BluespecGeneration {
       m + (e -> BVar(genParamName(e), bsInts.getFifoType(edgeMap(e))))
     })
     //Generate map from existing module parameter names to BSV variables
-    private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](Map())((vars, m) => {
+    private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
+      //use listmap to preserve order
       vars + (m.name -> BVar(m.name.v, translator.toBSVType(m.typ)))
     })
     //mapping memory ids to their associated locks
