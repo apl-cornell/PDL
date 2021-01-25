@@ -62,10 +62,54 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
         checkCommand(c2, l1)
       }
       case CSplit(cases, default) => {
-        val df = checkCommand(default, env)
-        cases.foldLeft(df)((fenv, cs) => {
-          fenv.intersect(checkCommand(cs.body, env))
-        })
+        //This will keep track of the not predicates required for all previously seen cases
+        val runningPredicates = mutable.Stack[Z3AST]()
+        //keeps track of the current environment as iterate through the cases
+        var runningEnv = env
+        //need some special handling for the first case statement
+        var first = true
+        for (caseObj <- cases) {
+          //get abstract interp of condition
+          var currentCond: Z3AST = null
+          predicateGenerator.abstractInterpExpr(caseObj.cond) match {
+            case Some(value) => currentCond = value
+            case None => currentCond = ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue())
+          }
+          //Get the not of the current condition
+          val notCurrentCond = ctx.mkNot(currentCond)
+          if (runningPredicates.isEmpty) {
+            predicates.push(currentCond)
+            runningPredicates.push(notCurrentCond)
+          } else {
+            val runningNot = runningPredicates.pop()
+            //need to add the current condition and the running Not of the previous cases to the predicates
+            predicates.push(ctx.mkAnd(runningNot, currentCond))
+            //add to the current running not
+            runningPredicates.push(ctx.mkAnd(runningNot, notCurrentCond))
+          }
+          val newEnv = checkCommand(caseObj.body, env)
+
+          //makes new environment with all locks implied by this case
+          val tenv = ConditionalLockEnv(newEnv.getMappedKeys()
+            .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), newEnv(id)))),
+            ctx)
+          //remove the predicate used for this case statement to reset for the next case
+          predicates.pop()
+          if (first) {
+            runningEnv = tenv
+          } else {
+            runningEnv = runningEnv.intersect(tenv)
+          }
+          first = false
+        }
+        //For default, all the case statements must be false, so add this to the predicates
+        predicates.push(runningPredicates.pop())
+        val defEnv = checkCommand(default, env)
+        val tenv = ConditionalLockEnv(defEnv.getMappedKeys()
+          .foldLeft[Map[LockArg, Z3AST]](Map())((nenv, id) => nenv + (id -> ctx.mkImplies(ctx.mkAnd(predicates.toSeq: _*), defEnv(id)))),
+          ctx)
+        predicates.pop()
+        tenv.intersect(runningEnv)
       }
       case CIf(expr, cons, alt) => {
         predicateGenerator.abstractInterpExpr(expr) match {

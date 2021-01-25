@@ -1,0 +1,17 @@
+
+pipe test16(input: int<32>)[rf: int<32>[5]] {
+    int<32> y = 3<32>;
+    int<32> x = 0<32>;
+    start(rf);
+    if (x == y + 3<32>) {
+      acquire(rf);
+    }
+    if (x == 10<32>) {
+      acquire(rf);
+    }
+    release(rf);
+    end(rf);
+}
+circuit {
+    r = memory(int<32>, 5);
+}

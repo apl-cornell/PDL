@@ -25,20 +25,20 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
 
   private def simplifyIfs(stg: PStage): Unit = stg match {
     case s: IfStage =>
-      s.trueStages.foreach(t => simplifyIfs(t))
-      s.falseStages.foreach(f => simplifyIfs(f))
+      s.condStages.foreach(stg => stg.foreach(t => simplifyIfs(t)))
+      s.defaultStages.foreach(f => simplifyIfs(f))
       //Check if the branches are combinational
-      val isTrueComb = s.trueStages.head.outEdges.exists(e => e.to == s.joinStage)
-      val isFalseComb = s.falseStages.head.outEdges.exists(e => e.to == s.joinStage)
+      val isBranchesComb = s.condStages.forall(stg => stg.head.outEdges.exists(e => e.to == s.joinStage))
+      val isDefaultComb = s.defaultStages.head.outEdges.exists(e => e.to == s.joinStage)
       //Merge in the first true and false stages since that delay is artificial
-      mergeStages(s, List(s.trueStages.head, s.falseStages.head))
+      mergeStages(s, s.condStages.map(stg => stg.head) :+ s.defaultStages.head)
       //Update IF stage metadata
-      s.trueStages = s.trueStages.tail
-      s.falseStages = s.falseStages.tail
+      s.condStages = s.condStages.map(stg => stg.tail)
+      s.defaultStages= s.defaultStages.tail
       //Get the inputs to the join stage from any conditional edge
       val joinStgInputs = s.joinStage.inEdges.filter(e => e.condRecv.isDefined).head.values
       //Special case here, where we can merge all of the output edges into one
-      if (isTrueComb && isFalseComb) {
+      if (isBranchesComb && isDefaultComb) {
         //join stage can be eliminated completely in this case
         val newOutEdge = PipelineEdge(None, None, s, s.joinStage, joinStgInputs)
         s.removeEdgesTo(s.joinStage)

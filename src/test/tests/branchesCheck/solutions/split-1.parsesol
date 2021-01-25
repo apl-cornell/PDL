@@ -1,0 +1,26 @@
+pipe test(inarg:int<32>)[] {
+  split {
+    case: inarg{1:0} == 0<2> {
+        int<2> x = 3<2>;
+        
+    }
+    case: inarg{1:0} == 1<2> {
+        int<2> x = 0<2>;
+        int<2> y = 1<2>;
+        
+    }
+    case: inarg{1:0} == 2<2> {
+        int<2> x = 2<2>;
+        
+    }
+    default: {
+        int<2> x = 1<2>;
+        
+    }
+  }
+  call test(0<30> ++ x);
+  
+}
+circuit {
+  rf = regfile(int<32>,5);
+}

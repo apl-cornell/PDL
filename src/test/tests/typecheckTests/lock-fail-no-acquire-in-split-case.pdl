@@ -1,0 +1,20 @@
+pipe test22(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    start(rf);
+    split {
+        case: randomBool {
+            acquire(rf);
+        }
+        case: randomBool2 {
+            int<32> c <- rf[0<5>];
+        }
+        case: (input{0:0} == 1) {
+            acquire(rf);
+        }
+    }
+    release(rf);
+    end(rf);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}
