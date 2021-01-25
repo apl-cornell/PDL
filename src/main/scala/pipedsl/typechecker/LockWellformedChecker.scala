@@ -1,8 +1,8 @@
 package pipedsl.typechecker
 
 import pipedsl.common.Errors.MalformedLockTypes
-import pipedsl.common.Locks.{General, LockType, Specific}
-import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Command, Id, LockArg, ModuleDef, Prog}
+import pipedsl.common.Locks.{General, LockGranularity, Specific}
+import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Command, Id, LockArg, LockType, ModuleDef, Prog}
 
 /**
  * A class to check whether a program's locks are well formed. Locks are well formed if 
@@ -11,19 +11,19 @@ import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Com
  */
 class LockWellformedChecker() {
 
-  private var memLockTypeMap: Map[Id, Map[Id, LockType]] = Map().withDefaultValue(Map())
+  private var memLockGranularityMap: Map[Id, Map[Id, LockGranularity]] = Map().withDefaultValue(Map())
   private var currentMod: Id = Id("-invalid-")
 
-  def getModLockTypeMap: Map[Id, Map[Id, LockType]] = {
-    memLockTypeMap
+  def getModLockGranularityMap: Map[Id, Map[Id, LockGranularity]] = {
+    memLockGranularityMap
   }
 
-  private def getLockTypeMap: Map[Id, LockType] = {
-    memLockTypeMap(currentMod)
+  private def getLockGranularityMap: Map[Id, LockGranularity] = {
+    memLockGranularityMap(currentMod)
   }
 
-  private def updateLockTypeMap(lid: Id, lt: LockType): Unit = {
-    memLockTypeMap = memLockTypeMap.updated(currentMod, getLockTypeMap + (lid -> lt))
+  private def updateLockGranularityMap(lid: Id, lt: LockGranularity): Unit = {
+    memLockGranularityMap = memLockGranularityMap.updated(currentMod, getLockGranularityMap + (lid -> lt))
   }
 
   /** 
@@ -51,15 +51,17 @@ class LockWellformedChecker() {
     case CSplit(cases, default) =>
       val s1 = cases.foldLeft[Set[LockArg]](lockArgs)((s, c) => checkCommand(c.body, s))
       checkCommand(default, s1)
-    case CLockOp(mem, _) =>
-      if (getLockTypeMap.contains(mem.id) && !getLockTypeMap(mem.id).equals(getLockType(mem)))
+    case c@CLockOp(mem, _, _) =>
+      if (getLockGranularityMap.contains(mem.id) && !getLockGranularityMap(mem.id).equals(getLockGranularity(mem)))
         throw MalformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
-      else updateLockTypeMap(mem.id, getLockType(mem))
+      else updateLockGranularityMap(mem.id, getLockGranularity(mem))
+      c.isSpecific = getLockGranularity(mem) == Specific
       lockArgs + mem
     case _ => lockArgs
+
   }
   
-  private def getLockType(lockArg: LockArg): LockType = lockArg.evar match {
+  private def getLockGranularity(lockArg: LockArg): LockGranularity = lockArg.evar match {
     case Some(_) => Specific
     case None => General
   }

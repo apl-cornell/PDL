@@ -1,6 +1,6 @@
 package pipedsl.common
 
-import pipedsl.common.Locks.LockType
+import pipedsl.common.Locks.LockGranularity
 import pipedsl.common.Syntax.{Id, Prog}
 
 //A holder class for metadata about programs that we want to pass between stages, etc.
@@ -15,7 +15,7 @@ class ProgInfo(val p: Prog) {
     modInfo(mod)
   }
 
-  def addLockInfo(locktypeinfo: Map[Id, Map[Id, LockType]]): Unit = {
+  def addLockInfo(locktypeinfo: Map[Id, Map[Id, LockGranularity]]): Unit = {
     locktypeinfo.keys.foreach(m => {
       modInfo(m).setLockTypes(locktypeinfo(m))
     })
@@ -23,12 +23,12 @@ class ProgInfo(val p: Prog) {
 
   class ModInfo {
 
-    private var lockType: Map[Id, LockType] = Map()
+    private var lockType: Map[Id, LockGranularity] = Map()
 
-    def setLockTypes(lockTypes: Map[Id, LockType]): Unit = {
+    def setLockTypes(lockTypes: Map[Id, LockGranularity]): Unit = {
       lockType = lockTypes
     }
-    def getLockTypes: Map[Id, LockType] = lockType
+    def getLockTypes: Map[Id, LockGranularity] = lockType
   }
 
 }

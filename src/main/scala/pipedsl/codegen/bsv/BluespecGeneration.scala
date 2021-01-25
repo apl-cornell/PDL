@@ -711,7 +711,7 @@ object BluespecGeneration {
       )
       case CLockStart(_) => None
       case CLockEnd(_) => None
-      case CLockOp(_, _) => None
+      case CLockOp(_, _, _) => None
       case CCheck(_) => None
       case CEmpty => None
       case _: ISpeculate => None
@@ -809,7 +809,7 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
-      case CLockOp(mem, op) => op match {
+      case CLockOp(mem, op,_) => op match {
         case pipedsl.common.Locks.Free => None
         case pipedsl.common.Locks.Reserved =>
           Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "res", List(translator.toBSVVar(threadIdVar)))))

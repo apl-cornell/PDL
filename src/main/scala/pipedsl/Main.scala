@@ -74,9 +74,11 @@ object Main {
       LockRegionChecker.check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
-      pinfo.addLockInfo(lockWellformedChecker.getModLockTypeMap)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockTypeMap)
+      pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap)
       lockChecker.check(recvProg, None)
+      val lockOperationTypeChecker = new LockOperationTypeChecker()
+      lockOperationTypeChecker.check(recvProg)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)

@@ -82,7 +82,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case CLockEnd(mod) => env.add(mod, Released)
       //can only reserve locks insisde of the relevant lock region
       //other lock ops can be outside of this pass
-    case CLockOp(mem, op) if op == Reserved =>
+    case CLockOp(mem, op, _) if op == Reserved =>
       if (env(mem.id) != Acquired) {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }

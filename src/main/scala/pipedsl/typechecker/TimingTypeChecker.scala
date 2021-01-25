@@ -88,7 +88,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       }
     case CLockStart(_) => (vars, nextVars)
     case CLockEnd(_) => (vars, nextVars)
-    case CLockOp(mem, _) =>
+    case CLockOp(mem, _, _) =>
       if (mem.evar.isDefined) {
         checkExpr(mem.evar.get, vars, isRhs = true)
       }

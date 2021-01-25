@@ -249,7 +249,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case _: TModType => tenv
         case _: TMemType => tenv
       }
-    case CLockOp(mem, _) => {
+    case CLockOp(mem, _, _) => {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case t: TModType =>
           if (mem.evar.isDefined) throw UnexpectedType(t.pos, "address lock operation", "Memory Type", t)

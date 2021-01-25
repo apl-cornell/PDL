@@ -36,7 +36,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def translateLockOps(stg: PStage): Unit = {
     val (lockCmds, notlockCmds) = stg.getCmds.partition { case _: CLockOp => true; case _ => false }
     val lockmap = lockCmds.foldLeft(Map[LockArg, List[Command]]())((m, lc) => lc match {
-      case c@CLockOp(mem, _) => updateListMap(m, mem, translateOp(c))
+      case c@CLockOp(mem, _, _) => updateListMap(m, mem, translateOp(c))
       case _ => throw UnexpectedCommand(lc)
     })
     val newlockcmds = lockmap.keys.foldLeft(List[Command]())((cs, lid) => {

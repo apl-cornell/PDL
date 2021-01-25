@@ -150,10 +150,10 @@ class Parser extends RegexParsers with PackratParsers {
       check |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
-      "acquire" ~> parens(lockArg) ^^ { i => CSeq(CLockOp(i, Reserved), CLockOp(i, Acquired)) } |
-      "reserve" ~> parens(lockArg) ^^ { i => CLockOp(i, Reserved)} |
-      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired) } |
-      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released)} |
+      "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t), CLockOp(i, Acquired, t)) } |
+      "reserve" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CLockOp(i, Reserved, t)} |
+      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired, None) } |
+      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None)} |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => COutput(e)) |
       "print" ~> parens(variable) ^^ (e => CPrint(e)) |
@@ -162,6 +162,11 @@ class Parser extends RegexParsers with PackratParsers {
   
   lazy val lockArg: P[LockArg] = positioned { 
     iden ~ brackets(variable).? ^^ {case i ~ v => LockArg(i, v)}
+  }
+
+  lazy val lockType: P[LockType] = positioned {
+    "READ" ^^ {_ => LockRead()} |
+    "WRITE" ^^ {_ => LockWrite()}
   }
 
   lazy val blockCmd: P[Command] = positioned {

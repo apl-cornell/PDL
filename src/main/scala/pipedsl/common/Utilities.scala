@@ -48,7 +48,7 @@ object Utilities {
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
-    case CLockOp(mem, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
+    case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
     case CSpeculate(predVar, predVal, verify, body) =>
      getUsedVars(predVal) ++ getAllVarNames(verify) ++ getAllVarNames(body) + predVar.id
     case CCheck(predVar) => Set(predVar)
@@ -110,7 +110,7 @@ object Utilities {
       case e:EMemAccess => getUsedVars(e)
       case _ => Set()
     })
-    case CLockOp(mem, _) => if (mem.evar.isDefined) Set(mem.evar.get.id) else Set()
+    case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.evar.get.id) else Set()
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)

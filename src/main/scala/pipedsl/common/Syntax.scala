@@ -22,6 +22,10 @@ object Syntax {
     sealed trait SpeculativeAnnotation {
       var maybeSpec: Boolean = false
     }
+    sealed trait LockInfoAnnotation {
+      var memOpType: Option[LockType] = None
+      var isSpecific: Boolean = false
+    }
   }
 
   object Latency extends Enumeration {
@@ -173,8 +177,10 @@ object Syntax {
     }
   }
   
-  case class LockArg(id: Id, evar: Option[EVar]) extends Positional
-
+  case class LockArg(id: Id, evar: Option[EVar]) extends Positional with LockInfoAnnotation
+  sealed trait LockType extends Positional
+  case class LockRead() extends LockType
+  case class LockWrite() extends LockType
   case object EInvalid extends Expr
   case class EIsValid(ex: Expr) extends Expr
   case class EFromMaybe(ex: Expr) extends Expr
@@ -185,7 +191,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr) extends Expr
+  case class EMemAccess(mem: Id, index: Expr) extends Expr with LockInfoAnnotation
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
@@ -200,10 +206,10 @@ object Syntax {
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: EVar, rhs: Expr) extends Command {
+  case class CAssign(lhs: EVar, rhs: Expr) extends Command with LockInfoAnnotation {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CRecv(lhs: Expr, rhs: Expr) extends Command {
+  case class CRecv(lhs: Expr, rhs: Expr) extends Command with LockInfoAnnotation {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CPrint(evar: EVar) extends Command
@@ -212,7 +218,7 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
-  case class CLockOp(mem: LockArg, op: LockState) extends Command
+  case class CLockOp(mem: LockArg, op: LockState, lockType: Option[LockType]) extends Command with LockInfoAnnotation
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command

@@ -19,7 +19,7 @@ import scala.collection.mutable
  * possible, the type checking fails.
  */
 //TODO: Make error case classes
-class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, Map[Id, LockType]]) extends TypeChecks[LockArg, Z3AST] {
+class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, Map[Id, LockGranularity]]) extends TypeChecks[LockArg, Z3AST] {
   
   private val ctx: Z3Context = new Z3Context()
   private val solver: Z3Solver = ctx.mkSolver()
@@ -150,6 +150,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           checkAcquired(mod, null, env)
         case _ => throw UnexpectedCase(c.pos)
       }
+<<<<<<< HEAD
 
       case CLockOp(mem, op) =>
         val expectedLockState = op match {
