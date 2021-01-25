@@ -233,5 +233,7 @@ reservations made before the checkpoint (i.e., they're going to be used whether 
 Although, in practice, we should always be able to resolve this before freeing write locks (not necessarily read locks),
 since we require in-order _free_ operations w/ the R/W API.
 
-
+Using _checkpoint_ and _resolve_ is necessary whenever reservations may be made speculatively. If the stages containing
+the relevant lock operations _may be speculative_ then checkpoints must also be used when making reservations for this memory.
+This ensures that a checkpoint will always exist, should a rollback due to misspeculation be necessary.
 
