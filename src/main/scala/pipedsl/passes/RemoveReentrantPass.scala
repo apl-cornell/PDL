@@ -11,11 +11,17 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
 
   override def run(stgs: List[PStage]): List[PStage] = {
     val (maybeResIns, _) = worklist(flattenStageList(stgs), MaybeReservedHandles)
-    flattenStageList(stgs).foreach(s => convertLockOps(s, maybeResIns(s.name)))
+    var maybeResInfo = maybeResIns
+    flattenStageList(stgs).foreach(s => maybeResInfo = convertLockOps(s, maybeResInfo))
     stgs
   }
 
-  private def convertLockOps(stg: PStage, maybeRes: DFMap[Set[LockHandleInfo]]): Unit = {
+  //returns the updated mappings for new handle variables (releasing locks requires
+  //updating handle variables and thus renaming them
+  private def convertLockOps(stg: PStage, resMap: DFMap[Map[Id, Set[LockHandleInfo]]]):
+    DFMap[Map[Id, Set[LockHandleInfo]]] = {
+    var result = resMap
+    val maybeRes = resMap(stg.name)
     var newRes = maybeRes
     var newCmds = List[Command]()
     stg.getCmds.foreach {
@@ -52,10 +58,11 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
       case c@IReleaseLock(larg, handle) if larg.evar.isDefined =>
         val aliases = newRes.getOrElse(larg.id, Set()).filterNot(alias => alias._1 == larg.evar.get)
         if (aliases.nonEmpty) {
-          //release if no alias other than self, otherwise set handle to invalid
-          val aliasAny = validAliasAny(larg.evar.get, aliases)
+          //release if no alias other than self, rename handle and set to invalid
           val aliasnone = aliasNone(larg.evar.get, aliases)
-          newCmds = newCmds :+ ICondCommand(aliasAny, List(IAssignLock(handle, EInvalid)))
+          val newHandle = getReassignedHandle(handle)
+          result = renameHandleVariable(handle, newHandle, result)
+          newCmds = newCmds :+ IAssignLock(newHandle, EInvalid, Some(handle))
           newCmds = newCmds :+ ICondCommand(aliasnone, List(c))
         } else {
           //just run the command as normal
@@ -71,6 +78,7 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
       case c@_ => newCmds = newCmds :+ c
     }
     stg.setCmds(newCmds)
+    result
   }
 
   private def validAliasAny(addr: EVar, aliases: Iterable[LockHandleInfo]): Expr = {
@@ -90,12 +98,12 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
     }))
   }
   //if (addr == aliasaddr && isValid(aliasHandle) {
-  //  newHandle = fromMaybe(0, aliasHandle)
+  //  newHandle = aliasHandle
   //}
   private def assignAlias(addr: EVar, newHandle: EVar, aliasInfo: LockHandleInfo): Command = {
     val aliasCond = AndOp(EIsValid(aliasInfo._2), EqOp(addr, aliasInfo._1))
     ICondCommand(aliasCond, List(
-      IAssignLock(newHandle, EFromMaybe(aliasInfo._2))
+      IAssignLock(newHandle, aliasInfo._2, None)
     ))
   }
 
@@ -105,5 +113,33 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
     ICondCommand(aliasCond, List(
       ICheckLockOwned(lockArg, aliasInfo._2)
     ))
+  }
+
+  private def getReassignedHandle(handle: EVar): EVar = {
+    val newId = Id(handle.id.v + "_done")
+    newId.typ = handle.id.typ
+    val newVar = EVar(newId)
+    newVar.typ = handle.typ
+    newVar
+  }
+
+  //changes the name of handle variables used to generate alias checks in all stages
+  private def renameHandleVariable(oldN: EVar, newN: EVar, map: DFMap[Map[Id, Set[LockHandleInfo]]]):
+    DFMap[Map[Id, Set[LockHandleInfo]]] = {
+    var result: DFMap[Map[Id, Set[LockHandleInfo]]] = Map()
+    map.foreachEntry((stg, mayberes) => {
+      var maybeResInfo: Map[Id, Set[LockHandleInfo]] = Map()
+      mayberes.foreachEntry((largid, aliases) => {
+          val renamedAliasHandles = aliases.map( linfo => {
+            val addr = linfo._1
+            val handle = linfo._2
+            val newhandle = if (handle == oldN) { newN } else { handle }
+            (addr, newhandle)
+          })
+          maybeResInfo = maybeResInfo + (largid -> renamedAliasHandles)
+      })
+      result = result + (stg -> maybeResInfo)
+    })
+    result
   }
 }

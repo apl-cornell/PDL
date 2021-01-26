@@ -770,11 +770,13 @@ object BluespecGeneration {
         Some(BDecl(translator.toBSVVar(handle), None))
       } else { None }
       case IReserveLock(handle, _) => Some(
-        BDecl(translator.toBSVVar(handle), None)
+        BDecl(translator.toBSVVar(handle), Some(BInvalid))
       )
-      case IAssignLock(handle, _) => Some(
-        BDecl(translator.toBSVVar(handle), None)
-      )
+      case IAssignLock(handle, _, default) => Some(
+        BDecl(translator.toBSVVar(handle), default match {
+          case Some(value) =>Some(translator.toBSVExpr(value))
+          case None =>None
+        }))
       case IMemSend(handle, _, _, _, _) =>
         Some(BDecl(translator.toBSVVar(handle), None))
       case _ => None
@@ -862,7 +864,7 @@ object BluespecGeneration {
         BInvokeAssign(translator.toBSVVar(handle),
           bsInts.getReserve(lockParams(mem.id), translator.toBSVVar(mem.evar)))
       )
-      case IAssignLock(handle, src) => Some(
+      case IAssignLock(handle, src, _) => Some(
         BAssign(translator.toBSVVar(handle), translator.toBSVExpr(src))
       )
       case IReleaseLock(mem, handle) => Some(

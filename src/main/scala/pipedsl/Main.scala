@@ -106,10 +106,10 @@ object Main {
       new ConvertAsyncPass(n).run(stgs)
       //Convert lock ops into ops that track explicit handles
       LockOpTranslationPass.run(stgs)
-      //Must be done after all passes that introduce new variables
-      AddEdgeValuePass.run(stgs)
       //Add in extra conditionals to ensure address locks are not double acquired
       RemoveReentrantPass.run(stgs)
+      //Must be done after all passes that introduce new variables
+      AddEdgeValuePass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
       val newstgs = CollapseStagesPass.run(stgs)
       //clean up lock ops that need to be merged at this point
