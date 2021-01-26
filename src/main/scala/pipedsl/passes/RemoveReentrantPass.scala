@@ -4,6 +4,7 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.{DFMap, MaybeReservedHandles, worklist}
 import pipedsl.common.Locks.LockHandleInfo
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities
 import pipedsl.common.Utilities.{flattenStageList, updateSetMap}
 import pipedsl.passes.Passes.StagePass
 
@@ -61,7 +62,7 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
           //release if no alias other than self, rename handle and set to invalid
           val aliasnone = aliasNone(larg.evar.get, aliases)
           val newHandle = getReassignedHandle(handle)
-          result = renameHandleVariable(handle, newHandle, result)
+          result = renameHandleVariable(handle, newHandle, stg, result)
           newCmds = newCmds :+ IAssignLock(newHandle, EInvalid, Some(handle))
           newCmds = newCmds :+ ICondCommand(aliasnone, List(c))
         } else {
@@ -124,12 +125,15 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
   }
 
   //changes the name of handle variables used to generate alias checks in all stages
-  private def renameHandleVariable(oldN: EVar, newN: EVar, map: DFMap[Map[Id, Set[LockHandleInfo]]]):
+  private def renameHandleVariable(oldN: EVar, newN: EVar, curstg: PStage, map: DFMap[Map[Id, Set[LockHandleInfo]]]):
     DFMap[Map[Id, Set[LockHandleInfo]]] = {
     var result: DFMap[Map[Id, Set[LockHandleInfo]]] = Map()
+    val reachable = Utilities.getReachableStages(curstg).map(s => s.name).toSet
     map.foreachEntry((stg, mayberes) => {
       var maybeResInfo: Map[Id, Set[LockHandleInfo]] = Map()
-      mayberes.foreachEntry((largid, aliases) => {
+      if (reachable.contains(stg)) {
+        //only update handles in reachable future stages
+        mayberes.foreachEntry((largid, aliases) => {
           val renamedAliasHandles = aliases.map( linfo => {
             val addr = linfo._1
             val handle = linfo._2
@@ -137,7 +141,11 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
             (addr, newhandle)
           })
           maybeResInfo = maybeResInfo + (largid -> renamedAliasHandles)
-      })
+          })
+      } else {
+        //else leave the alias info as is
+        maybeResInfo = mayberes
+      }
       result = result + (stg -> maybeResInfo)
     })
     result
