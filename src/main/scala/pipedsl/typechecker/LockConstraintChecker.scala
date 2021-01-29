@@ -43,7 +43,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     //At end of execution all locks must be free or released
     finalenv.getMappedKeys().foreach(id => {
       checkState(id, finalenv, Released.order, Free.order) match {
-        case Some(value) if value => 
+        case Z3Status.SATISFIABLE =>
           throw new RuntimeException("We want everything at end to be free or released")
         case _ => 
       }
@@ -56,9 +56,11 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
       case CSeq(c1, c2) =>
         val l1 = checkCommand(c1, env)
         checkCommand(c2, l1)
+
       case CTBar(c1, c2) =>
         val l1 = checkCommand(c1, env)
         checkCommand(c2, l1)
+
       case CSplit(cases, default) =>
         //This will keep track of the not predicates required for all previously seen cases
         val runningPredicates = mutable.Stack[Z3AST]()
@@ -108,6 +110,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           ctx)
         predicates.pop()
         tenv.intersect(runningEnv)
+
       case CIf(expr, cons, alt) =>
         predicateGenerator.abstractInterpExpr(expr) match {
           case Some(value) => predicates.push(value);
@@ -132,14 +135,17 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
 
         //Merge the two envs
         tenv.intersect(fenv) //real merge logic lives inside Envrionments.Z3AST
+
       case _: CSpeculate =>
         //TODO
         env
+
       case CAssign(lhs, rhs) => (lhs, rhs) match {
         case (_, EMemAccess(mem, expr)) =>
           checkAcquired(mem, expr, env)
         case _ => env
       }
+
       case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem, expr), _) =>
           checkAcquired(mem, expr, env)
@@ -150,32 +156,29 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           checkAcquired(mod, null, env)
         case _ => throw UnexpectedCase(c.pos)
       }
-      case CLockOp(mem, op) => op match {
-        case Locks.Free => env //unreachable
-        case Locks.Reserved => checkState(mem, env, Free.order) match {
-          case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be free before reserving")
-          case Some(value) if !value => env.add(mem,  mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, Reserved)))
-          case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
+
+      case CLockOp(mem, op) =>
+        val expectedLockState = op match {
+          case Locks.Free => throw new IllegalStateException() // TODO: is this right?
+          case Locks.Reserved => Free
+          case Locks.Acquired => Reserved
+          case Locks.Released => Acquired
         }
-        case Locks.Acquired => checkState(mem, env, Reserved.order) match {
-          case Some(value) if value =>
-            throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be reserved before acquiring")
-          case Some(value) if !value => env.add(mem,  mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, Acquired)))
-          case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
-        }
-        case Locks.Released => checkState(mem, env, Acquired.order) match {
-          case Some(value) if value =>
-            throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
-          case Some(value) if !value => env.add(mem, mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, Released)))
-          case None => throw new RuntimeException("An error occurred while attempting to solve the constraints")
-        }
-      } //logic inside the lock environment class
+      checkState(mem, env, expectedLockState.order) match {
+        case Z3Status.UNSATISFIABLE =>
+          env.add(mem, mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, op)))
+        case Z3Status.UNKNOWN =>
+          throw new RuntimeException("An error occurred while attempting to solve the constraints")
+        case Z3Status.SATISFIABLE =>
+          throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
+      }
+
       case _ => env
     }
   }
   override def checkCircuit(c: Circuit, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
   
-  private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], lockStateOrders: Int*): Option[Boolean] = {
+  private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], lockStateOrders: Int*): Z3Status = {
     // Makes an OR of all given lock states
     val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) =>
       ctx.mkOr(ast, ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(order))))
@@ -187,12 +190,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     solver.add(mkAnd(env(mem), ctx.mkNot(stateAST)))
     val check = solver.check()
     solver.reset()
-    // TODO: it's better to use Z3Status directly.
-    check match {
-      case Z3Status.UNSATISFIABLE => Some(false)
-      case Z3Status.UNKNOWN => None
-      case Z3Status.SATISFIABLE => Some(true)
-    }
+    check
   }
   
   private def makeEquals(mem: LockArg, lockState: LockState): Z3AST = {
@@ -211,9 +209,12 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
       env, 
       Acquired.order)
     match {
-      case Some(value) if value => throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
-      case None => throw new RuntimeException("AN error occurred while attempting to solve the constraints")
-      case _ => env
+      case Z3Status.SATISFIABLE =>
+        throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
+      case Z3Status.UNKNOWN =>
+        throw new RuntimeException("An error occurred while attempting to solve the constraints")
+      case Z3Status.UNSATISFIABLE =>
+        env
     }
   }
 
