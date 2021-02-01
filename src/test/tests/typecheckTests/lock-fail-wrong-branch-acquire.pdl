@@ -1,0 +1,21 @@
+pipe test18(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    bool a = true;
+    bool b = false;
+    start(rf);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            acquire(rf);
+        }
+    }
+    int<32> c <- rf[0<5>];
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            release(rf);
+        }
+    }
+    end(rf);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

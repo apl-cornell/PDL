@@ -165,7 +165,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val blockCmd: P[Command] = positioned {
-    block | conditional | speculate
+    block | conditional | speculate | split
   }
 
   lazy val speculate: P[Command] = positioned {

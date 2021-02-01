@@ -26,7 +26,7 @@ then
 else
     WDIR="$2"
 fi
-
+SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [ -d "$WDIR" ]
 then
     pushd "$WDIR"
@@ -71,5 +71,5 @@ case "$CMD" in
 	usage
 	;;
 esac
+eval "popd ; exit $?"
 
-popd

@@ -1,0 +1,21 @@
+pipe test(inarg: int<32>)[rf: int<32>[5]] {
+    start(rf);
+    acquire(rf);
+    end(rf);
+    if (inarg{0:0} == 1) {
+        rf[inarg{4:0}] <- inarg;
+        ---
+        int<32> y = inarg;
+        ---
+        int<32> z = inarg;
+    } else {
+        int<32> x = inarg;
+    }
+    release(rf);
+    ---
+    call test(inarg + 1<32>);
+}
+
+circuit {
+    rf = regfile(int<32>, 5);
+}

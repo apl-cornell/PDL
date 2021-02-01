@@ -81,7 +81,7 @@ object Utilities {
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
-    case IAssignLock(handle, _) => Set(handle.id)
+    case IAssignLock(handle, _, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -129,7 +129,8 @@ object Utilities {
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, _) => Set()
-    case IAssignLock(_, src) => getUsedVars(src)
+    case IAssignLock(_, src, default) => getUsedVars(src) ++
+      (if (default.isDefined) getUsedVars(default.get) else Set())
     case ICheckLockOwned(_, handle) => Set(handle.id)
     case IReleaseLock(_, handle) => Set(handle.id)
     case ILockNoOp(_) => Set()
@@ -160,6 +161,7 @@ object Utilities {
     case ECast(_, exp) => getUsedVars(exp)
     case EFromMaybe(ex) => getUsedVars(ex)
     case EIsValid(ex) => getUsedVars(ex)
+    case EFromMaybe(ex) => getUsedVars(ex)
     case _ => Set()
   }
 
@@ -212,14 +214,14 @@ object Utilities {
 
   def flattenStageList(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
-      case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
+      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.map(stg => flattenStageList(stg)).flatten ++ flattenStageList(s.defaultStages)
       case s: DAGSyntax.SpecStage => (l :+ s) ++ flattenStageList(s.verifyStages) ++ flattenStageList(s.specStages)
       case _ => l :+ stg
     })
   }
   def flattenIfStages(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
-      case s: DAGSyntax.IfStage => (l :+ s) ++ flattenStageList(s.trueStages) ++ flattenStageList(s.falseStages)
+      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.map(stg => flattenStageList(stg)).flatten ++ flattenStageList(s.defaultStages)
       case _ => l :+ stg
     })
   }
