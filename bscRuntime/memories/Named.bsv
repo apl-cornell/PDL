@@ -11,6 +11,8 @@ export CombMem(..);
 export AsyncMem(..);
 export MemId(..);
 
+export mkRenameRF;
+
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
 //these are the memory interfaces we suppport
@@ -39,11 +41,11 @@ interface AsyncMem#(type elem, type addr, type name);
 endinterface
    
 //TODO make physical size a parameter (rather than dictated by type of name)
-module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem, addr, name)) provisos
+module mkRenameRF#(parameter Integer aregs, parameter Integer pregs, parameter Bool init, parameter String fileInit)(CombMem#(elem, addr, name)) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
     PrimIndex#(addr, an), PrimIndex#(name, nn));
    
-   RegFile#(name, elem) regfile <- (init) ? mkRegFileFullLoad(fileInit) : mkRegFileFull();
+   RegFile#(name, elem) regfile <- (init) ? mkRegFileLoad(fileInit, 0, fromInteger(pregs - 1)) : mkRegFile(0, fromInteger(pregs - 1));
    
    //Initial mapping for all arch regs is identity
    module mkMapEntry#(Integer i)(Reg#(name));
@@ -51,23 +53,25 @@ module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem
       return r;
    endmodule
 
-   
-   //Initially the arch-numbered physical registers are both NOT FREE and NOT BUSY, others are
-   Integer numArch = valueOf(TExp#(szAddr));
-   module mkFreeEntry#(Integer i)(Reg#(Bool));
-      let b = i < numArch ? False : True;
+      module mkFreeEntry#(Integer i)(Reg#(Bool));
+      let b = i < aregs ? False : True;
       let r <- mkReg(b);
+      return r;
+   endmodule
+   
+   module mkOldEntry#(Integer i)(Reg#(name));
+      let r <- mkReg(fromInteger(i));
       return r;
    endmodule
    
    Vector#(TExp#(szAddr), Reg#(name)) namefile <- genWithM(mkMapEntry);
    Vector#(TExp#(szName), Reg#(Bool)) busyfile <- genWithM(mkFreeEntry);
    Vector#(TExp#(szName), Reg#(Bool)) freeList <- genWithM(mkFreeEntry);
-   Vector#(TExp#(szName), Reg#(name)) oldNames <- replicateM(mkReg(fromInteger(0)));
+   Vector#(TExp#(szName), Reg#(name)) oldNames <- genWithM(mkOldEntry);
 
    function Maybe#(name) getFreeName();
       Maybe#(name) result = tagged Invalid;
-      for (Integer i = 0; i < valueOf(TExp#(szName)); i = i + 1) begin
+      for (Integer i = 0; i < pregs; i = i + 1) begin
 	 if (result matches tagged Invalid &&& freeList[i])
 	    result = tagged Valid fromInteger(i);
       end
@@ -91,8 +95,10 @@ module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem
    //and save old mapping for arch 
    //busyfile[n] = True is an invariant that should hold here
    method ActionValue#(name) allocName(addr a) if (getFreeName matches tagged Valid.n);   
+      busyfile[n] <= True;
       freeList[n] <= False;
       oldNames[n] <= namefile[a];
+      namefile[a] <= n;
       return n;
    endmethod
    
@@ -105,8 +111,8 @@ module mkRenameRF#(parameter Bool init, parameter String fileInit)(CombMem#(elem
    //Frees register that this one overwrote
    //And reset its busy status
    method Action commit(name n);
+      $display("Freed name %d at %t", oldNames[n], $time());
       freeList[oldNames[n]] <= True;
-      busyfile[oldNames[n]] <= True;
    endmethod
    
 endmodule
