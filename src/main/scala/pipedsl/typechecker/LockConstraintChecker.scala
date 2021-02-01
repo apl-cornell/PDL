@@ -139,13 +139,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
       case _: CSpeculate =>
         //TODO
         env
-
-      case CAssign(lhs, rhs) => (lhs, rhs) match {
-        case (_, EMemAccess(mem, expr)) =>
-          checkAcquired(mem, expr, env)
-        case _ => env
-      }
-
+      case CAssign(_, rhs) => checkExpr(rhs, env)
       case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem, expr), _) =>
           checkAcquired(mem, expr, env)
@@ -176,10 +170,26 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
       case _ => env
     }
   }
+  private def checkExpr(e: Expr, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = e match {
+    case EUop(_, ex) => checkExpr(ex, env)
+    case EBinop(_, e1, e2) =>
+      val env1 = checkExpr(e1, env)
+      checkExpr(e2, env1)
+    case EMemAccess(mem, index) => checkAcquired(mem, index, env)
+    case ETernary(cond, tval, fval) =>
+      val env1 = checkExpr(cond, env)
+      val env2 = checkExpr(tval, env1)
+      checkExpr(fval, env2)
+    case EApp(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e))
+    case ECall(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e))
+    case ECast(_, exp) => checkExpr(exp, env)
+    case _ => env
+  }
   override def checkCircuit(c: Circuit, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
   
   private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], lockStateOrders: Int*): Z3Status = {
-    // Makes an OR of all given lock states
+
+  // Makes an OR of all given lock states
     val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) =>
       ctx.mkOr(ast, ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(order))))
     
