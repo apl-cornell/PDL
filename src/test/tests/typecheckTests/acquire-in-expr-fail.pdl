@@ -1,0 +1,15 @@
+//Expected Fail
+pipe test6(input: int<32>)[rf: int<32>[5]<c,s>] {
+    start(rf);
+    reserve(rf);
+    end(rf);
+    ---
+    int<32> x = rf[0<5>] + input;
+    ---
+    block(rf);
+    release(rf);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

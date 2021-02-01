@@ -10,6 +10,9 @@ pipe test22(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
         case: (input{0:0} == 1) {
             acquire(rf);
         }
+        default: {
+            acquire(rf);
+        }
     }
     release(rf);
     end(rf);
