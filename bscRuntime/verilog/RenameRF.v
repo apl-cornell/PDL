@@ -10,8 +10,8 @@ module RenameRF(CLK,
 		NAME, D_IN, WE,             //write data
 		NAME_1, D_OUT_1,            //read data 1
 		NAME_2, D_OUT_2,            //read data 2
-		BUSY_NAME_1, BUSY_OUT_1,    //check valid data 1
-		BUSY_NAME_2, BUSY_OUT_2,    //check valid data 2
+		VALID_NAME_1, VALID_OUT_1,    //check valid data 1
+		VALID_NAME_2, VALID_OUT_2,    //check valid data 2
 		NAME_F, FE                  //free name
 		);
 
@@ -46,10 +46,10 @@ module RenameRF(CLK,
    output [data_width - 1 : 0] D_OUT_2;
 
    //data busy
-   input [name_width - 1 : 0]  BUSY_NAME_1;
-   input [name_width - 1 : 0]  BUSY_NAME_2;
-   output 		       BUSY_OUT_1;   
-   output 		       BUSY_OUT_2;
+   input [name_width - 1 : 0]  VALID_NAME_1;
+   input [name_width - 1 : 0]  VALID_NAME_2;
+   output 		       VALID_OUT_1;   
+   output 		       VALID_OUT_2;
    
    
    //free name
@@ -67,11 +67,24 @@ module RenameRF(CLK,
    //old names
    reg [name_width - 1 : 0]    old[lo_phys:hi_phys];
 
-   //TODO get this by searching freelist (i.e., min index where free[idx] = 1)
-   wire [name_width - 1 : 0]   nextName;
-   wire 		       nextNameValid;
-   assign nextNameValid = |free; //valid if any index is 1
-
+   //priority encoder to pick the next free name from the free list
+   reg [name_width - 1 : 0]   nextName;
+   reg 			      nextNameValid;
+   integer 		       ii = 0;
+   
+   always@(*)
+     begin
+	nextName = 0;
+	nextNameValid = 0;	
+	for(ii = lo_arch; ii<hi_arch && !nextNameValid; ii = ii+1)
+	  begin
+	     if (free[ii])
+	       begin
+		  nextName = ii;
+		  nextNameValid = 1;		  
+	       end
+	  end
+     end
    //Read/alloc names
    assign ALLOC_READY = nextNameValid;
    assign NAME_OUT = nextName;
@@ -82,8 +95,8 @@ module RenameRF(CLK,
    assign D_OUT_1 = phys[NAME_1];
    assign D_OUT_2 = phys[NAME_2];
    //Readiness of data
-   assign BUSY_OUT_1 = busy[BUSY_NAME_1];
-   assign BUSY_OUT_2 = busy[BUSY_NAME_2];   
+   assign VALID_OUT_1 = !busy[VALID_NAME_1];
+   assign VALID_OUT_2 = !busy[VALID_NAME_2];   
    
    //For freeing old name
    wire [name_width - 1 : 0]   oldName;
