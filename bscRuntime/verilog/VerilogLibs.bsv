@@ -1,5 +1,8 @@
 package VerilogLibs;
 
+export CombMem(..);
+export mkRenameRF;
+
 interface CombMem#(type elem, type addr, type name);
    method name readName(addr a); //get name to read data later
    method Bool isValid(name n);  //check if safe to read
@@ -25,8 +28,8 @@ import "BVI" RenameRF =
     parameter hi_phys = pregs;
     
     default_clock clk(CLK, (*unused*) clk_gate);
-    default_reset no_reset;
-    //TODO add reset logic    default_reset rst (RST_N);
+//    default_reset no_reset;
+    default_reset rst (RST);
     
     method NAME_OUT_1 readName(ADDR_1);
     method VALID_OUT_1 isValid(VALID_NAME_1);

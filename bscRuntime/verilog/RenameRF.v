@@ -4,6 +4,7 @@
 `endif
 
 module RenameRF(CLK,
+		RST,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //rename req
 		ADDR_1, NAME_OUT_1,         //read name 1
 		ADDR_2, NAME_OUT_2,         //read name 2
@@ -24,6 +25,8 @@ module RenameRF(CLK,
    parameter hi_phys = 1;
    
    input CLK;
+   input RST;
+   
    //name read/write
    input [addr_width - 1 : 0] ADDR_IN;
    input 		      ALLOC_E;
@@ -61,9 +64,9 @@ module RenameRF(CLK,
    //phys_regfile
    reg [data_width - 1 : 0]    phys[lo_phys:hi_phys];
    //busy file (bit vector, not mem)
-   reg [hi_phys:lo_phys]       busy;
+   reg [hi_phys - 1:lo_phys]       busy;
    //free list
-   reg [hi_phys:lo_phys]       free;
+   reg [hi_phys - 1:lo_phys]       free;
    //old names
    reg [name_width - 1 : 0]    old[lo_phys:hi_phys];
 
@@ -76,7 +79,7 @@ module RenameRF(CLK,
      begin
 	nextName = 0;
 	nextNameValid = 0;	
-	for(ii = lo_arch; ii<hi_arch && !nextNameValid; ii = ii+1)
+	for(ii = lo_phys; ii<hi_phys && !nextNameValid; ii = ii+1)
 	  begin
 	     if (free[ii])
 	       begin
@@ -84,6 +87,10 @@ module RenameRF(CLK,
 		  nextNameValid = 1;		  
 	       end
 	  end
+`ifdef DEBUG
+	$display("nextFreeName %d", nextName);
+	$display("freeNameValid %d", nextNameValid);
+`endif
      end
    //Read/alloc names
    assign ALLOC_READY = nextNameValid;
@@ -102,26 +109,53 @@ module RenameRF(CLK,
    wire [name_width - 1 : 0]   oldName;
    assign oldName = old[NAME_F];
    
-   
+   integer 		       initi;
+   integer 		       initf;
+
+   `ifdef DEBUG
+   always@(posedge CLK)
+     begin
+	$display("FreeList %b", free);
+     end
+   `endif
    //update my stateful elements
    always@(posedge CLK)
      begin
-	if (ALLOC_E && nextNameValid)
-	  begin
-	     busy[nextName] <= `BSV_ASSIGNMENT_DELAY 1;
-	     free[nextName] <= `BSV_ASSIGNMENT_DELAY 0;
-	     old[nextName] <= `BSV_ASSIGNMENT_DELAY names[ADDR_IN];
-	     names[ADDR_IN] <= `BSV_ASSIGNMENT_DELAY nextName;	     
-	  end
-	if (WE)
-	  begin
-	     phys[NAME] <= `BSV_ASSIGNMENT_DELAY D_IN;
-	     busy[NAME] <= `BSV_ASSIGNMENT_DELAY 0;	     
-	  end
-	if (FE)
-	  begin
-	     free[oldName] <= `BSV_ASSIGNMENT_DELAY 1;	     
-	  end
-     end
+     if (!RST)
+       begin
+	  `ifdef DEBUG
+	  $display("Reseting");
+	  `endif
+	  for (initi = lo_arch; initi<hi_arch; initi = initi + 1)
+	    begin
+	       names[initi] <= initi;
+	       free[initi] <= 0;	       
+	    end
+	  for (initf = hi_arch; initf<hi_phys; initf = initf + 1)
+	    begin
+	       free[initf] <= 1;
+	    end
+       end
+     else
+       begin
+	  if (ALLOC_E && nextNameValid)
+	    begin
+	       busy[nextName] <= `BSV_ASSIGNMENT_DELAY 1;
+	       free[nextName] <= `BSV_ASSIGNMENT_DELAY 0;
+	       old[nextName] <= `BSV_ASSIGNMENT_DELAY names[ADDR_IN];
+	       names[ADDR_IN] <= `BSV_ASSIGNMENT_DELAY nextName;	     
+	    end
+	  if (WE)
+	    begin
+	       phys[NAME] <= `BSV_ASSIGNMENT_DELAY D_IN;
+	       busy[NAME] <= `BSV_ASSIGNMENT_DELAY 0;	     
+	    end
+	  if (FE)
+	    begin
+	       free[oldName] <= `BSV_ASSIGNMENT_DELAY 1;	     
+	    end
+       end // else: !if(RST)
+     end // always@ (posedge CLK)
+
    
 endmodule

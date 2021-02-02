@@ -37,6 +37,7 @@ endif
 
 $(B_LIB): $(B_IN)
 	$(BSC) -show-schedule $<
+
 verilog: mk$(OUT).v
 
 %.v: %.bsv
@@ -48,14 +49,16 @@ mk$(OUT).v: $(B_IN)
 .PHONY: sim
 sim: $(B_LIB) $(B_SIM)
 
-	$(BSC) -show-schedule -sim $(B_SIM)
-	$(BSC) -sim -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
+	$(BSC) -show-schedule $(VSIM) $(B_SIM)
+	$(BSC) -verilog -e mk$(OUT) -o mk$(OUT).bexe
+#	$(BSC) $(VSIM) -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
 	./mk$(OUT).bexe > smoke_test_bluesim.out 
 
 .PHONY: clean
 clean:
 	@rm -f *.bi *.bo *.ba 
 	@rm -f *.cxx *.h *.o *.so *.bexe
+	@rm -f mkTop.v
 	@rm -f *.vexe
 	@rm -f *.vcd *~ *.fsdb *.log
 	@rm -f *.sched
