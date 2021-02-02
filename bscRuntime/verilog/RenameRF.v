@@ -129,7 +129,8 @@ module RenameRF(CLK,
 	  for (initi = lo_arch; initi<hi_arch; initi = initi + 1)
 	    begin
 	       names[initi] <= initi;
-	       free[initi] <= 0;	       
+	       free[initi] <= 0;
+	       busy[initi] <= 0;	       
 	    end
 	  for (initf = hi_arch; initf<hi_phys; initf = initf + 1)
 	    begin
