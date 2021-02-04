@@ -36,6 +36,7 @@ module mkTop();
    rule readwrite (rf.isValid(reads.first()));
       writes.deq();
       rf.write(writes.first(), count);
+      count <= count + 1;
       $display("Wrote %d to name %d at %t", count, writes.first(), $time());
       commits.enq(writes.first());
       //reads
@@ -45,8 +46,7 @@ module mkTop();
    endrule
 
    rule commit;
-      if (count > 1000) $finish();	 
-      count <= count + 1;
+      if (count > 1000) $finish();
       rf.commit(commits.first());
       commits.deq();
    endrule
