@@ -38,7 +38,7 @@ endif
 $(B_LIB): $(B_IN)
 	$(BSC) -show-schedule $<
 
-verilog: mk$(OUT).v
+verilog: mk$O(UT).v
 
 %.v: %.bsv
 	$(BSC) -show-schedule -verilog $<
@@ -49,8 +49,8 @@ mk$(OUT).v: $(B_IN)
 .PHONY: sim
 sim: $(B_LIB) $(B_SIM)
 
-	$(BSC) -show-schedule $(VSIM) $(B_SIM)
-	$(BSC) -verilog -e mk$(OUT) -o mk$(OUT).bexe
+	$(BSC) -show-schedule $(DEBUG) $(VSIM) $(B_SIM)
+	$(BSC) $(DEBUG) -verilog -e mk$(OUT) -o mk$(OUT).bexe
 #	$(BSC) $(VSIM) -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
 	./mk$(OUT).bexe > smoke_test_bluesim.out 
 

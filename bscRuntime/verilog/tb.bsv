@@ -8,9 +8,9 @@ module mkTop();
    
    //Test the Renaming Register File a Bit
    CombMem#(UInt#(32), UInt#(5), UInt#(6)) rf <- mkRenameRF(32, 64, False, "");
-   FIFO#(UInt#(6)) writes <- mkSizedFIFO(10);
-   FIFO#(UInt#(6)) reads <- mkSizedFIFO(10);
-   FIFO#(UInt#(6)) commits <- mkSizedFIFO(10);
+   FIFO#(UInt#(6)) writes <- mkSizedFIFO(32);
+   FIFO#(UInt#(6)) reads <- mkSizedFIFO(32);
+   FIFO#(UInt#(6)) commits <- mkSizedFIFO(32);
 
    Reg#(UInt#(5)) arch <- mkReg(0);
    
@@ -49,5 +49,6 @@ module mkTop();
       if (count > 1000) $finish();
       rf.commit(commits.first());
       commits.deq();
+      $display("Freeing old name for %d at %t", commits.first(), $time());
    endrule
 endmodule

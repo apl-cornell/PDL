@@ -23,12 +23,11 @@ import "BVI" RenameRF =
     parameter data_width = valueOf(szElem);
     parameter name_width = valueOf(szName);
     parameter lo_arch = 0;
-    parameter hi_arch = aregs;
+    parameter hi_arch = aregs - 1;
     parameter lo_phys = 0;
-    parameter hi_phys = pregs;
+    parameter hi_phys = pregs - 1;
     
     default_clock clk(CLK, (*unused*) clk_gate);
-//    default_reset no_reset;
     default_reset rst (RST);
     
     method NAME_OUT_1 readName(ADDR_1);

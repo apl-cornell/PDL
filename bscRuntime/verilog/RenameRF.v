@@ -64,9 +64,9 @@ module RenameRF(CLK,
    //phys_regfile
    reg [data_width - 1 : 0]    phys[lo_phys:hi_phys];
    //busy file (bit vector, not mem)
-   reg [hi_phys - 1:lo_phys]       busy;
+   reg [hi_phys : lo_phys]       busy;
    //free list
-   reg [hi_phys - 1:lo_phys]       free;
+   reg [hi_phys : lo_phys]       free;
    //old names
    reg [name_width - 1 : 0]    old[lo_phys:hi_phys];
 
@@ -79,7 +79,7 @@ module RenameRF(CLK,
      begin
 	nextName = 0;
 	nextNameValid = 0;	
-	for(ii = lo_phys; ii<hi_phys && !nextNameValid; ii = ii+1)
+	for(ii = lo_phys; ii<= hi_phys && !nextNameValid; ii = ii+1)
 	  begin
 	     if (free[ii])
 	       begin
@@ -121,18 +121,18 @@ module RenameRF(CLK,
    //update my stateful elements
    always@(posedge CLK)
      begin
-     if (!RST)
+     if (RST == `BSV_RESET_VALUE)
        begin
 	  `ifdef DEBUG
 	  $display("Reseting");
 	  `endif
-	  for (initi = lo_arch; initi<hi_arch; initi = initi + 1)
+	  for (initi = lo_arch; initi <= hi_arch; initi = initi + 1)
 	    begin
 	       names[initi] <= initi;
 	       free[initi] <= 0;
 	       busy[initi] <= 0;	       
 	    end
-	  for (initf = hi_arch; initf<hi_phys; initf = initf + 1)
+	  for (initf = hi_arch + 1; initf <= hi_phys; initf = initf + 1)
 	    begin
 	       free[initf] <= 1;
 	    end
