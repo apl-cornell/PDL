@@ -26,7 +26,6 @@ interface CombMem#(type elem, type addr, type name);
 endinterface
 
 
-//TODO
 //this one is used for asynchronous reads which involve a request and response
 interface AsyncMem#(type elem, type addr, type name);
    method ActionValue#(name) reserveRead(addr a);
@@ -146,19 +145,22 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    let hasOutputReg = False;
    BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
 
-   Vector#(StQSize, Reg#(StQEntry#(addr, elem))) stQ <- replicateM( mkReg(StQEntry { a: unpack(0), d: tagged Invalid, isValid: False }));
-   FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();
-   Vector#(LdQSize, Reg#(LdQEntry#(addr, elem, name))) ldQ <- replicateM( mkReg(LdQEntry { a: unpack(0), d: tagged Invalid, str: tagged Invalid, isValid: False }));
-   Vector#(LdQSize, Reg#(Bool)) ldIssued <- replicateM(mkReg(False));
-   
+   ///Store Stuff
    Reg#(name) stHead <- mkReg(unpack(0));
-   Reg#(name) stIssue <- mkReg(unpack(0));
-   Reg#(name) ldHead <- mkReg(unpack(0));      
-   
-   Bool okToSt = stQ[stHead].isValid == False;
-   Bool okToLd = ldQ[ldHead].isValid == False;
-   
-   
+   Vector#(StQSize, Reg#(Bool)) stQValid <- replicateM (mkReg(False));
+   Vector#(StQSize, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
+   Vector#(StQSize, Reg#(Maybe#(elem))) stQData <- replicateM (mkReg(tagged Invalid));
+   FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();   
+   ///Load Stuff
+   Reg#(name) ldHead <- mkReg(unpack(0));         
+   Vector#(LdQSize, Reg#(Bool)) ldQValid <- replicateM (mkReg(False));
+   Vector#(LdQSize, Reg#(addr)) ldQAddr <- replicateM (mkReg(unpack(0)));
+   Vector#(LdQSize, Reg#(Maybe#(elem))) ldQData <- replicateM (mkReg(tagged Invalid));
+   Vector#(LdQSize, Reg#(Maybe#(name))) ldQStr <- replicateM (mkReg(tagged Invalid));
+   Vector#(LdQSize, Reg#(Bool)) ldQIssued <- replicateM(mkReg(False));   
+
+   Bool okToSt = !stQValid[stHead];
+   Bool okToLd = !ldQValid[ldHead];
 
    //return true if a is older than b, given a queue head (oldest entry) h
    function Bool isOlder(name a, name b, name h);
@@ -184,8 +186,8 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    function Maybe#(name) getMatchingStore(addr a);
       
       Maybe#(name) result = tagged Invalid;
-      for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
-	 if (stQ[i].isValid && stQ[i].a == a)
+      for (Integer i = 0; i < valueOf(StQSize); i = i + 1) begin
+	 if (stQValid[i] && stQAddr[i] == a)
 	    begin
 	       if (result matches tagged Valid.idx)
 		  begin
@@ -198,26 +200,21 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    endfunction
    
    //search starting at the _oldest_ load (which is at head)
-   // function Maybe#(name) getIssuingLoad();
-   //    Maybe#(name) result = tagged Invalid;
-   //    name newest = ldHead - 1;
-   //    for (name l = ldHead; l != newest; l = l + 1) begin
-   // 	 //no result, load is valid, not dependent on a store and not already issued
-   // 	 if (result matches tagged Invalid &&& ldQ[l].isValid &&&
-   // 	    !(isValid(ldQ[l].str)) &&& !ldIssued[l])
-   // 	    result = tagged Valid l;
-   //    end
-   //    if (result matches tagged Invalid &&& ldQ[newest].isValid &&&
-   // 	  !(isValid(ldQ[newest].str)) &&& !ldIssued[newest])
-   // 	 result = tagged Valid newest;
-   //    return result;
-	    
-   // endfunction
-   
    function Maybe#(name) getIssuingLoad();
-      return tagged Invalid;
+      Maybe#(name) result = tagged Invalid;
+      for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
+	 if (ldQValid[i] && !isValid(ldQData[i]) && !isValid(ldQStr[i]) && !ldQIssued[i])
+	    begin
+	       if (result matches tagged Valid.idx)
+		  begin
+		     if (isOlderLoad(fromInteger(i), idx)) result = tagged Valid fromInteger(i);
+		  end
+	       else result = tagged Valid fromInteger(i);
+	    end
+      end
+      return result;
    endfunction
-
+   
    rule issueSt;
       let st = stIssueQ.first();
       memory.put(True, st.a, st.d);
@@ -227,67 +224,69 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    Reg#(Maybe#(name)) nextData <- mkDReg(tagged Invalid);
    
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
-      let ld = ldQ[idx];
-      memory.put(False, ld.a, ?);
+      memory.put(False, ldQAddr[idx], ?);
       nextData <= tagged Valid idx;
-      ldIssued[idx] <= True;
+      ldQIssued[idx] <= True;
    endrule
    
    rule moveLdData (nextData matches tagged Valid.idx);
-      let ld = ldQ[idx];
-      ldQ[idx] <= LdQEntry { a: ld.a, d: tagged Valid memory.read, str: ld.str, isValid: ld.isValid };
+      ldQData[idx] <= tagged Valid memory.read;
    endrule
-   
+      
    method ActionValue#(name) reserveRead(addr a) if (okToLd);
       Maybe#(name) matchStr = getMatchingStore(a);
       Maybe#(elem) data = tagged Invalid;
       //if matching store, copy its data over (which may be invalid)
       if (matchStr matches tagged Valid.idx)
 	 begin
-	    data = stQ[idx].d;
+	    data = stQData[idx];
 	 end
       //If data is valid, then leave matching store invalid so no dependency
       if (data matches tagged Valid.d)
 	 begin
 	    matchStr = tagged Invalid;
 	 end
-      LdQEntry#(addr, elem, name) nentry = LdQEntry { a: a, d: data, str: matchStr, isValid: True };
-      ldQ[ldHead] <= nentry;
+      
+      ldQValid[ldHead] <= True;
+      ldQAddr[ldHead] <= a;
+      ldQData[ldHead] <= data;
+      ldQStr[ldHead] <= matchStr;
+      
       ldHead <= ldHead + 1;
       return ldHead;
    endmethod
    
    method ActionValue#(name) reserveWrite(addr a) if (okToSt);
-      StQEntry#(addr, elem) nentry = StQEntry { a: a, d: tagged Invalid, isValid: True };
-      stQ[stHead] <= nentry;
+      stQValid[stHead] <= True;
+      stQAddr[stHead] <= a;
+      stQData[stHead] <= tagged Invalid;
       stHead <= stHead + 1;
       return stHead;
    endmethod
    
 
    method Action write(name n, elem b);
-      let entry = stQ[n];
-      let nentry = StQEntry { a: entry.a, d: tagged Valid b, isValid: entry.isValid };
-      stQ[n] <= nentry;
-      //forward data to dependent loads
+      stQData[n] <= tagged Valid b;
+      //forward data to all dependent loads
       for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
-	 let lentry = ldQ[i];
-	 if (lentry.str matches tagged Valid.s &&& s == n)
-	    ldQ[i] <= LdQEntry { a: lentry.a, d: tagged Valid b, str: tagged Invalid, isValid: lentry.isValid };
+	 if (ldQStr[i] matches tagged Valid.s &&& s == n)
+	    begin
+	       ldQStr[i] <= tagged Invalid;
+	       ldQData[i] <= tagged Valid b;
+	    end
       end
    endmethod
 
    //checks if it's safe to read data associated w/ ldq entry
    method Bool isValid(name n);
-      let entry = ldQ[n];
-      //TODO we could maybe ignore the entry.isValid check since
+      //TODO we could maybe ignore the ldQValid[n] check
       //this should only be called on valid entries
-      return (entry.isValid && isValid(entry.d));
+      return ldQValid[n] && isValid(ldQData[n]);
    endmethod
 
 
    method elem read(name n);
-      if (ldQ[n].d matches tagged Valid.data)
+      if (ldQData[n] matches tagged Valid.data)
 	 return data;
       else
 	 return unpack(0);
@@ -295,17 +294,18 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
 
    //Load may or may not ever have been issued to main mem
    method Action commitRead(name n);
-      ldQ[n] <= LdQEntry { a: ?, d: ?, str: tagged Invalid, isValid: False };
-      ldIssued[n] <= False;
+      ldQValid[n] <= False;
+      ldQStr[n] <= tagged Invalid;
+      ldQIssued[n] <= False;
    endmethod
    
    //Only Issue stores after committing
    method Action commitWrite(name n);
-      stQ[n] <= StQEntry { a: ?, d: ?, isValid: False };
+      stQValid[n] <= False;
       elem data = unpack(0);
-      if (stQ[n].d matches tagged Valid.dt)
+      if (stQData[n] matches tagged Valid.dt)
 	 data = dt;
-      stIssueQ.enq(StIssue { a: stQ[n].a, d: data });
+      stIssueQ.enq(StIssue { a: stQAddr[n], d: data });
    endmethod
 
 endmodule
