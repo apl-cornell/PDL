@@ -28,7 +28,9 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
     stg.getCmds.foreach {
       case c@IReserveLock(handle, larg) if larg.evar.isDefined =>
         //reserve if no alias, otherwise assign to matching handle
-        val aliases = newRes.getOrElse(larg.id, Set()).filterNot(alias => alias._1 == larg.evar.get)
+        //don't compare w/ new reservations -> library must handle concurrent reservation reentrancy issues.
+        //use the original (maybeRes) instead to look for aliases
+        val aliases = maybeRes.getOrElse(larg.id, Set()).filterNot(alias => alias._1 == larg.evar.get)
         if (aliases.nonEmpty) {
           val aliasnone = aliasNone(larg.evar.get, aliases)
           //if none are valid aliases then run original command
