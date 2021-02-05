@@ -5,6 +5,7 @@ import FIFO :: *;
 import BRAMCore::*;
 import DReg :: *;
 import Vector :: *;
+import Ehr :: *;
 
 export CombMem(..);
 export AsyncMem(..);
@@ -147,7 +148,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
 
    ///Store Stuff
    Reg#(name) stHead <- mkReg(unpack(0));
-   Vector#(StQSize, Reg#(Bool)) stQValid <- replicateM (mkReg(False));
+   Vector#(StQSize, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
    Vector#(StQSize, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
    Vector#(StQSize, Reg#(Maybe#(elem))) stQData <- replicateM (mkReg(tagged Invalid));
    FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();   
@@ -159,7 +160,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    Vector#(LdQSize, Reg#(Maybe#(name))) ldQStr <- replicateM (mkReg(tagged Invalid));
    Vector#(LdQSize, Reg#(Bool)) ldQIssued <- replicateM(mkReg(False));   
 
-   Bool okToSt = !stQValid[stHead];
+   Bool okToSt = !stQValid[stHead][0];
    Bool okToLd = !ldQValid[ldHead];
 
    //return true if a is older than b, given a queue head (oldest entry) h
@@ -187,7 +188,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
       
       Maybe#(name) result = tagged Invalid;
       for (Integer i = 0; i < valueOf(StQSize); i = i + 1) begin
-	 if (stQValid[i] && stQAddr[i] == a)
+	 if (stQValid[i][0] && stQAddr[i] == a)
 	    begin
 	       if (result matches tagged Valid.idx)
 		  begin
@@ -257,7 +258,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    endmethod
    
    method ActionValue#(name) reserveWrite(addr a) if (okToSt);
-      stQValid[stHead] <= True;
+      stQValid[stHead][0] <= True;
       stQAddr[stHead] <= a;
       stQData[stHead] <= tagged Invalid;
       stHead <= stHead + 1;
@@ -301,7 +302,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    
    //Only Issue stores after committing
    method Action commitWrite(name n);
-      stQValid[n] <= False;
+      stQValid[n][1] <= False;
       elem data = unpack(0);
       if (stQData[n] matches tagged Valid.dt)
 	 data = dt;

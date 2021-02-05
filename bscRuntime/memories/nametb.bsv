@@ -28,7 +28,7 @@ module testLSQ();
       $display("LdQ Tag %d", n);
    endrule
    
-   UInt#(32) magic = 1337;
+   Reg#(UInt#(32)) magic <- mkReg(1337);
    
    rule s_2 (st == 2);
       lsq.write(t1, magic);
@@ -40,8 +40,37 @@ module testLSQ();
       $display("Store was forwarded correctly: %b", ready);
       let data = lsq.read(t2);
       $display("Load observed %d", data);
+      lsq.commitRead(t2);
+      lsq.commitWrite(t1);
+      st <= 4;
+   endrule
+   
+   rule s_4 (st == 4);
+      let nload <- lsq.reserveRead(0);
+      let nstore <- lsq.reserveWrite(0);
+      t1 <= nload;
+      t2 <= nstore;
+      st <= 5;
+   endrule
+   
+   rule s_5 (st == 5);
+      magic <= magic + 1;
+      $display("Next Load Should see %d", magic);
+      lsq.write(t2, magic + 1);
+      st <= 6;
    endrule
 
+   rule s_6 (st == 6 && lsq.isValid(t1));
+      let data = lsq.read(t1);
+      $display("Load observed %d", data);
+      let n <- lsq.reserveRead(0);
+      let n2 <- lsq.reserveWrite(0);
+      t1 <= n;
+      t2 <= n2;
+      lsq.commitRead(t1);
+      lsq.commitWrite(t2);
+      st <= 5;
+   endrule
 endmodule
    
 module testRename();
