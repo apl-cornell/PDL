@@ -8,11 +8,9 @@ import Vector :: *;
 
 export CombMem(..);
 export AsyncMem(..);
-export MemId(..);
 
 export mkRenameRF;
-
-typedef UInt#(TLog#(n)) MemId#(numeric type n);
+export mkLSQ;
 
 //these are the memory interfaces we suppport
 //the first is used for memories that support combinational reads
@@ -142,7 +140,7 @@ typedef `LDQ_SIZE LdQSize;
 
 //TODO make size of queues a parameter
 module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, addr, name)) provisos
-   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), PrimIndex#(name, nn), Arith#(name));
+   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), PrimIndex#(name, nn), Ord#(name), Arith#(name));
 
    let memSize = 2 ** valueOf(szAddr);
    let hasOutputReg = False;
@@ -160,34 +158,64 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    Bool okToSt = stQ[stHead].isValid == False;
    Bool okToLd = ldQ[ldHead].isValid == False;
    
+   
+
+   //return true if a is older than b, given a queue head (oldest entry) h
+   function Bool isOlder(name a, name b, name h);
+      let nohmid = a < b && !(a < h && b >= h);
+      let hmid = b < h && a >= h;
+      return nohmid || hmid;
+   endfunction
+   
+   function Bool isNewer(name a, name b, name h);
+      return !isOlder(a, b, h);
+   endfunction
+
+   function Bool isNewerStore(name a, name b);
+      return isNewer(a, b, stHead);
+   endfunction
+   
+   function Bool isOlderLoad(name a, name b);
+      return isOlder(a, b, ldHead);
+   endfunction
+   
    //search starting at the _newest_ store
    //newest store is at head - 1 (and go backwards)
    function Maybe#(name) getMatchingStore(addr a);
+      
       Maybe#(name) result = tagged Invalid;
-      for (name i = (stHead - 1); i != stHead; i = i - 1) begin
-	 if (result matches tagged Invalid &&& stQ[i].isValid &&& stQ[i].a == a)
-	    result = tagged Valid i;
+      for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
+	 if (stQ[i].isValid && stQ[i].a == a)
+	    begin
+	       if (result matches tagged Valid.idx)
+		  begin
+		     if (isNewerStore(fromInteger(i), idx)) result = tagged Valid fromInteger(i);
+		  end
+	       else result = tagged Valid fromInteger(i);
+	    end
       end
-      if (result matches tagged Invalid &&& stQ[stHead].isValid &&& stQ[stHead].a == a)
-	 result = tagged Valid stHead;
       return result;
    endfunction
    
    //search starting at the _oldest_ load (which is at head)
-   function Maybe#(name) getIssuingLoad();
-      Maybe#(name) result = tagged Invalid;
-      let newest = ldHead - 1;
-      for (name l = ldHead; l != newest; l = l + 1) begin
-	 //no result, load is valid, not dependent on a store and not already issued
-	 if (result matches tagged Invalid &&& ldQ[l].isValid &&&
-	    !(isValid(ldQ[l].str)) &&& !ldIssued[l])
-	    result = tagged Valid l;
-      end
-      if (result matches tagged Invalid &&& ldQ[newest].isValid &&&
-	  !(isValid(ldQ[newest].str)) &&& !ldIssued[newest])
-	 result = tagged Valid newest;
-      return result;
+   // function Maybe#(name) getIssuingLoad();
+   //    Maybe#(name) result = tagged Invalid;
+   //    name newest = ldHead - 1;
+   //    for (name l = ldHead; l != newest; l = l + 1) begin
+   // 	 //no result, load is valid, not dependent on a store and not already issued
+   // 	 if (result matches tagged Invalid &&& ldQ[l].isValid &&&
+   // 	    !(isValid(ldQ[l].str)) &&& !ldIssued[l])
+   // 	    result = tagged Valid l;
+   //    end
+   //    if (result matches tagged Invalid &&& ldQ[newest].isValid &&&
+   // 	  !(isValid(ldQ[newest].str)) &&& !ldIssued[newest])
+   // 	 result = tagged Valid newest;
+   //    return result;
 	    
+   // endfunction
+   
+   function Maybe#(name) getIssuingLoad();
+      return tagged Invalid;
    endfunction
 
    rule issueSt;
