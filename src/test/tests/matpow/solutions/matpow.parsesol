@@ -29,15 +29,19 @@ pipe matpow(k:int<5>,p:int<5>)[x:int<32>[9]<c, s>,row:int<5>[5]<c, s>,col:int<5>
   int<9> x_in_idx = x_in_mul{8:0} + 0<4> ++ col_p;
   int<18> x_out_mul = 20<9> * 0<4> ++ k;
   int<9> x_out_idx = x_out_mul{8:0} + 0<4> ++ row_p;
+  int<9> x_out_idx_cp = x_out_idx;
   start(x);
-  reserved(x[x_in_idx]);
-  acquired(x[x_in_idx]);
-  reserved(x[x_out_idx]);
-  acquired(x[x_out_idx]);
+  reserved(x[x_in_idx],READ);
+  acquired(x[x_in_idx],READ);
+  reserved(x[x_out_idx],READ);
+  acquired(x[x_out_idx],READ);
+  reserved(x[x_out_idx_cp],WRITE);
+  acquired(x[x_out_idx_cp],WRITE);
   end(x);
   int<32> x_in_val = x[x_in_idx];
   int<32> x_out_val_read = x[x_out_idx];
   released(x[x_in_idx]);
+  released(x[x_out_idx]);
   start(a);
   reserved(a);
   acquired(a);
@@ -49,8 +53,8 @@ pipe matpow(k:int<5>,p:int<5>)[x:int<32>[9]<c, s>,row:int<5>[5]<c, s>,col:int<5>
   int<64> nmul = a_val * x_in_val;
   int<32> nval = x_out_val_read + nmul{31:0};
   print(nval);
-  x[x_out_idx] <- nval;
-  released(x[x_out_idx]);
+  x[x_out_idx_cp] <- nval;
+  released(x[x_out_idx_cp]);
   
   ---
   if ( k == 19<5> && p == 19<5> ) {

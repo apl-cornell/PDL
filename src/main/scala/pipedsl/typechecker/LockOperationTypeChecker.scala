@@ -1,6 +1,6 @@
 package pipedsl.typechecker;
 
-import pipedsl.common.Errors.{MalformedLockTypes, UnexpectedCase}
+import pipedsl.common.Errors.{IllegalLockModification, IllegalMemoryAccessOperation, MalformedLockTypes, UnexpectedCase}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.{CAssign, CIf, CLockOp, CRecv, CSeq, CSpeculate, CSplit, CTBar, Command, ECall, EMemAccess, EVar, Id, LockArg, LockRead, LockType, LockWrite, ModuleDef, Prog}
 
@@ -26,7 +26,8 @@ class LockOperationTypeChecker() {
    * Checks if the program has correct lock types
    * as defined in the comment at the top of this class.
    * @param p the program to be checked
-   * @throws MalformedLockTypes error if locks are not well formed
+   * @throws MalformedLockTypes error if lock types are not well formed
+   * @throws IllegalMemoryAccessOperation error if access memory without correct READ or WRITE capability
    */
   def check(p:Prog) : Unit = {
     val Prog(_, moddefs, _) = p
@@ -47,15 +48,19 @@ class LockOperationTypeChecker() {
       cases.foreach(c => checkCommand(c.body))
       checkCommand(default)
     case c@CLockOp(mem, _, lockType) =>
-      //TODO: ALlow specific locks to have arbitrary lock type operation
       if (!c.isSpecific && lockType.isDefined)
         throw MalformedLockTypes("Can only specify lock type for address specific locks")
       if (lockType.isDefined) {
+        if (getLockAnnotationMap.get(mem).isDefined && getLockAnnotationMap(mem) != lockType.get) {
+          throw MalformedLockTypes("Only one lock type per an address specific lock is allowed")
+        }
         c.memOpType = lockType
         mem.memOpType = lockType
         updateLockAnnotationMap(mem, lockType.get)
       } else if (c.isSpecific) {
-        //None if it doesnt exist in the map (allows for specific locks to be read and write, use old api)
+        if (getLockAnnotationMap.get(mem).isEmpty) {
+          throw MalformedLockTypes("Address specific locks must have an associated lock type")
+        }
         c.memOpType = getLockAnnotationMap.get(mem)
         mem.memOpType = c.memOpType
       }
@@ -64,7 +69,7 @@ class LockOperationTypeChecker() {
       case (e@EMemAccess(mem, index), _) => {
         //check if it exists and is lock read, otherwise is ok
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
-          case Some(LockRead()) => throw MalformedLockTypes("Write memory access needs to have memory write capabilities")
+          case Some(LockRead()) => throw IllegalMemoryAccessOperation(c.pos)
           case _ => {
             e.memOpType = Some(LockWrite())
             c.memOpType = Some(LockWrite())
@@ -73,7 +78,7 @@ class LockOperationTypeChecker() {
       }
       case (_, e@EMemAccess(mem, index)) => {
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
-          case Some(LockWrite()) => throw MalformedLockTypes("Read memory access needs to have memory read capabilities")
+          case Some(LockWrite()) => throw IllegalMemoryAccessOperation(c.pos)
           case _ => {
             e.memOpType = Some(LockRead())
             c.memOpType = Some(LockRead())
@@ -88,9 +93,9 @@ class LockOperationTypeChecker() {
     case c@CAssign(lhs, rhs) => (lhs, rhs) match {
         //annotate the assign command and memory access
       case (_, e@EMemAccess(mem, index)) => {
-        //check if it exists and is lock write, otherwise is ok
+        //check if it exists and is lock write, otherwise is ok (not existing means it is both read and write)
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
-          case Some(LockWrite()) => throw MalformedLockTypes("Read memory access needs to have memory read capabilities")
+          case Some(LockWrite()) => throw IllegalMemoryAccessOperation(c.pos)
           case _ => {
             e.memOpType = Some(LockRead())
             c.memOpType = Some(LockRead())

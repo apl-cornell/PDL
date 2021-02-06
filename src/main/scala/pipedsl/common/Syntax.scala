@@ -232,15 +232,17 @@ object Syntax {
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
-  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
-  case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand
+  //TODO Clean up what actually needs the lock info annotation
+  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand
-  case class ICheckLockFree(mem: LockArg) extends InternalCommand
-  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand
-  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand
-  case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand
-  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand
+
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand with LockInfoAnnotation
+  case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
+  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
+  case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
+  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
   //needed for internal compiler passes to track branches with explicitly no lockstate change
   case class ILockNoOp(mem: LockArg) extends InternalCommand
 

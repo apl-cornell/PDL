@@ -150,9 +150,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           checkAcquired(mod, null, env)
         case _ => throw UnexpectedCase(c.pos)
       }
-<<<<<<< HEAD
-
-      case CLockOp(mem, op) =>
+      case CLockOp(mem, op, _) =>
         val expectedLockState = op match {
           case Locks.Free => throw new IllegalStateException() // TODO: is this right?
           case Locks.Reserved => Free

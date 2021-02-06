@@ -4,8 +4,8 @@ pipe test(inarg:int<32>)[rf:int<32>[5]<a, a>] {
   split {
     case: cond == 0<2> {
         int<5> addr = 7<5>;
-        reserved(rf[addr]);
-        acquired(rf[addr]);
+        reserved(rf[addr],WRITE);
+        acquired(rf[addr],WRITE);
         
     }
     case: cond == 1<2> {

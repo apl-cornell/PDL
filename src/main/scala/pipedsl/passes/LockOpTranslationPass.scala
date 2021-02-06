@@ -45,11 +45,35 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
     stg.setCmds(notlockCmds ++ newlockcmds)
   }
 
-  private def translateOp(c: CLockOp): Command = c.op match {
-    case Free => ICheckLockFree(c.mem)
-    case Reserved => IReserveLock(lockVar(c.mem), c.mem)
-    case Acquired => ICheckLockOwned(c.mem, lockVar(c.mem))
-    case Released => IReleaseLock(c.mem, lockVar(c.mem))
+  private def translateOp(c: CLockOp): Command = {
+    //TODO make this cleaner lol
+    c.op match {
+      case Free => {
+        val i = ICheckLockFree(c.mem)
+        i.memOpType = c.memOpType
+        i.isSpecific = c.isSpecific
+        i
+      }
+      case Reserved => {
+        val i = IReserveLock(lockVar(c.mem), c.mem)
+        i.memOpType = c.memOpType
+        i.isSpecific = c.isSpecific
+        i
+      }
+      case Acquired => {
+        val i = ICheckLockOwned(c.mem, lockVar(c.mem))
+        i.memOpType = c.memOpType
+        i.isSpecific = c.isSpecific
+        i
+      }
+      case Released => {
+        val i = IReleaseLock(c.mem, lockVar(c.mem))
+        i.memOpType = c.memOpType
+        i.isSpecific = c.isSpecific
+        i
+      }
+    }
+
   }
 
 }

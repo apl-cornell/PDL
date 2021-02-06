@@ -79,6 +79,7 @@ object Main {
       lockChecker.check(recvProg, None)
       val lockOperationTypeChecker = new LockOperationTypeChecker()
       lockOperationTypeChecker.check(recvProg)
+      LockReleaseChecker.check(recvProg)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)

@@ -6,7 +6,7 @@ import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Com
 
 /**
  * A class to check whether a program's locks are well formed. Locks are well formed if 
- * each memory module only has one type of lock (location-specific or not)
+ * each memory module only has one granularity of lock (location-specific or not)
  *
  */
 class LockWellformedChecker() {

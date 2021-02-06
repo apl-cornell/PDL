@@ -3,9 +3,9 @@ pipe ex1(in: bool)[r1: int<32>[5], r2: int<32>[5]] {
     start(r2);
     int<5> addr = 1<5>;
     if (in) {
-        reserve(r1[addr]);
+        reserve(r1[addr], WRITE);
     } else {
-        reserve(r2[addr]);
+        reserve(r2[addr], WRITE);
     }
     end(r1);
     end(r2);

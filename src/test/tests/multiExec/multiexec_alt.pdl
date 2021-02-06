@@ -36,13 +36,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
  int<5> rs2 = insn{11:7};
  int<5> rd = insn{16:12};
  start(rf);
- acquire(rf[rs1]);
- acquire(rf[rs2]);
+ acquire(rf[rs1], READ);
+ acquire(rf[rs2], READ);
  int<32> rf1 = rf[rs1];
  int<32> rf2 = rf[rs2];
  release(rf[rs1]);
  release(rf[rs2]);
- reserve(rf[rd]);
+ reserve(rf[rd], WRITE);
  end(rf);
  ---
  if (op == 0<2>) {   
@@ -51,7 +51,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
     block(rf[rd]);
     print(res);
     rf[rd] <- res;
-    release(rf[rd]);
  } else {
  if (op == 1<2>) {
     start(m);
@@ -63,7 +62,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
     block(rf[rd]);
     print(res);
     rf[rd] <- res;
-    release(rf[rd]);
  } else {
     start(f);
     acquire(f);
@@ -75,8 +73,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_
     print(res);
 
     rf[rd] <- res;
-    release(rf[rd]);
  }}
+ release(rf[rd]);
+
   if (pc == 14<16>) {
      output(true);
   }

@@ -75,7 +75,6 @@ package object pipedsl {
     assert(exit == 0)
     val blueSpecOutFile = new File(Paths.get(testDir.getAbsolutePath, outputFileBS).toString)
     val expected = new File(Paths.get(testDir.getAbsolutePath, "solutions", FilenameUtils.getBaseName(inputFile.getName) + "." + "simsol").toString)
-    println(expected)
     FileUtils.contentEquals(blueSpecOutFile, expected)
     assert(FileUtils.contentEqualsIgnoreEOL(blueSpecOutFile, expected, null))
     deleteGeneratedFiles(testDir)
