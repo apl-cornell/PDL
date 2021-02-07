@@ -46,7 +46,7 @@ object LockReleaseChecker {
             val l2 = caseRelList(j)
             //If any locks were released in any two branches, error
             if (l1.intersect(l2).nonEmpty) {
-              throw IllegalLockAcquisition(c.pos)
+              throw IllegalOOOLockRelease(c.pos)
             }
           }
         }

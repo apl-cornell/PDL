@@ -1,0 +1,27 @@
+//Expected Fail
+pipe test3(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    start(rf);
+    acquire(rf[rs1],READ);
+    acquire(rf[rs2],READ);
+    end(rf);
+    split {
+        case: (input{0:0} == 0) {
+            int<32> arg1 <- rf[rs1];
+            int<32> arg2 <- rf[rs2];
+            release(rf[rs2]);
+        }
+        case: ( input{0:0} == 1) {
+            release(rf[rs2]);
+        }
+        default: {
+            release(rf[rs2]);
+        }
+    }
+    release(rf[rs1]);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

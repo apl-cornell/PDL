@@ -163,7 +163,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
         case Z3Status.UNKNOWN =>
           throw new RuntimeException("An error occurred while attempting to solve the constraints")
         case Z3Status.SATISFIABLE =>
-          throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
+          throw new RuntimeException(s"A possible thread of execution can cause this to fail: memories needs to be $expectedLockState before $op")
       }
 
       case _ => env
