@@ -30,18 +30,18 @@ import "BVI" RenameRF =
     default_clock clk(CLK, (*unused*) clk_gate);
     default_reset rst (RST);
     
-    method NAME_OUT_1 readName(ADDR_1);
-    method VALID_OUT_1 isValid(VALID_NAME_1);
-    method D_OUT_1 read(NAME_1);
+    method NAME_OUT readName[2] (ADDR);
+    method VALID_OUT isValid[2] (VALID_NAME);
+    method D_OUT read[2] (NAME);
     method NAME_OUT allocName(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-    method write(NAME, D_IN) enable(WE);
+    method write(NAME_IN, D_IN) enable(WE);
     method commit(NAME_F) enable(FE);
     
-       schedule (readName) C (readName);
+       schedule (readName) CF (readName);
        schedule (readName) CF (isValid, read, allocName, write, commit);
-       schedule (isValid) C (isValid);
+       schedule (isValid) CF (isValid);
        schedule (isValid) CF (read, allocName, write, commit);
-       schedule (read) C (read);
+       schedule (read) CF (read);
        schedule (read) CF (allocName, write, commit);
        schedule (allocName) C (allocName);
        schedule (allocName) CF (write, commit);

@@ -8,7 +8,7 @@ module RenameRF(CLK,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //rename req
 		ADDR_1, NAME_OUT_1,         //read name 1
 		ADDR_2, NAME_OUT_2,         //read name 2
-		NAME, D_IN, WE,             //write data
+		NAME_IN, D_IN, WE,             //write data
 		NAME_1, D_OUT_1,            //read data 1
 		NAME_2, D_OUT_2,            //read data 2
 		VALID_NAME_1, VALID_OUT_1,    //check valid data 1
@@ -39,7 +39,7 @@ module RenameRF(CLK,
    output [name_width - 1 : 0] NAME_OUT_2;
    
    //data read/write
-   input [name_width - 1 : 0] NAME;
+   input [name_width - 1 : 0] NAME_IN;
    input [data_width - 1 : 0] D_IN;
    input 		      WE;
    input [name_width - 1 : 0] NAME_1;
@@ -148,8 +148,8 @@ module RenameRF(CLK,
 	    end
 	  if (WE)
 	    begin
-	       phys[NAME] <= `BSV_ASSIGNMENT_DELAY D_IN;
-	       busy[NAME] <= `BSV_ASSIGNMENT_DELAY 0;	     
+	       phys[NAME_IN] <= `BSV_ASSIGNMENT_DELAY D_IN;
+	       busy[NAME_IN] <= `BSV_ASSIGNMENT_DELAY 0;	     
 	    end
 	  if (FE)
 	    begin
