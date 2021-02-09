@@ -142,6 +142,22 @@ typedef `LDQ_SIZE LdQSize;
 module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, addr, name)) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), PrimIndex#(name, nn), Ord#(name), Arith#(name));
 
+   /*
+    * Schedule for This LSQ
+    * 
+    * isValid < everything -> don't consider data written this cycle (avoid combinational bypass)
+    * read < everything -> to match isValid -> only read the beginning of cycle values
+    * reserveRead < everything -> reads beginning of cycle values (for queue and current stores) (concurrent reserveWrite doesn't forward data)
+    * reserveWrite < everything -> reads beginning of cycle state
+    * reserves < write -> can write in the same cycle as reserving, also forwards data to load q
+    * 
+    * reserveRead < commitRead < issueLd -> can free ld entry at any time -> will not issue mem request if freed in same cycle.
+    * ld response is always 1 cycle, so an issued ld will always have a place to put its data.
+    * (if issueLd; commitread next cycle, then data will be written, but just never used, won't overwrite anything important)
+    * 
+    * everything < commitWrite -> can commit write in the same cycle as writing the data (gets pushed to store issue queue)
+    */
+   
    let memSize = 2 ** valueOf(szAddr);
    let hasOutputReg = False;
    BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
@@ -150,18 +166,19 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    Reg#(name) stHead <- mkReg(unpack(0));
    Vector#(StQSize, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
    Vector#(StQSize, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
-   Vector#(StQSize, Reg#(Maybe#(elem))) stQData <- replicateM (mkReg(tagged Invalid));
-   FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();   
+   Vector#(StQSize, Ehr#(3, Maybe#(elem))) stQData <- replicateM (mkEhr(tagged Invalid));
+   FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();
    ///Load Stuff
-   Reg#(name) ldHead <- mkReg(unpack(0));         
-   Vector#(LdQSize, Reg#(Bool)) ldQValid <- replicateM (mkReg(False));
+   Reg#(name) ldHead <- mkReg(unpack(0));
+   Vector#(LdQSize, Ehr#(2, Bool)) ldQValid <- replicateM (mkEhr(False));
    Vector#(LdQSize, Reg#(addr)) ldQAddr <- replicateM (mkReg(unpack(0)));
-   Vector#(LdQSize, Reg#(Maybe#(elem))) ldQData <- replicateM (mkReg(tagged Invalid));
-   Vector#(LdQSize, Reg#(Maybe#(name))) ldQStr <- replicateM (mkReg(tagged Invalid));
-   Vector#(LdQSize, Reg#(Bool)) ldQIssued <- replicateM(mkReg(False));   
+   Vector#(LdQSize, Ehr#(3, Maybe#(elem))) ldQData <- replicateM (mkEhr(tagged Invalid));
+   Vector#(LdQSize, Ehr#(3, Maybe#(name))) ldQStr <- replicateM (mkEhr(tagged Invalid));
+   Vector#(LdQSize, Ehr#(2, Bool)) ldQIssued <- replicateM(mkEhr(False));
 
+   //check with beginning of cycle values
    Bool okToSt = !stQValid[stHead][0];
-   Bool okToLd = !ldQValid[ldHead];
+   Bool okToLd = !ldQValid[ldHead][0];
 
    //return true if a is older than b, given a queue head (oldest entry) h
    function Bool isOlder(name a, name b, name h);
@@ -200,11 +217,14 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
       return result;
    endfunction
    
-   //search starting at the _oldest_ load (which is at head)
+   //search starting at the _oldest_ load
+   //always read start of cycle values ([0] from Ehrs) -> loads will issue (no earlier than)
+   //the first cycle that they can issue
    function Maybe#(name) getIssuingLoad();
       Maybe#(name) result = tagged Invalid;
       for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
-	 if (ldQValid[i] && !isValid(ldQData[i]) && !isValid(ldQStr[i]) && !ldQIssued[i])
+	 //read ldQIssued _after_ commit so we don't issue a load that just got freed
+	 if (ldQValid[i][0] && !isValid(ldQData[i][0]) && !isValid(ldQStr[i][0]) && !ldQIssued[i][1])
 	    begin
 	       if (result matches tagged Valid.idx)
 		  begin
@@ -216,6 +236,9 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
       return result;
    endfunction
    
+   //TODO avoid starvation between issueSt and issueLd (currently one always has precedence over the other)
+   //this shouldn't cause liveness issues in real designs but we would need to deal w/ this
+   //when considering other memory models   
    rule issueSt;
       let st = stIssueQ.first();
       memory.put(True, st.a, st.d);
@@ -224,14 +247,16 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    
    Reg#(Maybe#(name)) nextData <- mkDReg(tagged Invalid);
    
+   //run this _after_ commits so that we don't issue a load that's getting freed this cycle
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
       memory.put(False, ldQAddr[idx], ?);
       nextData <= tagged Valid idx;
-      ldQIssued[idx] <= True;
+      ldQIssued[idx][1] <= True;
    endrule
    
    rule moveLdData (nextData matches tagged Valid.idx);
-      ldQData[idx] <= tagged Valid memory.read;
+      //schedule this last for simplicity (can change later)
+      ldQData[idx][2] <= tagged Valid memory.read;
    endrule
       
    method ActionValue#(name) reserveRead(addr a) if (okToLd);
@@ -240,7 +265,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
       //if matching store, copy its data over (which may be invalid)
       if (matchStr matches tagged Valid.idx)
 	 begin
-	    data = stQData[idx];
+	    data = stQData[idx][0]; //changing this index could enable combinational bypass
 	 end
       //If data is valid, then leave matching store invalid so no dependency
       if (data matches tagged Valid.d)
@@ -248,32 +273,36 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
 	    matchStr = tagged Invalid;
 	 end
       
-      ldQValid[ldHead] <= True;
+      ldQValid[ldHead][0] <= True;
       ldQAddr[ldHead] <= a;
-      ldQData[ldHead] <= data;
-      ldQStr[ldHead] <= matchStr;
+      ldQData[ldHead][0] <= data;
+      ldQStr[ldHead][0] <= matchStr;
       
       ldHead <= ldHead + 1;
       return ldHead;
    endmethod
    
    method ActionValue#(name) reserveWrite(addr a) if (okToSt);
+      //Using index [0] means these are the first writes -- [1] reads can combinationally observe these writes
       stQValid[stHead][0] <= True;
       stQAddr[stHead] <= a;
-      stQData[stHead] <= tagged Invalid;
+      stQData[stHead][0] <= tagged Invalid;
       stHead <= stHead + 1;
       return stHead;
    endmethod
    
 
+   //ldQStr[i][1] -> read & write _after_ reserves (write to [0])
+   //ldQData[i][1] ->  write _after_ reserve
    method Action write(name n, elem b);
-      stQData[n] <= tagged Valid b;
+      stQData[n][1] <= tagged Valid b; //_can_ reserve and write same location in one cycle (write happens after)
       //forward data to all dependent loads
       for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
-	 if (ldQStr[i] matches tagged Valid.s &&& s == n)
+	 if (ldQStr[i][1] matches tagged Valid.s &&& s == n)
 	    begin
-	       ldQStr[i] <= tagged Invalid;
-	       ldQData[i] <= tagged Valid b;
+	       ldQStr[i][1] <= tagged Invalid;
+	       //order this after reserve (so reserve addr ;write addr forwards data appropriately)
+	       ldQData[i][1] <= tagged Valid b;
 	    end
       end
    endmethod
@@ -282,29 +311,31 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
    method Bool isValid(name n);
       //TODO we could maybe ignore the ldQValid[n] check
       //this should only be called on valid entries
-      return ldQValid[n] && isValid(ldQData[n]);
+      return ldQValid[n][0] && isValid(ldQData[n][0]); //read early (0) so can't observe written values -> will need to wait until next cycle
    endmethod
 
 
    method elem read(name n);
-      if (ldQData[n] matches tagged Valid.data)
+      //this index needs to match the index used by isValid (0 - right now) 
+      if (ldQData[n][0] matches tagged Valid.data)
 	 return data;
       else
 	 return unpack(0);
    endmethod
 
    //Load may or may not ever have been issued to main mem
+   //write _after_ all others
    method Action commitRead(name n);
-      ldQValid[n] <= False;
-      ldQStr[n] <= tagged Invalid;
-      ldQIssued[n] <= False;
+      ldQValid[n][1] <= False;
+      ldQStr[n][2] <= tagged Invalid;
+      ldQIssued[n][0] <= False;
    endmethod
    
    //Only Issue stores after committing
    method Action commitWrite(name n);
       stQValid[n][1] <= False;
       elem data = unpack(0);
-      if (stQData[n] matches tagged Valid.dt)
+      if (stQData[n][2] matches tagged Valid.dt) //if _write_ occurred this cycle we want to observe it
 	 data = dt;
       stIssueQ.enq(StIssue { a: stQAddr[n], d: data });
    endmethod
