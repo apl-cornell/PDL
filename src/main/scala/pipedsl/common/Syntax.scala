@@ -218,7 +218,7 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
-  case class CLockOp(mem: LockArg, op: LockState, lockType: Option[LockType]) extends Command with LockInfoAnnotation
+  case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command

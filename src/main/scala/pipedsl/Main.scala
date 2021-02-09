@@ -75,10 +75,10 @@ object Main {
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
       pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap)
-      lockChecker.check(recvProg, None)
       val lockOperationTypeChecker = new LockOperationTypeChecker()
       lockOperationTypeChecker.check(recvProg)
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap)
+      lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {

@@ -61,6 +61,7 @@ class LockOperationTypeChecker() {
         if (getLockAnnotationMap.get(mem).isEmpty) {
           throw MalformedLockTypes("Address specific locks must have an associated lock type")
         }
+        c.lockType = getLockAnnotationMap.get(mem)
         c.memOpType = getLockAnnotationMap.get(mem)
         mem.memOpType = c.memOpType
       }
