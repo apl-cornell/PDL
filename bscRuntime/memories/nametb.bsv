@@ -5,7 +5,8 @@ import FIFO::*;
 typedef UInt#(2) Tag;
 typedef UInt#(4) State;
 
-module testLSQ();
+
+module testLSQ1();
    
    AsyncMem#(UInt#(32), UInt#(16), Tag) lsq <- mkLSQ(False, "");
 
@@ -72,6 +73,53 @@ module testLSQ();
       st <= 5;
    endrule
 endmodule
+
+module testLSQ2();
+   
+   AsyncMem#(UInt#(32), UInt#(16), Tag) lsq <- mkLSQ(False, "");
+   Reg#(State) st <- mkReg(0);
+   
+   Reg#(UInt#(32)) count <- mkReg(0);
+   Reg#(UInt#(16)) addr <- mkReg(0);
+   FIFO#(Tag) tags <- mkSizedFIFO(10);
+   
+   rule s_0 (st == 0);
+      let n <- lsq.reserveWrite(0);
+      tags.enq(n);
+      st <= 1;
+   endrule
+
+   //test concurrent write, readreserve + commitread
+   rule s_1 (st == 1);
+      let n = tags.first();
+      lsq.write(n, 1337);
+//      tags.deq();
+//      let nld <- lsq.reserveRead(0);
+//      tags.enq(nld);
+//      lsq.commitWrite(n);
+//      st <= 2;
+      st <= 3;
+   endrule
+   
+   rule s_2 (st == 2 && lsq.isValid(tags.first()));
+      $display("Load is %d, %t", lsq.read(tags.first()), $time());
+      lsq.commitRead(tags.first());
+      tags.deq();
+      st <= 15;
+   endrule
+   
+   //alternate to s_2
+   rule s_3 (st == 3);
+      let nld <- lsq.reserveRead(0);
+      $display("Load has data: %b", lsq.isValid(nld));
+      $display("Load data is: %d", lsq.read(nld));
+      lsq.commitWrite(tags.first());
+      lsq.commitRead(nld);
+      tags.deq();
+      st <= 15;
+   endrule
+   
+endmodule
    
 module testRename();
    //Test the Renaming Register File a Bit
@@ -116,8 +164,7 @@ endmodule
 (*synthesize*)
 module mkTop();
    
-   let tb <- testLSQ();
-
+   let tb <- testLSQ2();
    Reg#(UInt#(32)) timer <- mkReg(0);
    
    `ifndef SIM_TIME

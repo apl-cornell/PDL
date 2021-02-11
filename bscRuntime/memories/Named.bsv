@@ -243,12 +243,14 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
       let st = stIssueQ.first();
       memory.put(True, st.a, st.d);
       stIssueQ.deq();
+      $display("Issuing Memory Store for addr %d, data %d, %t", st.a, st.d, $time());
    endrule
    
    Reg#(Maybe#(name)) nextData <- mkDReg(tagged Invalid);
    
    //run this _after_ commits so that we don't issue a load that's getting freed this cycle
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
+      $display("Issuing Memory Load for tag %d, addr %d, %t", idx, ldQAddr[idx], $time());
       memory.put(False, ldQAddr[idx], ?);
       nextData <= tagged Valid idx;
       ldQIssued[idx][1] <= True;
@@ -312,11 +314,15 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
       //TODO we could maybe ignore the ldQValid[n] check
       //this should only be called on valid entries
       return ldQValid[n][0] && isValid(ldQData[n][0]); //read early (0) so can't observe written values -> will need to wait until next cycle
+   //if we increase these EHR indices, we could allow comb bypass
    endmethod
 
 
    method elem read(name n);
-      //this index needs to match the index used by isValid (0 - right now) 
+      //this index needs to be >= used by isValid
+      //0 => implies data must have been written last cycle & reservation made last cycle
+      //1 => reservation may have been made this cycle
+      //2 => data may have been written this cycle
       if (ldQData[n][0] matches tagged Valid.data)
 	 return data;
       else
