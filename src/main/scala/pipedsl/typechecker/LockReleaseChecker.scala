@@ -1,8 +1,8 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors.{IllegalLockAcquisition, IllegalOOOLockRelease}
-import pipedsl.common.Locks.Released
-import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSplit, CTBar, Command, LockArg, ModuleDef, Prog}
+import pipedsl.common.Errors.IllegalOOOLockRelease
+import pipedsl.common.Locks.{Released, Specific}
+import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSplit, CTBar, Command, Id, LockWrite, ModuleDef, Prog}
 
 /**
  * Object that checks that address specific locks are released in order
@@ -25,7 +25,7 @@ object LockReleaseChecker {
   }
 
   //released is the set of locks released up until that point in the program
-  def checkCommand(c: Command, released: Set[LockArg]): Set[LockArg] = c match {
+  def checkCommand(c: Command, released: Set[Id]): Set[Id] = c match {
     case CSeq(c1, c2) => val s1 = checkCommand(c1, released); checkCommand(c2, s1)
     case CTBar(c1, c2) =>val s1 = checkCommand(c1, released); checkCommand(c2, s1)
     case CIf(cond, cons, alt) => {
@@ -51,11 +51,11 @@ object LockReleaseChecker {
           }
         }
       }
-      caseRelList.foldLeft[Set[LockArg]](caseRelList(0))((env1, env2) => env1.union(env2)) ++ released
+      caseRelList.foldLeft[Set[Id]](caseRelList(0))((env1, env2) => env1.union(env2)) ++ released
     }
       //only keep track of specific locks
-    case c@CLockOp(mem, op, _) if c.isSpecific => op match {
-      case Released => released + mem
+    case c@CLockOp(mem, op, _) if c.granularity == Specific && c.lockType.get == LockWrite => op match {
+      case Released => released + mem.id
       case _ => released
     }
     case _ => released

@@ -8,8 +8,8 @@ pipe test3(input: int<32>)[rf: int<32>[5]] {
     bool d = rs1 + 7<5> == rs2 + 7<5>;
 
     start(rf);
-    acquire(rf[rs1],W);
-    acquire(rf[rs2],W);
+    acquire(rf[rs1],R);
+    acquire(rf[rs2],R);
     end(rf);
     split {
         case: (a) {

@@ -165,8 +165,10 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val lockType: P[LockType] = positioned {
-    "READ" ^^ {_ => LockRead()} |
-    "WRITE" ^^ {_ => LockWrite()}
+    "R" ^^ {_ => LockRead} |
+    "r" ^^ {_ => LockRead} |
+    "W" ^^ {_ => LockWrite} |
+    "w" ^^ {_ => LockWrite}
   }
 
   lazy val blockCmd: P[Command] = positioned {

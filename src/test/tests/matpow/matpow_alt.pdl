@@ -33,9 +33,9 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>, row: int<5>[5]<c,s>, col: 
      int<9> x_out_idx =  x_out_mul{8:0} + (0<4> ++ row_p);
      int<9> x_out_idx_cp = x_out_idx;
      start(x);
-     acquire(x[x_in_idx], READ);
-     acquire(x[x_out_idx], READ);
-     acquire(x[x_out_idx_cp], WRITE);
+     acquire(x[x_in_idx], R);
+     acquire(x[x_out_idx], R);
+     acquire(x[x_out_idx_cp], W);
      end(x);
      int<32> x_in_val = x[x_in_idx];
      int<32> x_out_val_read = x[x_out_idx];

@@ -93,7 +93,7 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
       case Syntax.CLockOp(mem, op, t) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" +
-        printExprToString(mem.evar.get) + "]" else "") + (if (t.isDefined) "," + (if (t.get == LockRead()) "READ" else "WRITE") else "") + ");"
+        printExprToString(mem.evar.get) + "]" else "") + (if (t.isDefined) "," + (if (t.get == LockRead) "R" else "W") else "") + ");"
 
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"

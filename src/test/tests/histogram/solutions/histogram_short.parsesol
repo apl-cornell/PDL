@@ -2,12 +2,12 @@ pipe hist(counter:int<10>)[feature:int<10>[10]<c, s>,weight:int<32>[10]<c, s>,h:
   if ( counter < 1000<10> ) {
       call hist(counter + 1<10>);
       start(feature);
-      reserved(feature[counter],READ);
-      acquired(feature[counter],READ);
+      reserved(feature[counter],R);
+      acquired(feature[counter],R);
       end(feature);
       start(weight);
-      reserved(weight[counter],READ);
-      acquired(weight[counter],READ);
+      reserved(weight[counter],R);
+      acquired(weight[counter],R);
       end(weight);
       int<10> m = feature[counter];
       int<10> mcp = m;
@@ -15,10 +15,10 @@ pipe hist(counter:int<10>)[feature:int<10>[10]<c, s>,weight:int<32>[10]<c, s>,h:
       released(feature[counter]);
       released(weight[counter]);
       start(h);
-      reserved(h[m],READ);
-      acquired(h[m],READ);
-      reserved(h[mcp],WRITE);
-      acquired(h[mcp],WRITE);
+      reserved(h[m],R);
+      acquired(h[m],R);
+      reserved(h[mcp],W);
+      acquired(h[mcp],W);
       end(h);
       int<32> nm = h[m] + wt;
       released(h[m]);

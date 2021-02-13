@@ -75,7 +75,7 @@ object Main {
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
       pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
-      val lockOperationTypeChecker = new LockOperationTypeChecker()
+      val lockOperationTypeChecker = new LockOperationTypeChecker(lockWellformedChecker.getModLockGranularityMap)
       lockOperationTypeChecker.check(recvProg)
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap)
       lockChecker.check(recvProg, None)

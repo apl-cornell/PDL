@@ -2,7 +2,7 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
-import pipedsl.common.Locks.LockState
+import pipedsl.common.Locks.{General, LockGranularity, LockState, Specific}
 
 
 object Syntax {
@@ -24,7 +24,7 @@ object Syntax {
     }
     sealed trait LockInfoAnnotation {
       var memOpType: Option[LockType] = None
-      var isSpecific: Boolean = false
+      var granularity: LockGranularity = General
     }
   }
 
@@ -179,8 +179,8 @@ object Syntax {
   
   case class LockArg(id: Id, evar: Option[EVar]) extends Positional with LockInfoAnnotation
   sealed trait LockType extends Positional
-  case class LockRead() extends LockType
-  case class LockWrite() extends LockType
+  case object LockRead extends LockType
+  case object LockWrite extends LockType
   case object EInvalid extends Expr
   case class EIsValid(ex: Expr) extends Expr
   case class EFromMaybe(ex: Expr) extends Expr
@@ -206,10 +206,10 @@ object Syntax {
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: EVar, rhs: Expr) extends Command with LockInfoAnnotation {
+  case class CAssign(lhs: EVar, rhs: Expr) extends Command{
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CRecv(lhs: Expr, rhs: Expr) extends Command with LockInfoAnnotation {
+  case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CPrint(evar: EVar) extends Command

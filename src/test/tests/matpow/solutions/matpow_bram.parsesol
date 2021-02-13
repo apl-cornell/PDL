@@ -31,10 +31,10 @@ pipe matpow(k:int<5>,p:int<5>)[x:int<32>[9]<a, a>,row:int<5>[5]<a, a>,col:int<5>
   int<9> x_out_idx = x_out_mul{8:0} + 0<4> ++ row_p;
   int<9> x_out_idx_cp = x_out_idx;
   start(x);
-  reserved(x[x_in_idx],READ);
-  acquired(x[x_in_idx],READ);
-  reserved(x[x_out_idx],READ);
-  acquired(x[x_out_idx],READ);
+  reserved(x[x_in_idx],R);
+  acquired(x[x_in_idx],R);
+  reserved(x[x_out_idx],R);
+  acquired(x[x_out_idx],R);
   int<32> x_in_val <- x[x_in_idx];
   released(x[x_in_idx]);
   start(a);
@@ -45,7 +45,7 @@ pipe matpow(k:int<5>,p:int<5>)[x:int<32>[9]<a, a>,row:int<5>[5]<a, a>,col:int<5>
   end(a);
   
   ---
-  reserved(x[x_out_idx_cp],WRITE);
+  reserved(x[x_out_idx_cp],W);
   end(x);
   int<64> nmul = a_val * x_in_val;
   int<32> nval = nmul{31:0};

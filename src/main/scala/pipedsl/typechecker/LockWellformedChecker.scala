@@ -55,7 +55,7 @@ class LockWellformedChecker() {
       if (getLockGranularityMap.contains(mem.id) && !getLockGranularityMap(mem.id).equals(getLockGranularity(mem)))
         throw MalformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
       else updateLockGranularityMap(mem.id, getLockGranularity(mem))
-      c.isSpecific = getLockGranularity(mem) == Specific
+      c.granularity = getLockGranularity(mem)
       lockArgs + mem
     case _ => lockArgs
 

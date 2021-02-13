@@ -3,10 +3,10 @@ pipe ex1(in:bool)[r1:int<32>[5]<a, a>,r2:int<32>[5]<a, a>] {
   start(r2);
   int<5> addr = 1<5>;
   if ( in ) {
-      reserved(r1[addr],WRITE);
+      reserved(r1[addr],W);
       
   } else {
-      reserved(r2[addr],WRITE);
+      reserved(r2[addr],W);
       
   }
   end(r1);

@@ -2,7 +2,7 @@ pipe ex2(in:bool)[rf:int<32>[5]<a, a>] {
   start(rf);
   int<5> addr = 1<5>;
   if ( in ) {
-      reserved(rf[addr],READ);
+      reserved(rf[addr],R);
       
   } else {
       
@@ -12,7 +12,7 @@ pipe ex2(in:bool)[rf:int<32>[5]<a, a>] {
   int<5> addr2 = 2<5>;
   bool cond2 = true;
   if ( cond2 ) {
-      reserved(rf[addr2],READ);
+      reserved(rf[addr2],R);
       
   } else {
       
