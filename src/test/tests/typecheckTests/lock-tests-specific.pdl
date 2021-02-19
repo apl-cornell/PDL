@@ -1,0 +1,73 @@
+//Expected Success
+pipe test1(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    start(rf);
+    acquire(rf[rs1],R);
+    int<32> arg1 <- rf[rs1]; 
+    acquire(rf[rs2],R);
+    int<32> arg2 <- rf[rs2]; 
+    release(rf[rs1]);
+    release(rf[rs2]);
+    end(rf);
+} 
+
+//Expected Success
+pipe test2(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    start(rf);
+    if (input{0:0} == 1) {
+
+        acquire(rf[rs1],R);
+        int<32> arg1 <- rf[rs1];
+        release(rf[rs1]);
+    }
+    acquire(rf[rs2],R);
+    int<32> arg2 <- rf[rs2];
+    end(rf);
+    release(rf[rs2]);
+}
+
+//Expected success
+pipe test4(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    if (input{0:0} == 1) {
+        start(rf);
+        acquire(rf[rs1],R);
+        release(rf[rs1]);
+        acquire(rf[rs2],R);
+        release(rf[rs2]);
+        end(rf);
+    }
+    start(dmem);
+    acquire(dmem);
+    end(dmem);
+    release(dmem);
+}
+
+//Expected Success
+pipe test5(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+    bool a = true;
+    bool b = false;
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    start(rf);
+    acquire(rf[rs2],R);
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            acquire(rf[rs1],R);
+        }
+    }
+    if (randomBool == a) {
+        if (randomBool2 == b){
+            release(rf[rs1]);
+        }
+    }
+    release(rf[rs2]);
+    end(rf);
+}
+circuit {
+    r = memory(int<32>, 5);
+}

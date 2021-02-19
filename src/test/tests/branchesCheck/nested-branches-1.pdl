@@ -1,0 +1,149 @@
+pipe multi_stg_mul(a1: int<32>, a2: int<32>)[]: int<32> {
+     int<32> rr = a1{15:0} * a2{15:0};
+     int<32> rl = a1{15:0} * a2{31:16};
+     int<32> lr = a1{31:16} * a2{15:0};
+//   int<32> ll = a1{31:16} * a2{31:16};
+     ---
+     int<32> t1 = rl + lr;
+     int<32> res = (t1 << 16<5>) + rr;
+     output(res);
+}
+
+pipe multi_stg_div(num: int<32>, denom: int<32>, quot: int<32>, acc: int<32>, cnt: int<5>)[]: int<32> {
+    int<32> tmp = acc{30:0} ++ num{31:31};
+    int<32> na = (tmp >= denom) ? (tmp - denom) : (tmp);
+    int<32> nq = (tmp >= denom) ? ((quot << 1){31:1} ++ 1<1>) : (quot << 1);
+    int<32> nnum = num << 1;
+    if (cnt == 31<5>) {
+        output(nq);
+    } else {
+        call multi_stg_div(nnum, denom, nq, na, cnt + 1<5>);
+    }
+}
+
+pipe dummy(a1: int<32>, a2: int<32>)[]: int<32> {
+    int<32> a3 = a1 + a2 + a1;
+    ---
+    int<32> res = a3 >> 1;
+    output(res);
+}
+
+pipe dummy2(a1: int<32>, a2: int<32>)[]: int<32> {
+    split {
+        case: (a1 % 2<32> == 0<32>) {
+           if (a2 > a1) {
+                int<32> res = a1 + a1;
+           } else {
+                int<32> res = a1 / 2<32>;
+           }
+        }
+        default: {
+            if (a2 > a1) {
+                int<32> temp = a1 + a1;
+                int<32> res = temp + 1<32>;
+            }
+            else {
+                int<32> res = (a1 - 1<32>)/2<32>;
+            }
+        }
+    }
+    output(res);
+}
+
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, m: multi_stg_mul, f: multi_stg_div, d: dummy, d2: dummy2]: bool {
+ if (pc < 14<16>) {
+  call cpu(pc + 1<16>);
+ }
+ start(imem);
+ acquire(imem);
+ int<32> insn <- imem[pc];
+ release(imem);
+ end(imem);
+ ---
+ int<2> op = insn{1:0};
+ int<5> rs1 = insn{6:2};
+ int<5> rs2 = insn{11:7};
+ int<5> rd = insn{16:12};
+ start(rf);
+ acquire(rf[rs1], R);
+ acquire(rf[rs2], R);
+ int<32> rf1 = rf[rs1];
+ int<32> rf2 = rf[rs2];
+ release(rf[rs1]);
+ release(rf[rs2]);
+ reserve(rf[rd], W);
+ end(rf);
+ ---
+ split {
+    case: (op == 0<2>) {
+        split {
+            case: (rs1 % 3<5> == 0<5>) {
+                int<32> res <- rf1 + rf2;
+            }
+            case: (rs1 % 3<5> == 1<5>) {
+                int<32> res <- rf1 - rf2;
+            }
+            default: {
+                int<32> res <- rf1 << rf2;
+            }
+        }
+    }
+    case: (op == 1<2>) {
+        split {
+            case: (rs2 % 3<5> == 0<5>) {
+                start(f);
+                acquire(f);
+                int<32> res <- call f(rf1, rf2, 0<32>, 0<32>, 0<5>);
+                release(f);
+                end(f);
+            }
+            case: (rs2 % 3<5> == 1<5>){
+                int<32> res <- rf1 >> rf2;
+            }
+            default: {
+                start(m);
+                acquire(m);
+                int<32> res <- call m(rf1, rf2);
+                release(m);
+                end(m);
+            }
+
+        }
+    }
+    default: {
+        if(op % 2<2> == 0<2>) {
+            start(d);
+            acquire(d);
+            int<32> res <- call d(rf1, rf2);
+            release(d);
+            end(d);
+        } else {
+            start(d2);
+            acquire(d2);
+            int<32> res <- call d2(rf1, rf2);
+            release(d2);
+            end(d2);
+        }
+    }
+ }
+ ---
+ block(rf[rd]);
+ print(res);
+ rf[rd] <- res;
+ release(rf[rd]);
+ ---
+  if (pc == 14<16>) {
+     output(true);
+  }
+}
+
+circuit {
+ i = memory(int<32>, 16);
+ r = regfile(int<32>, 5);
+ m = new multi_stg_mul[];
+ fp = new multi_stg_div[];
+ d = new dummy[];
+ d2 = new dummy2[];
+ c = new cpu[r, i, m, fp, d, d2];
+ call c(0<16>);
+}

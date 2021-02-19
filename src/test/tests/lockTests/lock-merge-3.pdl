@@ -1,0 +1,47 @@
+pipe ex4(inarg: int<32>)[rf: int<32>[5]] {
+
+    start(rf);
+    int<5> a1 = 0<5>;
+    int<5> a2 = 1<5>;
+    bool b1 = cast(inarg{0:0} == 1, bool);
+    bool b2 = cast(inarg{1:1} == 1, bool);
+    reserve(rf[a2], R);
+    ---
+    if (b1) {
+        reserve(rf[a1], R);
+    } else {
+        reserve(rf[a1], R);
+    }
+    end(rf);
+    if (b1) {
+        block(rf[a1]);
+	    int<32> x <- rf[a1];
+        if (b2) {
+            release(rf[a1]);
+        }
+    }
+    ---
+    if(b1) {
+        block(rf[a2]);
+	int<32> y <- rf[a2];
+    } else {
+        block(rf[a2]);
+	int<32> y <- rf[a2];
+    }
+    release(rf[a2]);
+    ---
+    if (b1 && (!b2)) {
+        release(rf[a1]);
+    }
+    if(!b1) {
+        block(rf[a1]);
+        int<32> z <- rf[a1];
+        release(rf[a1]);
+    }
+}
+
+circuit {
+    r = memory(int<32>, 5);
+    e = new ex4[r];
+    call e(1<32>);
+}

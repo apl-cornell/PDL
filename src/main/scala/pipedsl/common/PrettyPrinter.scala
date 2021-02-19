@@ -92,14 +92,18 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
-      case Syntax.CLockOp(mem, op) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" + 
-        printExprToString(mem.evar.get) + "]" else "") +  ");"
+      case Syntax.CLockOp(mem, op, t) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" +
+        printExprToString(mem.evar.get) + "]" else "") + (if (t.isDefined) "," + (if (t.get == LockRead) "R" else "W") else "") + ");"
+
+      case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
+      case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
       case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
         printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + 
         printExprToString(predVal) + ", {\n" +
         printCmdToString(verify, indent + 4) + "\n" + ins + "}, {\n" +
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
+      case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
       case Syntax.CEmpty => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +
         cmd.foldLeft("")((s, c) => s + printCmdToString(c))
@@ -151,6 +155,7 @@ class PrettyPrinter(output: Option[File]) {
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
     case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
     case TModType(_, _, _, _) => "TODO MOD TYPE"
+    case TNamedType(name) =>  name.v
     case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)
   }
 
@@ -167,10 +172,11 @@ class PrettyPrinter(output: Option[File]) {
         pline("style=filled;")
         pline("color=lightgrey;")
         pline("node [style=filled,color=white];")
-        pline("label = \"IF(" + printExprToString(s.cond) + ")\";")
+        // TODO: Not sure how to change this line
+        // pline("label = \"IF(" + printExprToString(s.conds(0)) + ")\";")
         s.outEdges.foreach(e => printEdge(e))
-        printStagesForDot(s.trueStages)
-        printStagesForDot(s.falseStages)
+        s.condStages.foreach(stg => printStagesForDot(stg))
+        printStagesForDot(s.defaultStages)
         pline("}")
       case s: SpecStage =>
         pline("  subgraph cluster__" + s.name + " {")
@@ -208,11 +214,11 @@ class PrettyPrinter(output: Option[File]) {
       })
       stg match {
         case s:IfStage =>
-          pline("condition = " + printExprToString(s.cond))
+          pline("condition = " + printExprToString(s.conds(0)))
           pline("True block:")
-          printStages(s.trueStages)
+          printStages(s.condStages(0))
           pline("False block:")
-          printStages(s.falseStages)
+          printStages(s.defaultStages)
         case s:SpecStage =>
           pline("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
           pline("Verify Block: ")

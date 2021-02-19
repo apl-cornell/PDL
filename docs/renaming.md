@@ -157,3 +157,83 @@ the "names" returned need to be interpreted in _some_ way.
 Therefore reads and writes don't use the original address, but the lock identifier
 returned from the API (a.k.a. the underlying name).
 
+## Interacting With Speculation
+
+An interesting question is how both our high level lock API and the low level rename API interact w/ speculation
+based on how we know speculative architectures need to be built.
+
+The lock API now needs to come with a dynamic identifier, which the requester uses to indicate
+whether or not it is speculative.
+In this way, reading / allocating physical names can happen speculatively and relies on the
+naming layer to track speculative state.
+Therefore, in order to _resolve_ speculation, we need to make further use of the "free" API call.
+We can imagine "free" being split into "commit" and "abort" which the compiler must ensure are
+only used when the thread is either _nonspeculative_ or _misspeculated_, respectively.
+
+"commit" has the behavior of finalizing writes or reads; in the latter case this is necessary
+for modules that might update internal state to track ordering of reads w.r.t writes.
+"abort" takes a name and 'rollsback' the state affected by
+that operation (including internal state, not just the memory). Likely, rollback will need to rollback
+everything "newer" than that point - or we may need multiple versions (one which rolls it all back, one which doesn't).
+
+---
+
+### New Idea: Speculation + Checkpointing
+
+The aforementioned commit/abort idea has some issues:
+1) All read and write operations that are "reserved" need to be either committed or aborted explicitly.
+   This means that, when threads "die" they need to access some set of lock modules in stages where they otherwise
+   wouldn't need to. This can lead to some resource conflicts (i.e., multiple stages trying to modify lock state).
+2) We also can't control the order that these "aborts" happen in easily without running into deadlock scenarios.
+   Therefore, the lock modules would need to accept out of order aborts, while blocking conflicting non-speculative
+   allocations and reads until the aborts are all completed.
+
+Those two problems would require very complicated lock module implementations.
+
+_Instead_ we add speculation-related operations to the lock interface: _checkpoint_, _resolve(id, bool)_
+
+- _checkpoint()_: Creates a logical snapshot to which the current state can be reverted. This need
+not be an actual snapshot (copy); the implementation may instead be a pointer into a reversible history.
+This returns an _id_ to the caller that can be used for the other speculation methods.
+- _resolve(id, bool)_: This bookends the checkpoint calls, either reverting to the checkpoint or freeing it.
+If argument is _false_ then this reverts the lock state to the checkpoint associated with ID, _id_. This is used
+by threads when they determine that the speculation _they_ started was incorrect. If their speculation was _correct_
+then they call with a _true_ argument, which indicates the checkpoint associated with ID, _id_, will never be needed.
+
+
+This solves the eariler issues since only threads that _start_ speculation need to create or free checkpoints.
+If a _speculative thread_ creates a checkpoint speculatively and its parent later determines it to be misspeculative,
+the parent's _resolve(id, false)_ operation will automatically free the associated checkpoint too.
+
+### Restrictions
+
+The natural question now is, what are the ordering and calling restrictions on these new operations?
+
+_checkpoint_
+
+- Calling thread must not be _explicitly misspeculated_
+(i.e., it may be speculative, or non speculative but if it is speculative it must be wrapped with a non-blocking speculative check)
+- After creating a checkpoint, a thread may not _reserve_ any more locks, since reverting to that checkpoint may revert it _too far_
+(i.e., undo some of its reservations).
+- Checkpoints must be inside a _reservation region_ so that later threads cannot make reservations before this one creates its
+checkpoint.
+- Checkpoint statements must be paired with a later _resolve_ statement, to avoid resource starvation. This is similar
+to the requirement that locks must eventually be freed.
+
+It's even possible that we could automatically associate the "end()" statements, which close reservation regions, with
+"checkpoint" creation, assuming we could also infer where to place _resolve_ statements.
+
+_resolve_
+
+- Calling thread must explicitly be _non-speculative_. I'm not 100% sure this is necessary, but what we do
+need is in-order resolution (since it makes no sense to 'commit' some checkpoint that will eventually be reverted).
+This goes along with in-order speculation resolution. We may be able to relax this later, but it simplifies everything for now.
+- Resolution may happen _before_ or _after_ freeing locks (a.k.a. commit) because those free operations are associated with
+reservations made before the checkpoint (i.e., they're going to be used whether or not we revert back to the checkpoint).
+Although, in practice, we should always be able to resolve this before freeing write locks (not necessarily read locks),
+since we require in-order _free_ operations w/ the R/W API.
+
+Using _checkpoint_ and _resolve_ is necessary whenever reservations may be made speculatively. If the stages containing
+the relevant lock operations _may be speculative_ then checkpoints must also be used when making reservations for this memory.
+This ensures that a checkpoint will always exist, should a rollback due to misspeculation be necessary.
+

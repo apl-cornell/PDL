@@ -80,6 +80,9 @@ object Errors {
   case class IllegalLockAcquisition(pos: Position) extends TypeError(
     s"Cannot acquire or reserve locks inside multiple branches", pos)
 
+  case class IllegalOOOLockRelease(pos: Position) extends TypeError(
+    s"Cannot release locks inside multiple branches", pos)
+
   case class IllegalLockRelease(pos: Position) extends TypeError(
     s"Cannot release locks inside of a speculative block", pos)
 
@@ -128,4 +131,8 @@ object Errors {
   case class UnexpectedBSVType(msg: String) extends RuntimeException(msg)
   
   case class MalformedLockTypes(msg: String) extends RuntimeException(msg)
+
+  case class IllegalMemoryAccessOperation(pos: Position) extends TypeError(
+    s"Memory access's associated lock must have the correct READ or WRITE capabilities", pos
+  )
 }

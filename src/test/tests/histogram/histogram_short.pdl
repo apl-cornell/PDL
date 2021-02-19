@@ -1,0 +1,49 @@
+/*
+n = 128
+void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
+    for (int i =0; i < n ; ++ i ) {
+        int m = feature [ i ];
+        float wt = weight [ i ];
+        float x = hist [ m ];
+        hist [ m ] = x + wt ;
+    }
+}
+*/
+
+pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>, weight: int<32>[10]<c,s>, h: int<32>[10]<c,s>]: bool {
+    if (counter < 1000<10>) {
+        call hist(counter + 1<10>);
+    start(feature);
+    acquire(feature[counter], R);
+    end(feature);
+    start(weight);
+    acquire(weight[counter], R);
+    end(weight);
+    int<10> m = feature[counter];
+    int<10> mcp = m;
+    int<32> wt = weight[counter];
+    release(feature[counter]);
+    release(weight[counter]);
+    start(h);
+    acquire(h[m], R);
+    acquire(h[mcp], W);
+    end(h);
+    int<32> nm = h[m] + wt;
+    release(h[m]);
+    ---
+    print(nm);
+    h[mcp] <- nm;
+    release(h[mcp]);
+    ---
+    } else {
+        output(true);
+    }
+}
+
+circuit {
+    f = regfile(int<10>, 10);
+    w = regfile(int<32>, 10);
+    h = regfile(int<32>, 10);
+    hg = new hist[f, w, h];
+    call hg(0<10>);
+}

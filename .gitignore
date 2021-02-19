@@ -1,4 +1,4 @@
-*.~
+*~
 *.log
 *.aux
 *.pdf
@@ -8,5 +8,21 @@
 *.parse
 *.typecheck
 *.interpret
+out
 testOutputs/*
 miscnotes
+\#*
+
+### SBT ###
+
+dist/*
+target/
+lib_managed/
+src_managed/
+project/boot/
+project/plugins/project/
+project/**/target/
+.history
+.cache
+.lib/
+.bsp

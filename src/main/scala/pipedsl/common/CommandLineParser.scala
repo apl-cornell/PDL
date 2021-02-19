@@ -14,11 +14,9 @@ object CommandLineParser {
     memoryInput: Seq[String] = Seq(),
     maxIterations: Int = 0,
     printStageGraph: Boolean = false,
-    test: Boolean = false,
-    testInputDir: File = new File("."),
-    testResultDir: File = new File("."),
     defaultAddrLock: Option[String] = None,
-    memInit: Map[String, String] = Map()
+    memInit: Map[String, String] = Map(),
+    addSubInts: Boolean = false
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -42,15 +40,6 @@ object CommandLineParser {
         arg[File]("<file>...")
           .action((x, c) => c.copy(file = x))
           .text("pdsl files to parse"),
-        opt[Unit]('t', "test")
-          .action((_,c) => c.copy(test = true))
-          .text("Testing flag")
-          .children(
-            opt[String]('r', "testResultDir")
-              .action((x, c) => c.copy(testResultDir = new File(x)))
-              .required()
-              .text("directory of the expected test output files"),
-          ),
         cmd("parse")
           .text("parses the provided pdsl file and prints to the out file\n")
           .action((_, c) => c.copy(mode = "parse")),
@@ -78,7 +67,10 @@ object CommandLineParser {
               .action((s, c) => c.copy(defaultAddrLock = Some(s))),
             opt[Map[String, String]]("memInit")
               .valueName("<memName1>=<fileName1>,<memName2>=<fileName2>...")
-              .action((x, c) => c.copy(memInit = x))
+              .action((x, c) => c.copy(memInit = x)),
+            opt[Unit]("addMemInts")
+              .action((_, c) => c.copy(addSubInts = true))
+              .text("add submodule interfaces to generated top level module")
           ),
         cmd("typecheck") 
           .text("parses and type checks the resulting AST")

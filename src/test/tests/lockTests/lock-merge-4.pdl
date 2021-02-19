@@ -1,0 +1,40 @@
+pipe ex4(in: bool)[rf: int<32>[5]] {
+    start(rf);
+    int<5> addr = 1<5>;
+    reserve(rf[addr],R);
+    ---
+    int<5> addr2 = 2<5>;
+    bool cond2 = true;
+    if (cond2) {
+        reserve(rf[addr2],R);
+    }
+    end(rf);
+    if (in) {
+        ---
+        if (in) {
+            block(rf[addr]);
+        }
+        ---
+        if (cond2) {
+                block(rf[addr2]);
+                release(rf[addr2]);
+        }
+        ---
+    } else {
+        ---
+        block(rf[addr]);
+        ---
+    }
+    release(rf[addr]);
+    if ((!in) && cond2) {
+        block(rf[addr2]);
+        release(rf[addr2]);
+    }
+    int<1> x = 1<1>;
+}
+
+circuit {
+    r1 = memory(int<32>, 5);
+    e = new ex4[r1];
+    call e(true);
+}

@@ -58,11 +58,31 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       }
       //Merge matching states, merge Free|Released states to Released, error others
       lt.intersect(lf) //real merge logic lives inside Envrionments.LockState
+    case CSplit(cases, default) =>
+      val caseEnvList = (default :: cases.map(c => c.body)).map(c => checkLockRegions(c, env))
+      for (i <- 0 to caseEnvList.size-1) {
+        for (j <- 0 to caseEnvList.size-1) {
+          if (i != j) {
+            val l1 = caseEnvList(i)
+            val l2 = caseEnvList(j)
+            val envfree = env.filter(Free)
+            val l1free = l1.filter(Free)
+            val l1acq = envfree -- l1free.getMappedKeys()
+            val l2free = l2.filter(Free)
+            val l2acq = envfree -- l2free.getMappedKeys()
+            //If any locks were newly acquired/reserved in any two branches, error
+            if (l1acq.getMappedKeys().intersect(l2acq.getMappedKeys()).nonEmpty) {
+              throw IllegalLockAcquisition(c.pos)
+            }
+          }
+        }
+      }
+      caseEnvList.foldLeft[Environment[Id, LockState]](caseEnvList(0))((env1, env2) => env1.intersect(env2))
     case CLockStart(mod) => env.add(mod, Acquired)
     case CLockEnd(mod) => env.add(mod, Released)
       //can only reserve locks insisde of the relevant lock region
       //other lock ops can be outside of this pass
-    case CLockOp(mem, op) if op == Reserved =>
+    case CLockOp(mem, op, _) if op == Reserved =>
       if (env(mem.id) != Acquired) {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }

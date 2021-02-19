@@ -1,0 +1,14 @@
+pipe test3(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    start(rf);
+    acquire(rf[rs2], R);
+    end(rf);
+    rf[rs2] <- 0<32>;
+    release(rf[rs2]);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+
+}

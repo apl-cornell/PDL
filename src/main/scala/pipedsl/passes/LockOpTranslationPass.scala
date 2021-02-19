@@ -36,7 +36,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def translateLockOps(stg: PStage): Unit = {
     val (lockCmds, notlockCmds) = stg.getCmds.partition { case _: CLockOp => true; case _ => false }
     val lockmap = lockCmds.foldLeft(Map[LockArg, List[Command]]())((m, lc) => lc match {
-      case c@CLockOp(mem, _) => updateListMap(m, mem, translateOp(c))
+      case c@CLockOp(mem, _, _) => updateListMap(m, mem, translateOp(c))
       case _ => throw UnexpectedCommand(lc)
     })
     val newlockcmds = lockmap.keys.foldLeft(List[Command]())((cs, lid) => {
@@ -45,11 +45,35 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
     stg.setCmds(notlockCmds ++ newlockcmds)
   }
 
-  private def translateOp(c: CLockOp): Command = c.op match {
-    case Free => ICheckLockFree(c.mem)
-    case Reserved => IReserveLock(lockVar(c.mem), c.mem)
-    case Acquired => ICheckLockOwned(c.mem, lockVar(c.mem))
-    case Released => IReleaseLock(c.mem, lockVar(c.mem))
+  private def translateOp(c: CLockOp): Command = {
+    //TODO make this cleaner lol
+    c.op match {
+      case Free => {
+        val i = ICheckLockFree(c.mem)
+        i.memOpType = c.memOpType
+        i.granularity = c.granularity
+        i
+      }
+      case Reserved => {
+        val i = IReserveLock(lockVar(c.mem), c.mem)
+        i.memOpType = c.memOpType
+        i.granularity = c.granularity
+        i
+      }
+      case Acquired => {
+        val i = ICheckLockOwned(c.mem, lockVar(c.mem))
+        i.memOpType = c.memOpType
+        i.granularity = c.granularity
+        i
+      }
+      case Released => {
+        val i = IReleaseLock(c.mem, lockVar(c.mem))
+        i.memOpType = c.memOpType
+        i.granularity = c.granularity
+        i
+      }
+    }
+
   }
 
 }

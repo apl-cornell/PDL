@@ -1,0 +1,48 @@
+pipe hist(counter:int<10>)[feature:int<10>[10]<a, a>,weight:int<32>[10]<a, a>,h:int<32>[10]<a, a>] {
+  if ( counter < 1000<10> ) {
+      call hist(counter + 1<10>);
+      start(feature);
+      reserved(feature[counter],R);
+      acquired(feature[counter],R);
+      end(feature);
+      start(weight);
+      reserved(weight[counter],R);
+      acquired(weight[counter],R);
+      end(weight);
+      int<10> m <- feature[counter];
+      int<32> wt <- weight[counter];
+      released(feature[counter]);
+      released(weight[counter]);
+      
+      ---
+      int<10> mcp = m;
+      start(h);
+      reserved(h[m],R);
+      acquired(h[m],R);
+      reserved(h[mcp],W);
+      acquired(h[mcp],W);
+      end(h);
+      int<32> oldh <- h[m];
+      released(h[m]);
+      
+      ---
+      int<32> nm = oldh + wt;
+      print(nm);
+      h[mcp] <- nm;
+      released(h[mcp]);
+      
+      ---
+      
+  } else {
+      output true;
+      
+  }
+  
+}
+circuit {
+  f = memory(int<10>,10);
+  w = memory(int<32>,10);
+  h = memory(int<32>,10);
+  hg = new hist[f,w,h];
+call hg(0<10>);
+}

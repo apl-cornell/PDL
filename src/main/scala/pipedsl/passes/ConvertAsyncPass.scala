@@ -48,17 +48,21 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
   private def convertRecv(c: CRecv): (Command, Command) = {
     (c.lhs, c.rhs) match {
         //Mem Read
-      case (lhs@EVar(_), EMemAccess(mem, index@EVar(_))) =>
+      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_))) =>
         val handle = freshMessage(mem)
         val send = IMemSend(handle, isWrite = false, mem, None, index)
         val recv = IMemRecv(mem, handle, Some(lhs))
+        send.memOpType = e.memOpType
+        recv.memOpType = e.memOpType
         (send, recv)
       //Mem Write
-      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => mem.typ.get match {
+      case (e@EMemAccess(mem, index@EVar(_)), data@EVar(_)) => mem.typ.get match {
         case TMemType(_, _, _, Latency.Asynchronous) =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, isWrite = true, mem, Some(data), index)
           val recv = IMemRecv(mem, handle, None)
+          send.memOpType = e.memOpType
+          recv.memOpType = e.memOpType
           (send, recv)
           //if the memory is sequential we don't use handle since it
           //is assumed to complete at the end of the cycle

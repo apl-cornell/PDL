@@ -30,9 +30,9 @@ object Locks {
   }
 
 
-  sealed trait LockType
-  case object Specific extends LockType
-  case object General extends LockType
+  sealed trait LockGranularity
+  case object Specific extends LockGranularity
+  case object General extends LockGranularity
   
   case object Free extends LockState("free", 0)
   case object Reserved extends LockState("reserved", 1)
@@ -79,7 +79,7 @@ object Locks {
   def transferLockStates(node: PStage, instates: Map[LockArg, LockState]): Map[LockArg, LockState] = {
     var newMap = instates
     node.getCmds.foreach {
-      case CLockOp(mem, op) => newMap = newMap.updated(mem, op)
+      case CLockOp(mem, op, _) => newMap = newMap.updated(mem, op)
       case _ => ()
     }
     newMap
