@@ -24,9 +24,9 @@ object CanonicalizePass extends CommandPass[Command] with ModulePass[ModuleDef] 
    * @return The same command with no cseqs to/from empty commands
    */
   def removeCEmpty(c: Command): Command = c match {
-    case CSeq(CEmpty, CEmpty) => CEmpty
-    case CSeq(c1, CEmpty) => removeCEmpty(c1)
-    case CSeq(CEmpty, c2) => removeCEmpty(c2)
+    case CSeq(CEmpty(), CEmpty()) => CEmpty()
+    case CSeq(c1, CEmpty()) => removeCEmpty(c1)
+    case CSeq(CEmpty(), c2) => removeCEmpty(c2)
     case CSeq(c1, c2) => CSeq(removeCEmpty(c1), removeCEmpty(c2)).setPos(c.pos)
     case CTBar(c1, c2) => CTBar(removeCEmpty(c1), removeCEmpty(c2)).setPos(c.pos)
     case CIf(cond, cons, alt) => CIf(cond, removeCEmpty(cons), removeCEmpty(alt)).setPos(c.pos)

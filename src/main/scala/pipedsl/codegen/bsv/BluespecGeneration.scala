@@ -713,7 +713,7 @@ object BluespecGeneration {
       case CLockEnd(_) => None
       case CLockOp(_, _) => None
       case CCheck(_) => None
-      case CEmpty => None
+      case CEmpty() => None
       case _: ISpeculate => None
       case _: IUpdate => None
       case _: ICheck => None
@@ -879,7 +879,7 @@ object BluespecGeneration {
       case _: ILockNoOp => None
       case CAssign(_, _) => None
       case CExpr(_) => None
-      case CEmpty => None
+      case CEmpty() => None
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CCheck(_) => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)

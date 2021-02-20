@@ -1,48 +1,77 @@
 package pipedsl.typechecker
 
-import com.microsoft.z3.{AST => Z3AST, Expr => Z3Expr, BoolExpr => Z3BoolExpr, Context => Z3Context}
+import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Expr => Z3Expr}
 import pipedsl.common.Syntax
-import pipedsl.common.Syntax.{BoolOp, BoolUOp, CSeq, Command, EVar, EqOp, Expr}
+import pipedsl.common.Syntax.{BoolOp, BoolUOp, CSeq, Command, EVar, EqOp, Expr, ModuleDef, Prog}
+import pipedsl.common.Utilities.mkAnd
+
+import scala.collection.mutable
 
 class PredicateGenerator(ctx: Z3Context) {
 
   private val intArray = ctx.mkArraySort(ctx.getIntSort, ctx.getIntSort)
-  
-  def generatePostcondition(c: Command,  preCondition: Set[Z3AST]): Set[Z3AST] =
+  private val predicates: mutable.Stack[Z3AST] = mutable.Stack(ctx.mkTrue())
+  private var incrementer = 0
+
+  def checkProgram(p: Prog): Unit = {
+    p.moddefs.foreach(m => checkModule(m))
+  }
+
+  def checkModule(m: ModuleDef):Unit = {
+    //no need to reset any state here, at the end of a module predicates will be just true
+    annotateCommand(m.body)
+  }
+
+  def annotateCommand(c: Command): Unit =  {
     c match {
-      case CSeq(c1, c2) =>
-        val p1 = generatePostcondition(c1, preCondition)
-        generatePostcondition(c2, p1)
-      case Syntax.CTBar(c1, c2) =>
-        val p1 = generatePostcondition(c1, preCondition)
-        generatePostcondition(c2, p1)
-      case Syntax.CIf(cond, cons, alt) => 
-        val abscond = abstractInterpExpr(cond)
-        abscond match {
-          case Some(value: Z3BoolExpr) =>
-            generatePostcondition(cons, preCondition + value)
-              .intersect(generatePostcondition(alt, preCondition + ctx.mkNot(value)))
-          case None =>
-            generatePostcondition(cons, preCondition)
-              .intersect(generatePostcondition(alt, preCondition))
+      case CSeq(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
+      case Syntax.CTBar(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
+      case Syntax.CIf(cond, cons, alt) =>
+        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+        abstractInterpExpr(cond) match {
+          case Some(value) => predicates.push(value);
+          case None => predicates.push(ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue()))
         }
-      case Syntax.CAssign(lhs, rhs) => (lhs, abstractInterpExpr(rhs)) match {
-        case (evar: EVar, Some(value)) =>
-          val declare = ctx.mkEq(declareConstant(evar), value)
-          preCondition + declare
-        case (evar: EVar, None) => preCondition
-        case _ => preCondition
-      }
-      case Syntax.CRecv(lhs, rhs) => (lhs, abstractInterpExpr(rhs)) match {
-        case (evar: EVar, Some(value)) =>
-          val declare = ctx.mkEq(declareConstant(evar), value)
-          preCondition + declare
-        case (evar: EVar, None) => preCondition
-        case _ => preCondition
-      }
-      case _ => preCondition
+        incrementer += 1
+        annotateCommand(cons)
+        val trueBranch = predicates.pop()
+        predicates.push(ctx.mkNot(trueBranch.asInstanceOf[Z3BoolExpr]))
+        annotateCommand(alt)
+        predicates.pop()
+      case Syntax.CSplit(cases, default) =>
+        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+        var runningPredicates: Z3AST = null
+        for (caseObj <- cases) {
+          //get abstract interp of condition
+          var currentCond: Z3AST = null
+          abstractInterpExpr(caseObj.cond) match {
+            case Some(value) => currentCond = value
+            case None => currentCond = ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue())
+          }
+          //Get the not of the current condition
+          val notCurrentCond = ctx.mkNot(currentCond.asInstanceOf[Z3BoolExpr])
+          if (runningPredicates == null) {
+            predicates.push(currentCond)
+            runningPredicates = notCurrentCond
+          } else {
+            val runningNot = runningPredicates
+            //need to add the current condition and the running Not of the previous cases to the predicates
+            predicates.push(mkAnd(ctx, runningNot, currentCond))
+            //add to the current running not
+            runningPredicates = mkAnd(ctx, runningNot, notCurrentCond)
+          }
+          annotateCommand(caseObj.body)
+          //remove the predicate used for this case statement to reset for the next case
+          predicates.pop()
+        }
+        //For default, all the case statements must be false, so add this to the predicates
+        predicates.push(runningPredicates)
+        annotateCommand(default)
+        predicates.pop()
+      case _ => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
     }
-  
+  }
+
   def abstractInterpExpr(e: Expr): Option[Z3Expr] = e match {
     case evar: EVar => Some(declareConstant(evar))
     case Syntax.EInt(v, base, bits) => Some(ctx.mkInt(v))
@@ -87,5 +116,5 @@ class PredicateGenerator(ctx: Z3Context) {
         case _ => throw new RuntimeException("Unexpected type")
       }
       case None => throw new RuntimeException("Missing type")
-    } 
+    }
 }

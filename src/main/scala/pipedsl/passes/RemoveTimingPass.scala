@@ -25,9 +25,9 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       case CSeq(c1, c2) => CSeq(removeTimingConstructs(c1), removeTimingConstructs(c2))
       case CIf(cond, cons, alt) => CIf(cond, removeTimingConstructs(cons), removeTimingConstructs(alt))
       case CTBar(c1, c2) => CSeq(removeTimingConstructs(c1), removeTimingConstructs(c2));
-      case CLockOp(_,_) => CEmpty
-      case CSpeculate(_, _, _, _) => CEmpty
-      case CCheck(_) => CEmpty
+      case CLockOp(_,_) => CEmpty()
+      case CSpeculate(_, _, _, _) => CEmpty()
+      case CCheck(_) => CEmpty()
       case CSplit(cases, default) =>
         val newCases = List[CaseObj]()
         val newDefault = removeTimingConstructs(default)
@@ -52,7 +52,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   
   def convertCListToCSeq(commands: ListBuffer[Command], i: Int): Command = {
     if (i > commands.length-1) {
-      CEmpty
+      CEmpty()
     } else {
       CSeq(commands(i), convertCListToCSeq(commands, i+1))
     }
