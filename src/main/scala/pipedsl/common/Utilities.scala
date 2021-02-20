@@ -1,8 +1,10 @@
 package pipedsl.common
 
-import Syntax._
+import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
+import pipedsl.common.Syntax._
+
 
 object Utilities {
 
@@ -63,7 +65,7 @@ object Utilities {
     case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
     case ISpeculate(specId, specVar, value) => getUsedVars(value) + specId ++ getUsedVars(specVar)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
-    case Syntax.CEmpty => Set()
+    case Syntax.CEmpty() => Set()
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -150,7 +152,7 @@ object Utilities {
     case ICheckLockFree(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
-    case CEmpty => Set()
+    case CEmpty() => Set()
   }
 
   /**
@@ -298,6 +300,14 @@ object Utilities {
       case None => throw except
     }
   }
+
+  /** Like [[Z3Context.mkAnd]], but automatically casts inputs to [[Z3BoolExpr]]s. */
+  def mkAnd(ctx: Z3Context, expressions: Z3AST *): Z3BoolExpr =
+    ctx.mkAnd(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
+
+  /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
+  def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =
+    ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
 
 
 }

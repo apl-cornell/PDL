@@ -52,7 +52,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   
   def convertCListToCSeq(commands: ListBuffer[Command], i: Int): Command = {
     if (i > commands.length-1) {
-      CEmpty
+      CEmpty()
     } else {
       CSeq(commands(i), convertCListToCSeq(commands, i+1))
     }
