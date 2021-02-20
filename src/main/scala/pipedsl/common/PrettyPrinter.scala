@@ -103,7 +103,7 @@ class PrettyPrinter(output: Option[File]) {
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
-      case Syntax.CEmpty => ins
+      case Syntax.CEmpty() => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +
         cmd.foldLeft("")((s, c) => s + printCmdToString(c))
       case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +

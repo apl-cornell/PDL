@@ -1,8 +1,9 @@
 package pipedsl
 
+import com.microsoft.z3.Context
+
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
-
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
@@ -75,7 +76,10 @@ object Main {
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
       pinfo.addLockInfo(lockWellformedChecker.getModLockTypeMap)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockTypeMap)
+      val ctx = new Context()
+      val predicateGenerator = new PredicateGenerator(ctx)
+      predicateGenerator.checkProgram(recvProg)
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockTypeMap, ctx)
       lockChecker.check(recvProg, None)
       SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {

@@ -301,7 +301,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
       
-    case CEmpty => tenv
+    case CEmpty() => tenv
     case _ => throw UnexpectedCommand(c)
   }
 
