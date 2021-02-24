@@ -25,6 +25,7 @@ object Syntax {
     sealed trait LockInfoAnnotation {
       var memOpType: Option[LockType] = None
       var granularity: LockGranularity = General
+      var lockHandleArg: Option[EVar] = None
     }
   }
 

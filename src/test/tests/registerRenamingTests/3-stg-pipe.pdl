@@ -1,0 +1,28 @@
+pipe test(input: int<32>)[rf: int<32>[5]<c,s>]: bool {
+    int<5> rs1 = input{0:4};
+    int<5> rd = rs1 - 1<5>;
+    if (input < 100<32>) {
+        call test(input + 1<32>);
+    } else {
+        output(true);
+    }
+    start(rf);
+    reserve(rf[rs1], R);
+    reserve(rf[rd], W);
+    end(rf);
+    ---
+    block(rf[rs1]);
+    int<32> arg = 1<32> + rf[rs1];
+    release(rf[rs1]);
+    ---
+    block(rf[rd]);
+    rf[rd] <- arg;
+    release(rf[rd]);
+    ---
+}
+
+circuit {
+    rf = regfile(int<32>, 5);
+    t = new test[rf];
+    call t(0<32>);
+}
