@@ -17,9 +17,9 @@ jobs:
       with:
         java-version: 1.8
     - name: Install BSV
-    - env:
+      env:
           BLUESPECDIR: "$GITHUB_WORKSPACE/bsc"
-    - run: apt-get install ghc
+      run: apt-get install ghc
            apt-get install libghc-regex-compat-dev libghc-syb-dev libghc-old-time-dev libghc-split-dev
            apt-get install autoconf gperf
            apt-get install flex bison
