@@ -1,0 +1,33 @@
+name: Scala CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up JDK 1.8
+      uses: actions/setup-java@v1
+      with:
+        java-version: 1.8
+    - name: Install BSV
+    - env:
+          TMP: x
+    - run: apt-get install ghc
+           apt-get install libghc-regex-compat-dev libghc-syb-dev libghc-old-time-dev libghc-split-dev
+           apt-get install autoconf gperf
+           apt-get install flex bison
+           apt-get install iverilog
+           git clone --recursive https://github.com/B-Lang-org/bsc
+           pushd bsc
+           make install
+           popd
+    - name: Run tests
+      run: sbt test
