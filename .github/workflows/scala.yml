@@ -22,7 +22,7 @@ jobs:
       id:   cache-bsc
       uses: actions/cache@v2
       with:
-        path: bsc
+        path: ${{github.workspace}}/bsc
         key: ubuntu-bsc
     - name: Install BSV
       if: steps.cache-bsc.outputs.cache-hit != 'true'
