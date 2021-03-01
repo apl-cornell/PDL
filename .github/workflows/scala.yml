@@ -41,7 +41,7 @@ jobs:
       env:
         BLUESPECDIR: ${{github.workspace}}/bsc
       run: |
-        export BLUESPECDIR="$BLUESPECDIR"
+        export BLUESPECDIR=${{env.BLUESPECDIR}}
         echo "$BLUESPECDIR"
         make
     - name: Run tests
