@@ -39,7 +39,7 @@ jobs:
            popd
     - name: Build Libs
       env:
-        BLUESPECDIR: ${{GITHUB_WORKSPACE}}/bsc
+        BLUESPECDIR: ${{github.workspace}}/bsc
       run: |
         export BLUESPECDIR="$BLUESPECDIR"
         echo "$BLUESPECDIR"
