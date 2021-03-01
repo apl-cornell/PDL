@@ -3,7 +3,7 @@ package pipedsl.passes
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Locks._
-import pipedsl.common.Syntax
+import pipedsl.common.{LockImplementation, Syntax}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, updateListMap}
 import pipedsl.passes.Passes.StagePass
@@ -52,7 +52,8 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
       case _ => throw UnexpectedCommand(lc)
     })
     val newlockcmds = lockmap.keys.foldLeft(List[Command]())((cs, lid) => {
-      cs ++ mergeLockOps(lid, lockmap(lid))
+      val lockImpl = LockImplementation.getLockImpl(lid)
+      cs ++ lockImpl.mergeLockOps(lid, lockmap(lid))
     })
     notlockCmds.foreach(c => annotateMemOps(c))
     stg.setCmds(notlockCmds ++ newlockcmds)

@@ -2,6 +2,7 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
+import pipedsl.common.LockImplementation.{LockInterface, LockQueue}
 import pipedsl.common.Locks.{General, LockGranularity, LockState, Specific}
 
 
@@ -78,7 +79,7 @@ object Syntax {
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
-      case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
+      case TMemType(elem, size, rLat, wLat, l) => s"${elem.toString}[${size}]<$rLat, $wLat>($l)"
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
       case TNamedType(n) => n.toString
@@ -93,7 +94,9 @@ object Syntax {
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
+  case class TMemType(elem: Type, addrSize: Int,
+    readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous,
+    lockImpl: LockInterface = LockImplementation.getDefaultLockImpl) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
   //This is primarily used for parsing and is basically just a type variable

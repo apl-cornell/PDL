@@ -99,6 +99,9 @@ object Locks {
    * If any stage both calls "start" and "end" for a lock region,
    * then this function will eliminate both of them since we know statically
    * that the region is a single stage and therefore mutually exclusive.
+   * This doesn't check inside conditionally executed lock reservations;
+   * while this is an imprecision, later stage synthesis tools will still likely
+   * automatically prune the unnecessary circuitry.
    * @param stg The stage to modify
    */
   def eliminateLockRegions(stg: PStage): Unit = {
@@ -118,39 +121,6 @@ object Locks {
       case _ => true
     }
     stg.setCmds(newCmds)
-  }
-  /**
-   * This takes a memory identifier and a set of lock operations
-   * for that identifier. If certain combinations of operations
-   * are present, this returns a condensed set of new operations.
-   * Otherwise, they are left unmodified.
-   * @param mod The memory that is being considered
-   * @param lops A set of lock operations relevant to mod
-   * @return A new merged set of lock operations if any merges apply
-   */
-  def mergeLockOps(mod: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-    //res + rel -> checkfree
-    //res + checkowned -> res + checkfree
-    //else same
-    val rescmd = lops.find {
-      case _:IReserveLock => true
-      case _ => false
-    }
-    val relcmd = lops.find {
-      case _:IReleaseLock => true
-      case _ => false
-    }
-    val checkownedCmd = lops.find {
-      case _:ICheckLockOwned => true
-      case _ => false
-    }
-    if (rescmd.isDefined && relcmd.isDefined) {
-      List(ICheckLockFree(mod))
-    } else if (rescmd.isDefined && checkownedCmd.isDefined) {
-      List(rescmd.get, ICheckLockFree(mod))
-    } else {
-      lops
-    }
   }
 
   /**

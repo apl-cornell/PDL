@@ -30,6 +30,10 @@ object Errors {
   case class UnexpectedCommand(c: Command) extends RuntimeException(
     withPos(s"Reached unexpected command $c", c.pos)
   )
+  case class UnexpectedLockImpl(i: Id) extends RuntimeException(
+    withPos(s"$i is not a valid lock implementation name", i.pos)
+  )
+
   case class InvalidBitExtraction(s: Int, e: Int) extends RuntimeException(
     s"Start: $s must be less than or equal to End: $e"
   )

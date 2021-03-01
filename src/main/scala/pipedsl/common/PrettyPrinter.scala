@@ -153,7 +153,8 @@ class PrettyPrinter(output: Option[File]) {
     case TBool() => "bool"
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
-    case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
+    case TMemType(elem, addrSize, rlat, wlat, l) => printTypeToString(elem) + "[" + addrSize.toString + "]" +
+      "<" + rlat + ", " + wlat + ">" + "(" + l + ")"
     case TModType(_, _, _, _) => "TODO MOD TYPE"
     case TNamedType(name) =>  name.v
     case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)

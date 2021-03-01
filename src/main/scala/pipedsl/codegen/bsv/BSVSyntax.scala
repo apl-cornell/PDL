@@ -33,7 +33,8 @@ object BSVSyntax {
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
     def toBSVType(t: Type): BSVType = t match {
-      case TMemType(elem, addrSize, rlat, _) =>
+        //TODO incorporate lock name
+      case TMemType(elem, addrSize, rlat, _, _) =>
         bsints.getMemType(isAsync = rlat != Combinational,
           BSizedInt(unsigned = true, addrSize), toBSVType(elem),
           Some(bsints.getDefaultMemHandleType))

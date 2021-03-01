@@ -1,3 +1,12 @@
+//need to specify lock implementation type somehow
+//perhaps rf: int<32>[5]<c,s>RENAME
+//        imem: int<32>[32]<a,a>FAQUEUE
+//        rf2: int<32>[5]<c,s>QUEUE
+//        dmem: int<32>[5]<a,a>LSQ
+//memories come with: data type, addr type, read latency, lock impl
+//lock impls are named, e.g., QUEUE, FAQUEUE, RENAME, LSQ
+//lock impls are compatible w/ specific memory latencies
+
 pipe test(input: int<32>)[rf: int<32>[5]<c,s>]: bool {
     int<5> rs1 = input{0:4};
     int<5> rd = rs1 - 1<5>;

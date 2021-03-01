@@ -1,7 +1,6 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.UnexpectedCommand
-import pipedsl.common.Locks.mergeLockOps
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{log2, updateListMap}
 
@@ -153,7 +152,7 @@ object DAGSyntax {
     }
 
     //returns lock cmds on left and non lock commands on right
-    //non lock commands are stored as a map from the relevant lock ID to the set of commands
+    //lock commands are stored as a map from the relevant lock ID to the set of commands
     private def splitLockCmds(cmds: Iterable[Command]): (Map[LockArg, List[Command]], List[Command]) = {
       var lockCmds = Map[LockArg, List[Command]]()
       var nonlockCmds = List[Command]()
@@ -189,6 +188,7 @@ object DAGSyntax {
       var mergedCmds = List[Command]()
       val lockIds = srcLock.keySet ++ newLock.keySet
       lockIds.foreach(lid => {
+        val lockimpl = LockImplementation.getLockImpl(lid)
         val srcCmds = srcLock.get(lid)
         val newCmds = newLock.get(lid)
         (srcCmds.isDefined, newCmds.isDefined) match {
@@ -214,12 +214,12 @@ object DAGSyntax {
           newCondLockCmds.foreach(ent => {
             lockIds.foreach(l => {
               val lockops = ent._2.filter(p => getLockId(p) == l)
-              mergedCmds = mergedCmds :+ ICondCommand(ent._1, mergeLockOps(l, lockops).toList)
+              mergedCmds = mergedCmds :+ ICondCommand(ent._1, lockimpl.mergeLockOps(l, lockops).toList)
             })
           })
           lockIds.foreach(l => {
             val lockops = newUnCondLockCmds.filter(p => getLockId(p) == l)
-            mergedCmds = mergedCmds ++ mergeLockOps(l, lockops)
+            mergedCmds = mergedCmds ++ lockimpl.mergeLockOps(l, lockops)
           })
         }
       })

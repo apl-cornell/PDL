@@ -145,6 +145,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
     case CirMem(elemTyp, addrSize) => {
+      //TODO instantiate these w/ correct lock types
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
       c.typ = Some(mtyp)
       (mtyp, tenv)
@@ -378,7 +379,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv)
       (memt, idxt) match {
-        case (TMemType(e, s, _, _), TSizedInt(l, true)) if l == s => (e, env1)
+        case (TMemType(e, s, _, _, _), TSizedInt(l, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }

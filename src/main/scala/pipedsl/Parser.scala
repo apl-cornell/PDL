@@ -3,6 +3,7 @@ import scala.util.parsing.combinator._
 import common.Syntax._
 import common.Utilities._
 import common.Locks._
+import pipedsl.common.LockImplementation
 
 import scala.util.matching.Regex
 
@@ -218,17 +219,24 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
-  lazy val latency: P[Latency.Latency] = "c" ^^ { _ => Latency.Combinational } |
-    "s" ^^ { _ => Latency.Sequential } |
+  lazy val latency: P[Latency.Latency] =
+    "c" ^^ { _ => Latency.Combinational } |
+    "s" ^^ { _ => Latency.Sequential }    |
     "a" ^^ { _ => Latency.Asynchronous }
-  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency)).? ^^ { case elem ~ size ~ lats =>
-    if (lats.isDefined) {
-      val rlat = lats.get._1
-      val wlat = lats.get._2
-      TMemType(elem, size, rlat, wlat)
-    } else {
-      TMemType(elem, size)
-    }
+
+  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency) ~ parens(iden).?).?  ^^ {
+    case elem ~ size ~ lats =>
+      if (lats.isDefined) {
+        val rlat = lats.get._1._1
+        val wlat = lats.get._1._2
+        val lock = lats.get._2
+        if (lock.isDefined)
+          TMemType(elem, size, rlat, wlat, LockImplementation.getLockImpl(lock.get))
+        else
+          TMemType(elem, size, rlat, wlat)
+      } else {
+        TMemType(elem, size)
+      }
   }
 
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }

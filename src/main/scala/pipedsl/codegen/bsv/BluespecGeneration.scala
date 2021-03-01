@@ -249,7 +249,7 @@ object BluespecGeneration {
       val locktype = modInfo.getLockTypes.get(m.name) match {
         case Some(Locks.Specific) =>
           val addrType = m.typ match {
-            case TMemType(_, addrSize, _, _) =>  BSizedInt(unsigned = true, addrSize)
+            case TMemType(_, addrSize, _, _, _) =>  BSizedInt(unsigned = true, addrSize)
             case _ => throw UnexpectedType(m.pos, "Address Lock", "Memory Type", m.typ)
           }
           bsInts.getAddrLockType(bsInts.getDefaultLockHandleType, addrType)

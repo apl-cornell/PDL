@@ -1,16 +1,79 @@
 package pipedsl.common
 
+import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Syntax._
 
 
 object LockImplementation {
 
-  trait LockInterface {
-    //Determines whether or not this lock type can support the given list of
-    //commands in a given stage
-    //returns: true if no conflicts, false if has conflicts
+  private val lqueue = new LockQueue()
+  private val falqueue = new FALockQueue()
+  private val rename = new RenameRegfile()
+  private val lsq = new LoadStoreQueue()
+
+  /**
+   *
+   * @return
+   */
+  def getDefaultLockImpl: LockInterface = lqueue
+
+  /**
+   *
+   * @param n
+   * @return
+   */
+  def getLockImpl(n: Id): LockInterface = n.v match {
+    case "Queue" => lqueue
+    case "FAQueue" => falqueue
+    case "RenameRF" => rename
+    case "LSQ" => lsq
+    case _ => throw UnexpectedLockImpl(n)
+  }
+
+  /**
+   *
+   * @param l
+   * @return
+   */
+  def getLockImpl(l: LockArg): LockInterface = {
+    val mem = l.id
+    if (mem.typ.isEmpty) {
+      throw MissingType(mem.pos, mem.v)
+    } else {
+      val mtyp = mem.typ.get
+      mtyp.matchOrError(mem.pos, "Lock Argument", "Memory") {
+        case TMemType(_, _, _, _, lockImpl) => lockImpl
+      }
+    }
+  }
+
+  sealed trait LockInterface {
+    /**
+     * Determines whether or not this lock type can support the given list of
+     * commands in a given stage
+     * @param mem The memory (or memory location) to consider for conflicts
+     * @param lops The set of operations to consider for conflicts
+     * @return true if no conflicts, false if conflicts
+     */
     def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean
+
+    /**
+     * Merges the given set of commands which are meant to occur in
+     * a single stage. This is only intended to accept LOCK modifying commands
+     * (nothing else). If other commands are included in the list, they may not be returned in the result.
+     * @param mem The memory (or memory location) whose ops we are merging
+     * @param lops The operations to merge
+     * @return The list of merged operations
+     */
     def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
+
+    /**
+     * This returns true iff this lock implementation
+     * is compatible with the given memory type.
+     * @param mtyp The memory type
+     * @return true iff this lock can be backed by a memory of the given type
+     */
+    def isCompatible(mtyp: TMemType): Boolean
   }
 
   def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
@@ -66,7 +129,7 @@ object LockImplementation {
    * It also does not require interposing on the memory requests and can therefore be
    * used for any memory type.
    */
-  class LockQueue extends LockInterface {
+  private class LockQueue extends LockInterface {
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //res + rel -> checkfree
       //res + checkowned -> res + checkfree
@@ -84,6 +147,13 @@ object LockImplementation {
     }
     //no possible conflicts since all ops are mergeable if conflicting
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
+    override def isCompatible(mtyp: TMemType): Boolean = true
+    override def toString: String = "LockQueue"
+  }
+
+  //This is a different implementation with the same set of lock interface behaviors
+  private class FALockQueue extends LockQueue {
+    override def toString: String = "FALockQueue"
   }
 
   /**
@@ -91,7 +161,7 @@ object LockImplementation {
    * Reserve statements either translate to _reading a name_ (R) or _allocating a new name_ (W).
    *
    */
-  class RenameRegfile extends LockInterface {
+  private class RenameRegfile extends LockInterface {
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //This modules doesn't support any "merging")
       lops
@@ -113,9 +183,19 @@ object LockImplementation {
         true
       }
     }
+    override def isCompatible(mtyp: TMemType): Boolean = {
+      //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
+      return mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
+    }
+    override def toString: String = "RenameRegfile"
   }
 
-  class LoadStoreQueue extends LockInterface {
+  /**
+   * This represents a front to asynchronously responding memories,
+   * which take multiple cycles to service reads + writes.
+   * It includes a LoadStoreQueue which forwards data to avoid extra memory accesses.
+   */
+  private class LoadStoreQueue extends LockInterface {
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //don't need to do any merging! (no optimizations for releasing in the same cycle as acquiring)
       lops
@@ -144,7 +224,12 @@ object LockImplementation {
         true
       }
     }
+    override def isCompatible(mtyp: TMemType): Boolean = {
+      return mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
+    }
+    override def toString: String = "LoadStoreQueue"
   }
+
   /*
    *  Locks:
    *    reserve(R)
