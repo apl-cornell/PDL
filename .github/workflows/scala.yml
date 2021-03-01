@@ -18,7 +18,14 @@ jobs:
         java-version: 1.8
     - name: Checkout Code
       uses: actions/checkout@v2
+    - name: Cache BSV
+      id:   cache-bsc
+      uses: actions/cache@v2
+      with:
+        path: bsc
+        key: ubuntu-bsc
     - name: Install BSV
+      if: steps.cache-bsc.outputs.cache-hit != 'true'
       run: |
            sudo apt-get install ghc
            sudo apt-get install libghc-regex-compat-dev libghc-syb-dev libghc-old-time-dev libghc-split-dev
@@ -34,6 +41,8 @@ jobs:
       env:
         BLUESPECDIR: "$GITHUB_WORKSPACE/bsc"
       run: |
+        export BLUESPECDIR="$BLUESPECDIR"
+        echo "$BLUESPECDIR"
         make
     - name: Run tests
       run: sbt test
