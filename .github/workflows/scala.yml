@@ -34,8 +34,6 @@ jobs:
       env:
         BLUESPECDIR: "$GITHUB_WORKSPACE/bsc"
       run: |
-        pushd PDL
         make
-        popd
     - name: Run tests
       run: sbt test
