@@ -12,15 +12,17 @@ object LockImplementation {
   private val lsq = new LoadStoreQueue()
 
   /**
-   *
-   * @return
+   * This is used when the lock implementation for a memory is left unspecified:
+   * therefore it must be compatible with any kind of memory.
+   * @return The default lock implementation which can be used with any memory.
    */
   def getDefaultLockImpl: LockInterface = lqueue
 
   /**
-   *
-   * @param n
-   * @return
+   * Lookup the lock implementation based on its name, only the string
+   * value of the Id is used for lookup.
+   * @param n The name of the lock type to lookup
+   * @return The implementation for that lock type
    */
   def getLockImpl(n: Id): LockInterface = n.v match {
     case "Queue" => lqueue

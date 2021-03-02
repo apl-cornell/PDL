@@ -254,8 +254,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
       { case t: TModType =>
           if (mem.evar.isDefined) throw UnexpectedType(t.pos, "address lock operation", "Memory Type", t)
-          else tenv
+          else {
+            mem.id.typ = Some(t)
+            tenv
+          }
         case memt: TMemType => {
+          mem.id.typ = Some(memt)
           if(mem.evar.isEmpty) tenv
           else {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv)
