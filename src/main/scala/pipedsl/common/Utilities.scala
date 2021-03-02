@@ -128,11 +128,20 @@ object Utilities {
     case IMemWrite(_, addr, data) => Set(addr.id, data.id)
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
-    case IReserveLock(_, _) => Set()
+    case IReserveLock(_, larg) => larg.evar match {
+      case Some(value) => Set(value.id)
+      case None => Set()
+    }
     case IAssignLock(_, src, default) => getUsedVars(src) ++
       (if (default.isDefined) getUsedVars(default.get) else Set())
-    case ICheckLockOwned(_, handle) => Set(handle.id)
-    case IReleaseLock(_, handle) => Set(handle.id)
+    case ICheckLockOwned(larg, handle) => Set(handle.id) ++ (larg.evar match {
+      case Some(value) => Set(value.id)
+      case None => Set()
+    })
+    case IReleaseLock(larg, handle) => Set(handle.id) ++ (larg.evar match {
+      case Some(value) => Set(value.id)
+      case None => Set()
+    })
     case ILockNoOp(_) => Set()
     case ICheckLockFree(_) => Set()
     case CLockStart(_) => Set()
