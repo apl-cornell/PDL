@@ -16,7 +16,11 @@ object AddEdgeValuePass extends StagePass[List[PStage]] {
 
   override def run(stgs: List[PStage]): List[PStage] = {
     val (usedIns, _) = worklist(flattenStageList(stgs), UsedInLaterStages)
-    stgs.foreach(s => addEdgeValues(s, usedIns, Set[Id]()))
+    val (_, canSendOut) = worklist(flattenStageList(stgs), CanSendToLaterStages)
+    val variablesToSend = (usedIns map { case (stg, vars) => {
+      (stg, vars.intersect(canSendOut(stg)))
+    }}).withDefaultValue(Set()) //need withdefaultvalue since that isn't preserved
+    stgs.foreach(s => addEdgeValues(s, variablesToSend, Set[Id]()))
     stgs
   }
 

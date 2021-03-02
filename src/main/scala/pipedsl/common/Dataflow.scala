@@ -110,8 +110,28 @@ object Dataflow {
     case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
   }
 
+
+  /**
+   * This takes in the sets of variables that can be sent by earlier
+   * stages and simply unions them together (since they all are available now).
+   * @param node
+   * @param canSend
+   * @return
+   */
+  def mergeCanSend(node: PStage, canSend: DFMap[Set[Id]]): Set[Id] = {
+    canSend.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ canSend(n))
+  }
+
+  def transferCanSend(p: PStage, earlierCan: Set[Id]): Set[Id] = {
+    earlierCan ++ getWrittenVars(p.getCmds)
+    //if a var was written this stage, or a prior stage, then we can send it to the next stage
+  }
+
   val UsedInLaterStages: Analysis[Set[Id]] =
     Analysis[Set[Id]](isForward = false, Set(), mergeUsedVars, transferUsedVars)
+
+  val CanSendToLaterStages: Analysis[Set[Id]] =
+    Analysis[Set[Id]](isForward = true, Set(), mergeCanSend, transferCanSend)
   val LockStateInfo: Analysis[Map[LockArg, LockState]] = {
     Analysis[Map[LockArg, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
   }
