@@ -45,6 +45,7 @@ object LockImplementation {
       val mtyp = mem.typ.get
       mtyp.matchOrError(mem.pos, "Lock Argument", "Memory") {
         case TMemType(_, _, _, _, lockImpl) => lockImpl
+        case _:TModType => getDefaultLockImpl //modules only use the default lock impl for now
       }
     }
   }
