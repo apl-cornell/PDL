@@ -22,7 +22,7 @@ jobs:
       id:   cache-bsc
       uses: actions/cache@v2
       with:
-        path: ~/.bsc
+        path: bsc
         key: ubuntu-bsc
     - name: Install BSV
       if: steps.cache-bsc.outputs.cache-hit != 'true'
@@ -47,4 +47,15 @@ jobs:
         echo "$PATH"
         make
     - name: Run tests
-      run: sbt test
+      run: |
+        export BLUESPECDIR=${{env.BLUESPECDIR}}
+        export PATH="$PATH":"$BLUESPECDIR"/inst/bin
+        sbt test
+
+
+
+
+
+
+
+
