@@ -17,9 +17,11 @@ class CSplitSuite extends AnyFunSuite {
 
     //TODO find a way to only run the right set of tests
     //based on whether we expect success or not
+
+    /* for now, skip these as they aren't that useful atm.
     test((testBaseName + " Parse")) {
       testParse(testFolder, t)
-    }
+    }*/
 
     test((testBaseName + " Typecheck")) {
       testTypecheck(testFolder, t)
