@@ -129,9 +129,8 @@ object Dataflow {
 
   val UsedInLaterStages: Analysis[Set[Id]] =
     Analysis[Set[Id]](isForward = false, Set(), mergeUsedVars, transferUsedVars)
-
-  val CanSendToLaterStages: Analysis[Set[Id]] =
-    Analysis[Set[Id]](isForward = true, Set(), mergeCanSend, transferCanSend)
+  def CanSendToLaterStages(inputs: Set[Id]): Analysis[Set[Id]] =
+    Analysis[Set[Id]](isForward = true, inputs, mergeCanSend, transferCanSend)
   val LockStateInfo: Analysis[Map[LockArg, LockState]] = {
     Analysis[Map[LockArg, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
   }
