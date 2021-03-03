@@ -523,16 +523,21 @@ object BluespecGeneration {
       //generate a conditional assignment expression to choose
       //which conditional edge we're reading inputs from
       val condIn = stg.inEdges.filter(e => e.condRecv.isDefined)
-      //each edge better be accepting the same values
+      //the list of all values sent by _some_ edge
       val variableList = condIn.foldLeft(Set[Id]())((s, e) => {
         s ++ e.values
       })
       variableList.foreach(v => {
         val condEdgeExpr = condIn.foldLeft[BExpr](BDontCare)((expr, edge) => {
-          val paramExpr = bsInts.getFifoPeek(edgeParams(edge))
-          BTernaryExpr(translator.toBSVExpr(edge.condRecv.get),
-            BStructAccess(paramExpr, BVar(v.v, translator.toBSVType(v.typ.get))),
-            expr)
+          //if value is expected to come in on that edge, use that
+          //else we're not going to use the value later, send a dont care
+          val edgeValue = if (edge.values.contains(v)) {
+            val paramExpr = bsInts.getFifoPeek(edgeParams(edge))
+            BStructAccess(paramExpr, BVar(v.v, translator.toBSVType(v.typ.get)))
+          } else {
+            BDontCare
+          }
+          BTernaryExpr(translator.toBSVExpr(edge.condRecv.get), edgeValue, expr)
         })
         val bvar = translator.toBSVVar(v)
         body = body :+ BDecl(bvar, Some(condEdgeExpr))
