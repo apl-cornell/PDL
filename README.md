@@ -34,7 +34,7 @@ the only supported platform.
 
 In the top-level directory of this repo, simply  run `make`.
 
-This will produce an executable jar, `pdsl.jar`, in the `target/scala-2.13/` directory
+This will produce an executable jar, `pdl.jar`, in the `target/scala-2.13/` directory
 and will use BSV to compile the custom hardware module libraries.
 
 You can also manually build the compiler by running `sbt compile`.
@@ -45,7 +45,7 @@ You can also manually build the compiler by running `sbt compile`.
 The main class is `pipedsl.Main` and can be run via
 the sbt command `sbt "run pipedsl.Main <args>"`.
 Alternatively, the executable jar can be used by 
-running java with the command `java -jar pdsl.jar <args>`.
+running java with the command `java -jar pdl.jar <args>`.
 
 We also provide a script `pdl` in the `bin` directory that
 runs the executable jar with the provided arguments.

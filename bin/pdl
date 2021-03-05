@@ -3,7 +3,7 @@
 set -e
 
 #execute the pdl compiler
-JARNAME=pdsl.jar
+JARNAME=pdl.jar
 JARPATH=target/scala-2.13/"$JARNAME"
 SCRIPTPATH=$(cd "$(dirname "$0")" && pwd -P)
 #pass through all cmds except fist

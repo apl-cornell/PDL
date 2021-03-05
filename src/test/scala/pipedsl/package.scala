@@ -8,8 +8,6 @@ import scala.sys.process._
 
 package object pipedsl {
   val pathToBluespecScript = "bin/runbsc"
-  val outputFileBS = "top.sim.out"
-
 
   def getListOfFiles(dir: String, extension: String):List[File] = {
     val d = new File(dir)
@@ -40,57 +38,49 @@ package object pipedsl {
 
   def testParse(testDir: File, inputFile: File): Unit = {
     Main.parse(debug = false, printOutput = true, inputFile, testDir)
-    compareFiles(testDir, inputFile, "parse")
+    val success = compareFiles(testDir, inputFile, "parse")
     deleteGeneratedFiles(testDir)
+    assert(success)
   }
 
-  def testTypecheck(testDir: File, inputFile: File): Unit = {
+  def testTypecheck(testDir: File, inputFile: File): Boolean = {
+    var doesTypecheck: Boolean = false
     try {
       Main.runPasses(printOutput = true, inputFile, testDir)
+      doesTypecheck = true
     } catch {
       case _: Throwable => ()
     }
-    compareFiles(testDir, inputFile, "typecheck")
+    val success = compareFiles(testDir, inputFile, "typecheck")
     deleteGeneratedFiles(testDir)
+    assert(success)
+    return doesTypecheck
   }
 
   def testBlueSpecCompile(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
     Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit)
     val exit = (pathToBluespecScript + " v " + testDir.getAbsolutePath).!
-    assert(exit == 0)
     deleteGeneratedFiles(testDir)
-    memInit.values.foreach(memPath =>
-      new File(Paths.get(testDir.getAbsolutePath, FilenameUtils.getName(memPath)).toString).delete())
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).delete()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).delete()
+    deleteBSVFiles(testDir, memInit)
+    assert(exit == 0)
   }
 
   def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
     Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit)
-    val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath).!
-    assert(exit == 0)
-    val blueSpecOutFile = new File(Paths.get(testDir.getAbsolutePath, outputFileBS).toString)
-    val expected = new File(Paths.get(testDir.getAbsolutePath, "solutions", FilenameUtils.getBaseName(inputFile.getName) + "." + "simsol").toString)
-    FileUtils.contentEquals(blueSpecOutFile, expected)
-    assert(FileUtils.contentEqualsIgnoreEOL(blueSpecOutFile, expected, null))
+    val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath + " " + FilenameUtils.getBaseName(inputFile.getName) + ".sim").!
+    val success = exit == 0 && compareFiles(testDir, inputFile, "sim")
     deleteGeneratedFiles(testDir)
-    memInit.values.foreach(memPath =>
-      new File(Paths.get(testDir.getAbsolutePath, FilenameUtils.getName(memPath)).toString).delete())
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).delete()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).delete()
+    deleteBSVFiles(testDir, memInit)
+    assert(success)
   }
 
-  def compareFiles(testDir: File, inputFile: File, fileExtension: String): Unit = {
+  def compareFiles(testDir: File, inputFile: File, fileExtension: String): Boolean = {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + "." + fileExtension
-    val outputFile = new File(Paths.get(testDir.getPath, outputName).toString)
-    val expected = new File(Paths.get(testDir.getPath, "solutions", outputName + "sol").toString)
-    assert(FileUtils.contentEqualsIgnoreEOL(outputFile, expected, null))
+    val outputFile = new File(Paths.get(testDir.getAbsolutePath, outputName).toString)
+    val expected = new File(Paths.get(testDir.getAbsolutePath, "solutions", outputName + "sol").toString)
+    return FileUtils.contentEqualsIgnoreEOL(outputFile, expected, null);
   }
 
   def deleteGeneratedFiles(testDir: File): Unit = {
@@ -104,6 +94,16 @@ package object pipedsl {
       f.getName.endsWith(".out") ||
       f.getName.endsWith(".parse") ||
       f.getName.endsWith(".typecheck") ||
+      f.getName.endsWith(".sim") ||
       f.getName.endsWith(".interpret")).foreach(f => f.delete())
+  }
+
+  def deleteBSVFiles(testDir: File, memMap: Map[String, String]): Unit = {
+    memMap.values.foreach(memPath =>
+      new File(Paths.get(testDir.getAbsolutePath, FilenameUtils.getName(memPath)).toString).delete())
+    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).deleteRecursively()
+    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).deleteRecursively()
+    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).delete()
+    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).delete()
   }
 }

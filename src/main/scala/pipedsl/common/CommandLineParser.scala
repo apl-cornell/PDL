@@ -39,13 +39,13 @@ object CommandLineParser {
           .text("Add debug commands to the generated circuit"),
         arg[File]("<file>...")
           .action((x, c) => c.copy(file = x))
-          .text("pdsl files to parse"),
+          .text("pdl files to parse"),
         cmd("parse")
-          .text("parses the provided pdsl file and prints to the out file\n")
+          .text("parses the provided pdl file and prints to the out file\n")
           .action((_, c) => c.copy(mode = "parse")),
         cmd("interpret")
           .action((_, c) => c.copy(mode = "interpret"))
-          .text("interprets the provided pdsl file and prints the resulting memory state to the out file\n")
+          .text("interprets the provided pdl file and prints the resulting memory state to the out file\n")
           .children(
             opt[Int]("maxIterations")
               .action((x,c) => c.copy(maxIterations = x))
@@ -59,7 +59,7 @@ object CommandLineParser {
               .text("provided memory inputs")
           ),
         cmd("gen")
-          .text("generates code for the provided pdsl file and writes the generated bluespec in the 'out' directory\n")
+          .text("generates code for the provided pdl file and writes the generated bluespec in the 'out' directory\n")
           .action((_, c) => c.copy(mode = "gen"))
           .children(
             opt[String]("addrLockModule")

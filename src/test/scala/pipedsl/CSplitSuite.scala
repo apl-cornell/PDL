@@ -10,6 +10,14 @@ class CSplitSuite extends AnyFunSuite {
   private val testFiles = getListOfTests(folder)
   private val simFiles =  getListOfSims(folder)
   private val testFolder = new File(folder)
+  //TODO better way to set this up (right now convention
+  //requires test only has memories containing 32-bit values i and r -> they may omit these and it will still work
+
+  private val memInputs = folder + "/memInputs"
+  def defaultInputMap(testName: String): Map[String,String] = Map(
+    "i" -> (memInputs + "/i_" + testName ),
+    "r" -> (memInputs + "/r_" + testName )
+  )
 
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)
@@ -23,18 +31,20 @@ class CSplitSuite extends AnyFunSuite {
       testParse(testFolder, t)
     }*/
 
+    var doesTypecheck = false
     test((testBaseName + " Typecheck")) {
-      testTypecheck(testFolder, t)
+      doesTypecheck = testTypecheck(testFolder, t)
     }
 
-
-    test((testBaseName + " BSV Compile")) {
-      testBlueSpecCompile(testFolder, t, None, Map())
+    if (doesTypecheck) {
+      test((testBaseName + " BSV Compile")) {
+        testBlueSpecCompile(testFolder, t, None, Map())
+      }
     }
 
-    if (simFile.exists) {
+    if (doesTypecheck && simFile.exists) {
       test((testBaseName + " Simulation")) {
-        testBlueSpecSim(testFolder, t, None, Map())
+        testBlueSpecSim(testFolder, t, None, defaultInputMap(testBaseName))
       }
     }
   })

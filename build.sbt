@@ -1,4 +1,4 @@
-name := "PipeDSL"
+name := "PipelineDescriptionLanguage"
 version := "0.0.1"
 scalaVersion := "2.13.2"
 
@@ -25,6 +25,6 @@ libraryDependencies ++= Seq(
 )
 
 //Deployment Options
-assemblyJarName in assembly := "pdsl.jar"
+assemblyJarName in assembly := "pdl.jar"
 test in assembly := {}
 mainClass in assembly := Some("pipedsl.Main")
