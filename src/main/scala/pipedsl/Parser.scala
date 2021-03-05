@@ -224,7 +224,7 @@ class Parser extends RegexParsers with PackratParsers {
     "s" ^^ { _ => Latency.Sequential }    |
     "a" ^^ { _ => Latency.Asynchronous }
 
-  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency) ~ parens(iden).?).?  ^^ {
+  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ (angular(latency ~ ("," ~> latency)) ~ parens(iden).?).?  ^^ {
     case elem ~ size ~ lats =>
       if (lats.isDefined) {
         val rlat = lats.get._1._1
