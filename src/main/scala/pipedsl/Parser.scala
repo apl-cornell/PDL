@@ -283,8 +283,12 @@ class Parser extends RegexParsers with PackratParsers {
     "regfile" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirRegFile(elem, addr) }
   }
 
+  lazy val clock: P[CirExpr] = positioned {
+    iden ~ parens(iden) ^^ { case lid ~ mem => CirLock(mem, LockImplementation.getLockImpl(lid))}
+  }
+
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | cmem | crf | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cexpr: P[Circuit] = positioned {

@@ -281,6 +281,7 @@ object Syntax {
 
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
+  case class CirLock(mem: Id, impl: LockInterface) extends CirExpr //this represents a memory + a lock
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
