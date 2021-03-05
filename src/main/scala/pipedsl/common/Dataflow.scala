@@ -90,24 +90,8 @@ object Dataflow {
    * @param used Variables used in later stages.
    * @return All variables unioned together
    */
-  def mergeUsedVars(node: PStage, used: DFMap[Set[Id]]): Set[Id] = node match {
-    case stg: SpecStage =>
-      //only add the variables that are used in the join
-      //but not written in *either* branch
-      val joinNeeds = used(stg.joinStage.name)
-      val verifNeeds = used(stg.verifyStages.head.name)
-      val verifWritten = joinNeeds -- joinNeeds.intersect(verifNeeds)
-      val specNeeds = used(stg.specStages.head.name)
-      val specWritten = joinNeeds -- joinNeeds.intersect(specNeeds)
-      specNeeds.union(verifNeeds) -- specWritten -- verifWritten
-    case stg: IfStage =>
-      val joinNeeds = used(stg.joinStage.name)
-      val caseNeeds = (stg.condStages :+ stg.defaultStages).foldLeft[Set[Id]](Set())((set, stgs) =>
-        set ++ used(stgs.head.name)) ++ used(stg.defaultStages.head.name)
-      val caseWritten = (stg.condStages :+ stg.defaultStages).foldLeft[Set[Id]](Set())((set, stgs) =>
-        set ++ (joinNeeds -- used(stgs.head.name)))
-      caseNeeds -- caseWritten
-    case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
+  def mergeUsedVars(node: PStage, used: DFMap[Set[Id]]): Set[Id] = {
+    used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
   }
 
 
