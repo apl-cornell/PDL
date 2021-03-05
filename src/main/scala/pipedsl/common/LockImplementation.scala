@@ -33,9 +33,10 @@ object LockImplementation {
   }
 
   /**
-   *
-   * @param l
-   * @return
+   * Lookup the lock implementation based on the type
+   * of the memory referenced in the LockArg.
+   * @param l The LockArg that is used to lock a memory
+   * @return The lock implementation associated with the memory
    */
   def getLockImpl(l: LockArg): LockInterface = {
     val mem = l.id
@@ -77,6 +78,20 @@ object LockImplementation {
      * @return true iff this lock can be backed by a memory of the given type
      */
     def isCompatible(mtyp: TMemType): Boolean
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     * @param mem The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
+
   }
 
   def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
@@ -152,6 +167,22 @@ object LockImplementation {
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
     override def isCompatible(mtyp: TMemType): Boolean = true
     override def toString: String = "LockQueue"
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     *
+     * @param mem  The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+    //TODO implement for real
+
   }
 
   //This is a different implementation with the same set of lock interface behaviors
@@ -191,6 +222,21 @@ object LockImplementation {
       return mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
     }
     override def toString: String = "RenameRegfile"
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     *
+     * @param mem  The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+    //TODO implement for real
   }
 
   /**
@@ -231,6 +277,21 @@ object LockImplementation {
       return mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
     }
     override def toString: String = "LoadStoreQueue"
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     *
+     * @param mem  The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+    //TODO implement for real
   }
 
   /*
