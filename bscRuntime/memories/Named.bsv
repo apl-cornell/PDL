@@ -39,7 +39,7 @@ interface AsyncMem#(type elem, type addr, type name);
    //method Action abort(name a); use for speculative threads that die so name a can be thrown out
 endinterface
    
-//TODO make physical size a parameter (rather than dictated by type of name)
+
 module mkRenameRF#(parameter Integer aregs, parameter Integer pregs, parameter Bool init, parameter String fileInit)(CombMem#(elem, addr, name)) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
     PrimIndex#(addr, an), PrimIndex#(name, nn));

@@ -10,9 +10,7 @@ setup:
 	@echo "--- Checking setup ---"
 	@./bin/check-setup.sh
 
-compiler: $(COMPILER_JAR)
-
-$(COMPILER_JAR):
+compiler:
 	@echo "--- Building Compiler ---"
 	@sbt assembly
 	@echo
