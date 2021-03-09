@@ -1,5 +1,6 @@
 package Named;
 
+import Memories :: *;
 import RegFile :: *;
 import FIFO :: *;
 import BRAMCore::*;
@@ -7,44 +8,18 @@ import DReg :: *;
 import Vector :: *;
 import Ehr :: *;
 
-export CombMem(..);
-export AsyncMem(..);
-
 export mkRenameRF;
 export mkLSQ;
 
-//these are the memory interfaces we suppport
-//the first is used for memories that support combinational reads
-
-interface CombMem#(type elem, type addr, type name);
-   method name readName(addr a); //get name to read data later
-   method Bool isValid(name n);  //check if safe to read
-   method elem read(name a);    //do the read
-   method ActionValue#(name) allocName(addr a); //allocate a new name to be written
-   method Action write(name a, elem b); //write data given allocated name
-   method Action commit(name a); //indicate old name for a can be "freed"
-   // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
-endinterface
-
-
-//this one is used for asynchronous reads which involve a request and response
-interface AsyncMem#(type elem, type addr, type name);
-   method ActionValue#(name) reserveRead(addr a);
-   method ActionValue#(name) reserveWrite(addr a);
-   method Action write(name n, elem b); //start executing the write
-   method Bool isValid(name n); //check if reading the value returns a valid value
-   method elem read(name n); //do the read
-   method Action commitRead(name n); //indicate we're done reading/writing this location
-   method Action commitWrite(name n);
-   //method Action abort(name a); use for speculative threads that die so name a can be thrown out
-endinterface
    
 
-module mkRenameRF#(parameter Integer aregs, parameter Integer pregs, parameter Bool init, parameter String fileInit)(CombMem#(elem, addr, name)) provisos
+module mkRenameRF#(parameter Integer aregs, parameter Integer pregs, parameter Bool init, parameter String fileInit)(
+ RegFile#(name, elem) regfile, CombAddrMem#(elem, addr, name) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
     PrimIndex#(addr, an), PrimIndex#(name, nn));
    
-   RegFile#(name, elem) regfile <- (init) ? mkRegFileLoad(fileInit, 0, fromInteger(pregs - 1)) : mkRegFile(0, fromInteger(pregs - 1));
+//TODO generate in testbench code (not part of the library)
+//    RegFile#(name, elem) regfile <- (init) ? mkRegFileLoad(fileInit, 0, fromInteger(pregs - 1)) : mkRegFile(0, fromInteger(pregs - 1));
    
    //Initial mapping for all arch regs is identity
    module mkMapEntry#(Integer i)(Reg#(name));
@@ -139,7 +114,7 @@ typedef `STQ_SIZE StQSize;
 typedef `LDQ_SIZE LdQSize;
 
 //TODO make size of queues a parameter
-module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, addr, name)) provisos
+module mkLSQ#(parameter Bool init, parameter String fileInit)(BRAM_PORT #(addr, elem) memory, AsyncAddrMem#(elem, addr, name) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), PrimIndex#(name, nn), Ord#(name), Arith#(name));
 
    /*
@@ -158,9 +133,11 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(AsyncMem#(elem, ad
     * everything < commitWrite -> can commit write in the same cycle as writing the data (gets pushed to store issue queue)
     */
    
-   let memSize = 2 ** valueOf(szAddr);
-   let hasOutputReg = False;
-   BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
+
+   //TODO generate in testbench code
+   //    let memSize = 2 ** valueOf(szAddr);
+   //    let hasOutputReg = False;
+   //    BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
 
    ///Store Stuff
    Reg#(name) stHead <- mkReg(unpack(0));
