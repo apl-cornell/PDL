@@ -3,6 +3,8 @@ package LockQueues;
 import FIFOF :: * ;
 import Vector :: *;
 import RegFile :: *;
+import BRAMCore::*;
+import DReg :: *;
 import Memories :: *;
 
 export CombLock(..);
@@ -13,13 +15,13 @@ export mkCombLock;
 
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
 
-interface CombLock#(type elem, type addr, type id);
+interface CombLock#(type id);
    method Bool isEmpty();
    method Bool canRes();
-   interface CombMem#(elem, addr, id) cmem;
+   interface GeneralLock#(id) lock;
 endinterface
 
-module mkCombLock(RegFile#(addr, elem) rf, CombLock#(elem, addr, LockId#(d)) _unused_);
+module mkCombLock(CombLock#(LockId#(d)));
 
    Reg#(LockId#(d)) nextId <- mkReg(0);
    FIFOF#(LockId#(d)) held <- mkSizedFIFOF(valueOf(d));
@@ -37,21 +39,12 @@ module mkCombLock(RegFile#(addr, elem) rf, CombLock#(elem, addr, LockId#(d)) _un
       return held.notFull;
    endmethod
    
-   interface CombMem cmem;
-   
+   interface GeneralLock lock;
       //Returns True if thread `tid` already owns the lock
       method Bool owns(LockId#(d) tid);
-	 return owner == tid;
+      return owner == tid;
       endmethod
-	 
-      method elem read(addr a);
-	 return rf.sub(a);
-      endmethod
-      
-      method Action write(addr a, elem b);
-	 rf.upd(a, b);
-      endmethod
-      
+	       
       //Releases the lock iff thread `tid` owns it already
       method Action rel(LockId#(d) tid);
 	 if (owner == tid)
@@ -70,6 +63,17 @@ module mkCombLock(RegFile#(addr, elem) rf, CombLock#(elem, addr, LockId#(d)) _un
       
    endinterface
 endmodule: mkCombLock
+
+module mkGeneralCombMem(CombMem#(elem, addr) m, GeneralLock#(LockId#(d)) l, GeneralCombMem#(elem, addr, LockId#(d)) _unused_);   
+   interface CombMem mem = m;
+   interface GeneralLock lock = l;
+endmodule
+
+module mkGeneralAsyncMem(AsyncMem#(elem, addr, MemId#(inflight)) m, GeneralLock#(LockId#(d)) l,
+   GeneralAsyncMem#(elem, addr, MemId#(inflight), LockId#(d)) _unused_);
+   interface AsyncMem mem = m;
+   interface GeneralLock lock = l;
+endmodule
 
 /*
 typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
@@ -188,7 +192,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 
 endmodule: mkFAAddrLock
 
-module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(addr, szAddr));
+ module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(addr, szAddr));
    
    Vector#(TExp#(szAddr), Lock#(LockId#(d))) lockVec <- replicateM( mkLock() );
 
