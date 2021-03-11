@@ -110,9 +110,11 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       List(BVar("idsize", ht), BVar("addrtyp", elemtyp), BVar("numentries", BNumericType(sz))))
   }
 
+  //TODO hacked for debugging
   def getLockModule(typ: BSVType): BModule = typ match {
     case BInterface(lt, _) if lt == lockType => BModule(lockModuleName, List())
     case BInterface(lt, _) if lt == addrLockType => BModule(addrLockModuleName, List())
+    case BInterface(lt, _) => BModule(lt, List())
     case _ => throw UnexpectedBSVType("Expected a lock interface type")
   }
 
@@ -191,7 +193,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
       case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
-      case combMemType => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
+      case `combMemType` => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case _ => throw UnexpectedBSVType(s"${memtyp.name} is not an supported memory interface")
     }
   }

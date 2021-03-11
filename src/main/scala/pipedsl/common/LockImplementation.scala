@@ -18,18 +18,24 @@ object LockImplementation {
    */
   def getDefaultLockImpl: LockInterface = lqueue
 
+  private val implMap: Map[String, LockInterface] = Map(
+    (lqueue.toString -> lqueue),
+    (falqueue.toString -> falqueue),
+    (rename.toString -> rename),
+    (lsq.toString -> lsq)
+  )
   /**
    * Lookup the lock implementation based on its name, only the string
    * value of the Id is used for lookup.
    * @param n The name of the lock type to lookup
    * @return The implementation for that lock type
    */
-  def getLockImpl(n: Id): LockInterface = n.v match {
-    case "Queue" => lqueue
-    case "FAQueue" => falqueue
-    case "RenameRF" => rename
-    case "LSQ" => lsq
-    case _ => throw UnexpectedLockImpl(n)
+  def getLockImpl(n: Id): LockInterface = {
+    if (implMap.contains(n.v)) {
+      implMap(n.v)
+    } else {
+      throw UnexpectedLockImpl(n)
+    }
   }
 
   /**
@@ -91,7 +97,6 @@ object LockImplementation {
      *         and non-lock commands should be left unannotated.
      */
     def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
-
   }
 
   def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
@@ -148,6 +153,7 @@ object LockImplementation {
    * used for any memory type.
    */
   private class LockQueue extends LockInterface {
+
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //res + rel -> checkfree
       //res + checkowned -> res + checkfree
@@ -166,7 +172,7 @@ object LockImplementation {
     //no possible conflicts since all ops are mergeable if conflicting
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
     override def isCompatible(mtyp: TMemType): Boolean = true
-    override def toString: String = "LockQueue"
+    override def toString: String = "Queue"
 
     /**
      * Given a list of commands, return the
@@ -187,7 +193,7 @@ object LockImplementation {
 
   //This is a different implementation with the same set of lock interface behaviors
   private class FALockQueue extends LockQueue {
-    override def toString: String = "FALockQueue"
+    override def toString: String = "FAQueue"
   }
 
   /**
@@ -221,7 +227,7 @@ object LockImplementation {
       //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
       return mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
     }
-    override def toString: String = "RenameRegfile"
+    override def toString: String = "RenameRF"
 
     /**
      * Given a list of commands, return the
@@ -276,7 +282,7 @@ object LockImplementation {
     override def isCompatible(mtyp: TMemType): Boolean = {
       return mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
     }
-    override def toString: String = "LoadStoreQueue"
+    override def toString: String = "LSQ"
 
     /**
      * Given a list of commands, return the

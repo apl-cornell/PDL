@@ -78,8 +78,8 @@ object BluespecGeneration {
         val t1 = getTopLevelModules(c1, env)
         val t2 = getTopLevelModules(c2, env)
         t1 ++ t2
-      case CirConnect(_, _) => Map()
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
+      case _ => Map()
     }
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
@@ -91,6 +91,11 @@ object BluespecGeneration {
         val memtyp = bsInts.getMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
           translator.toBSVType(elemTyp), None)
         (memtyp, bsInts.getMem(memtyp, initFile))
+      case CirLock(mem, impl) =>
+        //TODO map impl -> BSV Module which takes in mem as a parameter
+        //also uses type info of CirLock expr to instantiate lock (e.g. address size, extra metadata)
+        //just returning BS for now
+        (bsInts.getLockType(bsInts.getDefaultLockHandleType), bsInts.getLockModule(BInterface(impl.toString)))
       case CirNew(mod, mods) =>
         (bsInts.getInterface(modMap(mod)),
           BModule(name = bsInts.getModuleName(modMap(mod)), args = mods.map(m => env(m))))
