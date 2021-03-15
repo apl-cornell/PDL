@@ -95,7 +95,7 @@ object BSVSyntax {
       case eb@EBinop(_, _, _) => toBSVBop(eb)
       case EBitExtract(num, start, end) =>
           val bnum = toBSVExpr(num)
-        //remove nested pack/unpacks
+          //remove nested pack/unpacks
           bnum match {
             case BUnpack(e) => BUnpack(BBitExtract(e, start, end))
             case e => BUnpack(BBitExtract(BPack(e), start, end))
@@ -105,7 +105,8 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toBSVExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index) => bsints.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
+      case EMemAccess(mem, index) =>
+        bsints.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toBSVExpr(ex))
       case EInvalid => BInvalid

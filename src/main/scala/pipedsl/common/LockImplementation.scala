@@ -105,6 +105,27 @@ object LockImplementation {
      */
     def usesAddresses: Boolean
 
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return The expression argument needed to complete a read
+     */
+    def getReadArgs(addr: Expr, lock: Expr): Expr
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return The expression arguments needed to complete a write
+     *         (excluding the data).
+     */
+    def getWriteArgs(addr: Expr, lock: Expr): Expr
+
     def getCheckEmptyName(l: Option[LockType]): Option[String]
 
     def getCheckOwnsName(l: Option[LockType]): Option[String]
@@ -177,7 +198,30 @@ object LockImplementation {
     override def getCanReserveName(l: Option[LockType]): Option[String] = None
 
     override def getReleaseName(l: Option[LockType]): Option[String] = Some("rel")
-  }
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     *
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return An iterable (e.g., List) of the expression arguments needed to complete a read
+     */
+    override def getReadArgs(addr: Expr, lock: Expr): Expr = addr
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     *
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return An iterable (e.g., List) of the expression arguments needed to complete a write
+     *         (excluding the data).
+     */
+    override def getWriteArgs(addr: Expr, lock: Expr): Expr = addr
+}
 
   //This is a different implementation with the same set of lock interface behaviors
   private class FALockQueue extends LockQueue {
@@ -262,7 +306,30 @@ object LockImplementation {
       case Some(LockWrite) => Some("commit")
       case None => None //TODO should be an exception
     }
-  }
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     *
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return An iterable (e.g., List) of the expression arguments needed to complete a read
+     */
+    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     *
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return An iterable (e.g., List) of the expression arguments needed to complete a write
+     *         (excluding the data).
+     */
+    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+}
 
   /**
    * This represents a front to asynchronously responding memories,
@@ -346,7 +413,30 @@ object LockImplementation {
       case Some(LockWrite) => Some("commitWrite")
       case None => None //TODO should be an exception
     }
-  }
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     *
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return An iterable (e.g., List) of the expression arguments needed to complete a read
+     */
+    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
+
+    /**
+     * Each lock implementation may require any non-empty subset
+     * of the address and the lock handle to serve read and write
+     * requests.
+     *
+     * @param addr The expression representing the request address
+     * @param lock The expression representing the lock held at this point.
+     * @return An iterable (e.g., List) of the expression arguments needed to complete a write
+     *         (excluding the data).
+     */
+    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+}
 
   //The following are internal helper functions
   private def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
