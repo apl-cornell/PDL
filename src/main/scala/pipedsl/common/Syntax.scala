@@ -2,8 +2,8 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
-import pipedsl.common.LockImplementation.{LockInterface, LockQueue}
-import pipedsl.common.Locks.{General, LockGranularity, LockState, Specific}
+import pipedsl.common.LockImplementation.LockInterface
+import pipedsl.common.Locks.{General, LockGranularity, LockState}
 
 
 object Syntax {
@@ -203,8 +203,6 @@ object Syntax {
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
-  def MemoryWrite(index: Expr, value: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index), (Id("value"),value)))
-  def MemoryRead(index: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index)))
 
   sealed trait Command extends Positional
   case class CSeq(c1: Command, c2: Command) extends Command

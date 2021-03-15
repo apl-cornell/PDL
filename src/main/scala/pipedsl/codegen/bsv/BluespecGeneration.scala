@@ -3,7 +3,7 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr, UnexpectedType}
-import pipedsl.common.{Locks, ProgInfo}
+import pipedsl.common.{LockImplementation, Locks, ProgInfo}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
 
@@ -84,18 +84,18 @@ object BluespecGeneration {
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
       case CirMem(elemTyp, addrSize) =>
-        val memtyp = bsInts.getMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
-          translator.toBSVType(elemTyp), Some(bsInts.getDefaultMemHandleType))
+        val memtyp = bsInts.getBaseMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
+          translator.toBSVType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirRegFile(elemTyp, addrSize) =>
-        val memtyp = bsInts.getMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
-          translator.toBSVType(elemTyp), None)
+        val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
+          translator.toBSVType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLock(mem, impl) =>
-        //TODO map impl -> BSV Module which takes in mem as a parameter
+        val lockedMemType = translator.toBSVType(c.typ.get)
         //also uses type info of CirLock expr to instantiate lock (e.g. address size, extra metadata)
         //just returning BS for now
-        (bsInts.getLockType(bsInts.getDefaultLockHandleType), bsInts.getLockModule(BInterface(impl.toString)))
+        (lockedMemType, bsInts.getLockModule(env(mem).typ, impl))
       case CirNew(mod, mods) =>
         (bsInts.getInterface(modMap(mod)),
           BModule(name = bsInts.getModuleName(modMap(mod)), args = mods.map(m => env(m))))
@@ -229,7 +229,6 @@ object BluespecGeneration {
     }
     private val outputQueueStruct = BStructDef(outputQueueElem, List("Bits", "Eq"))
     private val outputQueue = BVar("outputQueue", bsInts.getFifoType(outputQueueElem))
-    //
 
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true)
@@ -249,20 +248,7 @@ object BluespecGeneration {
       //use listmap to preserve order
       vars + (m.name -> BVar(m.name.v, translator.toBSVType(m.typ)))
     })
-    //mapping memory ids to their associated locks
-    private val lockParams: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
-      val locktype = modInfo.getLockTypes.get(m.name) match {
-        case Some(Locks.Specific) =>
-          val addrType = m.typ match {
-            case TMemType(_, addrSize, _, _, _) =>  BSizedInt(unsigned = true, addrSize)
-            case _ => throw UnexpectedType(m.pos, "Address Lock", "Memory Type", m.typ)
-          }
-          bsInts.getAddrLockType(bsInts.getDefaultLockHandleType, addrType)
-        case Some(Locks.General) | None =>
-          bsInts.getLockType(bsInts.getDefaultLockHandleType)
-      }
-      locks + (m.name -> BVar(genLockName(m.name), locktype))
-    })
+
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
       locks + (m.name -> BVar(genLockRegionName(m.name),
         bsInts.getLockRegionType))
@@ -429,17 +415,32 @@ object BluespecGeneration {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case CLockStart(mod) =>
           l :+ bsInts.getCheckStart(lockRegions(mod))
-        case ICheckLockFree(mem) =>
-          l :+ bsInts.getCheckEmpty(lockParams(mem.id),
-            translator.toBSVVar(mem.evar))
-        case IReserveLock(_, mem) =>
-          bsInts.getCanReserve(lockParams(mem.id), translator.toBSVVar(mem.evar)) match {
-            case Some(m) => l :+ m
-            case None => l
+        case cl@ICheckLockFree(mem) =>
+          val methodName = LockImplementation.getLockImpl(mem).getCheckEmptyName(cl.memOpType)
+          val addr = translator.toBSVVar(mem.evar)
+          if (methodName.isDefined) {
+            l :+ BMethodInvoke(modParams(mem.id), methodName.get, if (addr.isDefined) List(addr.get) else List())
+          } else {
+            l
           }
-        case ICheckLockOwned(mem, handle) =>
-          l :+ bsInts.getCheckOwns(lockParams(mem.id),
-            translator.toBSVExpr(handle), translator.toBSVVar(mem.evar))
+        case cl@IReserveLock(_, mem) =>
+          val methodName = LockImplementation.getLockImpl(mem).getCanReserveName(cl.memOpType)
+          val addr = translator.toBSVVar(mem.evar)
+          if (methodName.isDefined) {
+            l :+ BMethodInvoke(modParams(mem.id), methodName.get, if (addr.isDefined) List(addr.get) else List())
+          } else {
+            l
+          }
+        case cl@ICheckLockOwned(mem, h) =>
+          val methodName = LockImplementation.getLockImpl(mem).getCheckOwnsName(cl.memOpType)
+          val handle = translator.toBSVExpr(h)
+          val addr = translator.toBSVVar(mem.evar)
+          if (methodName.isDefined) {
+            l :+ BMethodInvoke(modParams(mem.id), methodName.get,
+              if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle)))
+          } else {
+            l
+          }
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
           l :+ bsInts.getCheckMemResp(modParams(mem), translator.toBSVVar(handle))
         case IRecv(handle, sender, _) =>
@@ -562,10 +563,7 @@ object BluespecGeneration {
       val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
         m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
       })
-      //Instantiate a lock for each memory:
-      val memLocks = lockParams.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
-        m + (id -> BModInst(lockParams(id), bsInts.getLockModule(lockParams(id).typ)))
-      })
+
       //Instantiate a lock regions for each memory:
       val memRegions = lockRegions.keys.foldLeft(Map[Id, BModInst]())((m, id) => {
         m + (id -> BModInst(lockRegions(id), bsInts.getLockRegionModule))
@@ -584,7 +582,7 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, bsInts.getFifo)
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
-      var stmts: List[BStatement] = edgeFifos.values.toList ++ memLocks.values.toList ++ memRegions.values.toList
+      var stmts: List[BStatement] = edgeFifos.values.toList ++ memRegions.values.toList
       if (mod.isRecursive) stmts = stmts :+ busyInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
@@ -819,15 +817,6 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toBSVExpr(cond), stmtlist, List())) else None
-      case CLockOp(mem, op,_) => op match {
-        case pipedsl.common.Locks.Free => None
-        case pipedsl.common.Locks.Reserved =>
-          Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "res", List(translator.toBSVVar(threadIdVar)))))
-        case pipedsl.common.Locks.Acquired =>
-          Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "res", List(translator.toBSVVar(threadIdVar)))))
-        case pipedsl.common.Locks.Released =>
-          Some(BExprStmt(BMethodInvoke(lockParams(mem.id), "rel", List(translator.toBSVVar(threadIdVar)))))
-      }
       case IMemSend(handle, isWrite, mem: Id, data: Option[EVar], addr: EVar) => Some(
         BInvokeAssign(translator.toBSVVar(handle),
           bsInts.getMemReq(modParams(mem), isWrite, translator.toBSVExpr(addr),
@@ -869,18 +858,27 @@ object BluespecGeneration {
           //place the result in the output queue
           BExprStmt(bsInts.getFifoEnq(outputQueue, outstruct))
         )))
-      case IReserveLock(handle, mem) =>
+      case cl@IReserveLock(handle, mem) =>
+        val methodName = LockImplementation.getLockImpl(mem).getReserveName(cl.memOpType)
+        val addr = translator.toBSVVar(mem.evar)
         Some(
         BInvokeAssign(translator.toBSVVar(handle),
-          bsInts.getReserve(lockParams(mem.id), translator.toBSVVar(mem.evar)))
+          BMethodInvoke(modParams(mem.id), methodName.get, if (addr.isDefined) List(addr.get) else List())
+        )
       )
       case IAssignLock(handle, src, _) => Some(
         BAssign(translator.toBSVVar(handle), translator.toBSVExpr(src))
       )
-      case IReleaseLock(mem, handle) => Some(
-        BExprStmt(bsInts.getRelease(lockParams(mem.id),
-          translator.toBSVVar(handle), translator.toBSVVar(mem.evar)))
-      )
+      case cl@IReleaseLock(mem, h) =>
+        val methodName = LockImplementation.getLockImpl(mem).getReleaseName(cl.memOpType)
+        val addr = translator.toBSVVar(mem.evar)
+        val handle = translator.toBSVExpr(h)
+        val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
+        if (methodName.isDefined) {
+          Some(
+            BExprStmt(BMethodInvoke(modParams(mem.id), methodName.get, args))
+          )
+        } else { None }
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
       case CPrint(evar) => Some(BDisplayVar(translator.toBSVVar(evar)))
@@ -899,6 +897,7 @@ object BluespecGeneration {
       case CReturn(_) => throw UnexpectedCommand(cmd)
       case CSpeculate(_, _, _, _) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
+      case CLockOp(_, _, _) => throw UnexpectedCommand(cmd)
     }
 
   }

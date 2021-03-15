@@ -2,6 +2,7 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
+import pipedsl.common.LockImplementation._
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
@@ -110,13 +111,26 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       List(BVar("idsize", ht), BVar("addrtyp", elemtyp), BVar("numentries", BNumericType(sz))))
   }
 
-  //TODO hacked for debugging
+  /**
   def getLockModule(typ: BSVType): BModule = typ match {
     case BInterface(lt, _) if lt == lockType => BModule(lockModuleName, List())
     case BInterface(lt, _) if lt == addrLockType => BModule(addrLockModuleName, List())
     case BInterface(lt, _) => BModule(lt, List())
     case _ => throw UnexpectedBSVType("Expected a lock interface type")
   }
+  **/
+
+  /**
+   *
+   * @param mtyp
+   * @param limpl
+   * @return
+   */
+  def getLockModule(mtyp: BSVType, limpl: LockInterface): BModule = {
+    val modInstName = "mk" + limpl.toString
+    BModule(modInstName, List())
+  }
+
 
   def getStart(mod: BVar): BStatement = {
     BModAssign(mod, BBoolLit(false))
@@ -132,31 +146,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     mod
   }
 
-  private val lockEmptyName = "isEmpty"
   private val lockOwnsName = "owns"
   private val lockResName = "res"
   private val lockRelName = "rel"
   private val lockCanResName = "canRes"
-
-  def getCheckEmpty(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
-    BMethodInvoke(mod, lockEmptyName, if (addr.isDefined) List(addr.get) else List())
-  }
-  def getCheckOwns(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
-    val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
-    BMethodInvoke(mod, lockOwnsName, args)
-  }
-  def getReserve(mod: BVar, addr: Option[BVar]): BMethodInvoke = {
-    BMethodInvoke(mod, lockResName, if (addr.isDefined) List(addr.get) else List())
-  }
-  def getCanReserve(mod: BVar, addr: Option[BVar]): Option[BMethodInvoke] = {
-    if (addr.isDefined) {
-      Some(BMethodInvoke(mod, lockCanResName, List(addr.get)))
-    } else None
-  }
-  def getRelease(mod: BVar, handle: BExpr, addr: Option[BVar]): BMethodInvoke = {
-    val args = if (addr.isDefined) List(BFromMaybe(BZero, handle), addr.get) else List(BFromMaybe(BZero, handle))
-    BMethodInvoke(mod, lockRelName, args)
-  }
 
   private val memHandleName = "MemId"
   private val defaultMemHandleSize = 8
@@ -170,18 +163,45 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val combMemType = "CombMem"
   private val combMemMod = "mkCombMem"
 
+  private val noAddrCombMem = "GeneralCombMem"
+  private val noAddrAsyncMem = "AsyncCombMem"
+  private val addrCombMem = "CombAddrMem"
+  private val addrAsyncMem = "AsyncAddrMem"
+
   def getIdParam(name: String): BTypeParam = BTypeParam(name + "Id")
-  def getMemType(isAsync: Boolean, addr: BSVType, data: BSVType, id:Option[BSVType]): BInterface = {
+
+  def getBaseMemType(isAsync: Boolean, addr: BSVType, data: BSVType): BInterface = {
     if (isAsync) {
-      val idtyp = if (id.isDefined) {
-        id.get
-      } else {
-        getIdParam("unkownMem")
-      }
-      BInterface(asyncMemType,
-        List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("idtyp", idtyp)))
+      //TODO make this type parameterizable
+      val reqTyp = getDefaultMemHandleType
+      BInterface(asyncMemType, List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", reqTyp)))
     } else {
       BInterface(combMemType,  List(BVar("elemtyp", data), BVar("addrtyp", addr)))
+    }
+  }
+
+  def getMemType(isAsync: Boolean, addr: BSVType, data: BSVType, limpl: LockInterface): BInterface = {
+    //TODO make these parameters somewhere the user can control
+    //since this influences the size of queues, etc.
+    val nameTyp = getDefaultMemHandleType
+    val lidTyp = getDefaultLockHandleType
+    if (isAsync) {
+      //TODO can maybe clean this up a bit
+      if (!limpl.usesAddresses) {
+        BInterface(limpl.toString,
+          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", lidTyp)))
+      } else {
+        BInterface(limpl.toString,
+          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", nameTyp), BVar("lidtyp", lidTyp)))
+      }
+    } else {
+      if (!limpl.usesAddresses) {
+        BInterface(limpl.toString,
+          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", lidTyp)))
+      } else {
+        BInterface(limpl.toString,
+          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("lidtyp", lidTyp)))
+      }
     }
   }
 
@@ -194,7 +214,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     memtyp.name match {
       case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case `combMemType` => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
-      case _ => throw UnexpectedBSVType(s"${memtyp.name} is not an supported memory interface")
+      case _ => throw UnexpectedBSVType(s"${memtyp.name} is not a supported memory interface")
     }
   }
   private val memCombReadName = "read"

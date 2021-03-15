@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.{LockType, _}
 
 
 object LockImplementation {
@@ -19,10 +19,10 @@ object LockImplementation {
   def getDefaultLockImpl: LockInterface = lqueue
 
   private val implMap: Map[String, LockInterface] = Map(
-    (lqueue.toString -> lqueue),
-    (falqueue.toString -> falqueue),
-    (rename.toString -> rename),
-    (lsq.toString -> lsq)
+    lqueue.toString -> lqueue,
+    falqueue.toString -> falqueue,
+    rename.toString -> rename,
+    lsq.toString -> lsq
   )
   /**
    * Lookup the lock implementation based on its name, only the string
@@ -97,9 +97,259 @@ object LockImplementation {
      *         and non-lock commands should be left unannotated.
      */
     def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
+
+    /**
+     * Returns true iff this lock implementation requires
+     * addreses specified in its operations.
+     * @return True if this lock requires addresses in its operations else false
+     */
+    def usesAddresses: Boolean
+
+    def getCheckEmptyName(l: Option[LockType]): Option[String]
+
+    def getCheckOwnsName(l: Option[LockType]): Option[String]
+
+    def getReserveName(l: Option[LockType]): Option[String]
+
+    def getCanReserveName(l: Option[LockType]): Option[String]
+
+    def getReleaseName(l: Option[LockType]): Option[String]
+
   }
 
-  def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
+  /**
+   * This represents the lock implementation as a generic queue that
+   * allows one reservation to be allocated at a time. This implements
+   * no forwarding or anything; it simply queues up reservation requests.
+   * It also does not require interposing on the memory requests and can therefore be
+   * used for any memory type.
+   */
+  private class LockQueue extends LockInterface {
+
+    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
+      //res + rel -> checkfree
+      //res + checkowned -> res + checkfree
+      //else same
+      val rescmd = getReserveCommand(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      val checkownedCmd = getCheckOwnedCommand(mem, lops)
+      if (rescmd.isDefined && relcmd.isDefined) {
+        List(ICheckLockFree(mem))
+      } else if (rescmd.isDefined && checkownedCmd.isDefined) {
+        List(rescmd.get, ICheckLockFree(mem))
+      } else {
+        lops
+      }
+    }
+    //no possible conflicts since all ops are mergeable if conflicting
+    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
+    override def isCompatible(mtyp: TMemType): Boolean = true
+    override def toString: String = "Queue"
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     *
+     * @param mem  The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+    //TODO implement for real
+    /**
+     * Returns true iff this lock implementation requires
+     * addreses specified in its operations.
+     *
+     * @return True if this lock requires addresses in its operations else false
+     */
+    override def usesAddresses: Boolean = false
+
+    override def getCheckEmptyName(l: Option[LockType]): Option[String] = Some("isEmpty")
+
+    override def getCheckOwnsName(l: Option[LockType]): Option[String] = Some("owns")
+
+    override def getReserveName(l: Option[LockType]): Option[String] = Some("res")
+
+    override def getCanReserveName(l: Option[LockType]): Option[String] = None
+
+    override def getReleaseName(l: Option[LockType]): Option[String] = Some("rel")
+  }
+
+  //This is a different implementation with the same set of lock interface behaviors
+  private class FALockQueue extends LockQueue {
+    override def toString: String = "FAQueue"
+
+    override def getCanReserveName(l: Option[LockType]): Option[String] = Some("canRes")
+  }
+
+  /**
+   * This represents a renaming register file.
+   * Reserve statements either translate to _reading a name_ (R) or _allocating a new name_ (W).
+   *
+   */
+  private class RenameRegfile extends LockInterface {
+    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
+      //This modules doesn't support any "merging")
+      lops
+    }
+    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
+      //base ops: reserve, checkowned, release
+      //conflicts: reserve(W) + write(W), or reserve(W) + release(W) ,or write(W) + release(W)
+      //TODO does checkowned(R/W) conflict w/ anyting? I don't think so
+      val rescmd = getReserveWrite(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      val memWrite = hasMemoryWrite(mem, lops)
+      //conflicts
+      if (rescmd.isDefined && relcmd.isDefined ||
+          rescmd.isDefined && memWrite ||
+          memWrite && relcmd.isDefined) {
+        false
+        //no conflicts
+      } else {
+        true
+      }
+    }
+    override def isCompatible(mtyp: TMemType): Boolean = {
+      //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
+      mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
+    }
+    override def toString: String = "RenameRF"
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     *
+     * @param mem  The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+    //TODO implement for real
+    /**
+     * Returns true iff this lock implementation requires
+     * addreses specified in its operations.
+     *
+     * @return True if this lock requires addresses in its operations else false
+     */
+    override def usesAddresses: Boolean = true
+
+    override def getCheckEmptyName(l: Option[LockType]): Option[String] = None
+
+    override def getCheckOwnsName(l: Option[LockType]): Option[String] = l match {
+      case Some(LockRead) => Some("isValid")
+      case Some(LockWrite) => None
+      case None => None //TODO should be an exception
+    }
+
+    override def getReserveName(l: Option[LockType]): Option[String] = l match {
+      case Some(LockRead) => Some("readName")
+      case Some(LockWrite) => Some("allocName")
+      case None => None //TODO should be an exception
+    }
+
+    override def getCanReserveName(l: Option[LockType]): Option[String] = None
+
+    override def getReleaseName(l: Option[LockType]): Option[String] = l match {
+      case Some(LockRead) => None
+      case Some(LockWrite) => Some("commit")
+      case None => None //TODO should be an exception
+    }
+  }
+
+  /**
+   * This represents a front to asynchronously responding memories,
+   * which take multiple cycles to service reads + writes.
+   * It includes a LoadStoreQueue which forwards data to avoid extra memory accesses.
+   */
+  private class LoadStoreQueue extends LockInterface {
+    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
+      //don't need to do any merging! (no optimizations for releasing in the same cycle as acquiring)
+      lops
+    }
+    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
+      //base ops: reserve, checkowned, release
+      //conflicts are the same as renaming register file:
+      //res(W) + write, res(W) + rel(W), write + rel(W)
+      //but also has conflicts;
+      //res(R) + read, res(R/W) + checkowned
+      val reswrite = getReserveWrite(mem, lops)
+      val resRead = getReserveRead(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      val memWrite = hasMemoryWrite(mem, lops)
+      val asyncMemRead = hasAsyncMemoryRead(mem, lops)
+      val check = getCheckOwnedCommand(mem, lops)
+      //conflicts
+      if ((reswrite.isDefined && relcmd.isDefined) ||
+        (reswrite.isDefined && memWrite) ||
+        (memWrite && relcmd.isDefined) ||
+        (resRead.isDefined && asyncMemRead) ||
+        ((resRead.isDefined || reswrite.isDefined) && check.isDefined)) {
+        false
+      } else {
+        //no conflicts
+        true
+      }
+    }
+    override def isCompatible(mtyp: TMemType): Boolean = {
+      mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
+    }
+    override def toString: String = "LSQ"
+
+    /**
+     * Given a list of commands, return the
+     * same list with the port information annotated.
+     * Each type of operation supported by this lock implementation,
+     * that is in this list will be assigned a different port number.
+     * If this implementation doesn't support that many ports, it will throw an exception.
+     *
+     * @param mem  The memory/lock we're assigning ports for.
+     * @param lops The operations to annotate
+     * @return The annoated list of operations, iteration order should be preserved
+     *         and non-lock commands should be left unannotated.
+     */
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+    //TODO implement for real
+    /**
+     * Returns true iff this lock implementation requires
+     * addreses specified in its operations.
+     *
+     * @return True if this lock requires addresses in its operations else false
+     */
+    override def usesAddresses: Boolean = true
+
+    override def getCheckEmptyName(l: Option[LockType]): Option[String] = None
+
+    override def getCheckOwnsName(l: Option[LockType]): Option[String] = l match {
+      case Some(LockRead) => Some("isValid")
+      case Some(LockWrite) => None
+      case None => None //TODO should be an exception
+    }
+
+    override def getReserveName(l: Option[LockType]): Option[String] = l match {
+      case Some(LockRead) => Some("reserveRead")
+      case Some(LockWrite) => Some("reserveWrite")
+      case None => None //TODO should be an exception
+    }
+
+    override def getCanReserveName(l: Option[LockType]): Option[String] = None
+
+    override def getReleaseName(l: Option[LockType]): Option[String] = l match {
+      case Some(LockRead) => Some("commitRead")
+      case Some(LockWrite) => Some("commitWrite")
+      case None => None //TODO should be an exception
+    }
+  }
+
+  //The following are internal helper functions
+  private def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
     mem.id == mid && (mem.evar.isEmpty || mem.evar.get == addr)
   }
   private def getReserveCommand(mem: LockArg, cs: Iterable[Command]): Option[IReserveLock] = {
@@ -144,160 +394,6 @@ object LockImplementation {
       case IMemSend(_, isWrite, mid,_, addr) if !isWrite && largMatches(mem, mid, addr)=> true
       case _ => false
     }
-  }
-  /**
-   * This represents the lock implementation as a generic queue that
-   * allows one reservation to be allocated at a time. This implements
-   * no forwarding or anything; it simply queues up reservation requests.
-   * It also does not require interposing on the memory requests and can therefore be
-   * used for any memory type.
-   */
-  private class LockQueue extends LockInterface {
-
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //res + rel -> checkfree
-      //res + checkowned -> res + checkfree
-      //else same
-      val rescmd = getReserveCommand(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val checkownedCmd = getCheckOwnedCommand(mem, lops)
-      if (rescmd.isDefined && relcmd.isDefined) {
-        List(ICheckLockFree(mem))
-      } else if (rescmd.isDefined && checkownedCmd.isDefined) {
-        List(rescmd.get, ICheckLockFree(mem))
-      } else {
-        lops
-      }
-    }
-    //no possible conflicts since all ops are mergeable if conflicting
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
-    override def isCompatible(mtyp: TMemType): Boolean = true
-    override def toString: String = "Queue"
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
-
-  }
-
-  //This is a different implementation with the same set of lock interface behaviors
-  private class FALockQueue extends LockQueue {
-    override def toString: String = "FAQueue"
-  }
-
-  /**
-   * This represents a renaming register file.
-   * Reserve statements either translate to _reading a name_ (R) or _allocating a new name_ (W).
-   *
-   */
-  private class RenameRegfile extends LockInterface {
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //This modules doesn't support any "merging")
-      lops
-    }
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
-      //base ops: reserve, checkowned, release
-      //conflicts: reserve(W) + write(W), or reserve(W) + release(W) ,or write(W) + release(W)
-      //TODO does checkowned(R/W) conflict w/ anyting? I don't think so
-      val rescmd = getReserveWrite(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val memWrite = hasMemoryWrite(mem, lops)
-      //conflicts
-      if (rescmd.isDefined && relcmd.isDefined ||
-          rescmd.isDefined && memWrite ||
-          memWrite && relcmd.isDefined) {
-        false
-        //no conflicts
-      } else {
-        true
-      }
-    }
-    override def isCompatible(mtyp: TMemType): Boolean = {
-      //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
-      return mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
-    }
-    override def toString: String = "RenameRF"
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
-  }
-
-  /**
-   * This represents a front to asynchronously responding memories,
-   * which take multiple cycles to service reads + writes.
-   * It includes a LoadStoreQueue which forwards data to avoid extra memory accesses.
-   */
-  private class LoadStoreQueue extends LockInterface {
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //don't need to do any merging! (no optimizations for releasing in the same cycle as acquiring)
-      lops
-    }
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
-      //base ops: reserve, checkowned, release
-      //conflicts are the same as renaming register file:
-      //res(W) + write, res(W) + rel(W), write + rel(W)
-      //but also has conflicts;
-      //res(R) + read, res(R/W) + checkowned
-      val reswrite = getReserveWrite(mem, lops)
-      val resRead = getReserveRead(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val memWrite = hasMemoryWrite(mem, lops)
-      val asyncMemRead = hasAsyncMemoryRead(mem, lops)
-      val check = getCheckOwnedCommand(mem, lops)
-      //conflicts
-      if ((reswrite.isDefined && relcmd.isDefined) ||
-        (reswrite.isDefined && memWrite) ||
-        (memWrite && relcmd.isDefined) ||
-        (resRead.isDefined && asyncMemRead) ||
-        ((resRead.isDefined || reswrite.isDefined) && check.isDefined)) {
-        false
-      } else {
-        //no conflicts
-        true
-      }
-    }
-    override def isCompatible(mtyp: TMemType): Boolean = {
-      return mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
-    }
-    override def toString: String = "LSQ"
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
   }
 
   /*
