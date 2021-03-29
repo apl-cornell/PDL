@@ -3,7 +3,7 @@ package pipedsl.passes
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Locks._
-import pipedsl.common.{LockImplementation, Syntax}
+import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, updateListMap}
 import pipedsl.passes.Passes.StagePass
@@ -108,8 +108,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   private def modifyMemAddrArg(isWrite: Boolean, mem: Id, idx: EVar): Expr = {
     val larg = LockArg(mem, Some(idx))
-    val lock = EFromMaybe(lockVar(larg)).setPos(larg.pos)
-    lock.typ = lock.ex.typ
+    val lock = lockVar(larg)
     val newArg = if (isWrite) LockImplementation.getLockImpl(larg).getWriteArgs(idx, lock)
     else LockImplementation.getLockImpl(larg).getReadArgs(idx, lock)
     newArg
