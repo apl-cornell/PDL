@@ -169,8 +169,8 @@ object Utilities {
     case EVar(id) => id.typ = e.typ; Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case EFromMaybe(ex) => getUsedVars(ex)
+    case EToMaybe(ex) => getUsedVars(ex)
     case EIsValid(ex) => getUsedVars(ex)
-    case EFromMaybe(ex) => getUsedVars(ex)
     case _ => Set()
   }
 

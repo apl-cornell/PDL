@@ -112,6 +112,7 @@ object BSVSyntax {
       case EIsValid(ex) => BIsValid(toBSVExpr(ex))
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toBSVExpr(ex))
+      case EToMaybe(ex) => BTaggedValid(toBSVExpr(ex))
       case _ => throw UnexpectedExpr(e)
     }
 
@@ -208,6 +209,7 @@ object BSVSyntax {
   case object BOne extends BExpr
   case object BTime extends BExpr
   case object BInvalid extends BExpr
+  case class BTaggedValid(exp: BExpr) extends BExpr
   case class BFromMaybe(default: BExpr, exp: BExpr) extends BExpr
   case class BIsValid(exp: BExpr) extends BExpr
   case class BPack(e: BExpr) extends BExpr

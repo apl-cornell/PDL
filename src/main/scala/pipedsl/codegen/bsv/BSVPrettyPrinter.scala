@@ -55,6 +55,7 @@ object BSVPrettyPrinter {
     case BIsValid(exp) => mkExprString("isValid(",toBSVExprStr(exp), ")")
     case BFromMaybe(d, exp) => mkExprString("fromMaybe(",toBSVExprStr(d), ",", toBSVExprStr(exp), ")")
     case BInvalid => mkExprString("tagged", "Invalid")
+    case BTaggedValid(exp) => mkExprString("tagged", "Valid", toBSVExprStr(exp))
     case BTernaryExpr(cond, trueex, falseex) => mkExprString("(", toBSVExprStr(cond), "?",
       toBSVExprStr(trueex), ":", toBSVExprStr(falseex), ")")
     case BBoolLit(v) => if (v) {

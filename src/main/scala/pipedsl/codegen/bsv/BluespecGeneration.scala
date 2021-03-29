@@ -863,7 +863,10 @@ object BluespecGeneration {
         val addr = translator.toBSVVar(mem.evar)
         Some(
         BInvokeAssign(translator.toBSVVar(handle),
-          BMethodInvoke(modParams(mem.id), methodName.get, if (addr.isDefined) List(addr.get) else List())
+          //Adds in the "maybe" tag here.
+          BTaggedValid(
+            BMethodInvoke(modParams(mem.id), methodName.get, if (addr.isDefined) List(addr.get) else List())
+          )
         )
       )
       case IAssignLock(handle, src, _) => Some(
