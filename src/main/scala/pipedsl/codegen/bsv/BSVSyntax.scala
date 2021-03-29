@@ -42,9 +42,10 @@ object BSVSyntax {
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
+      case TMaybe(btyp) => BInterface("Maybe", List(BVar("basetype", toBSVType(btyp))))
       case TRequestHandle(n, isLock) =>
         if (isLock) {
-          BInterface("Maybe", List(BVar("basehandletyp", bsints.getDefaultLockHandleType)))
+          bsints.getDefaultLockHandleType
         } else {
           val modtyp = toBSVType(n.typ.get)
           if (handleMap.contains(modtyp)) {

@@ -81,6 +81,7 @@ object Syntax {
       case TMemType(elem, size, rLat, wLat, l) => s"${elem.toString}[${size}]<$rLat, $wLat>($l)"
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
+      case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
     }
   }
@@ -100,6 +101,7 @@ object Syntax {
   case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
+  case class TMaybe(btyp: Type) extends Type
 
   /**
    * Define common helper methods implicit classes.

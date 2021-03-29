@@ -8,7 +8,6 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, updateListMap}
 import pipedsl.passes.Passes.StagePass
 
-import scala.:+
 
 /**
  * This pass converts the high level (syntax-level) lock operations
@@ -27,7 +26,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def lockVar(l: LockArg): EVar = {
     val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "")
     val res = EVar(Id(lockname))
-    res.typ = Some(TRequestHandle(l.id, isLock = true))
+    res.typ = Some(TMaybe(TRequestHandle(l.id, isLock = true)))
     res.id.typ = res.typ
     res
   }
@@ -108,7 +107,10 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   private def modifyMemAddrArg(isWrite: Boolean, mem: Id, idx: EVar): Expr = {
     val larg = LockArg(mem, Some(idx))
-    val lock = lockVar(larg)
+    val lock = EFromMaybe(lockVar(larg)).setPos(larg.pos)
+    lock.typ = lock.ex.typ.get.matchOrError(lock.ex.pos, "Extract Lock Handle", "Maybe(Handle)") {
+      case TMaybe(t) => Some(t)
+    }
     val newArg = if (isWrite) LockImplementation.getLockImpl(larg).getWriteArgs(idx, lock)
     else LockImplementation.getLockImpl(larg).getReadArgs(idx, lock)
     newArg
