@@ -1,5 +1,7 @@
 package pipedsl.codegen.bsv
 
+import pipedsl.codegen.Translations.Translator
+
 import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
@@ -25,29 +27,29 @@ object BSVSyntax {
   case object BVoid extends BSVType
   case object BEmptyModule extends BSVType
 
-  class BSVTranslator(val bsints: BluespecInterfaces,
-    val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map()) {
+  class BSVTranslator(val bsints: BluespecInterfaces, val modmap: Map[Id, BSVType] = Map(),
+    val handleMap: Map[BSVType, BSVType] = Map()) extends Translator[BSVType, BExpr, BVar, BFuncDef] {
 
     private var variablePrefix = ""
 
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
-    def toBSVType(t: Type): BSVType = t match {
+    def toType(t: Type): BSVType = t match {
         //TODO incorporate lock name
       case TMemType(elem, addrSize, rlat, _, limpl) =>
         bsints.getMemType(isAsync = rlat != Combinational,
-          BSizedInt(unsigned = true, addrSize), toBSVType(elem), limpl)
+          BSizedInt(unsigned = true, addrSize), toType(elem), limpl)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
-      case TMaybe(btyp) => BInterface("Maybe", List(BVar("basetype", toBSVType(btyp))))
+      case TMaybe(btyp) => BInterface("Maybe", List(BVar("basetype", toType(btyp))))
       case TRequestHandle(n, isLock) =>
         if (isLock) {
           bsints.getDefaultLockHandleType
         } else {
-          val modtyp = toBSVType(n.typ.get)
+          val modtyp = toType(n.typ.get)
           if (handleMap.contains(modtyp)) {
             handleMap(modtyp)
           } else {
@@ -71,81 +73,72 @@ object BSVSyntax {
       BVar(variablePrefix + v.name, v.typ)
     }
 
-    def toBSVVar(i: Id): BVar = {
-      BVar(variablePrefix + i.v, toBSVType(i.typ.get))
+    def toVar(i: Id): BVar = {
+      BVar(variablePrefix + i.v, toType(i.typ.get))
     }
 
-    def toBSVVar(v: EVar): BVar = {
-      toBSVVar(v.id)
+    def toVar(v: EVar): BVar = {
+      toVar(v.id)
     }
 
-    def toBSVVar(v: Option[EVar]): Option[BVar] = v match {
-      case Some(value) => Some(toBSVVar(value))
-      case None => None
-    }
-
-    def toBSVExpr(e: Option[Expr]): Option[BExpr] = e match {
-      case Some(value) => Some(toBSVExpr(value))
-      case None => None
-    }
-    def toBSVExpr(e: Expr): BExpr = e match {
+    def toExpr(e: Expr): BExpr = e match {
       case EInt(v, base, bits) => BIntLit(v, base, bits)
       case EBool(v) => BBoolLit(v)
       case EString(v) => BStringLit(v)
-      case EUop(op, ex) => BUOp(op.op, toBSVExpr(ex))
+      case EUop(op, ex) => BUOp(op.op, toExpr(ex))
       case eb@EBinop(_, _, _) => toBSVBop(eb)
       case EBitExtract(num, start, end) =>
-          val bnum = toBSVExpr(num)
+          val bnum = toExpr(num)
           //remove nested pack/unpacks
           bnum match {
             case BUnpack(e) => BUnpack(BBitExtract(e, start, end))
             case e => BUnpack(BBitExtract(BPack(e), start, end))
           }
-      case ETernary(cond, tval, fval) => BTernaryExpr(toBSVExpr(cond), toBSVExpr(tval), toBSVExpr(fval))
-      case e@EVar(_) => toBSVVar(e)
-      case EApp(func, args) => BFuncCall(func.v, args.map(a => toBSVExpr(a)))
+      case ETernary(cond, tval, fval) => BTernaryExpr(toExpr(cond), toExpr(tval), toExpr(fval))
+      case e@EVar(_) => toVar(e)
+      case EApp(func, args) => BFuncCall(func.v, args.map(a => toExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index) =>
-        bsints.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
+        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
-      case EIsValid(ex) => BIsValid(toBSVExpr(ex))
+      case EIsValid(ex) => BIsValid(toExpr(ex))
       case EInvalid => BInvalid
-      case EFromMaybe(ex) => BFromMaybe(BDontCare, toBSVExpr(ex))
-      case EToMaybe(ex) => BTaggedValid(toBSVExpr(ex))
+      case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
+      case EToMaybe(ex) => BTaggedValid(toExpr(ex))
       case _ => throw UnexpectedExpr(e)
     }
 
     //TODO handle casts better
-    def translateCast(e: ECast): BExpr = {
+    private def translateCast(e: ECast): BExpr = {
       e.ctyp match {
-        case TBool() => toBSVExpr(e.exp)
+        case TBool() => toExpr(e.exp)
         case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
           "TBool", e.ctyp)
       }
     }
 
     //TODO a better way to translate operators
-    def toBSVBop(b: EBinop): BExpr = b.op match {
+    private def toBSVBop(b: EBinop): BExpr = b.op match {
       case BitOp("++", _) =>
-        val left = toBSVExpr(b.e1) match {
+        val left = toExpr(b.e1) match {
           case BUnpack(e) => e
           case e => BPack(e)
         }
-        val right = toBSVExpr(b.e2) match {
+        val right = toExpr(b.e2) match {
           case BUnpack(e) => e
           case e => BPack(e)
         }
         BUnpack(BConcat(left, List(right)))
-      case _ => BBOp(b.op.op, toBSVExpr(b.e1), toBSVExpr(b.e2))
+      case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
 
     //This updates the translator's map of already defined functions
     //so that they can be used by later translation operations
-    def toBSVFunc(b: FuncDef): BFuncDef = {
-      val rettype = toBSVType(b.ret)
+    def toFunc(b: FuncDef): BFuncDef = {
+      val rettype = toType(b.ret)
       val params = b.args.foldLeft(List[BVar]())((ps, arg) => {
-        ps :+ BVar(arg.name.v, toBSVType(arg.typ))
+        ps :+ BVar(arg.name.v, toType(arg.typ))
       })
       val fdef = BFuncDef(b.name.v, rettype, params, translateFuncBody(b.body))
       fdef
@@ -155,13 +148,13 @@ object BSVSyntax {
       case CSeq(c1, c2) =>
         translateFuncBody(c1) ++ translateFuncBody(c2)
       case CIf(cond, cons, alt) =>
-        List(BIf(toBSVExpr(cond), translateFuncBody(cons), translateFuncBody(alt)))
+        List(BIf(toExpr(cond), translateFuncBody(cons), translateFuncBody(alt)))
       case CAssign(lhs, rhs) =>
-        List(BDecl(toBSVVar(lhs), Some(toBSVExpr(rhs))))
+        List(BDecl(toVar(lhs), Some(toExpr(rhs))))
       case CReturn(exp) =>
-        List(BReturnStmt(toBSVExpr(exp)))
+        List(BReturnStmt(toExpr(exp)))
       case CExpr(exp) =>
-        List(BExprStmt(toBSVExpr(exp)))
+        List(BExprStmt(toExpr(exp)))
       //TODO case Syntax.CSplit(cases, default) =>
       case CEmpty => List()
       case _ => throw UnexpectedCommand(c)

@@ -1,10 +1,12 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
-import pipedsl.common.Syntax.{LockType, _}
+import pipedsl.common.Syntax._
 
 
 object LockImplementation {
+
+  sealed case class MethodInfo(name: String, doesModify: Boolean, usesArgs: List[Expr])
 
   private val lqueue = new LockQueue()
   private val falqueue = new FALockQueue()
@@ -126,16 +128,24 @@ object LockImplementation {
      */
     def getWriteArgs(addr: Expr, lock: Expr): Expr
 
-    def getCheckEmptyName(l: Option[LockType]): Option[String]
+    def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo]
 
-    def getCheckOwnsName(l: Option[LockType]): Option[String]
+    def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo]
 
-    def getReserveName(l: Option[LockType]): Option[String]
+    def getReserveInfo(l: IReserveLock): Option[MethodInfo]
 
-    def getCanReserveName(l: Option[LockType]): Option[String]
+    def getCanReserveInfo(l: IReserveLock): Option[MethodInfo]
 
-    def getReleaseName(l: Option[LockType]): Option[String]
+    def getReleaseInfo(l: IReleaseLock): Option[MethodInfo]
 
+    //TODO put this somewhere like Syntax
+    protected def extractHandle(h: EVar): Expr = {
+      val e = EFromMaybe(h).setPos(h.pos)
+      e.typ = h.typ.get.matchOrError(h.pos, "Lock Handle", "Maybe type") {
+        case TMaybe(t) => Some(t)
+      }
+      e
+    }
   }
 
   /**
@@ -189,15 +199,23 @@ object LockImplementation {
      */
     override def usesAddresses: Boolean = false
 
-    override def getCheckEmptyName(l: Option[LockType]): Option[String] = Some("isEmpty")
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
+      Some(MethodInfo("isEmpty", doesModify = false, List()))
+    }
 
-    override def getCheckOwnsName(l: Option[LockType]): Option[String] = Some("owns")
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
+      Some(MethodInfo("owns", doesModify = false, List()))
+    }
 
-    override def getReserveName(l: Option[LockType]): Option[String] = Some("res")
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+      Some(MethodInfo("res", doesModify = true, List()))
+    }
 
-    override def getCanReserveName(l: Option[LockType]): Option[String] = None
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
-    override def getReleaseName(l: Option[LockType]): Option[String] = Some("rel")
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
+      Some(MethodInfo("rel", doesModify = true, List()))
+    }
 
     /**
      * Each lock implementation may require any non-empty subset
@@ -223,11 +241,30 @@ object LockImplementation {
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = addr
 }
 
-  //This is a different implementation with the same set of lock interface behaviors
+  //This is a different implementation which uses the address in some parameters
+  //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
     override def toString: String = "FAQueue"
 
-    override def getCanReserveName(l: Option[LockType]): Option[String] = Some("canRes")
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
+      Some(MethodInfo("isEmpty", doesModify = false, List(l.mem.evar.get)))
+    }
+
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
+      Some(MethodInfo("owns", doesModify = false, List(l.mem.evar.get)))
+    }
+
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+      Some(MethodInfo("canRes", doesModify = false, List(l.mem.evar.get)))
+    }
+
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+      Some(MethodInfo("res", doesModify = true, List(l.mem.evar.get)))
+    }
+
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
+      Some(MethodInfo("rel", doesModify = true, List(l.mem.evar.get)))
+    }
   }
 
   /**
@@ -285,25 +322,25 @@ object LockImplementation {
      */
     override def usesAddresses: Boolean = true
 
-    override def getCheckEmptyName(l: Option[LockType]): Option[String] = None
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
-    override def getCheckOwnsName(l: Option[LockType]): Option[String] = l match {
-      case Some(LockRead) => Some("isValid")
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.handle))))
       case Some(LockWrite) => None
       case None => None //TODO should be an exception
     }
 
-    override def getReserveName(l: Option[LockType]): Option[String] = l match {
-      case Some(LockRead) => Some("readName")
-      case Some(LockWrite) => Some("allocName")
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("readName", doesModify = false, List(l.mem.evar.get)))
+      case Some(LockWrite) => Some(MethodInfo("allocName", doesModify = true, List(l.mem.evar.get)))
       case None => None //TODO should be an exception
     }
 
-    override def getCanReserveName(l: Option[LockType]): Option[String] = None
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
-    override def getReleaseName(l: Option[LockType]): Option[String] = l match {
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
       case Some(LockRead) => None
-      case Some(LockWrite) => Some("commit")
+      case Some(LockWrite) => Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.handle))))
       case None => None //TODO should be an exception
     }
 
@@ -392,25 +429,25 @@ object LockImplementation {
      */
     override def usesAddresses: Boolean = true
 
-    override def getCheckEmptyName(l: Option[LockType]): Option[String] = None
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
-    override def getCheckOwnsName(l: Option[LockType]): Option[String] = l match {
-      case Some(LockRead) => Some("isValid")
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.handle))))
       case Some(LockWrite) => None
       case None => None //TODO should be an exception
     }
 
-    override def getReserveName(l: Option[LockType]): Option[String] = l match {
-      case Some(LockRead) => Some("reserveRead")
-      case Some(LockWrite) => Some("reserveWrite")
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("reserveRead", doesModify = true, List(l.mem.evar.get)))
+      case Some(LockWrite) => Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
       case None => None //TODO should be an exception
     }
 
-    override def getCanReserveName(l: Option[LockType]): Option[String] = None
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
-    override def getReleaseName(l: Option[LockType]): Option[String] = l match {
-      case Some(LockRead) => Some("commitRead")
-      case Some(LockWrite) => Some("commitWrite")
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("commitRead", doesModify = true, List(extractHandle(l.handle))))
+      case Some(LockWrite) => Some(MethodInfo("commitWrite", doesModify = true, List(extractHandle(l.handle))))
       case None => None //TODO should be an exception
     }
 
