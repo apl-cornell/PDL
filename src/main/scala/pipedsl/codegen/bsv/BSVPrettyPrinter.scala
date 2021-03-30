@@ -153,14 +153,19 @@ object BSVPrettyPrinter {
       )
     }
 
+    private def getLetString(stmt: BStatement): String = if (stmt.useLet) "let " else ""
+
     def printBSVStatement(stmt: BStatement): Unit = stmt match {
       case BStmtSeq(stmts) => stmts.foreach(s => printBSVStatement(s))
       case BExprStmt(expr) => w.write(mkStatementString(toBSVExprStr(expr)))
       case BReturnStmt(expr) => w.write(mkStatementString("return", toBSVExprStr(expr)))
       case BModInst(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
-      case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
-      case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
-      case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
+      case BInvokeAssign(lhs, rhs) =>
+        w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
+      case BModAssign(lhs, rhs) =>
+        w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
+      case BAssign(lhs, rhs) =>
+        w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BIntAssign(lhs, rhs) =>
         val intname = lhs.typ.matchOrError() { case BInterface(n, _) => n }
         w.write(mkStatementString("interface", intname, lhs.name, "=", toBSVExprStr(rhs)))

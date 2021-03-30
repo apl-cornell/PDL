@@ -189,7 +189,12 @@ object BluespecGeneration {
 
     private val modInfo = progInfo.getModInfo(mod.name)
     private val translator = new BSVTranslator(bsInts, bsvMods, bsvHandles)
-
+    private var tmpCount = 0
+    private def freshTmp(t: BSVType): BVar = {
+      val tmp = BVar("__tmp_" + tmpCount.toString, t)
+      tmpCount = tmpCount + 1
+      tmp
+    }
     private val threadIdName = "_threadID"
 
     //Helpers for disambiguating generated edge names
@@ -430,7 +435,7 @@ object BluespecGeneration {
           } else {
             l
           }
-        case cl@ICheckLockOwned(mem, h) =>
+        case cl@ICheckLockOwned(mem, _) =>
           val methodInfo = LockImplementation.getLockImpl(mem).getCheckOwnsInfo(cl)
           if (methodInfo.isDefined) {
             l :+ translateMethod(modParams(mem.id), methodInfo.get)
@@ -860,8 +865,15 @@ object BluespecGeneration {
           val resMethod = translateMethod(modParams(mem.id), methodInfo.get)
           Some(
             if (methodInfo.get.doesModify) {
-            //TODO this needs to be changed into two expressions -> can't wrap the invocation in a Tagged Valid
-            BInvokeAssign(translator.toVar(handle), BTaggedValid(resMethod))
+              //can't just apply TaggedValid( resMethod) if it is an Action method (i.e., uses <-).
+              //Need to assign to a fresh variable and then tag that.
+              val handletyp = handle.typ.get.matchOrError(
+                handle.pos, "Extract Lock Handle", "Maybe(Handle)") { case TMaybe(t) => t }
+              val fresh = freshTmp(translator.toType(handletyp))
+              BStmtSeq(List(
+                BInvokeAssign(fresh, resMethod).setUseLet(true),
+                BAssign(translator.toVar(handle), BTaggedValid(fresh))
+              ))
             } else {
               BAssign(translator.toVar(handle), BTaggedValid(resMethod))
           })

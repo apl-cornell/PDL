@@ -222,7 +222,10 @@ object BSVSyntax {
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
 
-  sealed trait BStatement
+  sealed trait BStatement {
+    var useLet: Boolean = false
+    def setUseLet(b: Boolean): BStatement = { this.useLet = b; this }
+  }
 
   case class BStmtSeq(stmts: List[BStatement]) extends BStatement
 
