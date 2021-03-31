@@ -1,9 +1,9 @@
 package VerilogLibs;
 
-export CombMem(..);
+export RenameRF(..);
 export mkRenameRF;
 
-interface CombMem#(type elem, type addr, type name);
+interface RenameRF#(type elem, type addr, type name);
    method name readName(addr a); //get name to read data later
    method Bool isValid(name n);  //check if safe to read
    method elem read(name a);    //do the read
@@ -15,7 +15,7 @@ endinterface
 
 import "BVI" RenameRF =
  module mkRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)
-    (CombMem#(elem, addr, name)) provisos
+    (RenameRF#(elem, addr, name)) provisos
     (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
      PrimIndex#(addr, an), PrimIndex#(name, nn));
 

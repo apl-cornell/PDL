@@ -7,11 +7,11 @@
 //lock impls are named, e.g., QUEUE, FAQUEUE, RENAME, LSQ
 //lock impls are compatible w/ specific memory latencies
 
-pipe test(input: int<32>)[rf: int<32>[5]<c,s>(RenameRF)]: bool {
-    int<5> rs1 = input{0:4};
+pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(RenameRF)]: bool {
+    int<5> rs1 = pc{4:0};
     int<5> rd = rs1 - 1<5>;
-    if (input < 100<32>) {
-        call test(input + 1<32>);
+    if (pc < 100<32>) {
+        call test(pc + 1<32>);
     } else {
         output(true);
     }
