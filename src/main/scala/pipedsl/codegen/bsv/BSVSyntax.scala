@@ -34,11 +34,27 @@ object BSVSyntax {
 
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
+    //TODO it would be nice not to need two type translation methods
+    def toTypeForMod(t: Type, n: Id): BSVType = t match {
+      case TLockedMemType(elem, idsz, limpl) =>
+        val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
+        bsints.getLockedMemType(isAsync = elem.readLatency != Combinational,
+          BSizedInt(unsigned = true, elem.addrSize),
+          toType(elem.elem),
+          lidtyp, limpl)
+      case _ => toType(t)
+    }
+
     def toType(t: Type): BSVType = t match {
-        //TODO incorporate lock name
-      case TMemType(elem, addrSize, rlat, _, limpl) =>
-        bsints.getMemType(isAsync = rlat != Combinational,
-          BSizedInt(unsigned = true, addrSize), toType(elem), limpl)
+      case TMemType(elem, addrSize, rlat, _) =>
+        bsints.getBaseMemType(isAsync = rlat != Combinational,
+          BSizedInt(unsigned = true, addrSize), toType(elem))
+      case TLockedMemType(elem, idsz, limpl) =>
+        val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else BTypeParam("_MISSINGTYPEPARAM_")
+        bsints.getLockedMemType(isAsync = elem.readLatency != Combinational,
+          BSizedInt(unsigned = true, elem.addrSize),
+          toType(elem.elem),
+          lidtyp, limpl)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString
@@ -47,7 +63,8 @@ object BSVSyntax {
       case TMaybe(btyp) => BInterface("Maybe", List(BVar("basetype", toType(btyp))))
       case TRequestHandle(n, isLock) =>
         if (isLock) {
-          bsints.getDefaultLockHandleType
+          //These are passed in the modmap rather than the handle map
+          modmap(n)
         } else {
           val modtyp = toType(n.typ.get)
           if (handleMap.contains(modtyp)) {

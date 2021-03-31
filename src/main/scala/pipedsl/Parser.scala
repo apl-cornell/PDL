@@ -230,8 +230,9 @@ class Parser extends RegexParsers with PackratParsers {
         val rlat = lats.get._1._1
         val wlat = lats.get._1._2
         val lock = lats.get._2
+        val mtyp = TMemType(elem, size, rlat, wlat)
         if (lock.isDefined)
-          TMemType(elem, size, rlat, wlat, LockImplementation.getLockImpl(lock.get))
+          TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock.get))
         else
           TMemType(elem, size, rlat, wlat)
       } else {
@@ -284,7 +285,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val clock: P[CirExpr] = positioned {
-    iden ~ parens(iden) ^^ { case lid ~ mem => CirLock(mem, LockImplementation.getLockImpl(lid))}
+    iden ~ parens(iden) ~ angular(posint).? ^^ {
+      case lid ~ mem ~ idsz => CirLock(mem, LockImplementation.getLockImpl(lid), idsz)
+    }
   }
 
   lazy val cconn: P[Circuit] = positioned {

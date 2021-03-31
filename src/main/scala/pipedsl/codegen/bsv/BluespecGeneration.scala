@@ -16,6 +16,7 @@ object BluespecGeneration {
   private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
+  private val verilogLib = "VerilogLibs"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
     debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
@@ -92,7 +93,7 @@ object BluespecGeneration {
         val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
           translator.toType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
-      case CirLock(mem, impl) =>
+      case CirLock(mem, impl, idsz) =>
         val lockedMemType = translator.toType(c.typ.get)
         //also uses type info of CirLock expr to instantiate lock (e.g. address size, extra metadata)
         //just returning BS for now
@@ -180,6 +181,8 @@ object BluespecGeneration {
    * @param firstStage  - The first stage in the pipeline that accepts inputs from
    *                    a single channel (unlike the other stages).
    * @param otherStages - The full remaining list of pipeline stages.
+   * @param bsvMods - Mapping from identifiers to BSV Interfaces representing those modules (for already defined mods)
+   * @param bsvHandles - Mapping from BSV Module types to their type parameter for request handles
    * @return - The BSV Module that represents this pipeline.
    */
   private class BluespecModuleGenerator(val mod: ModuleDef,
@@ -187,8 +190,21 @@ object BluespecGeneration {
     val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val progInfo: ProgInfo,
     val bsInts: BluespecInterfaces, val debug:Boolean = false, val funcImport: BImport) {
 
-    private val modInfo = progInfo.getModInfo(mod.name)
-    private val translator = new BSVTranslator(bsInts, bsvMods, bsvHandles)
+    private val lockHandleVars = mod.modules.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
+      mod.typ match {
+          //TODO once we unify memories and modules
+        case TModType(_, _, _, _) => mapping
+        case TLockedMemType(_, idSz, _) => if (idSz.isEmpty) {
+          //instantiate type variable
+          mapping + (mod.name -> BTypeParam("_lidTyp_" + mod.name.v))
+        } else {
+          //don't
+          mapping
+        }
+        case _ => mapping
+      }
+    })
+    private val translator = new BSVTranslator(bsInts, bsvMods ++ lockHandleVars, bsvHandles)
     private var tmpCount = 0
     private def freshTmp(t: BSVType): BVar = {
       val tmp = BVar("__tmp_" + tmpCount.toString, t)
@@ -252,7 +268,7 @@ object BluespecGeneration {
     //Generate map from existing module parameter names to BSV variables
     private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
       //use listmap to preserve order
-      vars + (m.name -> BVar(m.name.v, translator.toType(m.typ)))
+      vars + (m.name -> BVar(m.name.v, translator.toTypeForMod(m.typ, m.name)))
     })
 
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
@@ -289,7 +305,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), funcImport) ++
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,

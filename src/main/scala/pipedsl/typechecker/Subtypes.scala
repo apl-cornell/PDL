@@ -10,7 +10,7 @@ object Subtypes {
         val okSpec = t2.maybeSpec || !t1.maybeSpec
         isSub && okSpec
     }
-    def isSubtype(t1: Type, t2: Type): Boolean =  (t1, t2) match {
+    def isSubtype(t1: Type, t2: Type): Boolean = (t1, t2) match {
         case (TSizedInt(l1, u1), TSizedInt(l2, u2)) => l1 == l2 && u1 == u2
         case (TRecType(_, f1), TRecType(_, f2)) =>
             //f1 must contain all of the named fields of f2 and they can be subtypes of f2's fields
@@ -32,6 +32,8 @@ object Subtypes {
                     false
                 }
             }
+        case (TLockedMemType(m1, id1, l1), TLockedMemType(m2, id2, l2)) =>
+            areEqual(m1, m2) && l1 == l2 && (id1 == id2 || id2.isEmpty)
         case _ => areEqual(t1, t2)
     }
 
@@ -39,8 +41,10 @@ object Subtypes {
         case (TSizedInt(l1, u1), TBool()) => l1 == 1 && u1
         case (TBool(), TSizedInt(l1, u1)) => l1 == 1 && u1
         case (TSizedInt(l1, u1), TSizedInt(l2, u2)) => l1 == l2 && u1 == u2
-        case (TMemType(e1, as1, r1, w1, l1), TMemType(e2, as2, r2, w2, l2)) => areEqual(e1, e2) &&
-          as1 == as2 && r1 == r2 && w1 == w2 && l1 == l2
+        case (TMemType(e1, as1, r1, w1), TMemType(e2, as2, r2, w2)) => areEqual(e1, e2) &&
+          as1 == as2 && r1 == r2 && w1 == w2
+        case (TLockedMemType(m1, id1, l1), TLockedMemType(m2, id2, l2)) =>
+            areEqual(m1, m2) && id1 == id2 && l1 == l2
         case _ => t1 == t2
     }
 }

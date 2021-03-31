@@ -31,9 +31,9 @@ object Syntax {
 
   object Latency extends Enumeration {
     type Latency = Value
-    val Combinational = Value("c")
-    val Sequential = Value("s")
-    val Asynchronous = Value("a")
+    val Combinational: Latency = Value("c")
+    val Sequential: Latency = Value("s")
+    val Asynchronous: Latency = Value("a")
 
     def join(l1: Latency, l2: Latency): Latency = l1 match {
       case Combinational => l2
@@ -78,7 +78,9 @@ object Syntax {
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
-      case TMemType(elem, size, rLat, wLat, l) => s"${elem.toString}[${size}]<$rLat, $wLat>($l)"
+      case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
+      case TLockedMemType(m, sz, impl) => s"${m.toString}(${impl.toString})".concat(
+        if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
       case TMaybe(btyp) => s"Maybe<${btyp}>"
@@ -95,9 +97,9 @@ object Syntax {
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
   case class TMemType(elem: Type, addrSize: Int,
-    readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous,
-    lockImpl: LockInterface = LockImplementation.getDefaultLockImpl) extends Type
+    readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
+  case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
   case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
@@ -281,7 +283,8 @@ object Syntax {
 
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
-  case class CirLock(mem: Id, impl: LockInterface) extends CirExpr //this represents a memory + a lock
+  //TODO do these ever need other kinds of parameters besides ints?
+  case class CirLock(mem: Id, impl: LockInterface, idSize: Option[Int]) extends CirExpr //this represents a memory/module + a lock
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
