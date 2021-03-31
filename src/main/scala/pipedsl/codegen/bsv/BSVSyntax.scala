@@ -36,9 +36,10 @@ object BSVSyntax {
 
     def toType(t: Type): BSVType = t match {
         //TODO incorporate lock name
-      case TMemType(elem, addrSize, rlat, _, limpl) =>
-        bsints.getMemType(isAsync = rlat != Combinational,
-          BSizedInt(unsigned = true, addrSize), toType(elem), limpl)
+      case TMemType(elem, addrSize, rlat, _) =>
+        bsints.getBaseMemType(isAsync = rlat != Combinational,
+          BSizedInt(unsigned = true, addrSize), toType(elem))
+      case TLockedMemType(elem, idsz, limpl) => BBool //TODO
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString

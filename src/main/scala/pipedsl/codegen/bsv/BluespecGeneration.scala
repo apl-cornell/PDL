@@ -16,6 +16,7 @@ object BluespecGeneration {
   private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
+  private val verilogLib = "VerilogLibs"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
     debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
@@ -92,7 +93,7 @@ object BluespecGeneration {
         val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
           translator.toType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
-      case CirLock(mem, impl) =>
+      case CirLock(mem, impl, idsz) =>
         val lockedMemType = translator.toType(c.typ.get)
         //also uses type info of CirLock expr to instantiate lock (e.g. address size, extra metadata)
         //just returning BS for now
@@ -289,7 +290,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), funcImport) ++
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,

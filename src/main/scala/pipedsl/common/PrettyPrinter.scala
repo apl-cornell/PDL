@@ -139,7 +139,8 @@ class PrettyPrinter(output: Option[File]) {
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
-      case CirLock(mem, impl) => impl.toString + "(" + mem.v + ")"
+      case CirLock(mem, impl, sz) => impl.toString + "(" + mem.v + ")" +
+        (if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case CirNew(mod, mods) => "new " + mod.v +
         "[" + mods.map(m => m.v).mkString(",") + "]"
       case CirCall(mod, args) => "call " + mod.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
@@ -154,8 +155,8 @@ class PrettyPrinter(output: Option[File]) {
     case TBool() => "bool"
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
-    case TMemType(elem, addrSize, rlat, wlat, l) => printTypeToString(elem) + "[" + addrSize.toString + "]" +
-      "<" + rlat + ", " + wlat + ">" + "(" + l + ")"
+    case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" +
+      "<" + rlat + ", " + wlat + ">"
     case TModType(_, _, _, _) => "TODO MOD TYPE"
     case TNamedType(name) =>  name.v
     case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)

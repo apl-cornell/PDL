@@ -150,10 +150,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
-    case CirLock(mem, lockimpl) => {
+    case CirLock(mem, lockimpl, idsz) => {
       val mtyp: TMemType = tenv(mem).
         matchOrError(mem.pos, "lock instantiation", "memory") { case c: TMemType => c }
-      val newtyp = TMemType(mtyp.elem, mtyp.addrSize, mtyp.readLatency, mtyp.writeLatency, lockimpl)
+      val newtyp = TLockedMemType(mtyp, idsz, lockimpl)
       c.typ = Some(newtyp)
       (newtyp, tenv)
     }
@@ -250,12 +250,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
       {
         case _: TModType => tenv
-        case _: TMemType => tenv
+        case _: TLockedMemType => tenv
       }
     case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
       {
         case _: TModType => tenv
-        case _: TMemType => tenv
+        case _: TLockedMemType => tenv
       }
     case CLockOp(mem, _, _) => {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
@@ -265,8 +265,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             mem.id.typ = Some(t)
             tenv
           }
-        case memt: TMemType => {
-          mem.id.typ = Some(memt)
+        case t: TLockedMemType => {
+          val memt = t.mem
+          mem.id.typ = Some(t)
           if(mem.evar.isEmpty) tenv
           else {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv)
@@ -390,7 +391,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv)
       (memt, idxt) match {
-        case (TMemType(e, s, _, _, _), TSizedInt(l, true)) if l == s => (e, env1)
+        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }
