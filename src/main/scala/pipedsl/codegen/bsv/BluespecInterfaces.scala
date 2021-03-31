@@ -180,11 +180,11 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
-  def getMemType(isAsync: Boolean, addr: BSVType, data: BSVType, limpl: LockInterface): BInterface = {
-    //TODO make these parameters somewhere the user can control
+  def getLockedMemType(isAsync: Boolean, addr: BSVType, data: BSVType,
+    lidTyp: BSVType, limpl: LockInterface): BInterface = {
+    //TODO make this parameter somewhere the user can control
     //since this influences the size of queues, etc.
     val nameTyp = getDefaultMemHandleType
-    val lidTyp = getDefaultLockHandleType
     if (isAsync) {
       //TODO can maybe clean this up a bit
       if (!limpl.usesAddresses) {

@@ -15,8 +15,21 @@ object BSVPrettyPrinter {
     mkExprString(toBSVTypeStr(v.typ), v.name)
   }
 
+  private def getTypeParams(typ: BSVType): Set[String] = typ match {
+    case BCombMemType(elem, _) => getTypeParams(elem)
+    case BAsyncMemType(elem, _) => getTypeParams(elem)
+    case BStruct(_, fields) => fields.foldLeft(Set[String]())((s, f) => s ++ getTypeParams(f.typ))
+    case BInterface(_, tparams) => tparams.foldLeft(Set[String]())((s, f) => s ++ getTypeParams(f.typ))
+    case BTypeParam(name) => Set(name)
+    case _ => Set()
+  }
+
   def toBSVTypeStr(t: BSVType): String = t match {
-    case BStruct(name, _) => name
+    case BStruct(name, _) =>
+      val tparams = getTypeParams(t)
+      if (tparams.isEmpty) { name } else {
+        name + "#(" + tparams.mkString(", ") + ")"
+      }
     case BEmptyModule => "Empty"
     case BInterface(name, tparams) =>
       if (tparams.nonEmpty) {
@@ -141,11 +154,15 @@ object BSVPrettyPrinter {
     }
 
     def printStructDef(sdef: BStructDef): Unit = {
+      val typeparams = getTypeParams(sdef.typ).map(s => "type " + s)
+      val typeparamStr = if (typeparams.nonEmpty) {
+        mkExprString("#(", typeparams.mkString(","), ")")
+      } else { "" }
       val structstring = mkExprString("struct {",
         sdef.typ.fields.map(f => {
           toDeclString(f)
         }).mkString("; "),
-        "; }", sdef.typ.name)
+        "; }", sdef.typ.name + typeparamStr)
       w.write(
         mkStatementString("typedef", structstring,
           "deriving(", sdef.derives.mkString(","), ")"

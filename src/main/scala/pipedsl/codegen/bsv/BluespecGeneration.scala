@@ -181,6 +181,8 @@ object BluespecGeneration {
    * @param firstStage  - The first stage in the pipeline that accepts inputs from
    *                    a single channel (unlike the other stages).
    * @param otherStages - The full remaining list of pipeline stages.
+   * @param bsvMods - Mapping from identifiers to BSV Interfaces representing those modules (for already defined mods)
+   * @param bsvHandles - Mapping from BSV Module types to their type parameter for request handles
    * @return - The BSV Module that represents this pipeline.
    */
   private class BluespecModuleGenerator(val mod: ModuleDef,
@@ -188,8 +190,21 @@ object BluespecGeneration {
     val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val progInfo: ProgInfo,
     val bsInts: BluespecInterfaces, val debug:Boolean = false, val funcImport: BImport) {
 
-    private val modInfo = progInfo.getModInfo(mod.name)
-    private val translator = new BSVTranslator(bsInts, bsvMods, bsvHandles)
+    private val lockHandleVars = mod.modules.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
+      mod.typ match {
+          //TODO once we unify memories and modules
+        case TModType(_, _, _, _) => mapping
+        case TLockedMemType(_, idSz, _) => if (idSz.isEmpty) {
+          //instantiate type variable
+          mapping + (mod.name -> BTypeParam("_lidTyp_" + mod.name.v))
+        } else {
+          //don't
+          mapping
+        }
+        case _ => mapping
+      }
+    })
+    private val translator = new BSVTranslator(bsInts, bsvMods ++ lockHandleVars, bsvHandles)
     private var tmpCount = 0
     private def freshTmp(t: BSVType): BVar = {
       val tmp = BVar("__tmp_" + tmpCount.toString, t)
@@ -253,7 +268,7 @@ object BluespecGeneration {
     //Generate map from existing module parameter names to BSV variables
     private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
       //use listmap to preserve order
-      vars + (m.name -> BVar(m.name.v, translator.toType(m.typ)))
+      vars + (m.name -> BVar(m.name.v, translator.toTypeForMod(m.typ, m.name)))
     })
 
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
