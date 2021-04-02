@@ -50,7 +50,9 @@ object BSVSyntax {
         bsints.getBaseMemType(isAsync = rlat != Combinational,
           BSizedInt(unsigned = true, addrSize), toType(elem))
       case TLockedMemType(elem, idsz, limpl) =>
-        val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else BTypeParam("_MISSINGTYPEPARAM_")
+        val lidtyp = if (idsz.isDefined) {
+          bsints.getLockHandleType(idsz.get)
+        } else BTypeParam("_MISSINGTYPEPARAM_")
         bsints.getLockedMemType(isAsync = elem.readLatency != Combinational,
           BSizedInt(unsigned = true, elem.addrSize),
           toType(elem.elem),
@@ -226,6 +228,7 @@ object BSVSyntax {
   case class BUnpack(e: BExpr) extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
   case class BBoolLit(v: Boolean) extends BExpr
+  case class BUnsizedInt(v: Int) extends BExpr
   case class BIntLit(v: Int, base: Int, bits: Int) extends BExpr
   case class BStringLit(v: String) extends BExpr
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr

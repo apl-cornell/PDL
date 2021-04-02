@@ -153,6 +153,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CirLock(mem, lockimpl, idsz) => {
       val mtyp: TMemType = tenv(mem).
         matchOrError(mem.pos, "lock instantiation", "memory") { case c: TMemType => c }
+      mem.typ = Some(mtyp)
       val newtyp = TLockedMemType(mtyp, idsz, lockimpl)
       c.typ = Some(newtyp)
       (newtyp, tenv)
