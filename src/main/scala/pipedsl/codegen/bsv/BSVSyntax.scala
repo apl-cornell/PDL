@@ -282,6 +282,7 @@ object BSVSyntax {
 
   case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
 
+
   case class BModuleDef(name: String, typ: Option[BInterface],
     params: List[BVar], body: List[BStatement], rules: List[BRuleDef], methods: List[BMethodDef])
 
