@@ -285,13 +285,19 @@ object BSVPrettyPrinter {
       } else {
         BVar("_unused_", BEmptyModule)
       }
+
       val paramStr = (mod.params :+ interfaceParam).map(p => toDeclString(p)).mkString(", ")
       val paramString = mkExprString("(", paramStr, ")")
+      //generate the Bits#(tvar,sztvar) proviso for any unspecified type variables
+      val typeVars = mod.params.foldLeft(Set[String]())((s, p) => s ++ getTypeParams(p.typ))
+      val provisoString = mkExprString("provisos(",
+        typeVars.map(s => "Bits#(" + s + ",_sz" + s + ")").mkString(","),
+        ")")
       //can synthesize if there are no parameters
       if (mod.params.isEmpty) {
         w.write("(* synthesize *)\n")
       }
-      w.write(mkStatementString("module", mod.name, paramString))
+      w.write(mkStatementString("module", mod.name, paramString, provisoString))
       incIndent()
       mod.body.foreach(s => printBSVStatement(s))
       mkStatementString("") //for readability only
