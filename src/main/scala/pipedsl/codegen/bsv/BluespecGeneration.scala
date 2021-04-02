@@ -26,13 +26,13 @@ object BluespecGeneration {
     val funcModule: String = funcmodname
     private val funcImport = BImport(funcmodname)
 
-    //for each module
+    //for each module get the type of request handles used to access it
     private val handleTyps: Map[Id, BSVType] = prog.moddefs.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
       val stages = stageInfo(mod.name)
       val handletyp = BSizedInt(unsigned = true, log2(flattenStageList(stages).length))
       mapping + (mod.name -> handletyp)
     })
-
+    //for each module map the name used to define it to the bsv program representation
     private val modMap: Map[Id, BProgram] = prog.moddefs.foldLeft(Map[Id, BProgram]())((mapping, mod) => {
       val modtyps = mapping map { case (i, p) => (i, p.topModule.typ.get) }
       val modHandles = modtyps.foldLeft(Map[BSVType, BSVType]())((m, mtyp) => {
@@ -44,7 +44,7 @@ object BluespecGeneration {
       ).getBSV
       mapping + ( mod.name -> newmod )
     })
-
+    //a different handle map that uses the BSV types as keys (instead of the original Identifiers)
     private val modToHandle: Map[BSVType, BSVType] = prog.moddefs.map(m => m.name)
       .foldLeft(Map[BSVType, BSVType]())((mapping, mod) => {
       val modtyp =  bsInts.getInterface(modMap(mod))
@@ -59,6 +59,9 @@ object BluespecGeneration {
     })
 
 
+    //Given the circuit specification and module types:
+    //generate the set of statements that instantiate the top level modules and add any new type bindings to the
+    //environment by instantiating the modules
     private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
       case CirSeq(c1, c2) =>
         val (stmts1, env1) = instantiateModules(c1, env)
@@ -95,9 +98,12 @@ object BluespecGeneration {
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLock(mem, impl, idsz) =>
         val lockedMemType = translator.toType(c.typ.get)
-        //also uses type info of CirLock expr to instantiate lock (e.g. address size, extra metadata)
-        //just returning BS for now
-        (lockedMemType, bsInts.getLockModule(env(mem).typ, impl))
+        val modInstName = "mk" + impl.toString
+        val modArgs: List[BExpr] = impl.getModInstArgs(
+          mem.typ.get.matchOrError(mem.pos, "LockInstantiation", "MemTyp") { case m:TMemType => m },
+          idsz.getOrElse(bsInts.defaultLockHandleSize)
+        ).map(a => BUnsizedInt(a)) :+ env(mem)
+        (lockedMemType, BModule(modInstName, modArgs))
       case CirNew(mod, mods) =>
         (bsInts.getInterface(modMap(mod)),
           BModule(name = bsInts.getModuleName(modMap(mod)), args = mods.map(m => env(m))))

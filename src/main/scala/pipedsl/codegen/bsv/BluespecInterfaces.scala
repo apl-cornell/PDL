@@ -3,6 +3,7 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
 import pipedsl.common.LockImplementation._
+import pipedsl.common.Syntax.{TMemType, Type}
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
@@ -78,7 +79,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val fifoFirstMethodName = "first"
 
   private val lockHandleName = "LockId"
-  private val defaultLockHandleSize = 4
+  val defaultLockHandleSize = 4
 
   def getDefaultLockHandleType: BSizedType = getLockHandleType(defaultLockHandleSize)
 
@@ -120,18 +121,6 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
   **/
 
-  /**
-   *
-   * @param mtyp
-   * @param limpl
-   * @return
-   */
-  def getLockModule(mtyp: BSVType, limpl: LockInterface): BModule = {
-    val modInstName = "mk" + limpl.toString
-    BModule(modInstName, List())
-  }
-
-
   def getStart(mod: BVar): BStatement = {
     BModAssign(mod, BBoolLit(false))
   }
@@ -146,11 +135,6 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     mod
   }
 
-  private val lockOwnsName = "owns"
-  private val lockResName = "res"
-  private val lockRelName = "rel"
-  private val lockCanResName = "canRes"
-
   private val memHandleName = "MemId"
   private val defaultMemHandleSize = 8
   def getDefaultMemHandleType: BSizedType = getMemHandleType(defaultMemHandleSize)
@@ -158,10 +142,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     BSizedType(memHandleName, List(sz))
   }
 
-  private val asyncMemType = "AsyncMem"
-  private val asyncMemMod = "mkLat1Mem"
-  private val combMemType = "CombMem"
-  private val combMemMod = "mkCombMem"
+  private val asyncMemType = "BRAM_PORT"
+  private val asyncMemMod = "mkBRAMCore1"
+  private val combMemType = "RegFile"
+  private val combMemMod = "mkRegFile"
 
   private val noAddrCombMem = "GeneralCombMem"
   private val noAddrAsyncMem = "AsyncCombMem"

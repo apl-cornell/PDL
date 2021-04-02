@@ -139,6 +139,8 @@ object LockImplementation {
 
     def getReleaseInfo(l: IReleaseLock): Option[MethodInfo]
 
+    def getModInstArgs(m: TMemType, idSz: Int): List[Int]
+
     //TODO put this somewhere like Syntax
     protected def extractHandle(h: EVar): Expr = {
       val e = EFromMaybe(h).setPos(h.pos)
@@ -240,6 +242,8 @@ object LockImplementation {
      *         (excluding the data).
      */
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = addr
+
+    def getModInstArgs(m: TMemType, idSz: Int): List[Int] = List()
 }
 
   //This is a different implementation which uses the address in some parameters
@@ -367,6 +371,10 @@ object LockImplementation {
      *         (excluding the data).
      */
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+
+    def getModInstArgs(m: TMemType, idSz: Int): List[Int] = {
+      List(idSz, m.addrSize)
+    }
 }
 
   /**
@@ -474,6 +482,8 @@ object LockImplementation {
      *         (excluding the data).
      */
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+
+    def getModInstArgs(m: TMemType, idSz: Int): List[Int] = List()
 }
 
   //The following are internal helper functions

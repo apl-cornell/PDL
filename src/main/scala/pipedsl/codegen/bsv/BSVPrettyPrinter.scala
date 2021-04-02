@@ -76,6 +76,7 @@ object BSVPrettyPrinter {
     } else {
       "False"
     }
+    case BUnsizedInt(v) => v.toString
     case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
     case BStringLit(v) => "\"" + v + "\""
     case BStructLit(typ, fields) =>
