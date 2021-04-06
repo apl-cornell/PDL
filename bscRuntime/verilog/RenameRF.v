@@ -23,6 +23,8 @@ module RenameRF(CLK,
    parameter hi_arch = 1;   
    parameter lo_phys = 0;
    parameter hi_phys = 1;
+   parameter binaryInit = 0;
+   parameter file = "";   
    
    input CLK;
    input RST;
@@ -111,7 +113,20 @@ module RenameRF(CLK,
    
    integer 		       initi;
    integer 		       initf;
-
+   integer 		       siminit;
+   
+   //simulation initialization
+   initial
+     begin
+	if (binaryInit)
+	  $readmemb(file, phys, lo_arch, hi_arch);
+	else
+	  begin
+	     for (siminit = lo_arch; siminit <= hi_arch; siminit = siminit + 1)
+	       phys[siminit] = 0;	     
+	  end
+     end
+   
    `ifdef DEBUG
    always@(posedge CLK)
      begin

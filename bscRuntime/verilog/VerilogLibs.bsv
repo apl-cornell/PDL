@@ -1,5 +1,7 @@
 package VerilogLibs;
 
+import RegFile :: *;
+
 export RenameRF(..);
 export mkRenameRF;
 
@@ -14,8 +16,7 @@ interface RenameRF#(type elem, type addr, type name);
 endinterface
 
 import "BVI" RenameRF =
- module mkRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)
-    (RenameRF#(elem, addr, name)) provisos
+ module mkRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)(RenameRF#(elem, addr, name)) provisos
     (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
      PrimIndex#(addr, an), PrimIndex#(name, nn));
 
@@ -26,6 +27,8 @@ import "BVI" RenameRF =
     parameter hi_arch = aregs - 1;
     parameter lo_phys = 0;
     parameter hi_phys = pregs - 1;
+    parameter binaryInit = init;
+    parameter file = fileInit;
     
     default_clock clk(CLK, (*unused*) clk_gate);
     default_reset rst (RST);
