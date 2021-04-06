@@ -34,7 +34,8 @@ pipe ex4(in: bool)[rf: int<32>[5]] {
 }
 
 circuit {
-    r1 = memory(int<32>, 5);
+    t1 = memory(int<32>, 5);
+    r1 = Queue(t1);
     e = new ex4[r1];
     call e(true);
 }

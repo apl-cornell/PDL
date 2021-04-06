@@ -10,7 +10,7 @@ void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
 }
 */
 
-pipe hist(counter: int<10>)[feature: int<10>[10]<a,a>, weight: int<32>[10]<a,a>, h: int<32>[10]<a,a>]: bool {
+pipe hist(counter: int<10>)[feature: int<10>[10]<a,a>(FAQueue), weight: int<32>[10]<a,a>(FAQueue), h: int<32>[10]<a,a>(FAQueue)]: bool {
     if (counter < 1000<10>) {
         call hist(counter + 1<10>);
     start(feature);
@@ -44,9 +44,12 @@ pipe hist(counter: int<10>)[feature: int<10>[10]<a,a>, weight: int<32>[10]<a,a>,
 }
 
 circuit {
-    f = memory(int<10>, 10);
-    w = memory(int<32>, 10);
-    h = memory(int<32>, 10);
-    hg = new hist[f, w, h];
-    call hg(0<10>);
-}
+       tf = memory(int<10>, 10);
+       f = FAQueue(tf);
+       tw = memory(int<32>, 10);
+       w = FAQueue(tw);
+       th = memory(int<32>, 10);
+       h = FAQueue(th);
+       hg = new hist[f, w, h];
+       call hg(0<10>);
+ }

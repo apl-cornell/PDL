@@ -9,7 +9,7 @@ void matrix_power( inout_int_t x[20][20], in_int_t row[20], in_int_t col[20], in
 }
 */
 
-pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>, row: int<5>[5]<c,s>, col: int<5>[5]<c,s>, a: int<32>[5]<c,s>]: bool {
+pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>(FAQueue), row: int<5>[5]<c,s>(Queue), col: int<5>[5]<c,s>(Queue), a: int<32>[5]<c,s>(Queue)]: bool {
      if (p == 19<5>) {
      	if (k != 19<5>) {
 	   call matpow(k + 1<5>, 0<5>);
@@ -60,10 +60,14 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<c,s>, row: int<5>[5]<c,s>, col: 
 }
 
 circuit {
-  x = regfile(int<32>, 9);
-  a = regfile(int<32>, 5);
-  r = regfile(int<5>, 5);
-  c = regfile(int<5>, 5);
+  tx = regfile(int<32>, 9);
+  x = FAQueue(tx);
+  ta = regfile(int<32>, 5);
+  a = Queue(ta);
+  tr = regfile(int<5>, 5);
+  r = Queue(tr);
+  tc = regfile(int<5>, 5);
+  c = Queue(tc);
   mp = new matpow[x, r, c, a];
   call mp(1<5>, 0<5>);
 }

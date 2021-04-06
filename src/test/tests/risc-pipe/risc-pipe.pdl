@@ -60,11 +60,11 @@ def br(pc: int<16>, off:int<16>, op:int<3>, arg1:int<32>, arg2:int<32>): int<16>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>] {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)] {
     start(imem);
-    acquire(imem[pc]);
+    acquire(imem);
     int<32> insn <- imem[pc];
-    release(imem[pc]);
+    release(imem);
     end(imem);
     ---
     int<7> opcode = insn{6:0};
@@ -160,9 +160,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>
 }
 
 circuit {
-    i = memory(int<32>, 16);
-    d = memory(int<32>, 16);
-    r = regfile(int<32>, 5);
+    ti = memory(int<32>, 16);
+    i = Queue(ti);
+    td = memory(int<32>, 16);
+    d = FAQueue(td);
+    tr = regfile(int<32>, 5);
+    r = FAQueue(tr);
     c = new cpu[r, i, d];
     call c(0<16>);
 }

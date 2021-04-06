@@ -224,7 +224,7 @@ class Parser extends RegexParsers with PackratParsers {
     "s" ^^ { _ => Latency.Sequential }    |
     "a" ^^ { _ => Latency.Asynchronous }
 
-  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ (angular(latency ~ ("," ~> latency)) ~ parens(iden).?).?  ^^ {
+  lazy val lockedMemory: P[Type] = sizedInt ~ brackets(posint) ~ (angular(latency ~ ("," ~> latency)) ~ parens(iden).?).?  ^^ {
     case elem ~ size ~ lats =>
       if (lats.isDefined) {
         val rlat = lats.get._1._1
@@ -234,15 +234,16 @@ class Parser extends RegexParsers with PackratParsers {
         if (lock.isDefined)
           TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock.get))
         else
-          TMemType(elem, size, rlat, wlat)
+          TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
       } else {
-        TMemType(elem, size)
+        val mtyp = TMemType(elem, size,  Latency.Asynchronous, Latency.Asynchronous)
+        TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
       }
   }
 
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
   lazy val string: P[Type] = "String".r ^^ {_ => TString() }
-  lazy val baseTyp: P[Type] = memory | sizedInt | bool | string
+  lazy val baseTyp: P[Type] = lockedMemory | sizedInt | bool | string
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp

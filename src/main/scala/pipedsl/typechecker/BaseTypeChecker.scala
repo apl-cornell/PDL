@@ -259,18 +259,18 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
-    case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+    case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
         case _: TModType => tenv
         case _: TLockedMemType => tenv
       }
-    case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+    case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
         case _: TModType => tenv
         case _: TLockedMemType => tenv
       }
     case CLockOp(mem, _, _) => {
-      tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
+      tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
       { case t: TModType =>
           if (mem.evar.isDefined) throw UnexpectedType(t.pos, "address lock operation", "Memory Type", t)
           else {
@@ -302,7 +302,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
       else throw UnexpectedSubtype(predval.pos, "speculate", ltyp, predtyp)
     }
-    case CCheck(predVar) => {
+    case CCheck(_) => {
       tenv
     }
     case COutput(exp) => {
