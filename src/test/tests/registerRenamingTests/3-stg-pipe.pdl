@@ -31,8 +31,9 @@ pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(RenameRF)]: bool {
 }
 
 circuit {
-    rf = regfile(int<32>, 5);
-    rename = RenameRF(rf)<128>;
-    t = new test[rename];
-    call t(0<32>);
+   // rf = regfile(int<32>, 5);
+   // rename = RenameRF(rf)<128>;
+   rename = rflock(int<32>, 5, 128);
+   t = new test[rename];
+   call t(0<32>);
 }

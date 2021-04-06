@@ -280,8 +280,16 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val cmem: P[CirExpr] = positioned {
     "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(elem, addr) }
   }
+
   lazy val crf: P[CirExpr] = positioned {
     "regfile" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirRegFile(elem, addr) }
+  }
+
+  lazy val clockrf: P[CirExpr] = positioned {
+    "rflock" ~> parens(sizedInt ~ "," ~ posint ~ "," ~ posint.?) ^^ {
+      case elem ~ _ ~ addr ~ _ ~ idsz =>
+        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(Id("RenameRF")), idsz)
+    }
   }
 
   lazy val clock: P[CirExpr] = positioned {
@@ -291,7 +299,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | cmem | crf | clockrf | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cexpr: P[Circuit] = positioned {

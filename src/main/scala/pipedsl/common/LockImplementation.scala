@@ -373,7 +373,7 @@ object LockImplementation {
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
     def getModInstArgs(m: TMemType, idSz: Int): List[Int] = {
-      List(idSz, m.addrSize)
+      List(Utilities.exp2(m.addrSize), idSz)
     }
 }
 

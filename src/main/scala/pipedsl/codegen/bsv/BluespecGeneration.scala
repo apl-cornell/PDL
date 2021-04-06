@@ -3,7 +3,7 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
-import pipedsl.common.LockImplementation.MethodInfo
+import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{flattenStageList, log2}
@@ -13,7 +13,6 @@ import scala.collection.immutable.ListMap
 
 object BluespecGeneration {
 
-  private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
   private val verilogLib = "VerilogLibs"
@@ -87,23 +86,46 @@ object BluespecGeneration {
       case _ => Map()
     }
 
+    private def getLockModArgs(mtyp: TMemType, limpl: LockInterface, idSz: Option[Int]): List[BExpr] = {
+      limpl.getModInstArgs(
+        mtyp, idSz.getOrElse(bsInts.defaultLockHandleSize)
+      ).map(a => BUnsizedInt(a))
+    }
+
+    private def getLockedMemModule(mtyp: TMemType, limpl: LockInterface,
+      idSz: Option[Int], initFile: Option[String]): BModule = {
+      val modInstName = "mk" + limpl.toString
+      //full args are: Lock impl args ++ Memory Init args
+      val modArgs: List[BExpr] = getLockModArgs(mtyp, limpl, idSz) ++
+        List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse("")))
+      BModule(modInstName, modArgs)
+    }
+
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
       case CirMem(elemTyp, addrSize) =>
         val memtyp = bsInts.getBaseMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
           translator.toType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
+      case CirLockMem(elemTyp, addrSize, impl, idsz) =>
+        val lockMemTyp = translator.toType(c.typ.get)
+        val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous)
+        (lockMemTyp, getLockedMemModule(mtyp, impl, idsz, initFile))
       case CirRegFile(elemTyp, addrSize) =>
         val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
           translator.toType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
+      case CirLockRegFile(elemTyp, addrSize, impl, idsz) =>
+        val lockMemTyp = translator.toType(c.typ.get)
+        val mtyp = TMemType(elemTyp, addrSize, Latency.Combinational, Latency.Sequential)
+        (lockMemTyp, getLockedMemModule(mtyp, impl, idsz, initFile))
       case CirLock(mem, impl, idsz) =>
         val lockedMemType = translator.toType(c.typ.get)
         val modInstName = "mk" + impl.toString
-        val modArgs: List[BExpr] = impl.getModInstArgs(
+        //pass the memory itself in addition to the args the lock asks for
+        val modargs = getLockModArgs(
           mem.typ.get.matchOrError(mem.pos, "LockInstantiation", "MemTyp") { case m:TMemType => m },
-          idsz.getOrElse(bsInts.defaultLockHandleSize)
-        ).map(a => BUnsizedInt(a)) :+ env(mem)
-        (lockedMemType, BModule(modInstName, modArgs))
+          impl, idsz) :+ env(mem)
+        (lockedMemType, BModule(modInstName, modargs))
       case CirNew(mod, mods) =>
         (bsInts.getInterface(modMap(mod)),
           BModule(name = bsInts.getModuleName(modMap(mod)), args = mods.map(m => env(m))))
@@ -160,7 +182,8 @@ object BluespecGeneration {
     private val intargs = finalArgMap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     private val circuitstart = initCircuit(prog.circ, intargs)
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = BImport(memLib) +: modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
+      imports = List(BImport(memLib), BImport(verilogLib)) ++
+        modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
       modules = List(bsInts.tbModule(
         modarg, BModule(topLevelModule.name),
@@ -311,7 +334,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), funcImport) ++
+        imports = List(BImport(fifoLib), BImport(memLib), BImport(verilogLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,

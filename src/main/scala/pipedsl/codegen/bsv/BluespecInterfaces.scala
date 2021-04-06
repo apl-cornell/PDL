@@ -3,7 +3,6 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
 import pipedsl.common.LockImplementation._
-import pipedsl.common.Syntax.{TMemType, Type}
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
@@ -201,6 +200,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       case _ => throw UnexpectedBSVType(s"${memtyp.name} is not a supported memory interface")
     }
   }
+
   private val memCombReadName = "read"
   private val memCombWriteName = "write"
 

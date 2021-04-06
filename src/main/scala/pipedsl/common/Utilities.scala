@@ -17,6 +17,10 @@ object Utilities {
     bits
   }
 
+  def exp2(x: Int): Int = {
+    1 << x
+  }
+
   def freshVar(baseName: String, usedNames:Set[Id], counter: Int): (Id, Set[Id], Int) = {
     var n = baseName
     var newcount = counter

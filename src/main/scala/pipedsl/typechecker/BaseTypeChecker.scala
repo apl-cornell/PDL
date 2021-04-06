@@ -145,10 +145,15 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
     case CirMem(elemTyp, addrSize) => {
-      //TODO instantiate these w/ correct lock types
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
       c.typ = Some(mtyp)
       (mtyp, tenv)
+    }
+    case CirLockMem(elemTyp, addrSize, limpl, idsz) => {
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
+      val ltyp = TLockedMemType(mtyp, idsz, limpl)
+      c.typ = Some(ltyp)
+      (ltyp, tenv)
     }
     case CirLock(mem, lockimpl, idsz) => {
       val mtyp: TMemType = tenv(mem).
@@ -162,6 +167,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
       c.typ = Some(mtyp)
       (mtyp, tenv)
+    }
+    case CirLockRegFile(elemTyp, addrSize, lockimpl, idsz) => {
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
+      val ltyp = TLockedMemType(mtyp, idsz, lockimpl)
+      c.typ = Some(ltyp)
+      (ltyp, tenv)
     }
     case CirNew(mod, mods) => {
       val mtyp = tenv(mod)
