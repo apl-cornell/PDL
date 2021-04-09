@@ -6,9 +6,15 @@ import SpecialFIFOs :: *;
 import BRAMCore::*;
 import DReg :: *;
 import Vector :: *;
+import Locks :: *;
 
+export MemId(..);
+export QueueLockCombMem(..);
+export QueueLockAsyncMem(..);
 
-typedef UInt#(TLog#(n)) LockId#(numeric type n);
+export mkQueueLockCombMem;
+export mkQueueLockAsyncMem;
+
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
 //Types of memories X Locks:
@@ -22,13 +28,6 @@ interface AsyncMem#(type addr, type elem, type mid);
 endinterface
 
 // (General vs. Addr Specific) X (Combinational vs. Async)
-interface QueueLock#(type id);
-   method ActionValue#(id) res();
-   method Bool owns(id i);
-   method Action rel(id i);
-   method Bool isEmpty();
-   method Bool canRes();
-endinterface
 
 interface QueueLockCombMem#(type addr, type elem, type id);
    method elem read(addr a);
@@ -44,6 +43,19 @@ interface QueueLockAsyncMem#(type addr, type elem, type rid, type lid);
    interface QueueLock#(lid) lock;
 endinterface
 
+interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
+   method elem read (addr a);
+   method Action write(addr a, elem b);
+   interface AddrLock#(id, addr, size) lock;
+endinterface
+
+interface AddrLockAsyncMem#(type addr, type elem, type rid, type lid, numeric type size);
+   method ActionValue#(rid) req(addr a, elem b, Bool isWrite);
+   method elem peekResp(rid i);
+   method Bool checkRespId(rid i);
+   method Action resp(rid i);
+   interface AddrLock#(lid, addr, size) lock;
+endinterface
 
 module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(addr, elem, MemId#(inflight)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
@@ -80,47 +92,6 @@ module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(addr, elem, MemId#(i
       
    method Action resp(MemId#(inflight) a);
       valid[a] <= False;
-   endmethod
-   
-endmodule
-
-module mkQueueLock(QueueLock#(LockId#(d)));
-
-   Reg#(LockId#(d)) nextId <- mkReg(0);
-   FIFOF#(LockId#(d)) held <- mkSizedFIFOF(valueOf(d));
-   
-   Reg#(LockId#(d)) cnt <- mkReg(0);
-   
-   Bool lockFree = !held.notEmpty;
-   LockId#(d) owner = held.first;
-
-   method Bool isEmpty();
-      return lockFree;
-   endmethod
-   
-   method Bool canRes();
-      return held.notFull;
-   endmethod
-   
-   //Returns True if thread `tid` already owns the lock
-   method Bool owns(LockId#(d) tid);
-      return owner == tid;
-   endmethod
-	       
-   //Releases the lock iff thread `tid` owns it already
-   method Action rel(LockId#(d) tid);
-      if (owner == tid)
-	 begin
-	    held.deq();
-	 end
-   endmethod
-   
-   //Reserves the lock and returns the associated id
-   method ActionValue#(LockId#(d)) res();
-      held.enq(nextId);
-      nextId <= nextId + 1;
-      cnt <= cnt + 1;
-      return nextId;
    endmethod
    
 endmodule
@@ -167,5 +138,5 @@ module mkQueueLockAsyncMem(BRAM_PORT#(addr, elem) memory, QueueLockAsyncMem#(add
    interface lock = l;
    
 endmodule
-   
+
 endpackage

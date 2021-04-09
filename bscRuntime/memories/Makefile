@@ -5,7 +5,7 @@ B_LIB=$(BMOD).bo
 B_SIM=tb.bsv
 OUT=Top
 
-TOBUILD=Memories.bo
+TOBUILD=Locks.bo Memories.bo
 
 ## Default simulator is iverilog
 VSIM = -vsim iverilog
