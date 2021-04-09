@@ -7,86 +7,45 @@ import BRAMCore::*;
 import DReg :: *;
 import Vector :: *;
 
-export GeneralLock(..);
-export CombMem(..);
-export AsyncMem(..);
-export GeneralCombMem(..);
-export GeneralAsyncMem(..);
-export CombAddrMem(..);
-export AsyncAddrMem(..);
-export MemId(..);
 
-export mkCombMem;
-
+typedef UInt#(TLog#(n)) LockId#(numeric type n);
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
 //Types of memories X Locks:
+//For the built-in types of locks & mems:
+
+interface AsyncMem#(type addr, type elem, type mid);
+   method ActionValue#(mid) req(addr a, elem b, Bool isWrite);
+   method elem peekResp(mid a);
+   method Bool checkRespId(mid a);
+   method Action resp(mid a);
+endinterface
 
 // (General vs. Addr Specific) X (Combinational vs. Async)
-interface GeneralLock#(type id);
+interface QueueLock#(type id);
    method ActionValue#(id) res();
    method Bool owns(id i);
    method Action rel(id i);
+   method Bool isEmpty();
+   method Bool canRes();
 endinterface
 
-interface CombMem#(type elem, type addr);
+interface QueueLockCombMem#(type addr, type elem, type id);
    method elem read(addr a);
    method Action write(addr a, elem b);
+   interface QueueLock#(id) lock;   
 endinterface
 
-interface GeneralCombMem#(type elem, type addr, type id);
-   interface CombMem#(elem, addr) mem;
-   interface GeneralLock#(id) lock;   
-endinterface
-
-interface AsyncMem#(type elem, type addr, type rid);
+interface QueueLockAsyncMem#(type addr, type elem, type rid, type lid);
    method ActionValue#(rid) req(addr a, elem b, Bool isWrite);
    method elem peekResp(rid i);
    method Bool checkRespId(rid i);
    method Action resp(rid i);
+   interface QueueLock#(lid) lock;
 endinterface
 
-interface GeneralAsyncMem#(type elem, type addr, type rid, type lid);
-   interface AsyncMem#(elem, addr, rid) mem;
-   interface GeneralLock#(lid) lock;
-endinterface
 
-//these are the memory interfaces we suppport
-//the first is used for memories that support combinational reads
-interface CombAddrMem#(type elem, type addr, type name); //Addr Comb
-   method name readName(addr a); //get name to read data later
-   method Bool isValid(name n);  //check if safe to read
-   method elem read(name a);    //do the read
-   method ActionValue#(name) allocName(addr a); //allocate a new name to be written
-   method Action write(name a, elem b); //write data given allocated name
-   method Action commit(name a); //indicate old name for a can be "freed"
-   // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
-endinterface
-
-//this one is used for asynchronous reads which involve a request and response
-interface AsyncAddrMem#(type elem, type addr, type name); //Addr Async
-   method ActionValue#(name) reserveRead(addr a);
-   method ActionValue#(name) reserveWrite(addr a);
-   method Action write(name n, elem b); //start executing the write
-   method Bool isValid(name n); //check if reading the value returns a valid value
-   method elem read(name n); //do the read
-   method Action commitRead(name n); //indicate we're done reading/writing this location
-   method Action commitWrite(name n);
-   //method Action abort(name a); use for speculative threads that die so name a can be thrown out
-endinterface
-
-module mkCombMem(RegFile#(addr, elem) rf, CombMem#(elem, addr) _unused_);
-   
-   method elem read(addr a);
-      return rf.sub(a);
-   endmethod
-      
-   method Action write(addr a, elem b);
-      rf.upd(a, b);
-   endmethod
-endmodule
-
-module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(elem, addr, MemId#(inflight)) _unused_)
+module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(addr, elem, MemId#(inflight)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
    let outDepth = valueOf(inflight);
@@ -125,4 +84,88 @@ module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(elem, addr, MemId#(i
    
 endmodule
 
+module mkQueueLock(QueueLock#(LockId#(d)));
+
+   Reg#(LockId#(d)) nextId <- mkReg(0);
+   FIFOF#(LockId#(d)) held <- mkSizedFIFOF(valueOf(d));
+   
+   Reg#(LockId#(d)) cnt <- mkReg(0);
+   
+   Bool lockFree = !held.notEmpty;
+   LockId#(d) owner = held.first;
+
+   method Bool isEmpty();
+      return lockFree;
+   endmethod
+   
+   method Bool canRes();
+      return held.notFull;
+   endmethod
+   
+   //Returns True if thread `tid` already owns the lock
+   method Bool owns(LockId#(d) tid);
+      return owner == tid;
+   endmethod
+	       
+   //Releases the lock iff thread `tid` owns it already
+   method Action rel(LockId#(d) tid);
+      if (owner == tid)
+	 begin
+	    held.deq();
+	 end
+   endmethod
+   
+   //Reserves the lock and returns the associated id
+   method ActionValue#(LockId#(d)) res();
+      held.enq(nextId);
+      nextId <= nextId + 1;
+      cnt <= cnt + 1;
+      return nextId;
+   endmethod
+   
+endmodule
+
+module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem, LockId#(d)) _unused_);
+
+   QueueLock#(LockId#(d)) l <- mkQueueLock();
+   
+   interface lock = l;
+   
+   method elem read(addr a);
+      return rf.sub(a);
+   endmethod
+      
+   method Action write(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+   
+endmodule
+
+module mkQueueLockAsyncMem(BRAM_PORT#(addr, elem) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d)) _unused_)
+   provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
+   
+   AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
+   QueueLock#(LockId#(d)) l <- mkQueueLock();
+   
+   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
+      let r <- amem.req(a, b, isWrite);
+      return r;
+   endmethod
+   
+   method elem peekResp(MemId#(inflight) i);
+      return amem.peekResp(i);
+   endmethod
+   
+   method Bool checkRespId(MemId#(inflight) i);
+      return amem.checkRespId(i);
+   endmethod
+   
+   method Action resp(MemId#(inflight) i);
+      amem.resp(i);
+   endmethod   
+   
+   interface lock = l;
+   
+endmodule
+   
 endpackage

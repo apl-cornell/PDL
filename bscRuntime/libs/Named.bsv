@@ -8,13 +8,23 @@ import DReg :: *;
 import Vector :: *;
 import Ehr :: *;
 
+export RenameRF(..);
 export mkRenameRF;
 export mkLSQ;
 
+interface RenameRF#(type elem, type addr, type name);
+   method name readName(addr a);
+   method Bool isValid(name n);
+   method elem read(name a);
+   method ActionValue#(name) allocName(addr a);
+   method Action write(name a, elem b);
+   method Action commit(name a);
+   // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
+endinterface
    
 
 module mkRenameRF#(parameter Integer aregs, parameter Integer pregs, parameter Bool init, parameter String fileInit)(
- RegFile#(name, elem) regfile, CombAddrMem#(elem, addr, name) _unused_) provisos
+ RegFile#(name, elem) regfile, RenameRF#(elem, addr, name) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
     PrimIndex#(addr, an), PrimIndex#(name, nn));
    
