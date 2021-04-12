@@ -112,11 +112,95 @@ module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem,
    
 endmodule
 
+module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem, LockId#(d), numlocks) _unused_)
+   provisos (Bits#(addr, szAddr), Eq#(addr));
+
+   AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
+   method elem read(addr a);
+      return rf.sub(a);
+   endmethod
+   
+   method Action write(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+   
+   interface lock = l;
+endmodule
+
+module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem, LockId#(d), numlocks) _unused_)
+   provisos (PrimIndex#(addr, szAddr));
+
+   AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
+   method elem read(addr a);
+      return rf.sub(a);
+   endmethod
+   
+   method Action write(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+   
+   interface lock = l;
+endmodule
+   
 module mkQueueLockAsyncMem(BRAM_PORT#(addr, elem) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
    AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
    QueueLock#(LockId#(d)) l <- mkQueueLock();
+   
+   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
+      let r <- amem.req(a, b, isWrite);
+      return r;
+   endmethod
+   
+   method elem peekResp(MemId#(inflight) i);
+      return amem.peekResp(i);
+   endmethod
+   
+   method Bool checkRespId(MemId#(inflight) i);
+      return amem.checkRespId(i);
+   endmethod
+   
+   method Action resp(MemId#(inflight) i);
+      amem.resp(i);
+   endmethod   
+   
+   interface lock = l;
+   
+endmodule
+
+module mkFAAddrLockAsyncMem(BRAM_PORT#(addr, elem) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
+   provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
+   
+   AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
+   AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
+   
+   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
+      let r <- amem.req(a, b, isWrite);
+      return r;
+   endmethod
+   
+   method elem peekResp(MemId#(inflight) i);
+      return amem.peekResp(i);
+   endmethod
+   
+   method Bool checkRespId(MemId#(inflight) i);
+      return amem.checkRespId(i);
+   endmethod
+   
+   method Action resp(MemId#(inflight) i);
+      amem.resp(i);
+   endmethod   
+   
+   interface lock = l;
+   
+endmodule
+
+module mkDMAddrLockAsyncMem(BRAM_PORT#(addr, elem) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
+   provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
+   
+   AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
+   AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
    
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
       let r <- amem.req(a, b, isWrite);
