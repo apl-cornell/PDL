@@ -139,14 +139,12 @@ class PrettyPrinter(output: Option[File]) {
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirLockMem(elemTyp, addrSize, _, sz) => "memlock(" +
-        printTypeToString(elemTyp) + "," + addrSize.toString + "," +
-        (if (sz.isDefined) s"<${sz.get.toString}>" else "")  + ")"
+        printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
       case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirLockRegFile(elemTyp, addrSize, _, sz) => "rflock(" +
-        printTypeToString(elemTyp) + "," + addrSize.toString + "," +
-        (if (sz.isDefined) s"<${sz.get.toString}>" else "")  + ")"
+        printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
       case CirLock(mem, impl, sz) => impl.toString + "(" + mem.v + ")" +
-        (if (sz.isDefined) s"<${sz.get.toString}>" else "")
+        "<" + sz.map(a => a.toString).mkString(",") + ">"
       case CirNew(mod, mods) => "new " + mod.v +
         "[" + mods.map(m => m.v).mkString(",") + "]"
       case CirCall(mod, args) => "call " + mod.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"

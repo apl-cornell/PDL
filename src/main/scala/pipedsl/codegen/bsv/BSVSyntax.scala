@@ -36,12 +36,11 @@ object BSVSyntax {
 
     //TODO it would be nice not to need two type translation methods
     def toTypeForMod(t: Type, n: Id): BSVType = t match {
-      case TLockedMemType(elem, idsz, limpl) =>
+      case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
-        bsints.getLockedMemType(isAsync = elem.readLatency != Combinational,
-          BSizedInt(unsigned = true, elem.addrSize),
-          toType(elem.elem),
-          lidtyp, limpl)
+        val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
+          BSizedInt(unsigned = true, mem.addrSize), toType(mem.elem))
+        bsints.getLockedMemType(mem, mtyp, lidtyp, limpl)
       case _ => toType(t)
     }
 
@@ -49,14 +48,12 @@ object BSVSyntax {
       case TMemType(elem, addrSize, rlat, _) =>
         bsints.getBaseMemType(isAsync = rlat != Combinational,
           BSizedInt(unsigned = true, addrSize), toType(elem))
-      case TLockedMemType(elem, idsz, limpl) =>
+      case TLockedMemType(mem, idsz, limpl) =>
+        val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
         val lidtyp = if (idsz.isDefined) {
           bsints.getLockHandleType(idsz.get)
-        } else BTypeParam("_MISSINGTYPEPARAM_")
-        bsints.getLockedMemType(isAsync = elem.readLatency != Combinational,
-          BSizedInt(unsigned = true, elem.addrSize),
-          toType(elem.elem),
-          lidtyp, limpl)
+        } else bsints.getDefaultLockHandleType
+        bsints.getLockedMemType(mem, mtyp, lidtyp, limpl)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString

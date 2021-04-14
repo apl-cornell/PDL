@@ -1,6 +1,8 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
+import pipedsl.common.Locks.{General, LockGranularity, Specific}
+import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
 
@@ -21,10 +23,10 @@ object LockImplementation {
   def getDefaultLockImpl: LockInterface = lqueue
 
   private val implMap: Map[String, LockInterface] = Map(
-    lqueue.toString -> lqueue,
-    falqueue.toString -> falqueue,
-    rename.toString -> rename,
-    lsq.toString -> lsq
+    lqueue.shortName -> lqueue,
+    falqueue.shortName -> falqueue,
+    rename.shortName -> rename,
+    lsq.shortName -> lsq
   )
   /**
    * Lookup the lock implementation based on its name, only the string
@@ -61,6 +63,12 @@ object LockImplementation {
   }
 
   sealed trait LockInterface {
+
+    //Convenience method to generate module names
+    protected val combSuffix = "CombMem"
+    protected val asyncSuffix = "AsyncMem"
+    protected def getSuffix(m: TMemType): String = if (m.readLatency == Combinational) combSuffix else asyncSuffix
+
     /**
      * Determines whether or not this lock type can support the given list of
      * commands in a given stage
@@ -102,11 +110,12 @@ object LockImplementation {
     def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
 
     /**
-     * Returns true iff this lock implementation requires
-     * addreses specified in its operations.
-     * @return True if this lock requires addresses in its operations else false
+     * Returns the lock granularity supported by this implementation
+     * (which indicates whether or not
+     * addreses are specified in its operations).
+     * @return Specific if this lock requires addresses in its operations else General
      */
-    def usesAddresses: Boolean
+    def granularity: LockGranularity
 
     /**
      * Each lock implementation may require any non-empty subset
@@ -139,7 +148,13 @@ object LockImplementation {
 
     def getReleaseInfo(l: IReleaseLock): Option[MethodInfo]
 
-    def getModInstArgs(m: TMemType, idSz: Int): List[Int]
+    def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int]
+
+    def shortName: String
+
+    def getModuleName(m: TMemType): String
+
+    def getModuleInstName(m: TMemType): String =  "mk" + getModuleName(m)
 
     //TODO put this somewhere like Syntax
     protected def extractHandle(h: EVar): Expr = {
@@ -160,6 +175,10 @@ object LockImplementation {
    */
   private class LockQueue extends LockInterface {
 
+    override def shortName: String = "Queue"
+
+    override def getModuleName(m: TMemType): String = "QueueLock" + getSuffix(m)
+
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //res + rel -> checkfree
       //res + checkowned -> res + checkfree
@@ -178,7 +197,6 @@ object LockImplementation {
     //no possible conflicts since all ops are mergeable if conflicting
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
     override def isCompatible(mtyp: TMemType): Boolean = true
-    override def toString: String = "Queue"
 
     /**
      * Given a list of commands, return the
@@ -194,13 +212,8 @@ object LockImplementation {
      */
     override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
     //TODO implement for real
-    /**
-     * Returns true iff this lock implementation requires
-     * addreses specified in its operations.
-     *
-     * @return True if this lock requires addresses in its operations else false
-     */
-    override def usesAddresses: Boolean = false
+
+    override def granularity: LockGranularity = General
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
       Some(MethodInfo("isEmpty", doesModify = false, List()))
@@ -243,13 +256,18 @@ object LockImplementation {
      */
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = addr
 
-    def getModInstArgs(m: TMemType, idSz: Int): List[Int] = List()
-}
+    override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
+
+  }
 
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
-    override def toString: String = "FAQueue"
+
+    override def shortName: String = "FAQueue"
+    override def getModuleName(m: TMemType): String = "FAAddrLock" + getSuffix(m)
+
+    override def granularity: LockGranularity = Specific
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
       Some(MethodInfo("isEmpty", doesModify = false, List(l.mem.evar.get)))
@@ -278,10 +296,16 @@ object LockImplementation {
    *
    */
   private class RenameRegfile extends LockInterface {
+
+    override def shortName: String = "RenameRF"
+
+    override def getModuleName(m: TMemType): String = "RenameRF"
+
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //This modules doesn't support any "merging")
       lops
     }
+
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
       //base ops: reserve, checkowned, release
       //conflicts: reserve(W) + write(W), or reserve(W) + release(W) ,or write(W) + release(W)
@@ -303,7 +327,6 @@ object LockImplementation {
       //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
       mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
     }
-    override def toString: String = "RenameRF"
 
     /**
      * Given a list of commands, return the
@@ -319,13 +342,8 @@ object LockImplementation {
      */
     override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
     //TODO implement for real
-    /**
-     * Returns true iff this lock implementation requires
-     * addreses specified in its operations.
-     *
-     * @return True if this lock requires addresses in its operations else false
-     */
-    override def usesAddresses: Boolean = true
+
+    override def granularity:LockGranularity = Specific
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
@@ -372,8 +390,11 @@ object LockImplementation {
      */
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
-    def getModInstArgs(m: TMemType, idSz: Int): List[Int] = {
-      List(Utilities.exp2(m.addrSize), idSz)
+    def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = {
+      //TODO make default more configurable
+      val aregs = Utilities.exp2(m.addrSize)
+      val pregs = if (szParams.isEmpty) aregs * 2 else szParams.head
+      List(Utilities.exp2(m.addrSize), pregs)
     }
 }
 
@@ -383,6 +404,10 @@ object LockImplementation {
    * It includes a LoadStoreQueue which forwards data to avoid extra memory accesses.
    */
   private class LoadStoreQueue extends LockInterface {
+
+    override def shortName: String = "LSQ"
+    override def getModuleName(m: TMemType): String = "LSQ"
+
     override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
       //don't need to do any merging! (no optimizations for releasing in the same cycle as acquiring)
       lops
@@ -430,13 +455,8 @@ object LockImplementation {
      */
     override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
     //TODO implement for real
-    /**
-     * Returns true iff this lock implementation requires
-     * addreses specified in its operations.
-     *
-     * @return True if this lock requires addresses in its operations else false
-     */
-    override def usesAddresses: Boolean = true
+
+    override def granularity: LockGranularity = Specific
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
@@ -483,7 +503,7 @@ object LockImplementation {
      */
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
-    def getModInstArgs(m: TMemType, idSz: Int): List[Int] = List()
+    def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 }
 
   //The following are internal helper functions

@@ -287,15 +287,15 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val clockrf: P[CirExpr] = positioned {
-    "rflock" ~> parens(sizedInt ~ "," ~ posint ~ "," ~ posint.?) ^^ {
-      case elem ~ _ ~ addr ~ _ ~ idsz =>
-        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(Id("RenameRF")), idsz)
+    "rflock" ~> parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
+      case elem ~ _ ~ addr ~ szs =>
+        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(Id("RenameRF")), szs.getOrElse(List()))
     }
   }
 
   lazy val clock: P[CirExpr] = positioned {
-    iden ~ parens(iden) ~ angular(posint).? ^^ {
-      case lid ~ mem ~ idsz => CirLock(mem, LockImplementation.getLockImpl(lid), idsz)
+    iden ~ parens(iden) ~ angular(repsep(posint,",")).? ^^ {
+      case lid ~ mem ~ szs => CirLock(mem, LockImplementation.getLockImpl(lid), szs.getOrElse(List()))
     }
   }
 

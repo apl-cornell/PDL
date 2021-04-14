@@ -3,6 +3,7 @@ package pipedsl.codegen.bsv
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
 import pipedsl.common.LockImplementation._
+import pipedsl.common.Syntax.TMemType
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
@@ -146,10 +147,6 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val combMemType = "RegFile"
   private val combMemMod = "mkRegFile"
 
-  private val noAddrCombMem = "GeneralCombMem"
-  private val noAddrAsyncMem = "AsyncCombMem"
-  private val addrCombMem = "CombAddrMem"
-  private val addrAsyncMem = "AsyncAddrMem"
 
   def getIdParam(name: String): BTypeParam = BTypeParam(name + "Id")
 
@@ -163,34 +160,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
-  def getLockedMemType(isAsync: Boolean, addr: BSVType, data: BSVType,
-    lidTyp: BSVType, limpl: LockInterface): BInterface = {
-    //TODO make this parameter somewhere the user can control
-    //since this influences the size of queues, etc.
-    val nameTyp = getDefaultMemHandleType
-    if (isAsync) {
-      //TODO can maybe clean this up a bit
-      if (!limpl.usesAddresses) {
-        BInterface(limpl.toString,
-          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", lidTyp)))
-      } else {
-        BInterface(limpl.toString,
-          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", nameTyp), BVar("lidtyp", lidTyp)))
-      }
-    } else {
-      if (!limpl.usesAddresses) {
-        BInterface(limpl.toString,
-          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", lidTyp)))
-      } else {
-        BInterface(limpl.toString,
-          List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("lidtyp", lidTyp)))
-      }
-    }
-  }
-
-  def isMemType(t: BSVType): Boolean = t match {
-    case BInterface(n, _) if n == combMemType || n == asyncMemType => true
-    case _ => false
+  def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType, limpl: LockInterface): BInterface = {
+    val intName = limpl.getModuleName(m)
+    val params = mtyp.tparams :+ BVar("lidtyp", lockIdTyp)
+    BInterface(intName, params)
   }
 
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {

@@ -86,15 +86,13 @@ object BluespecGeneration {
       case _ => Map()
     }
 
-    private def getLockModArgs(mtyp: TMemType, limpl: LockInterface, idSz: Option[Int]): List[BExpr] = {
-      limpl.getModInstArgs(
-        mtyp, idSz.getOrElse(bsInts.defaultLockHandleSize)
-      ).map(a => BUnsizedInt(a))
+    private def getLockModArgs(mtyp: TMemType, limpl: LockInterface, szParams: List[Int]): List[BExpr] = {
+      limpl.getModInstArgs(mtyp, szParams).map(a => BUnsizedInt(a))
     }
 
     private def getLockedMemModule(mtyp: TMemType, limpl: LockInterface,
-      idSz: Option[Int], initFile: Option[String]): BModule = {
-      val modInstName = "mk" + limpl.toString
+      idSz: List[Int], initFile: Option[String]): BModule = {
+      val modInstName = limpl.getModuleInstName(mtyp)
       //full args are: Lock impl args ++ Memory Init args
       val modArgs: List[BExpr] = getLockModArgs(mtyp, limpl, idSz) ++
         List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse("")))
@@ -106,21 +104,22 @@ object BluespecGeneration {
         val memtyp = bsInts.getBaseMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
           translator.toType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
-      case CirLockMem(elemTyp, addrSize, impl, idsz) =>
+      case CirLockMem(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
         val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous)
-        (lockMemTyp, getLockedMemModule(mtyp, impl, idsz, initFile))
+        (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
       case CirRegFile(elemTyp, addrSize) =>
         val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
           translator.toType(elemTyp))
         (memtyp, bsInts.getMem(memtyp, initFile))
-      case CirLockRegFile(elemTyp, addrSize, impl, idsz) =>
+      case CirLockRegFile(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
         val mtyp = TMemType(elemTyp, addrSize, Latency.Combinational, Latency.Sequential)
-        (lockMemTyp, getLockedMemModule(mtyp, impl, idsz, initFile))
+        (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
       case CirLock(mem, impl, idsz) =>
         val lockedMemType = translator.toType(c.typ.get)
-        val modInstName = "mk" + impl.toString
+        val modInstName = impl.getModuleInstName(
+          mem.typ.get.matchOrError(mem.pos, "locked mem", "mem typ") { case c:TMemType => c})
         //pass the memory itself in addition to the args the lock asks for
         val modargs = getLockModArgs(
           mem.typ.get.matchOrError(mem.pos, "LockInstantiation", "MemTyp") { case m:TMemType => m },
