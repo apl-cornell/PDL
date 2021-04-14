@@ -150,6 +150,8 @@ object LockImplementation {
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int]
 
+    def getTypeArgs(szParams: List[Int]): List[Int] = List()
+
     def shortName: String
 
     def getModuleName(m: TMemType): String
@@ -264,6 +266,8 @@ object LockImplementation {
   //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
 
+    private val defaultNumLocks = 4
+
     override def shortName: String = "FAQueue"
     override def getModuleName(m: TMemType): String = "FAAddrLock" + getSuffix(m)
 
@@ -288,6 +292,8 @@ object LockImplementation {
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
       Some(MethodInfo("rel", doesModify = true, List(l.mem.evar.get)))
     }
+
+    override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
   }
 
   /**

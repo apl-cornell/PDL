@@ -160,12 +160,6 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
-  def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType, limpl: LockInterface): BInterface = {
-    val intName = limpl.getModuleName(m)
-    val params = mtyp.tparams :+ BVar("lidtyp", lockIdTyp)
-    BInterface(intName, params)
-  }
-
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
       case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))

@@ -1,8 +1,8 @@
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
-
 import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
 
@@ -40,7 +40,7 @@ object BSVSyntax {
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
         val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
           BSizedInt(unsigned = true, mem.addrSize), toType(mem.elem))
-        bsints.getLockedMemType(mem, mtyp, lidtyp, limpl)
+        getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
@@ -53,7 +53,7 @@ object BSVSyntax {
         val lidtyp = if (idsz.isDefined) {
           bsints.getLockHandleType(idsz.get)
         } else bsints.getDefaultLockHandleType
-        bsints.getLockedMemType(mem, mtyp, lidtyp, limpl)
+        getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString
@@ -148,6 +148,21 @@ object BSVSyntax {
         }
         BUnpack(BConcat(left, List(right)))
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
+    }
+
+    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType,
+      limpl: LockInterface, useTypeVars:Boolean = false, paramId: Option[Id]): BInterface = {
+      val intName = limpl.getModuleName(m)
+      val lparams = limpl.getTypeArgs(List()).zipWithIndex.map(a => {
+        val sz = a._1
+        val idx = a._2
+        if (useTypeVars) {
+          BVar("_unused_", BTypeParam("_szParam_" + idx + "_" + paramId.get))
+        } else {
+          BVar("_unused_", BNumericType(sz))
+       }})
+      val params = (mtyp.tparams :+ BVar("lidtyp", lockIdTyp)) ++ lparams
+      BInterface(intName, params)
     }
 
     //This updates the translator's map of already defined functions
