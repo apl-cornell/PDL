@@ -222,7 +222,7 @@ object LockImplementation {
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("lock.owns", doesModify = false, List()))
+      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.handle))))
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -232,7 +232,7 @@ object LockImplementation {
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.rel", doesModify = true, List()))
+      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.handle))))
     }
 
     /**
@@ -279,7 +279,7 @@ object LockImplementation {
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("lock.owns", doesModify = false, List(l.handle, l.mem.evar.get)))
+      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.handle), l.mem.evar.get)))
     }
 
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -291,7 +291,7 @@ object LockImplementation {
     }
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.rel", doesModify = true, List(l.handle, l.mem.evar.get)))
+      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.handle), l.mem.evar.get)))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
