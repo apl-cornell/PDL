@@ -16,6 +16,8 @@ object BluespecGeneration {
   private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
+  private val combLib = "RegFile"
+  private val asyncLib = "BRAMCore"
   private val verilogLib = "VerilogLibs"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
@@ -182,7 +184,7 @@ object BluespecGeneration {
     private val intargs = finalArgMap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     private val circuitstart = initCircuit(prog.circ, intargs)
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = List(BImport(lockLib), BImport(memLib), BImport(verilogLib)) ++
+      imports = List(BImport(lockLib), BImport(memLib), BImport(verilogLib), BImport(combLib), BImport(asyncLib)) ++
         modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
       modules = List(bsInts.tbModule(
