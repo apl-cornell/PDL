@@ -15,18 +15,22 @@ object BSVPrettyPrinter {
     mkExprString(toBSVTypeStr(v.typ), v.name)
   }
 
-  private def getTypeParams(typ: BSVType): Set[String] = typ match {
+  private def toProvisoString(name: String, p: Proviso): String = p match {
+    case PBits(szName) => "Bits#(" + name + "," + szName +")"
+  }
+
+  private def getTypeParams(typ: BSVType): Set[BTypeParam] = typ match {
     case BCombMemType(elem, _) => getTypeParams(elem)
     case BAsyncMemType(elem, _) => getTypeParams(elem)
-    case BStruct(_, fields) => fields.foldLeft(Set[String]())((s, f) => s ++ getTypeParams(f.typ))
-    case BInterface(_, tparams) => tparams.foldLeft(Set[String]())((s, f) => s ++ getTypeParams(f.typ))
-    case BTypeParam(name) => Set(name)
+    case BStruct(_, fields) => fields.foldLeft(Set[BTypeParam]())((s, f) => s ++ getTypeParams(f.typ))
+    case BInterface(_, tparams) => tparams.foldLeft(Set[BTypeParam]())((s, f) => s ++ getTypeParams(f.typ))
+    case t@BTypeParam(_, _) => Set(t)
     case _ => Set()
   }
 
   def toBSVTypeStr(t: BSVType): String = t match {
     case BStruct(name, _) =>
-      val tparams = getTypeParams(t)
+      val tparams = getTypeParams(t).map(tp => tp.name)
       if (tparams.isEmpty) { name } else {
         name + "#(" + tparams.mkString(", ") + ")"
       }
@@ -52,7 +56,7 @@ object BSVPrettyPrinter {
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BSizedType(name, sizeParams) => name + "#(" + sizeParams.map(i => i.toString).mkString(",") + ")"
     case BNumericType(sz) => sz.toString
-    case BTypeParam(name) => name
+    case BTypeParam(name, _) => name
     case BString => "String"
   }
 
@@ -155,7 +159,7 @@ object BSVPrettyPrinter {
     }
 
     def printStructDef(sdef: BStructDef): Unit = {
-      val typeparams = getTypeParams(sdef.typ).map(s => "type " + s)
+      val typeparams = getTypeParams(sdef.typ).map(s => "type " + s.name)
       val typeparamStr = if (typeparams.nonEmpty) {
         mkExprString("#(", typeparams.mkString(","), ")")
       } else { "" }
@@ -290,10 +294,12 @@ object BSVPrettyPrinter {
       val paramStr = (mod.params :+ interfaceParam).map(p => toDeclString(p)).mkString(", ")
       val paramString = mkExprString("(", paramStr, ")")
       //generate the Bits#(tvar,sztvar) proviso for any unspecified type variables
-      val typeVars = mod.params.foldLeft(Set[String]())((s, p) => s ++ getTypeParams(p.typ))
-      val provisoString = mkExprString("provisos(",
-        typeVars.map(s => "Bits#(" + s + ",_sz" + s + ")").mkString(","),
-        ")")
+      val typeVars = mod.params.foldLeft(Set[BTypeParam]())((s, p) => s ++ getTypeParams(p.typ))
+      val provisos = typeVars.flatMap(tp => tp.provisos match {
+        case List() => None
+        case _ => tp.provisos.map(p => toProvisoString(tp.name, p))
+      })
+      val provisoString = mkExprString("provisos(", provisos.mkString(","), ")")
       //can synthesize if there are no parameters
       if (mod.params.isEmpty) {
         w.write("(* synthesize *)\n")

@@ -13,6 +13,9 @@ object BSVSyntax {
   case class Value(rtyp: BSVType) extends MethodType
   case class ActionValue(rtyp: BSVType) extends MethodType
 
+  sealed trait Proviso
+  case class PBits(szName: String) extends Proviso
+
   sealed trait BSVType
   case class BNumericType(sz: Int) extends BSVType
   case class BCombMemType(elem: BSVType, addrSize: Int) extends BSVType
@@ -21,7 +24,7 @@ object BSVSyntax {
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedType(name: String, sizeParams: List[Integer] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
-  case class BTypeParam(name: String) extends BSVType
+  case class BTypeParam(name: String, provisos: List[Proviso]) extends BSVType
   case object BBool extends BSVType
   case object BString extends BSVType
   case object BVoid extends BSVType
@@ -79,7 +82,7 @@ object BSVSyntax {
           }
         }
       case TVoid() => BVoid
-      case TNamedType(name) => BTypeParam(name.v)
+      case TNamedType(name) => BTypeParam(name.v, List(PBits("_sz" + name.v)))
       //TODO implement function type translation
       case TFun(_, _) => throw new RuntimeException
       //TODO better error
@@ -157,7 +160,8 @@ object BSVSyntax {
         val sz = a._1
         val idx = a._2
         if (useTypeVars) {
-          BVar("_unused_", BTypeParam("_szParam_" + idx + "_" + paramId.get))
+          //Don't use the Bits#() proviso for this type since it is a static integer not a wire type
+          BVar("_unused_", BTypeParam("_szParam_" + idx + "_" + paramId.get, List()))
         } else {
           BVar("_unused_", BNumericType(sz))
        }})

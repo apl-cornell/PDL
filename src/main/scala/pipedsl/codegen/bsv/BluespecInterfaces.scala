@@ -148,8 +148,6 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val combMemMod = "mkRegFile"
 
 
-  def getIdParam(name: String): BTypeParam = BTypeParam(name + "Id")
-
   def getBaseMemType(isAsync: Boolean, addr: BSVType, data: BSVType): BInterface = {
     if (isAsync) {
       //TODO make this type parameterizable

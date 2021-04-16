@@ -13,6 +13,7 @@ import scala.collection.immutable.ListMap
 
 object BluespecGeneration {
 
+  private val lockLib = "Locks"
   private val memLib = "Memories"
   private val fifoLib = "FIFOF"
   private val verilogLib = "VerilogLibs"
@@ -181,7 +182,7 @@ object BluespecGeneration {
     private val intargs = finalArgMap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     private val circuitstart = initCircuit(prog.circ, intargs)
     val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = List(BImport(memLib), BImport(verilogLib)) ++
+      imports = List(BImport(lockLib), BImport(memLib), BImport(verilogLib)) ++
         modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
       modules = List(bsInts.tbModule(
@@ -224,7 +225,8 @@ object BluespecGeneration {
         case TModType(_, _, _, _) => mapping
         case TLockedMemType(_, idSz, _) => if (idSz.isEmpty) {
           //instantiate type variable
-          mapping + (mod.name -> BTypeParam("_lidTyp_" + mod.name.v))
+          val name = "_lidTyp_" + mod.name.v
+          mapping + (mod.name -> BTypeParam(name, List(PBits("_sz" + name))))
         } else {
           //don't
           mapping
@@ -333,7 +335,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(memLib), BImport(verilogLib), funcImport) ++
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,

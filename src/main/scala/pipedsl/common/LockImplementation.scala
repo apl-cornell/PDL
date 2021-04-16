@@ -216,23 +216,23 @@ object LockImplementation {
     //TODO implement for real
 
     override def granularity: LockGranularity = General
-
+    //TODO placing the interface name (lock.) here is weird but OK i guess
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
-      Some(MethodInfo("isEmpty", doesModify = false, List()))
+      Some(MethodInfo("lock.isEmpty", doesModify = false, List()))
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("owns", doesModify = false, List()))
+      Some(MethodInfo("lock.owns", doesModify = false, List()))
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("res", doesModify = true, List()))
+      Some(MethodInfo("lock.res", doesModify = true, List()))
     }
 
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("rel", doesModify = true, List()))
+      Some(MethodInfo("lock.rel", doesModify = true, List()))
     }
 
     /**
@@ -275,23 +275,23 @@ object LockImplementation {
     override def granularity: LockGranularity = Specific
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
-      Some(MethodInfo("isEmpty", doesModify = false, List(l.mem.evar.get)))
+      Some(MethodInfo("lock.isEmpty", doesModify = false, List(l.mem.evar.get)))
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("owns", doesModify = false, List(l.handle, l.mem.evar.get)))
+      Some(MethodInfo("lock.owns", doesModify = false, List(l.handle, l.mem.evar.get)))
     }
 
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("canRes", doesModify = false, List(l.mem.evar.get)))
+      Some(MethodInfo("lock.canRes", doesModify = false, List(l.mem.evar.get)))
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("res", doesModify = true, List(l.mem.evar.get)))
+      Some(MethodInfo("lock.res", doesModify = true, List(l.mem.evar.get)))
     }
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("rel", doesModify = true, List(l.handle, l.mem.evar.get)))
+      Some(MethodInfo("lock.rel", doesModify = true, List(l.handle, l.mem.evar.get)))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
