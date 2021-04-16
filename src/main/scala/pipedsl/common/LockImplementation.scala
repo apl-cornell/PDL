@@ -269,7 +269,8 @@ object LockImplementation {
     private val defaultNumLocks = 4
 
     override def shortName: String = "FAQueue"
-    override def getModuleName(m: TMemType): String = "FAAddrLock" + getSuffix(m)
+    override def getModuleName(m: TMemType): String = "AddrLock" + getSuffix(m)
+    override def getModuleInstName(m: TMemType): String =  "mkFA" + getModuleName(m)
 
     override def granularity: LockGranularity = Specific
 
@@ -278,7 +279,7 @@ object LockImplementation {
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("owns", doesModify = false, List(l.mem.evar.get)))
+      Some(MethodInfo("owns", doesModify = false, List(l.handle, l.mem.evar.get)))
     }
 
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -290,7 +291,7 @@ object LockImplementation {
     }
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("rel", doesModify = true, List(l.mem.evar.get)))
+      Some(MethodInfo("rel", doesModify = true, List(l.handle, l.mem.evar.get)))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))

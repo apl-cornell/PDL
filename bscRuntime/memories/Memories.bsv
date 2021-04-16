@@ -11,9 +11,13 @@ import Locks :: *;
 export MemId(..);
 export QueueLockCombMem(..);
 export QueueLockAsyncMem(..);
+export AddrLockCombMem(..);
+export AddrLockAsyncMem(..);
 
 export mkQueueLockCombMem;
 export mkQueueLockAsyncMem;
+export mkFAAddrLockCombMem;
+export mkFAAddrLockAsyncMem;
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 

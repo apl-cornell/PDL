@@ -154,9 +154,9 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     if (isAsync) {
       //TODO make this type parameterizable
       val reqTyp = getDefaultMemHandleType
-      BInterface(asyncMemType, List(BVar("elemtyp", data), BVar("addrtyp", addr), BVar("ridtyp", reqTyp)))
+      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data), BVar("ridtyp", reqTyp)))
     } else {
-      BInterface(combMemType,  List(BVar("elemtyp", data), BVar("addrtyp", addr)))
+      BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
     }
   }
 
