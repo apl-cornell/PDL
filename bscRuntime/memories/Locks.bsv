@@ -2,6 +2,7 @@ package Locks;
 
 import FIFOF :: *;
 import Vector :: *;
+import ConfigReg :: *;
 export LockId(..);
 export QueueLock(..);
 export AddrLock(..);
@@ -75,7 +76,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 
    
    Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkQueueLock() );
-   Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkReg(tagged Invalid) );
+   Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkConfigReg(tagged Invalid) );
 
    //Allow each lock entry to be freed once it's no longer used,
    //but tagged as valid
@@ -85,7 +86,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	    entryVec[i] <= tagged Invalid;
       endrule
    end
-      
+  
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);

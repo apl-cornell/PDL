@@ -14,10 +14,12 @@ export QueueLockAsyncMem(..);
 export AddrLockCombMem(..);
 export AddrLockAsyncMem(..);
 
+export mkRegFile;
 export mkQueueLockCombMem;
 export mkQueueLockAsyncMem;
 export mkFAAddrLockCombMem;
 export mkFAAddrLockAsyncMem;
+
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
@@ -60,6 +62,16 @@ interface AddrLockAsyncMem#(type addr, type elem, type rid, type lid, numeric ty
    method Action resp(rid i);
    interface AddrLock#(lid, addr, size) lock;
 endinterface
+
+module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr, elem))
+   provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Bounded#(addr));
+   RegFile#(addr, elem) rf;
+   if (init)
+      rf <- mkRegFileWCFLoad(initFile, minBound, maxBound);
+   else
+      rf <- mkRegFileWCF(minBound, maxBound);
+   return rf;
+endmodule
 
 module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(addr, elem, MemId#(inflight)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
