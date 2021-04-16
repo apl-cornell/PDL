@@ -9,12 +9,14 @@ import Vector :: *;
 import Locks :: *;
 
 export MemId(..);
+export BramPort(..);
 export QueueLockCombMem(..);
 export QueueLockAsyncMem(..);
 export AddrLockCombMem(..);
 export AddrLockAsyncMem(..);
 
 export mkRegFile;
+export mkBramPort;
 export mkQueueLockCombMem;
 export mkQueueLockAsyncMem;
 export mkFAAddrLockCombMem;
@@ -25,6 +27,11 @@ typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
 //Types of memories X Locks:
 //For the built-in types of locks & mems:
+
+interface BramPort#(type addr, type elem, type mid);
+   interface BRAM_PORT#(addr, elem) port;
+endinterface
+
 
 interface AsyncMem#(type addr, type elem, type mid);
    method ActionValue#(mid) req(addr a, elem b, Bool isWrite);
@@ -73,9 +80,24 @@ module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr,
    return rf;
 endmodule
 
-module mkAsyncMem(BRAM_PORT #(addr, elem) memory, AsyncMem#(addr, elem, MemId#(inflight)) _unused_)
+module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, elem, MemId#(inflight)))
+   provisos (Bits#(addr,szAddr), Bits#(elem,szElem));
+   BRAM_PORT#(addr, elem) p;
+   let memSize = 2 ** valueOf(szAddr);
+   let hasOutputReg = False;
+   if (init)
+      p <- mkBRAMCore1Load(memSize, hasOutputReg, file, False);
+   else
+      p <- mkBRAMCore1(memSize, hasOutputReg);
+   
+   interface port = p;
+
+endmodule
+
+module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memwrap, AsyncMem#(addr, elem, MemId#(inflight)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
+   let memory = memwrap.port;
    let outDepth = valueOf(inflight);
    
    //this must be at least size 2 to work correctly (safe bet)
@@ -158,7 +180,7 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    interface lock = l;
 endmodule
    
-module mkQueueLockAsyncMem(BRAM_PORT#(addr, elem) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d)) _unused_)
+module mkQueueLockAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
    AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
@@ -185,7 +207,7 @@ module mkQueueLockAsyncMem(BRAM_PORT#(addr, elem) memory, QueueLockAsyncMem#(add
    
 endmodule
 
-module mkFAAddrLockAsyncMem(BRAM_PORT#(addr, elem) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
+module mkFAAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
    
    AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
@@ -212,7 +234,7 @@ module mkFAAddrLockAsyncMem(BRAM_PORT#(addr, elem) memory, AddrLockAsyncMem#(add
    
 endmodule
 
-module mkDMAddrLockAsyncMem(BRAM_PORT#(addr, elem) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
+module mkDMAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
    
    AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
