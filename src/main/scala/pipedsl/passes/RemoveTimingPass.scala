@@ -1,5 +1,6 @@
 package pipedsl.passes
 
+import pipedsl.analysis.TypeAnalysis
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
@@ -7,8 +8,10 @@ import scala.collection.mutable.ListBuffer
 
 object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
   var calls: ListBuffer[Command] = new ListBuffer[Command]()
+  var typeAnalysis: TypeAnalysis = null
   
   override def run(p: Prog): Prog = {
+    typeAnalysis = TypeAnalysis.get(p)
     p.copy(moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
   }
 
@@ -25,9 +28,9 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       case CSeq(c1, c2) => CSeq(removeTimingConstructs(c1), removeTimingConstructs(c2))
       case CIf(cond, cons, alt) => CIf(cond, removeTimingConstructs(cons), removeTimingConstructs(alt))
       case CTBar(c1, c2) => CSeq(removeTimingConstructs(c1), removeTimingConstructs(c2));
-      case CLockOp(_,_) => CEmpty
-      case CSpeculate(_, _, _, _) => CEmpty
-      case CCheck(_) => CEmpty
+      case CLockOp(_,_) => CEmpty()
+      case CSpeculate(_, _, _, _) => CEmpty()
+      case CCheck(_) => CEmpty()
       case CSplit(cases, default) =>
         val newCases = List[CaseObj]()
         val newDefault = removeTimingConstructs(default)
@@ -41,7 +44,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         val newArgs: ListBuffer[Expr] = new ListBuffer[Expr]()
         for (index <- args.indices) {
           val arg = EVar(Id("__" + id.v + "__" + calls.length + index))
-          assigns.addOne(CAssign(arg, args(index)))
+          assigns.addOne(CAssign(arg, args(index), Some(typeAnalysis.typeCheck(args(index)))))
           newArgs.addOne(arg)
         }
         calls.addOne(CExpr(ECall(id, newArgs.toList)))
@@ -52,7 +55,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   
   def convertCListToCSeq(commands: ListBuffer[Command], i: Int): Command = {
     if (i > commands.length-1) {
-      CEmpty
+      CEmpty()
     } else {
       CSeq(commands(i), convertCListToCSeq(commands, i+1))
     }

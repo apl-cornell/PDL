@@ -56,7 +56,7 @@ class LockWellformedChecker() {
         throw MalformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
       else updateLockTypeMap(mem.id, getLockType(mem))
       lockArgs + mem
-    case _ => lockArgs
+      case _ => lockArgs
   }
   
   private def getLockType(lockArg: LockArg): LockType = lockArg.evar match {

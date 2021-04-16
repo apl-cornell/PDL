@@ -116,8 +116,8 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     attr {
       //Context is prev OR parent 
       //Need to match prev with CAssign, CIf,or CSplit, or CRecV
-      case program.prev(p@CAssign(lhs@EVar(id), rhs, Some(typ))) =>  context(p).add(id, typ)
-      case program.prev(p@CRecv(lhs@EVar(id), rhs, Some(typ))) =>  context(p).add(id, typ)
+      case program.prev(p@CAssign(lhs@EVar(id), rhs, Some(typ))) => println(p); println(context(p)); context(p).add(id, typ)
+      case program.prev(p@CRecv(lhs@EVar(id), rhs, Some(typ))) => println(p); println(context(p)); context(p).add(id, typ)
       case program.prev(p@CIf(cond, tbranch, fbranch)) => 
         contextAfterNode(rightMostLeaf(tbranch)).intersect(contextAfterNode(rightMostLeaf(fbranch)))
       case program.prev(p@CSplit(cases, default))  =>
@@ -138,8 +138,9 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
       case program.prev(m@ModuleDef(name, inputs, modules, ret, body)) =>
         context(m).add(m.name, typeCheck(m))
       case program.prev(cc@CirConnect(name, c)) => context(cc).add(name, checkCirExpr(c))
-      case program.parent(p) => context(p)
+      case program.parent.pair(m, p) => println(m); println(context(p)); context(p)
       case program.root => TypeEnv()
+      case p => println(p); println(program.parent(p)); program.parent(p).foreach(f => println(program.parent(f))); throw new RuntimeException()
     }
   }
   
@@ -211,7 +212,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
         checkCommand(default)
       case Syntax.CSpeculate(predVar, predVal, verify, body) =>
       case Syntax.CCheck(predVar) =>
-      case Syntax.CEmpty =>
+      case Syntax.CEmpty() =>
       case _ => throw UnexpectedCommand(c)
     }
   }
@@ -423,7 +424,14 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
           case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
         }
       }
+    }
   }
-  
-  }
+}
+
+object TypeAnalysis extends Attribution with AnalysisProvider[TypeAnalysis] {
+  val instance: Prog => TypeAnalysis =
+    attr {
+      case p => new TypeAnalysis(new Tree[ProgramNode, Prog](p))
+    }
+  override def get(program: Prog): TypeAnalysis = instance(program)
 }

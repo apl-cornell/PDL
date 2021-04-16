@@ -1,6 +1,7 @@
 package pipedsl.codegen.bsv
 
 import BSVSyntax._
+import pipedsl.analysis.TypeAnalysis
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.{Locks, ProgInfo}
@@ -20,7 +21,7 @@ object BluespecGeneration {
     debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
     memInit:Map[String, String] = Map(), addSubInts: Boolean = false) {
 
-
+    val typeAnalysis: TypeAnalysis = TypeAnalysis.get(prog)
     val funcModule: String = funcmodname
     private val funcImport = BImport(funcmodname)
 
@@ -38,7 +39,7 @@ object BluespecGeneration {
       })
       val newmod = new BluespecModuleGenerator(
         mod, stageInfo(mod.name).head, flattenStageList(stageInfo(mod.name).tail), modtyps, modHandles,
-        pinfo, bsInts, debug, funcImport
+        pinfo, bsInts, debug, funcImport, typeAnalysis
       ).getBSV
       mapping + ( mod.name -> newmod )
     })
@@ -50,7 +51,7 @@ object BluespecGeneration {
     })
 
     private val translator = new BSVTranslator(bsInts,
-      modMap map { case (i, p) => (i, p.topModule.typ.get) }, modToHandle)
+      modMap map { case (i, p) => (i, p.topModule.typ.get) }, modToHandle, typeAnalysis)
 
     private val funcMap: Map[Id, BFuncDef] = prog.fdefs.foldLeft(Map[Id, BFuncDef]())((fmap, fdef) => {
       fmap + (fdef.name -> translator.toBSVFunc(fdef))
@@ -179,10 +180,10 @@ object BluespecGeneration {
   private class BluespecModuleGenerator(val mod: ModuleDef,
     val firstStage: PStage, val otherStages: List[PStage],
     val bsvMods: Map[Id, BInterface], val bsvHandles: Map[BSVType, BSVType], val progInfo: ProgInfo,
-    val bsInts: BluespecInterfaces, val debug:Boolean = false, val funcImport: BImport) {
+    val bsInts: BluespecInterfaces, val debug:Boolean = false, val funcImport: BImport, val typeAnalysis: TypeAnalysis) {
 
     private val modInfo = progInfo.getModInfo(mod.name)
-    private val translator = new BSVTranslator(bsInts, bsvMods, bsvHandles)
+    private val translator = new BSVTranslator(bsInts, bsvMods, bsvHandles, typeAnalysis)
 
     private val threadIdName = "_threadID"
 
@@ -312,7 +313,7 @@ object BluespecGeneration {
       stgs.foldLeft[Map[PipelineEdge, BStructDef]](Map())((m, s) => {
         s.inEdges.foldLeft[Map[PipelineEdge, BStructDef]](m)((ms, e) => {
           var sfields = e.values.foldLeft(List[BVar]())((l, id) => {
-            l :+ BVar(id.v, translator.toBSVType(id.typ.get))
+            l :+ BVar(id.v, translator.toBSVType(typeAnalysis.typeCheck(id)))
           })
           if (addTId) sfields = sfields :+ threadIdVar
           val styp = BStruct(genStructName(e), sfields)
@@ -325,7 +326,7 @@ object BluespecGeneration {
     private def getFirstEdgeStructInfo(stg: PStage, fieldOrder: Iterable[Id]): BStructDef = {
       val inedge = stg.inEdges.head //must be only one for the first stage
       val sfields = fieldOrder.foldLeft(List[BVar]())((l, id) => {
-        l :+ BVar(id.v, translator.toBSVType(id.typ.get))
+        l :+ BVar(id.v, translator.toBSVType(typeAnalysis.typeCheck(id)))
       }) :+ threadIdVar
       val styp = BStruct(genStructName(inedge), sfields)
       BStructDef(styp, List("Bits", "Eq"))
@@ -513,7 +514,7 @@ object BluespecGeneration {
           val pvar = translator.toBSVVar(v)
             body = body :+ BDecl(pvar, Some(BStructAccess(paramExpr,
               //but don't rename the struct field names
-              BVar(v.v, translator.toBSVType(v.typ.get)))))
+              BVar(v.v, translator.toBSVType(typeAnalysis.typeCheck(v))))))
           declaredVars = declaredVars + pvar
         })
         //only read threadIDs from an unconditional edge
@@ -531,7 +532,7 @@ object BluespecGeneration {
         val condEdgeExpr = condIn.foldLeft[BExpr](BDontCare)((expr, edge) => {
           val paramExpr = bsInts.getFifoPeek(edgeParams(edge))
           BTernaryExpr(translator.toBSVExpr(edge.condRecv.get),
-            BStructAccess(paramExpr, BVar(v.v, translator.toBSVType(v.typ.get))),
+            BStructAccess(paramExpr, BVar(v.v, translator.toBSVType(typeAnalysis.typeCheck(v)))),
             expr)
         })
         val bvar = translator.toBSVVar(v)
@@ -662,7 +663,7 @@ object BluespecGeneration {
     }
 
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
-      case CAssign(lhs, _) => Some(BDecl(translator.toBSVVar(lhs), None))
+      case CAssign(lhs, _, _) => Some(BDecl(translator.toBSVVar(lhs), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toBSVVar(v), None))
         case None => None
@@ -689,7 +690,7 @@ object BluespecGeneration {
      * @return Some(translation) if cmd is combinational, otherwise None
      */
     private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
-      case CAssign(lhs, rhs) =>
+      case CAssign(lhs, rhs, _) =>
         Some(BAssign(translator.toBSVVar(lhs), translator.toBSVExpr(rhs)))
       case ICondCommand(cond: Expr, cs) =>
         val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
@@ -713,7 +714,7 @@ object BluespecGeneration {
       case CLockEnd(_) => None
       case CLockOp(_, _) => None
       case CCheck(_) => None
-      case CEmpty => None
+      case CEmpty() => None
       case _: ISpeculate => None
       case _: IUpdate => None
       case _: ICheck => None
@@ -722,7 +723,7 @@ object BluespecGeneration {
       case _: InternalCommand => None
       case COutput(_) => None
       case CPrint(_) => None
-      case CRecv(_, _) => throw UnexpectedCommand(cmd)
+      case CRecv(_, _, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
@@ -877,12 +878,12 @@ object BluespecGeneration {
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
-      case CAssign(_, _) => None
+      case CAssign(_, _, _) => None
       case CExpr(_) => None
-      case CEmpty => None
+      case CEmpty() => None
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CCheck(_) => throw UnexpectedCommand(cmd)
-      case CRecv(_, _) => throw UnexpectedCommand(cmd)
+      case CRecv(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)

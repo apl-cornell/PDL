@@ -3,8 +3,10 @@ package pipedsl
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 
+import com.microsoft.z3.Context
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.io.FilenameUtils
+import pipedsl.analysis.{PredicateAnalysis, TimingAnalysis, TypeAnalysis}
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
@@ -66,18 +68,18 @@ object Main {
     val pinfo = new ProgInfo(prog)
     try {
       val canonProg = CanonicalizePass.run(prog)
-      val basetypes = BaseTypeChecker.check(canonProg, None)
-      val nprog = new BindModuleTypes(basetypes).run(canonProg)
-      TimingTypeChecker.check(nprog, Some(basetypes))
-      MarkNonRecursiveModulePass.run(nprog)
-      val recvProg = SimplifyRecvPass.run(nprog)
+      TypeAnalysis.get(prog).checkProg()
+      TimingAnalysis.get(prog).checkProg()
+      MarkNonRecursiveModulePass.run(prog)
+      val recvProg = SimplifyRecvPass.run(prog)
       LockRegionChecker.check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
       pinfo.addLockInfo(lockWellformedChecker.getModLockTypeMap)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockTypeMap)
+      val ctx = new Context()
+      val lockChecker = new LockConstraintChecker(PredicateAnalysis.get(recvProg, ctx), locks, lockWellformedChecker.getModLockTypeMap, ctx)
       lockChecker.check(recvProg, None)
-      SpeculationChecker.check(recvProg, Some(basetypes))
+      //SpeculationChecker.check(recvProg, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")
@@ -103,7 +105,7 @@ object Main {
     //Run the transformation passes on the stage representation
     stageInfo map { case (n, stgs) =>
       //Change Recv statements into send + recv pairs
-      new ConvertAsyncPass(n).run(stgs)
+      new ConvertAsyncPass(n, TypeAnalysis.get(prog)).run(stgs)
       //Convert lock ops into ops that track explicit handles
       LockOpTranslationPass.run(stgs)
       //Add in extra conditionals to ensure address locks are not double acquired

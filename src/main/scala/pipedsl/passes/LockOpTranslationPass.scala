@@ -9,12 +9,12 @@ import pipedsl.passes.Passes.StagePass
 
 object LockOpTranslationPass extends StagePass[List[PStage]] {
 
-
   private def lockVar(l: LockArg): EVar = {
     val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "")
     val res = EVar(Id(lockname))
-    res.typ = Some(TRequestHandle(l.id, isLock = true))
-    res.id.typ = res.typ
+    //TODO: Need to figure this out
+    //res.typ = Some(TRequestHandle(l.id, isLock = true))
+    //res.id.typ = res.typ
     res
   }
 

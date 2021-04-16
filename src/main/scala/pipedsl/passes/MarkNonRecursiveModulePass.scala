@@ -29,8 +29,8 @@ object MarkNonRecursiveModulePass extends ModulePass[ModuleDef] with ProgPass[Pr
     case CSeq(c1, c2) => hasRecursiveCall(c1, mod) || hasRecursiveCall(c2, mod)
     case CTBar(c1, c2) => hasRecursiveCall(c1, mod) || hasRecursiveCall(c2, mod)
     case CIf(_, cons, alt) => hasRecursiveCall(cons, mod) || hasRecursiveCall(alt, mod)
-    case CAssign(_, rhs) => hasRecCall(rhs, mod)
-    case CRecv(_, rhs) => hasRecCall(rhs, mod)
+    case CAssign(_, rhs, _) => hasRecCall(rhs, mod)
+    case CRecv(_, rhs, _) => hasRecCall(rhs, mod)
     case COutput(exp) => hasRecCall(exp, mod)
     case CExpr(exp) => hasRecCall(exp, mod)
     case _ => false

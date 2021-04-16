@@ -1,5 +1,6 @@
 package pipedsl.passes
 
+import pipedsl.analysis.TypeAnalysis
 import pipedsl.common.Syntax._
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{UnexpectedExpr, UnexpectedType}
@@ -11,7 +12,7 @@ import pipedsl.passes.Passes.StagePass
  * of Send and Recv pairs. The Send produces a reference
  * which the Recv uses to request the result.
  */
-class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
+class ConvertAsyncPass(modName: Id, typeAnalysis: TypeAnalysis) extends StagePass[List[PStage]] {
 
   private var msgCount = 0
   override def run(stgs: List[PStage]): List[PStage] = {
@@ -54,7 +55,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         val recv = IMemRecv(mem, handle, Some(lhs))
         (send, recv)
       //Mem Write
-      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => mem.typ.get match {
+      case (EMemAccess(mem, index@EVar(_)), data@EVar(_)) => typeAnalysis.typeCheck(mem) match {
         case TMemType(_, _, _, Latency.Asynchronous) =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, isWrite = true, mem, Some(data), index)
@@ -62,8 +63,8 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           (send, recv)
           //if the memory is sequential we don't use handle since it
           //is assumed to complete at the end of the cycle
-        case TMemType(_, _, _, _) => (IMemWrite(mem, index, data), CEmpty)
-        case _ => throw UnexpectedType(mem.pos, "Memory Write Statement", "Memory Type", mem.typ.get)
+        case TMemType(_, _, _, _) => (IMemWrite(mem, index, data), CEmpty())
+        case _ => throw UnexpectedType(mem.pos, "Memory Write Statement", "Memory Type", typeAnalysis.typeCheck(mem))
       }
       //module calls
       case (lhs@EVar(_), call@ECall(_, _)) =>
@@ -104,8 +105,8 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
 
   private def freshMessage(m: Id): EVar = {
     val res = EVar(Id("_request_" + msgCount))
-    res.typ = Some(TRequestHandle(m, isLock = false))
-    res.id.typ = res.typ
+    //res.typ = Some(TRequestHandle(m, isLock = false))
+   // res.id.typ = res.typ
     msgCount += 1
     res
   }

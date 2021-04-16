@@ -49,7 +49,10 @@ object Environments {
     case class TypeEnv(
             typeMap: Map[Id, Type] = Map()) extends Environment[Id, Type] {
         
-        override def apply(id: Id) = this.get(id).getOrThrow(MissingType(id.pos, id.v))
+        override def apply(id: Id) = this.get(id) match {
+            case Some(value) => value
+            case None => println(typeMap); throw MissingType(id.pos, id.v)
+        }
         
         override def add(name: Id, typ: Type): Environment[Id, Type] = typeMap.get(name) match {
             case Some(t) => throw AlreadyBoundType(name.pos, name.v, t, typ)

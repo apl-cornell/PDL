@@ -10,9 +10,6 @@ object Syntax {
    * Annotations added by the various passes of the type checker.
    */
   object Annotations {
-    sealed trait TypeAnnotation {
-      var typ: Option[Type] = None
-    }
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
@@ -61,11 +58,11 @@ object Syntax {
 
   import Annotations._
 
-  case class Id(v: String) extends Positional with TypeAnnotation {
+  case class Id(v: String) extends ProgramNode {
     override def toString = s"$v"
   }
 
-  sealed trait Type extends Positional with LabelAnnotation with SpeculativeAnnotation {
+  sealed trait Type extends ProgramNode with LabelAnnotation with SpeculativeAnnotation {
     override def toString: String = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
@@ -107,7 +104,7 @@ object Syntax {
     }
   }
 
-  sealed trait UOp extends Positional {
+  sealed trait UOp extends ProgramNode {
     val op: String;
     override def toString: String = this.op
     def operate(v1: Any): Option[Any] = this match {
@@ -129,7 +126,7 @@ object Syntax {
   def OrOp(e1: Expr, e2: Expr): EBinop = EBinop(BoolOp("||", OpConstructor.or), e1, e2)
   def EqOp(e1: Expr, e2: Expr): EBinop = EBinop(EqOp("=="), e1, e2)
 
-  sealed trait BOp extends Positional {
+  sealed trait BOp extends ProgramNode {
     val op: String;
     override def toString = this.op
     def operate(v1: Any, v2: Any): Option[Any] = this match {
@@ -160,7 +157,7 @@ object Syntax {
   case class NumOp(op: String, fun: (Int, Int) => Int) extends BOp
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
-  sealed trait Expr extends Positional with TypeAnnotation {
+  sealed trait Expr extends ProgramNode{
     def isLVal = this match {
       case _:EVar => true
       case _:EMemAccess => true
@@ -168,12 +165,11 @@ object Syntax {
     }
     def copyMeta(from: Expr): Expr = {
       setPos(from.pos)
-      typ = from.typ
       this
     }
   }
   
-  case class LockArg(id: Id, evar: Option[EVar]) extends Positional
+  case class LockArg(id: Id, evar: Option[EVar]) extends ProgramNode
 
   case object EInvalid extends Expr
   case class EIsValid(ex: Expr) extends Expr
@@ -196,14 +192,19 @@ object Syntax {
   def MemoryWrite(index: Expr, value: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index), (Id("value"),value)))
   def MemoryRead(index: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index)))
 
-  sealed trait Command extends Positional
+  sealed trait Command extends ProgramNode
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: EVar, rhs: Expr) extends Command {
+  abstract class CDefine extends Command {
+    def lhs: Expr
+    def rhs: Expr
+    def typ: Option[Type]
+  }
+  case class CAssign(lhs: EVar, rhs: Expr, typ: Option[Type]) extends CDefine {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CRecv(lhs: Expr, rhs: Expr) extends Command {
+  case class CRecv(lhs: Expr, rhs: Expr, typ: Option[Type]) extends CDefine {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CPrint(evar: EVar) extends Command
@@ -216,8 +217,8 @@ object Syntax {
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
-  case object CEmpty extends Command
-
+  case class CEmpty() extends Command
+  
   sealed trait InternalCommand extends Command
 
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
@@ -238,9 +239,9 @@ object Syntax {
   //needed for internal compiler passes to track branches with explicitly no lockstate change
   case class ILockNoOp(mem: LockArg) extends InternalCommand
 
-  case class CaseObj(cond: Expr, body: Command) extends Positional
+  case class CaseObj(cond: Expr, body: Command) extends ProgramNode
 
-  sealed trait Definition extends Positional
+  sealed trait Definition extends ProgramNode
 
   case class FuncDef(
     name: Id,
@@ -255,14 +256,16 @@ object Syntax {
     ret: Option[Type],
     body: Command) extends Definition with RecursiveAnnotation
 
-  case class Param(name: Id, typ: Type) extends Positional
+  case class Param(name: Id, typ: Type) extends ProgramNode
 
   case class Prog(
           fdefs: List[FuncDef],
           moddefs: List[ModuleDef],
-          circ: Circuit) extends Positional
+          circ: Circuit) extends ProgramNode
+  
+  sealed abstract class ProgramNode extends Positional with Product
 
-  sealed trait Circuit extends Positional
+  sealed trait Circuit extends ProgramNode
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
   case class CirConnect(name: Id, c: CirExpr) extends Circuit
   case class CirExprStmt(ce: CirExpr) extends Circuit

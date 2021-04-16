@@ -11,6 +11,8 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
   type Available = Set[Id]
   val NoneAvailable: Available = Set[Id]()
 
+  def checkProg(): Unit = program.root.moddefs.foreach(checkModule(_))
+  def checkModule(m: ModuleDef): Unit = checkCommand(m.body)
   def checkCommand(c: Command): Unit = c match {
     case CSeq(c1, c2) => checkCommand(c1); checkCommand(c2)
     case CTBar(c1, c2) => checkCommand(c2); checkCommand(c2)
@@ -53,7 +55,7 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
       }
     case CLockStart(mod) =>
     case CLockEnd(mod) =>
-    case CEmpty =>
+    case CEmpty() =>
     case _ =>
   }
   
@@ -178,4 +180,12 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
       case _ => false  
     }
   }
+}
+
+object TimingAnalysis extends Attribution with AnalysisProvider[TimingAnalysis] {
+  val instance: Prog => TimingAnalysis =
+    attr {
+      case p => new TimingAnalysis(new Tree[ProgramNode, Prog](p), TypeAnalysis.get(p))
+    }
+  override def get(program: Prog): TimingAnalysis = instance(program)
 }
