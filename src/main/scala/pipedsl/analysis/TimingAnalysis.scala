@@ -17,7 +17,7 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
     case CSeq(c1, c2) => checkCommand(c1); checkCommand(c2)
     case CTBar(c1, c2) => checkCommand(c2); checkCommand(c2)
     case CIf(cond, cons, alt) => 
-      if (latency(cond) == Latency.Combinational) {
+      if (latency(cond) != Latency.Combinational) {
         throw UnexpectedAsyncReference(cond.pos, cond.toString)
       }
       checkCommand(cons)
@@ -63,7 +63,7 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
   val availableNow: ProgramNode => Available = {
     attr {
         case program.prev(program.parent(c@CSeq(c1, c2))) => availableNow(c1) ++ availableNowAfterNode(NoneAvailable)(c1)
-        case program.prev(program.parent(c@CTBar(c1, c2))) => availableNow(c1) ++ availableNextAfterNode(NoneAvailable)(c1)
+        case program.prev(program.parent(c@CTBar(c1, c2))) => availableNow(c1) ++ availableNowAfterNode(NoneAvailable)(c1) ++ availableNextAfterNode(NoneAvailable)(c1)
         case program.parent(m@ModuleDef(name, inputs, modules, ret, body)) =>
           val inputs = m.inputs.foldLeft[Available](NoneAvailable)((av,p) => {
             av + p.name
@@ -176,7 +176,7 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Asynchronous
-    case e@EVar(id) => if(!availableNow(e)(id) && isRhs(e)) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
+    case e@EVar(id) => if(!availableNow(e)(id) && isRhs(e)) { println(availableNow(e)); println(availableNext(e)); println(availableNextAfterNode(NoneAvailable)(e)); println(availableNowAfterNode(NoneAvailable)(e)); throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
     case ECast(_, exp) => latency(exp)
     case _ => Combinational
   }

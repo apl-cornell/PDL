@@ -155,9 +155,8 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
       case program.prev(m@ModuleDef(name, inputs, modules, ret, body)) =>
         context(m).add(m.name, typeCheck(m))
       case program.prev(cc@CirConnect(name, c)) => context(cc).add(name, checkCirExpr(c))
-      case program.parent.pair(m, p) => println(m); println(context(p)); context(p)
+      case program.parent(p) => context(p)
       case program.root => TypeEnv()
-      case p => println(p); println(program.parent(p)); program.parent(p).foreach(f => println(program.parent(f))); throw new RuntimeException()
     }
   }
 
@@ -187,8 +186,8 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
         if (isSubtype(rTyp, lTyp)) TVoid() else throw UnexpectedSubtype(rhs.pos, "assignment", lTyp, rTyp)
       case Syntax.CPrint(evar) =>
         val t = typeCheck(evar)
-        t match {
-          case _ => throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
+        if (! (t.isInstanceOf[TSizedInt] || t.isInstanceOf[TString] || t.isInstanceOf[TBool])) {
+          throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
         }
       case Syntax.COutput(exp) => typeCheck(exp)
       case Syntax.CReturn(exp) => typeCheck(exp)
@@ -254,8 +253,8 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
       case program.parent.pair(id: Id, mod: ModuleDef) => typeCheck(mod)
       case program.parent.pair(id: Id, func: FuncDef) => typeCheck(func)
       case i:Id => context(i)(i)
-      case e: Syntax.Expr => checkExpr(e)
       case ce: CirExpr => checkCirExpr(ce)
+      case e: Syntax.Expr => checkExpr(e)
       case m: ModuleDef => //TODO disallow memories
         val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
         //TODO require memory or module types
@@ -386,7 +385,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
           case _ => ()
         }
         ctyp
-      case _ => throw UnexpectedCase(e.pos)
+      case _ => print(e); throw UnexpectedCase(e.pos)
     }
   }
 

@@ -51,7 +51,7 @@ object Environments {
         
         override def apply(id: Id) = this.get(id) match {
             case Some(value) => value
-            case None => println(typeMap); throw MissingType(id.pos, id.v)
+            case None => throw MissingType(id.pos, id.v)
         }
         
         override def add(name: Id, typ: Type): Environment[Id, Type] = typeMap.get(name) match {
