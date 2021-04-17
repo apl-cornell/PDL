@@ -5,8 +5,8 @@ import org.bitbucket.inkytonik.kiama.relation.Tree
 import pipedsl.common.Errors.{ArgLengthMismatch, IllegalCast, MalformedFunction, MissingType, UnexpectedAssignment, UnexpectedCase, UnexpectedCommand, UnexpectedReturn, UnexpectedSubtype, UnexpectedType}
 import pipedsl.common.Syntax
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
-import pipedsl.common.Syntax.{BitOp, BitUOp, BoolOp, BoolUOp, CAssign, CCheck, CDefine, CIf, CLockEnd, CLockOp, CLockStart, COutput, CRecv, CReturn, CSeq, CSpeculate, CSplit, CTBar, CirCall, CirConnect, CirExpr, CirExprStmt, CirMem, CirNew, CirRegFile, CirSeq, Circuit, CmpOp, Command, EVar, EqOp, Expr, FuncDef, Id, ModuleDef, NumOp, NumUOp, Prog, ProgramNode, TBool, TFun, TMemType, TModType, TNamedType, TRecType, TSizedInt, TString, TVoid, Type}
-import pipedsl.typechecker.Environments.{Environment, TypeEnv}
+import pipedsl.common.Syntax.{BitOp, BitUOp, BoolOp, BoolUOp, CAssign, CCheck, CIf, CLockEnd, CLockOp, CLockStart, COutput, CRecv, CReturn, CSeq, CSpeculate, CSplit, CTBar, CirCall, CirConnect, CirExpr, CirExprStmt, CirMem, CirNew, CirRegFile, CirSeq, Circuit, CmpOp, Command, EVar, EqOp, Expr, FuncDef, Id, ModuleDef, NumOp, NumUOp, Prog, ProgramNode, TBool, TFun, TMemType, TModType, TNamedType, TRecType, TSizedInt, TString, TVoid, Type}
+import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{areEqual, isSubtype}
 
 class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
@@ -28,11 +28,14 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     })
     checkCircuit(prog.circ)
   }
-  
-  val rightMostLeaf: Command => Command = {
-    case program.lastChild(p:Command) => rightMostLeaf(p)
-    case p => p
-  }
+  //Make this only a TOP LEVEL COMMAND (i.e. not the commands inside if statements or otherwise) Essentially, only
+  //traverse CSEQ or CTBAR
+  val rightMostLeaf: Command => Command =
+    attr {
+      case c@CSeq(c1, c2) => rightMostLeaf(c2)
+      case c@CTBar(c1, c2) => rightMostLeaf(c2)
+      case c => c
+    }
   
   /**
    * This checks that the function doesn't include any disallowed expressions
@@ -112,18 +115,32 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     }
   }
 
+  val contextAfterCommand: Environment[Id, Type] => Command => Environment[Id, Type] = {
+    paramAttr {
+      env => {
+        case c@CSeq(c1, c2) => val e1 = contextAfterCommand(env)(c1); contextAfterCommand(e1)(c2)
+        case c@CTBar(c1, c2) => val e1 = contextAfterCommand(env)(c1); contextAfterCommand(e1)(c2)
+        case c@CIf(cond, cons, alt) => contextAfterCommand(env)(cons).intersect(contextAfterCommand(env)(alt))
+        case c@CSplit(cases, default) =>
+          var runningEnv = contextAfterCommand(env)(default)
+          for (c <- cases) {
+            runningEnv = runningEnv.intersect(contextAfterCommand(env)(c.body))
+          }
+          runningEnv
+        case c@CAssign(lhs@EVar(id), rhs, typ) => env.add(id, typ.get)
+        case c@CRecv(lhs@EVar(id), rhs, typ) => env.add(id, typ.get)
+        case _ => env
+      }
+    }
+  }
+  //Need some thing that gives the context after a thingy
+
   val context: ProgramNode => Environment[Id, Type] = {
     attr {
       //Context is prev OR parent 
       //Need to match prev with CAssign, CIf,or CSplit, or CRecV
-      case program.prev(p@CAssign(lhs@EVar(id), rhs, Some(typ))) => println(p); println(context(p)); context(p).add(id, typ)
-      case program.prev(p@CRecv(lhs@EVar(id), rhs, Some(typ))) => println(p); println(context(p)); context(p).add(id, typ)
-      case program.prev(p@CIf(cond, tbranch, fbranch)) => 
-        contextAfterNode(rightMostLeaf(tbranch)).intersect(contextAfterNode(rightMostLeaf(fbranch)))
-      case program.prev(p@CSplit(cases, default))  =>
-        cases.foldLeft[Environment[Id, Type]](contextAfterNode(rightMostLeaf(default)))(
-          (env, v) => env.intersect(contextAfterNode(rightMostLeaf(v.body)))
-        )
+      case program.prev(program.parent(c@CSeq(c1, c2))) => context(c1).union(contextAfterCommand(EmptyTypeEnv)(c1))
+      case program.prev(program.parent(c@CTBar(c1, c2))) => context(c1).union(contextAfterCommand(EmptyTypeEnv)(c1))
       case program.parent(m@ModuleDef(name,inputs,modules,ret,body)) =>
         val tenv = context(m)
         val inEnv = inputs.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
@@ -143,7 +160,6 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
       case p => println(p); println(program.parent(p)); program.parent(p).foreach(f => println(program.parent(f))); throw new RuntimeException()
     }
   }
-  
 
   //Module parameters can't be given a proper type during parsing if they refer to another module
   //This uses module names in the type environment to lookup their already checked types

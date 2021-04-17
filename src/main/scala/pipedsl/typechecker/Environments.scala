@@ -182,6 +182,6 @@ object Environments {
 
         //This is filler code, I don't think we ever actually need this
         override def union(other: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = other
-        
+
     }
 }

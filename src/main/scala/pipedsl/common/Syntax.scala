@@ -196,15 +196,10 @@ object Syntax {
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  abstract class CDefine extends Command {
-    def lhs: Expr
-    def rhs: Expr
-    def typ: Option[Type]
-  }
-  case class CAssign(lhs: EVar, rhs: Expr, typ: Option[Type]) extends CDefine {
+  case class CAssign(lhs: EVar, rhs: Expr, typ: Option[Type]) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CRecv(lhs: Expr, rhs: Expr, typ: Option[Type]) extends CDefine {
+  case class CRecv(lhs: Expr, rhs: Expr, typ: Option[Type]) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CPrint(evar: EVar) extends Command
