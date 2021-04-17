@@ -64,7 +64,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         CSeq(idxAssgn, CRecv(lhs, EMemAccess(mem, idxAssgn.lhs).setPos(rhs.pos), typ)).setPos(c.pos)
       case (EMemAccess(_, EVar(_)), EVar(_)) => c //leave it alone, already in form we want
       case (EMemAccess(_,EVar(_)), _) => // separate out the RHS computation
-        val rhsAssgn = CAssign(newVar("msg", rhs.pos), rhs, typ).setPos(rhs.pos)
+        val rhsAssgn = CAssign(newVar("msg", rhs.pos), rhs, Some(typeAnalysis.typeCheck(rhs))).setPos(rhs.pos)
         CSeq(rhsAssgn, CRecv(lhs, rhsAssgn.lhs, typ).setPos(c.pos)).setPos(c.pos)
       case (EMemAccess(mem,idx), EVar(_)) => //separate out the index computation
         val idxAssgn = CAssign(newVar("index", idx.pos), idx, Some(typeAnalysis.typeCheck(idx))).setPos(idx.pos)
@@ -72,7 +72,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         CSeq(idxAssgn, CRecv(access, rhs, typ).setPos(c.pos)).setPos(c.pos)
       case (EMemAccess(mem,idx), _) => //separate the index computation AND the rhs computation into new variables
         val idxAssgn = CAssign(newVar("index", idx.pos), idx, Some(typeAnalysis.typeCheck(idx))).setPos(idx.pos)
-        val rhsAssgn = CAssign(newVar("msg", rhs.pos), rhs, typ).setPos(rhs.pos)
+        val rhsAssgn = CAssign(newVar("msg", rhs.pos), rhs, Some(typeAnalysis.typeCheck(rhs))).setPos(rhs.pos)
         val access = EMemAccess(mem, idxAssgn.lhs).setPos(lhs.pos)
         CSeq(idxAssgn,
           CSeq(rhsAssgn,

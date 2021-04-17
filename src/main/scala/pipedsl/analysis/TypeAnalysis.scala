@@ -28,14 +28,6 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     })
     checkCircuit(prog.circ)
   }
-  //Make this only a TOP LEVEL COMMAND (i.e. not the commands inside if statements or otherwise) Essentially, only
-  //traverse CSEQ or CTBAR
-  val rightMostLeaf: Command => Command =
-    attr {
-      case c@CSeq(c1, c2) => rightMostLeaf(c2)
-      case c@CTBar(c1, c2) => rightMostLeaf(c2)
-      case c => c
-    }
   
   /**
    * This checks that the function doesn't include any disallowed expressions
@@ -107,66 +99,6 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     case _ => assignees
   }
   
-  val contextAfterNode: ProgramNode => Environment[Id, Type] = {
-    attr {
-      case c@CAssign(lhs@EVar(id), rhs, typ) => context(c).add(id, typ.get)
-      case c@CRecv(lhs@EVar(id), rhs, typ) => context(c).add(id, typ.get)
-      case p => context(p)
-    }
-  }
-
-  val contextAfterCommand: Environment[Id, Type] => Command => Environment[Id, Type] = {
-    paramAttr {
-      env => {
-        case c@CSeq(c1, c2) => val e1 = contextAfterCommand(env)(c1); contextAfterCommand(e1)(c2)
-        case c@CTBar(c1, c2) => val e1 = contextAfterCommand(env)(c1); contextAfterCommand(e1)(c2)
-        case c@CIf(cond, cons, alt) => contextAfterCommand(env)(cons).intersect(contextAfterCommand(env)(alt))
-        case c@CSplit(cases, default) =>
-          var runningEnv = contextAfterCommand(env)(default)
-          for (c <- cases) {
-            runningEnv = runningEnv.intersect(contextAfterCommand(env)(c.body))
-          }
-          runningEnv
-        case c@CAssign(lhs@EVar(id), rhs, typ) => env.add(id, typ.get)
-        case c@CRecv(lhs@EVar(id), rhs, typ) => env.add(id, typ.get)
-        case _ => env
-      }
-    }
-  }
-  //Need some thing that gives the context after a thingy
-
-  val context: ProgramNode => Environment[Id, Type] = {
-    attr {
-      //Context is prev OR parent 
-      //Need to match prev with CAssign, CIf,or CSplit, or CRecV
-      case program.prev(program.parent(c@CSeq(c1, c2))) => context(c1).union(contextAfterCommand(EmptyTypeEnv)(c1))
-      case program.prev(program.parent(c@CTBar(c1, c2))) => context(c1).union(contextAfterCommand(EmptyTypeEnv)(c1))
-      case program.parent(m@ModuleDef(name,inputs,modules,ret,body)) =>
-        val tenv = context(m)
-        val inEnv = inputs.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
-        val pipeEnv = modules.foldLeft[Environment[Id, Type]](inEnv)((env, p) =>
-        { env.add(p.name, replaceNamedType(p.typ, m)) })
-        pipeEnv.add(m.name, typeCheck(m))
-      case program.parent(f@FuncDef(name, args, ret, body)) =>
-        val tenv = context(f)
-        f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
-      case program.prev(f@FuncDef(name, args, ret, body))=>
-        context(f).add(f.name, typeCheck(f))
-      case program.prev(m@ModuleDef(name, inputs, modules, ret, body)) =>
-        context(m).add(m.name, typeCheck(m))
-      case program.prev(cc@CirConnect(name, c)) => context(cc).add(name, checkCirExpr(c))
-      case program.parent(p) => context(p)
-      case program.root => TypeEnv()
-    }
-  }
-
-  //Module parameters can't be given a proper type during parsing if they refer to another module
-  //This uses module names in the type environment to lookup their already checked types
-  private def replaceNamedType(t: Type, mod: ModuleDef): Type = t match {
-    case TNamedType(name) => context(mod)(name)
-    case _ => t
-  }
-
   def checkCommand(c: Command): Unit = {
     val tenv = context(c)
     c match {
@@ -244,6 +176,57 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     }
   }
 
+  val contextAfterCommand: Environment[Id, Type] => Command => Environment[Id, Type] = {
+    paramAttr {
+      env => {
+        case c@CSeq(c1, c2) => val e1 = contextAfterCommand(env)(c1); contextAfterCommand(e1)(c2)
+        case c@CTBar(c1, c2) => val e1 = contextAfterCommand(env)(c1); contextAfterCommand(e1)(c2)
+        case c@CIf(cond, cons, alt) => contextAfterCommand(env)(cons).intersect(contextAfterCommand(env)(alt))
+        case c@CSplit(cases, default) =>
+          var runningEnv = contextAfterCommand(env)(default)
+          for (c <- cases) {
+            runningEnv = runningEnv.intersect(contextAfterCommand(env)(c.body))
+          }
+          runningEnv
+        case c@CAssign(lhs@EVar(id), rhs, typ) => env.add(id, typ.get)
+        case c@CRecv(lhs@EVar(id), rhs, typ) => env.add(id, typ.get)
+        case _ => env
+      }
+    }
+  }
+
+  val context: ProgramNode => Environment[Id, Type] = {
+    attr {
+      //Context is prev OR parent 
+      //Need to match prev with CAssign, CIf,or CSplit, or CRecV
+      case program.prev(program.parent(c@CSeq(c1, c2))) => context(c1).union(contextAfterCommand(EmptyTypeEnv)(c1))
+      case program.prev(program.parent(c@CTBar(c1, c2))) => context(c1).union(contextAfterCommand(EmptyTypeEnv)(c1))
+      case program.parent(m@ModuleDef(name,inputs,modules,ret,body)) =>
+        val tenv = context(m)
+        val inEnv = inputs.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ) })
+        val pipeEnv = modules.foldLeft[Environment[Id, Type]](inEnv)((env, p) =>
+        { env.add(p.name, replaceNamedType(p.typ, m)) })
+        pipeEnv.add(m.name, typeCheck(m))
+      case program.parent(f@FuncDef(name, args, ret, body)) =>
+        val tenv = context(f)
+        f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
+      case program.prev(f@FuncDef(name, args, ret, body))=>
+        context(f).add(f.name, typeCheck(f))
+      case program.prev(m@ModuleDef(name, inputs, modules, ret, body)) =>
+        context(m).add(m.name, typeCheck(m))
+      case program.prev(cc@CirConnect(name, c)) => context(cc).add(name, checkCirExpr(c))
+      case program.parent(p) => context(p)
+      case program.root => TypeEnv()
+    }
+  }
+
+  //Module parameters can't be given a proper type during parsing if they refer to another module
+  //This uses module names in the type environment to lookup their already checked types
+  private def replaceNamedType(t: Type, mod: ModuleDef): Type = t match {
+    case TNamedType(name) => context(mod)(name)
+    case _ => t
+  }
+
   val typeCheck: ProgramNode => Type = {
     attr {
       //used to get the defined type of a node 
@@ -267,7 +250,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     }
   }
   
-  def checkExpr(e: Expr): Type = {
+  private def checkExpr(e: Expr): Type = {
     val tenv = context(e)
     e match {
       case Syntax.EInt(v, base, bits) => TSizedInt(bits, unsigned = true)
@@ -389,7 +372,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
     }
   }
 
-  def checkCirExpr(c: CirExpr): Type = {
+  private def checkCirExpr(c: CirExpr): Type = {
     val tenv = context(c)
     c match {
       case CirMem(elemTyp, addrSize) => {

@@ -72,7 +72,7 @@ object Main {
       TimingAnalysis.get(prog).checkProg()
       MarkNonRecursiveModulePass.run(prog)
       val recvProg = SimplifyRecvPass.run(prog)
-      LockRegionChecker.check(recvProg, None)
+      new LockRegionChecker(recvProg).check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
       pinfo.addLockInfo(lockWellformedChecker.getModLockTypeMap)
