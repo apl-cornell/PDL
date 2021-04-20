@@ -17,7 +17,7 @@ class MainSuite extends AnyFunSuite {
   private val inputH = histInputs + "/h"
   private val inputF = histInputs + "/f"
   private val inputW = histInputs + "/w"
-  private val inputMap = Map("h" -> inputH, "f" -> inputF, "w" -> inputW)
+  private val inputMap = Map("th" -> inputH, "tf" -> inputF, "tw" -> inputW)
 
   /*for now, skip these as they aren't that useful atm.
   test("Histogram Parse Test") {
@@ -105,9 +105,9 @@ class MainSuite extends AnyFunSuite {
   private val matpowAlt = matpowFolder + "/matpow_alt.pdl"
   private val matpowInputs = matpowFolder + "/memInputs"
   private val matpowMap = Map("a" -> (matpowInputs + "/a_2"),
-    "x" -> (matpowInputs + "/x"),
-    "r" -> (matpowInputs + "/r"),
-    "c" -> (matpowInputs + "/c")
+    "tx" -> (matpowInputs + "/x"),
+    "tr" -> (matpowInputs + "/r"),
+    "tc" -> (matpowInputs + "/c")
   )
 
   /*
@@ -197,8 +197,8 @@ class MainSuite extends AnyFunSuite {
   private val multiSplit = multiFolder + "/multiexec_split.pdl"
   private val multiInputs = multiFolder + "/memInputs"
   private val memMap = Map(
-    "i" -> (multiInputs + "/i"),
-    "r" -> (multiInputs + "/r")
+    "ti" -> (multiInputs + "/i"),
+    "tr" -> (multiInputs + "/r")
   )
 
   /* for now, skip these as they aren't that useful atm.

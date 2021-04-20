@@ -15,8 +15,8 @@ class CSplitSuite extends AnyFunSuite {
 
   private val memInputs = folder + "/memInputs"
   def defaultInputMap(testName: String): Map[String,String] = Map(
-    "i" -> (memInputs + "/i_" + testName ),
-    "r" -> (memInputs + "/r_" + testName )
+    "ti" -> (memInputs + "/i_" + testName ),
+    "tr" -> (memInputs + "/r_" + testName )
   )
 
   testFiles.foreach(t => {
