@@ -77,13 +77,15 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    
    Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkQueueLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkConfigReg(tagged Invalid) );
+   //Signal that a reservation used an already-allocated lock this cycle
+   //which tells the relevant "free lock" rules not to execute
+   Vector#(numlocks, RWire#(Bool)) resVec <- replicateM(mkRWire());
 
    //Allow each lock entry to be freed once it's no longer used,
-   //but tagged as valid
+   //but tagged as valid, *AND* was there isn't a reservation this cycle to it.
    for (Integer i = 0; i < valueOf(numlocks); i = i + 1) begin      
-      rule freelock;
-	 if (lockVec[i].isEmpty && isValid(entryVec[i]))
-	    entryVec[i] <= tagged Invalid;
+      rule freelock(lockVec[i].isEmpty && isValid(entryVec[i]) && !isValid(resVec[i].wget()));
+	 entryVec[i] <= tagged Invalid;
       endrule
    end
   
@@ -163,9 +165,11 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    endmethod
    
    method ActionValue#(LockId#(d)) res(addr loc);
-      Maybe#(QueueLock#(LockId#(d))) addrLock = getLock(loc);
-      if (addrLock matches tagged Valid.lock)
+      Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
+      if (lockIdx matches tagged Valid.idx)
 	 begin
+	    let lock = lockVec[idx];
+	    resVec[idx].wset(True);
 	    let nid <- lock.res();
             return nid;
 	 end

@@ -21,7 +21,8 @@ export mkQueueLockCombMem;
 export mkQueueLockAsyncMem;
 export mkFAAddrLockCombMem;
 export mkFAAddrLockAsyncMem;
-
+export mkDMAddrLockCombMem;
+export mkDMAddrLockAsyncMem;
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
 
