@@ -104,7 +104,7 @@ class MainSuite extends AnyFunSuite {
   private val matpowBram = matpowFolder + "/matpow_bram.pdl"
   private val matpowAlt = matpowFolder + "/matpow_alt.pdl"
   private val matpowInputs = matpowFolder + "/memInputs"
-  private val matpowMap = Map("a" -> (matpowInputs + "/a_2"),
+  private val matpowMap = Map("ta" -> (matpowInputs + "/a_2"),
     "tx" -> (matpowInputs + "/x"),
     "tr" -> (matpowInputs + "/r"),
     "tc" -> (matpowInputs + "/c")
