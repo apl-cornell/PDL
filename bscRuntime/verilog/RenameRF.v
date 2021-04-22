@@ -119,7 +119,7 @@ module RenameRF(CLK,
    initial
      begin
 	if (binaryInit)
-	  $readmemb(file, phys, lo_arch, hi_arch);
+	  $readmemh(file, phys, lo_arch, hi_arch);
 	else
 	  begin
 	     for (siminit = lo_arch; siminit <= hi_arch; siminit = siminit + 1)

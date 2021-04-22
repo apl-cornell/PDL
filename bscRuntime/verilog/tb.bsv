@@ -7,7 +7,7 @@ import RegFile :: *;
 module mkTop();
    
    //Test the Renaming Register File a Bit
-   RenameRF#(UInt#(32), UInt#(5), UInt#(6)) rf <- mkRenameRF(32, 64, False, "");
+   RenameRF#(UInt#(5), UInt#(32), UInt#(6)) rf <- mkRenameRF(32, 64, False, "");
    FIFO#(UInt#(6)) writes <- mkSizedFIFO(32);
    FIFO#(UInt#(6)) reads <- mkSizedFIFO(32);
    FIFO#(UInt#(6)) commits <- mkSizedFIFO(32);
