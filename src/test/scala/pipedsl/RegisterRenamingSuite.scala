@@ -9,11 +9,21 @@ class RegisterRenamingSuite extends AnyFunSuite{
   private val testFiles = getListOfTests(folder)
   private val testFolder = new File(folder)
 
+  private val inputFolder = folder + "/memInputs"
+  private val inputRename = inputFolder + "/rename"
+  private val inputMap = Map("rename" -> inputRename)
+
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)
-    test((testBaseName + " Typecheck")) {
-      testTypecheck(testFolder, t)
+    val simFile = getSimFile(testFolder, testBaseName)
+    test((testBaseName + " Typecheck; Compile; Simulate")) {
+      val doesTypecheck = testTypecheck(testFolder, t)
+      if (doesTypecheck) {
+        testBlueSpecCompile(testFolder, t, None, inputMap)
+        if (simFile.exists) {
+            testBlueSpecSim(testFolder, t, None, inputMap)
+        }
+      }
     }
-
   })
 }

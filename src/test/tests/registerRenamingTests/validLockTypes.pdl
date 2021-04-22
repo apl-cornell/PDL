@@ -1,7 +1,7 @@
 //Expected Success
-pipe test1(input: int<32>)[rf: int<32>[5]] {
-    int<5> rs1 = input{0:4};
-    int<5> rs2 = input{5:9};
+pipe test1(tinput: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = tinput{4:0};
+    int<5> rs2 = tinput{9:5};
     start(rf);
     acquire(rf[rs1], R);
     int<32> arg1 <- rf[rs1];
@@ -10,14 +10,15 @@ pipe test1(input: int<32>)[rf: int<32>[5]] {
     release(rf[rs1]);
     release(rf[rs2]);
     end(rf);
+    ---
 }
 
 //Expected Success
-pipe test2(input: int<32>)[rf: int<32>[5]] {
-    int<5> rs1 = input{0:4};
-    int<5> rs2 = input{5:9};
+pipe test2(tinput: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = tinput{4:0};
+    int<5> rs2 = tinput{9:5};
     start(rf);
-    if (input{0:0} == 1) {
+    if (tinput{0:0} == 1) {
         acquire(rf[rs1], W);
         rf[rs1] <- 1<32> ;
         release(rf[rs1]);
@@ -26,11 +27,12 @@ pipe test2(input: int<32>)[rf: int<32>[5]] {
     int<32> arg2 <- rf[rs2];
     end(rf);
     release(rf[rs2]);
+    ---
 }
 
-pipe test3(input: int<32>)[rf: int<32>[5]<c,s>] {
-    int<5> rs1 = input{0:4};
-    int<5> rs2 = input{5:9};
+pipe test3(tinput: int<32>)[rf: int<32>[5]<c,s>] {
+    int<5> rs1 = tinput{4:0};
+    int<5> rs2 = tinput{9:5};
     start(rf);
     acquire(rf[rs2], R);
     end(rf);

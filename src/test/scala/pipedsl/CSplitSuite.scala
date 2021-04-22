@@ -32,19 +32,15 @@ class CSplitSuite extends AnyFunSuite {
     }*/
 
     var doesTypecheck = false
-    test((testBaseName + " Typecheck")) {
+    test((testBaseName + " Typecheck; Compile; Simulate")) {
       doesTypecheck = testTypecheck(testFolder, t)
-    }
 
-    if (doesTypecheck) {
-      test((testBaseName + " BSV Compile")) {
-        testBlueSpecCompile(testFolder, t, None, Map())
+      if (doesTypecheck) {
+          testBlueSpecCompile(testFolder, t, None, Map())
       }
-    }
 
-    if (doesTypecheck && simFile.exists) {
-      test((testBaseName + " Simulation")) {
-        testBlueSpecSim(testFolder, t, None, defaultInputMap(testBaseName))
+      if (doesTypecheck && simFile.exists) {
+          testBlueSpecSim(testFolder, t, None, defaultInputMap(testBaseName))
       }
     }
   })

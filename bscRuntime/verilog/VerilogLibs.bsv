@@ -5,7 +5,7 @@ import RegFile :: *;
 export RenameRF(..);
 export mkRenameRF;
 
-interface RenameRF#(type elem, type addr, type name);
+interface RenameRF#(type addr, type elem, type name);
    method name readName(addr a); //get name to read data later
    method Bool isValid(name n);  //check if safe to read
    method elem read(name a);    //do the read
@@ -16,7 +16,7 @@ interface RenameRF#(type elem, type addr, type name);
 endinterface
 
 import "BVI" RenameRF =
- module mkRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)(RenameRF#(elem, addr, name)) provisos
+ module mkRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)(RenameRF#(addr, elem, name)) provisos
     (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
      PrimIndex#(addr, an), PrimIndex#(name, nn));
 
