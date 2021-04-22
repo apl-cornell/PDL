@@ -168,9 +168,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           checkAcquired(mem, expr, env)
         case (_, EMemAccess(mem, expr)) =>
           checkAcquired(mem, expr, env)
-        case (_, ECall(mod, _)) =>
-          //TODO Maybe just from null
-          checkAcquired(mod, null, env)
+        case (_, ECall(mod, args)) =>
+          args.foldLeft(env)((e, a) => checkExpr(a, e))
         case _ => throw UnexpectedCase(c.pos)
       }
       case c@CLockOp(mem, op, _) =>

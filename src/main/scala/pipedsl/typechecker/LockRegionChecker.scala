@@ -25,7 +25,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
   override def checkModule(m: ModuleDef, env: Environment[Id, LockState]): Environment[Id, LockState] = {
     val nenv = m.modules.foldLeft[Environment[Id, LockState]](env)( (e, m) => m.typ match {
       case TLockedMemType(_, _, _) => e.add(m.name, Free)
-      case TModType(_, _, _, _) => e.add(m.name, Free)
+      case TModType(_, _, _, _) => e  //no locks for modules, but they're an expected type
       case _ => throw UnexpectedCase(m.pos)
     })
     val finalStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)

@@ -262,22 +262,15 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     }
     case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
-        case _: TModType => tenv
         case _: TLockedMemType => tenv
       }
     case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
-        case _: TModType => tenv
         case _: TLockedMemType => tenv
       }
     case CLockOp(mem, _, _) => {
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
-      { case t: TModType =>
-          if (mem.evar.isDefined) throw UnexpectedType(t.pos, "address lock operation", "Memory Type", t)
-          else {
-            mem.id.typ = Some(t)
-            tenv
-          }
+      {
         case t: TLockedMemType => {
           val memt = t.mem
           mem.id.typ = Some(t)

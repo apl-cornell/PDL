@@ -91,38 +91,22 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     case: (op == 1<2>) {
         split {
             case: (rs2 % 3<5> == 0<5>) {
-                start(f);
-                acquire(f);
                 int<32> res <- call f(rf1, rf2, 0<32>, 0<32>, 0<5>);
-                release(f);
-                end(f);
             }
             case: (rs2 % 3<5> == 1<5>){
                 int<32> res <- rf1 >> rf2;
             }
             default: {
-                start(m);
-                acquire(m);
                 int<32> res <- call m(rf1, rf2);
-                release(m);
-                end(m);
             }
 
         }
     }
     default: {
         if(op % 2<2> == 0<2>) {
-            start(d);
-            acquire(d);
             int<32> res <- call d(rf1, rf2);
-            release(d);
-            end(d);
         } else {
-            start(d2);
-            acquire(d2);
             int<32> res <- call d2(rf1, rf2);
-            release(d2);
-            end(d2);
         }
     }
  }

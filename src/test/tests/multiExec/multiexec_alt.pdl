@@ -53,21 +53,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     rf[rd] <- res;
  } else {
  if (op == 1<2>) {
-    start(m);
-    acquire(m);
     int<32> res <- call m(rf1, rf2);
-    release(m);
-    end(m);
     ---
     block(rf[rd]);
     print(res);
     rf[rd] <- res;
  } else {
-    start(f);
-    acquire(f);
     int<32> res <- call f(rf1, rf2, 0<32>, 0<32>, 0<5>);
-    release(f);
-    end(f);
     ---
     block(rf[rd]);
     print(res);

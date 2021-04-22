@@ -38,7 +38,8 @@ pipe hist(counter: int<10>)[feature: int<10>[10]<a,a>(FAQueue), weight: int<32>[
     h[mcp] <- nm;
     release(h[mcp]);
     ---
-    } else {
+    }
+    if (counter >= 1000<10>) {    
       output(true);
     }
 }
