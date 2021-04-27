@@ -16,6 +16,8 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
+    - name: Install IVerilog
+      run: sudo apt-get install iverilog
     - name: Checkout Code
       uses: actions/checkout@v2
     - name: Cache BSV
