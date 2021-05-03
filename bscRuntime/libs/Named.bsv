@@ -8,97 +8,17 @@ import DReg :: *;
 import Vector :: *;
 import Ehr :: *;
 
-export RenameRF(..);
-export mkRenameRF;
 export mkLSQ;
 
-interface RenameRF#(type elem, type addr, type name);
-   method name readName(addr a);
-   method Bool isValid(name n);
-   method elem read(name a);
-   method ActionValue#(name) allocName(addr a);
-   method Action write(name a, elem b);
-   method Action commit(name a);
-   // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
-endinterface
-   
-
-module mkRenameRF#(parameter Integer aregs, parameter Integer pregs, parameter Bool init, parameter String fileInit)(
- RegFile#(name, elem) regfile, RenameRF#(elem, addr, name) _unused_) provisos
-   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
-    PrimIndex#(addr, an), PrimIndex#(name, nn));
-   
-//TODO generate in testbench code (not part of the library)
-//    RegFile#(name, elem) regfile <- (init) ? mkRegFileLoad(fileInit, 0, fromInteger(pregs - 1)) : mkRegFile(0, fromInteger(pregs - 1));
-   
-   //Initial mapping for all arch regs is identity
-   module mkMapEntry#(Integer i)(Reg#(name));
-      let r <- mkReg(unpack(fromInteger(i)));
-      return r;
-   endmodule
-
-      module mkFreeEntry#(Integer i)(Reg#(Bool));
-      let b = i < aregs ? False : True;
-      let r <- mkReg(b);
-      return r;
-   endmodule
-   
-   module mkOldEntry#(Integer i)(Reg#(name));
-      let r <- mkReg(fromInteger(i));
-      return r;
-   endmodule
-   
-   Vector#(TExp#(szAddr), Reg#(name)) namefile <- genWithM(mkMapEntry);
-   Vector#(TExp#(szName), Reg#(Bool)) busyfile <- genWithM(mkFreeEntry);
-   Vector#(TExp#(szName), Reg#(Bool)) freeList <- genWithM(mkFreeEntry);
-   Vector#(TExp#(szName), Reg#(name)) oldNames <- genWithM(mkOldEntry);
-
-   function Maybe#(name) getFreeName();
-      Maybe#(name) result = tagged Invalid;
-      for (Integer i = 0; i < pregs; i = i + 1) begin
-	 if (result matches tagged Invalid &&& freeList[i])
-	    result = tagged Valid fromInteger(i);
-      end
-      return result;
-   endfunction
-   
-   method name readName(addr a);
-      return namefile[a];
-   endmethod
-   
-   //Valid if NOT busy
-   method Bool isValid(name n);
-      return !busyfile[n];
-   endmethod
-   
-   method elem read(name n);
-      return regfile.sub(n);
-   endmethod 
-   
-   //if there is a free entry in the freelist then allocate it
-   //and save old mapping for arch 
-   //busyfile[n] = True is an invariant that should hold here
-   method ActionValue#(name) allocName(addr a) if (getFreeName matches tagged Valid.n);   
-      busyfile[n] <= True;
-      freeList[n] <= False;
-      oldNames[n] <= namefile[a];
-      namefile[a] <= n;
-      return n;
-   endmethod
-   
-   //Writing data makes it no longer busy
+interface LSQ#(type addr, type elem, type name);
+   method ActionValue#(name) reserveRead(addr a);
+   method ActionValue#(name) reserveWrite(addr a);
    method Action write(name n, elem b);
-      regfile.upd(n, b);
-      busyfile[n] <= False;
-   endmethod
-   
-   //Frees register that this one overwrote
-   method Action commit(name n);
-      $display("Freed name %d at %t", oldNames[n], $time());
-      freeList[oldNames[n]] <= True;
-   endmethod
-   
-endmodule
+   method Bool isValid(name n);
+   method elem read(name n);
+   method Action commitRead(name n);
+   method Action commitWrite(name n);
+endinterface
 
 typedef struct {
    addr a;
