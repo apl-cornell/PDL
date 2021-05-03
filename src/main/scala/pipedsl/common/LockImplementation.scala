@@ -150,6 +150,9 @@ object LockImplementation {
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int]
 
+    //LSQ doesn't need a separate lock id so use this to differentiate
+    def useUniqueLockId(): Boolean = true
+
     def getTypeArgs(szParams: List[Int]): List[Int] = List()
 
     def shortName: String
@@ -511,6 +514,8 @@ object LockImplementation {
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
+
+    override def useUniqueLockId(): Boolean = false
 }
 
   //The following are internal helper functions

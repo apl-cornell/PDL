@@ -165,7 +165,11 @@ object BSVSyntax {
         } else {
           BVar("_unused_", BNumericType(sz))
        }})
-      val params = (mtyp.tparams :+ BVar("lidtyp", lockIdTyp)) ++ lparams
+      val params = if (limpl.useUniqueLockId()) {
+        (mtyp.tparams :+ BVar("lidtyp", lockIdTyp)) ++ lparams
+      } else {
+        mtyp.tparams ++ lparams
+      }
       BInterface(intName, params)
     }
 

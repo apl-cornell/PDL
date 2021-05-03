@@ -294,50 +294,42 @@ typedef struct {
    Bool isValid;
 } LdQEntry#(type addr, type data, type entId) deriving(Bits, Eq);
 
-`define STQ_SIZE 4
-typedef `STQ_SIZE StQSize;
-`define LDQ_SIZE 4
-typedef `LDQ_SIZE LdQSize;
-
-//TODO make size of queues a parameter
-module mkLSQ#(parameter Bool init, parameter String fileInit)(BRAM_PORT #(addr, elem) memory, LSQ#(addr, elem, name) _unused_) provisos
+module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, elem, MemId#(inflight)) memwrap,
+ LSQ#(addr, elem, MemId#(inflight)) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), PrimIndex#(name, nn), Ord#(name), Arith#(name));
 
    /*
     * Schedule for This LSQ
-    * 
+    *
     * isValid < everything -> don't consider data written this cycle (avoid combinational bypass)
     * read < everything -> to match isValid -> only read the beginning of cycle values
     * reserveRead < everything -> reads beginning of cycle values (for queue and current stores) (concurrent reserveWrite doesn't forward data)
     * reserveWrite < everything -> reads beginning of cycle state
     * reserves < write -> can write in the same cycle as reserving, also forwards data to load q
-    * 
+    *
     * reserveRead < commitRead < issueLd -> can free ld entry at any time -> will not issue mem request if freed in same cycle.
     * ld response is always 1 cycle, so an issued ld will always have a place to put its data.
     * (if issueLd; commitread next cycle, then data will be written, but just never used, won't overwrite anything important)
-    * 
+    *
     * everything < commitWrite -> can commit write in the same cycle as writing the data (gets pushed to store issue queue)
     */
-   
 
-   //TODO generate in testbench code
-   //    let memSize = 2 ** valueOf(szAddr);
-   //    let hasOutputReg = False;
-   //    BRAM_PORT #(addr, elem) memory <- (init) ? mkBRAMCore1Load(memSize, hasOutputReg, fileInit, False) : mkBRAMCore1(memSize, hasOutputReg);
+   let memory = memwrap.p;
+   let name = MemId#(inflight)
 
    ///Store Stuff
    Reg#(name) stHead <- mkReg(unpack(0));
-   Vector#(StQSize, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
-   Vector#(StQSize, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
-   Vector#(StQSize, Ehr#(3, Maybe#(elem))) stQData <- replicateM (mkEhr(tagged Invalid));
+   Vector#(inflight, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
+   Vector#(inflight, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
+   Vector#(inflight, Ehr#(3, Maybe#(elem))) stQData <- replicateM (mkEhr(tagged Invalid));
    FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();
    ///Load Stuff
    Reg#(name) ldHead <- mkReg(unpack(0));
-   Vector#(LdQSize, Ehr#(2, Bool)) ldQValid <- replicateM (mkEhr(False));
-   Vector#(LdQSize, Reg#(addr)) ldQAddr <- replicateM (mkReg(unpack(0)));
-   Vector#(LdQSize, Ehr#(3, Maybe#(elem))) ldQData <- replicateM (mkEhr(tagged Invalid));
-   Vector#(LdQSize, Ehr#(3, Maybe#(name))) ldQStr <- replicateM (mkEhr(tagged Invalid));
-   Vector#(LdQSize, Ehr#(2, Bool)) ldQIssued <- replicateM(mkEhr(False));
+   Vector#(inflight, Ehr#(2, Bool)) ldQValid <- replicateM (mkEhr(False));
+   Vector#(inflight, Reg#(addr)) ldQAddr <- replicateM (mkReg(unpack(0)));
+   Vector#(inflight, Ehr#(3, Maybe#(elem))) ldQData <- replicateM (mkEhr(tagged Invalid));
+   Vector#(inflight, Ehr#(3, Maybe#(name))) ldQStr <- replicateM (mkEhr(tagged Invalid));
+   Vector#(inflight, Ehr#(2, Bool)) ldQIssued <- replicateM(mkEhr(False));
 
    //check with beginning of cycle values
    Bool okToSt = !stQValid[stHead][0];
@@ -367,7 +359,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BRAM_PORT #(addr, 
    function Maybe#(name) getMatchingStore(addr a);
       
       Maybe#(name) result = tagged Invalid;
-      for (Integer i = 0; i < valueOf(StQSize); i = i + 1) begin
+      for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 	 if (stQValid[i][0] && stQAddr[i] == a)
 	    begin
 	       if (result matches tagged Valid.idx)
@@ -385,7 +377,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BRAM_PORT #(addr, 
    //the first cycle that they can issue
    function Maybe#(name) getIssuingLoad();
       Maybe#(name) result = tagged Invalid;
-      for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
+      for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 	 //read ldQIssued _after_ commit so we don't issue a load that just got freed
 	 if (ldQValid[i][0] && !isValid(ldQData[i][0]) && !isValid(ldQStr[i][0]) && !ldQIssued[i][1])
 	    begin
@@ -462,7 +454,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BRAM_PORT #(addr, 
    method Action write(name n, elem b);
       stQData[n][1] <= tagged Valid b; //_can_ reserve and write same location in one cycle (write happens after)
       //forward data to all dependent loads
-      for (Integer i = 0; i < valueOf(LdQSize); i = i + 1) begin
+      for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 	 if (ldQStr[i][1] matches tagged Valid.s &&& s == n)
 	    begin
 	       ldQStr[i][1] <= tagged Invalid;
