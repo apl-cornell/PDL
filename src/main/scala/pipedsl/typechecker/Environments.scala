@@ -5,6 +5,7 @@ import pipedsl.common.Errors._
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
+import pipedsl.analysis.TypeInference._
 
 object Environments {
 
@@ -83,6 +84,7 @@ object Environments {
                 }
             }))
         }
+        def apply_subst_typeenv(subst: List[(Id, Type)]): TypeEnv = TypeEnv(typeMap.foldLeft[Map[Id, Type]](Map())((e, kv) => e + (kv._1 -> apply_subst_typ(subst, kv._2))))
     }
 
     case class LockEnv(lockMap: Map[Id, LockState] = Map()) extends Environment[Id, LockState] {
