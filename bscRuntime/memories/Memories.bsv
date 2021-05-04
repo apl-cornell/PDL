@@ -296,7 +296,7 @@ typedef struct {
 
 module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, elem, MemId#(inflight)) memwrap,
  LSQ#(addr, elem, MemId#(inflight)) _unused_) provisos
-   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Eq#(addr), PrimIndex#(name, nn), Ord#(name), Arith#(name));
+   (Bits#(elem, szElem), Bits#(addr, szAddr), Eq#(addr));
 
    /*
     * Schedule for This LSQ
@@ -314,21 +314,21 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
     * everything < commitWrite -> can commit write in the same cycle as writing the data (gets pushed to store issue queue)
     */
 
-   let memory = memwrap.p;
-   let name = MemId#(inflight)
+   let memory = memwrap.port;
+
 
    ///Store Stuff
-   Reg#(name) stHead <- mkReg(unpack(0));
+   Reg#(MemId#(inflight)) stHead <- mkReg(unpack(0));
    Vector#(inflight, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
    Vector#(inflight, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
    Vector#(inflight, Ehr#(3, Maybe#(elem))) stQData <- replicateM (mkEhr(tagged Invalid));
    FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();
    ///Load Stuff
-   Reg#(name) ldHead <- mkReg(unpack(0));
+   Reg#(MemId#(inflight)) ldHead <- mkReg(unpack(0));
    Vector#(inflight, Ehr#(2, Bool)) ldQValid <- replicateM (mkEhr(False));
    Vector#(inflight, Reg#(addr)) ldQAddr <- replicateM (mkReg(unpack(0)));
    Vector#(inflight, Ehr#(3, Maybe#(elem))) ldQData <- replicateM (mkEhr(tagged Invalid));
-   Vector#(inflight, Ehr#(3, Maybe#(name))) ldQStr <- replicateM (mkEhr(tagged Invalid));
+   Vector#(inflight, Ehr#(3, Maybe#(MemId#(inflight)))) ldQStr <- replicateM (mkEhr(tagged Invalid));
    Vector#(inflight, Ehr#(2, Bool)) ldQIssued <- replicateM(mkEhr(False));
 
    //check with beginning of cycle values
@@ -336,29 +336,29 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
    Bool okToLd = !ldQValid[ldHead][0];
 
    //return true if a is older than b, given a queue head (oldest entry) h
-   function Bool isOlder(name a, name b, name h);
+   function Bool isOlder(MemId#(inflight) a, MemId#(inflight) b, MemId#(inflight) h);
       let nohmid = a < b && !(a < h && b >= h);
       let hmid = b < h && a >= h;
       return nohmid || hmid;
    endfunction
    
-   function Bool isNewer(name a, name b, name h);
+   function Bool isNewer(MemId#(inflight) a, MemId#(inflight) b, MemId#(inflight) h);
       return !isOlder(a, b, h);
    endfunction
 
-   function Bool isNewerStore(name a, name b);
+   function Bool isNewerStore(MemId#(inflight) a, MemId#(inflight) b);
       return isNewer(a, b, stHead);
    endfunction
    
-   function Bool isOlderLoad(name a, name b);
+   function Bool isOlderLoad(MemId#(inflight) a, MemId#(inflight) b);
       return isOlder(a, b, ldHead);
    endfunction
    
    //search starting at the _newest_ store
    //newest store is at head - 1 (and go backwards)
-   function Maybe#(name) getMatchingStore(addr a);
+   function Maybe#(MemId#(inflight)) getMatchingStore(addr a);
       
-      Maybe#(name) result = tagged Invalid;
+      Maybe#(MemId#(inflight)) result = tagged Invalid;
       for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 	 if (stQValid[i][0] && stQAddr[i] == a)
 	    begin
@@ -375,8 +375,8 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
    //search starting at the _oldest_ load
    //always read start of cycle values ([0] from Ehrs) -> loads will issue (no earlier than)
    //the first cycle that they can issue
-   function Maybe#(name) getIssuingLoad();
-      Maybe#(name) result = tagged Invalid;
+   function Maybe#(MemId#(inflight)) getIssuingLoad();
+      Maybe#(MemId#(inflight)) result = tagged Invalid;
       for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 	 //read ldQIssued _after_ commit so we don't issue a load that just got freed
 	 if (ldQValid[i][0] && !isValid(ldQData[i][0]) && !isValid(ldQStr[i][0]) && !ldQIssued[i][1])
@@ -401,7 +401,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
 //      $display("Issuing Memory Store for addr %d, data %d, %t", st.a, st.d, $time());
    endrule
    
-   Reg#(Maybe#(name)) nextData <- mkDReg(tagged Invalid);
+   Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
    
    //run this _after_ commits so that we don't issue a load that's getting freed this cycle
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
@@ -416,8 +416,8 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
       ldQData[idx][2] <= tagged Valid memory.read;
    endrule
       
-   method ActionValue#(name) reserveRead(addr a) if (okToLd);
-      Maybe#(name) matchStr = getMatchingStore(a);
+   method ActionValue#(MemId#(inflight)) reserveRead(addr a) if (okToLd);
+      Maybe#(MemId#(inflight)) matchStr = getMatchingStore(a);
       Maybe#(elem) data = tagged Invalid;
       //if matching store, copy its data over (which may be invalid)
       if (matchStr matches tagged Valid.idx)
@@ -439,7 +439,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
       return ldHead;
    endmethod
    
-   method ActionValue#(name) reserveWrite(addr a) if (okToSt);
+   method ActionValue#(MemId#(inflight)) reserveWrite(addr a) if (okToSt);
       //Using index [0] means these are the first writes -- [1] reads can combinationally observe these writes
       stQValid[stHead][0] <= True;
       stQAddr[stHead] <= a;
@@ -451,7 +451,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
 
    //ldQStr[i][1] -> read & write _after_ reserves (write to [0])
    //ldQData[i][1] ->  write _after_ reserve
-   method Action write(name n, elem b);
+   method Action write(MemId#(inflight) n, elem b);
       stQData[n][1] <= tagged Valid b; //_can_ reserve and write same location in one cycle (write happens after)
       //forward data to all dependent loads
       for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
@@ -465,7 +465,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
    endmethod
 
    //checks if it's safe to read data associated w/ ldq entry
-   method Bool isValid(name n);
+   method Bool isValid(MemId#(inflight) n);
       //TODO we could maybe ignore the ldQValid[n] check
       //this should only be called on valid entries
       return ldQValid[n][0] && isValid(ldQData[n][0]); //read early (0) so can't observe written values -> will need to wait until next cycle
@@ -473,7 +473,7 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
    endmethod
 
 
-   method elem read(name n);
+   method elem read(MemId#(inflight) n);
       //this index needs to be >= used by isValid
       //0 => implies data must have been written last cycle & reservation made last cycle
       //1 => reservation may have been made this cycle
@@ -486,21 +486,22 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
 
    //Load may or may not ever have been issued to main mem
    //write _after_ all others
-   method Action commitRead(name n);
+   method Action commitRead(MemId#(inflight) n);
       ldQValid[n][1] <= False;
       ldQStr[n][2] <= tagged Invalid;
       ldQIssued[n][0] <= False;
    endmethod
    
    //Only Issue stores after committing
-   method Action commitWrite(name n);
+   method Action commitWrite(MemId#(inflight) n);
       stQValid[n][1] <= False;
       elem data = unpack(0);
       if (stQData[n][2] matches tagged Valid.dt) //if _write_ occurred this cycle we want to observe it
 	 data = dt;
       stIssueQ.enq(StIssue { a: stQAddr[n], d: data });
    endmethod
-
+  
+   
 endmodule
 
 
