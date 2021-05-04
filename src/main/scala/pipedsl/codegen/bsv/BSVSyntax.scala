@@ -53,9 +53,14 @@ object BSVSyntax {
           BSizedInt(unsigned = true, addrSize), toType(elem))
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
-        val lidtyp = if (idsz.isDefined) {
-          bsints.getLockHandleType(idsz.get)
-        } else bsints.getDefaultLockHandleType
+        val lidtyp =  if (limpl.useUniqueLockId()) {
+          if (idsz.isDefined) {
+            bsints.getLockHandleType(idsz.get)
+          } else bsints.getDefaultLockHandleType
+        } else {
+          //re-use the id from the memory
+          mtyp.tparams.last.typ
+        }
         getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
