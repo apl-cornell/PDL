@@ -77,14 +77,17 @@ interface AddrLockAsyncMem#(type addr, type elem, type rid, type lid, numeric ty
 endinterface
 
 interface LSQ#(type addr, type elem, type name);
+   method ActionValue#(name) req(name a, elem b, Bool isWrite);
+   method elem peekResp(name i);
+   method Bool checkRespId(name i);
+   method Action resp(name i);
    method ActionValue#(name) reserveRead(addr a);
    method ActionValue#(name) reserveWrite(addr a);
-   method Action write(name n, elem b);
    method Bool isValid(name n);
-   method elem read(name n);
    method Action commitRead(name n);
    method Action commitWrite(name n);
 endinterface
+
 module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr, elem))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Bounded#(addr));
    RegFile#(addr, elem) rf;
@@ -500,8 +503,25 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
 	 data = dt;
       stIssueQ.enq(StIssue { a: stQAddr[n], d: data });
    endmethod
-  
-   
+
+  method ActionValue#(MemId#(inflight)) req(MemId#(inflight) a, elem b, Bool isWrite);
+    if (isWrite) write(a, b);
+    return a;
+  endmethod
+
+  method elem peekResp((MemId#(inflight) i);
+    return read(i);
+  endmethod
+
+  //Dummy methods needed to fit interface
+  method Bool checkRespId((MemId#(inflight) i);
+    return True;
+  endmethod
+
+  method Action resp((MemId#(inflight) i);
+    return;
+  endmethod
+
 endmodule
 
 

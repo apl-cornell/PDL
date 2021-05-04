@@ -53,7 +53,9 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         val send = IMemSend(handle, isWrite = false, mem, None, index)
         val recv = IMemRecv(mem, handle, Some(lhs))
         send.memOpType = e.memOpType
+        send.granularity = e.granularity
         recv.memOpType = e.memOpType
+        recv.granularity = e.granularity
         (send, recv)
       //Mem Write
       case (e@EMemAccess(mem, index@EVar(_)), data@EVar(_)) => mem.typ.get match {
@@ -62,7 +64,9 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           val send = IMemSend(handle, isWrite = true, mem, Some(data), index)
           val recv = IMemRecv(mem, handle, None)
           send.memOpType = e.memOpType
+          send.granularity = e.granularity
           recv.memOpType = e.memOpType
+          recv.granularity = e.granularity
           (send, recv)
           //if the memory is sequential we don't use handle since it
           //is assumed to complete at the end of the cycle
