@@ -394,6 +394,34 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
       return result;
    endfunction
    
+   //ldQStr[i][1] -> read & write _after_ reserves (write to [0])
+   //ldQData[i][1] ->  write _after_ reserve
+   function Action write(MemId#(inflight) n, elem b);
+      return action
+		stQData[n][1] <= tagged Valid b; //_can_ reserve and write same location in one cycle (write happens after)
+				    //forward data to all dependent loads
+				    for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
+				       if (ldQStr[i][1] matches tagged Valid.s &&& s == n)
+					  begin
+					     ldQStr[i][1] <= tagged Invalid;
+					     //order this after reserve (so reserve addr ;write addr forwards data appropriately)
+					     ldQData[i][1] <= tagged Valid b;
+					  end
+				    end
+	     endaction;
+   endfunction
+
+   function elem read(MemId#(inflight) n);
+      //this index needs to be >= used by isValid
+      //0 => implies data must have been written last cycle & reservation made last cycle
+      //1 => reservation may have been made this cycle
+      //2 => data may have been written this cycle
+      if (ldQData[n][0] matches tagged Valid.data)
+	 return data;
+      else
+	 return unpack(0);
+   endfunction
+
    //TODO avoid starvation between issueSt and issueLd (currently one always has precedence over the other)
    //this shouldn't cause liveness issues in real designs but we would need to deal w/ this
    //when considering other memory models   
@@ -452,20 +480,6 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
    endmethod
    
 
-   //ldQStr[i][1] -> read & write _after_ reserves (write to [0])
-   //ldQData[i][1] ->  write _after_ reserve
-   method Action write(MemId#(inflight) n, elem b);
-      stQData[n][1] <= tagged Valid b; //_can_ reserve and write same location in one cycle (write happens after)
-      //forward data to all dependent loads
-      for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
-	 if (ldQStr[i][1] matches tagged Valid.s &&& s == n)
-	    begin
-	       ldQStr[i][1] <= tagged Invalid;
-	       //order this after reserve (so reserve addr ;write addr forwards data appropriately)
-	       ldQData[i][1] <= tagged Valid b;
-	    end
-      end
-   endmethod
 
    //checks if it's safe to read data associated w/ ldq entry
    method Bool isValid(MemId#(inflight) n);
@@ -473,18 +487,6 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
       //this should only be called on valid entries
       return ldQValid[n][0] && isValid(ldQData[n][0]); //read early (0) so can't observe written values -> will need to wait until next cycle
    //if we increase these EHR indices, we could allow comb bypass
-   endmethod
-
-
-   method elem read(MemId#(inflight) n);
-      //this index needs to be >= used by isValid
-      //0 => implies data must have been written last cycle & reservation made last cycle
-      //1 => reservation may have been made this cycle
-      //2 => data may have been written this cycle
-      if (ldQData[n][0] matches tagged Valid.data)
-	 return data;
-      else
-	 return unpack(0);
    endmethod
 
    //Load may or may not ever have been issued to main mem
@@ -509,17 +511,16 @@ module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, el
     return a;
   endmethod
 
-  method elem peekResp((MemId#(inflight) i);
+   method elem peekResp(MemId#(inflight) i);
     return read(i);
   endmethod
 
   //Dummy methods needed to fit interface
-  method Bool checkRespId((MemId#(inflight) i);
+   method Bool checkRespId(MemId#(inflight) i);
     return True;
   endmethod
 
-  method Action resp((MemId#(inflight) i);
-    return;
+  method Action resp(MemId#(inflight) i);
   endmethod
 
 endmodule
