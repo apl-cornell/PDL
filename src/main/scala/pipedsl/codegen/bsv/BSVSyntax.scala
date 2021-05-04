@@ -75,7 +75,7 @@ object BSVSyntax {
             //if not in the handle map, use the appropriate default handle size. If the
             //handle is for a normal module then there is no default
             n.typ.get match {
-              case _: TLockedMemType => bsints.getDefaultMemHandleType
+              case l: TLockedMemType => if(l.limpl.useUniqueLockId()) bsints.getDefaultMemHandleType else modmap(n)
               case _: TMemType => bsints.getDefaultMemHandleType
               case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
             }

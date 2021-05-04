@@ -223,8 +223,6 @@ object BluespecGeneration {
 
     private val lockHandleVars = mod.modules.foldLeft(Map[Id, BSVType]())((mapping, mod) => {
       mod.typ match {
-          //TODO once we unify memories and modules
-        case TModType(_, _, _, _) => mapping
         case TLockedMemType(_, idSz, _) => if (idSz.isEmpty) {
           //instantiate type variable
           val name = "_lidTyp_" + mod.name.v
@@ -236,6 +234,7 @@ object BluespecGeneration {
         case _ => mapping
       }
     })
+
     private val translator = new BSVTranslator(bsInts, bsvMods ++ lockHandleVars, bsvHandles)
     private var tmpCount = 0
     private def freshTmp(t: BSVType): BVar = {
