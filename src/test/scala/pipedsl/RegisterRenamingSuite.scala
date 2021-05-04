@@ -11,7 +11,8 @@ class RegisterRenamingSuite extends AnyFunSuite{
 
   private val inputFolder = folder + "/memInputs"
   private val inputRename = inputFolder + "/rename"
-  private val inputMap = Map("rename" -> inputRename)
+  private val inputM = inputFolder + "/m"
+  private val inputMap = Map("rename" -> inputRename, "m" -> inputM)
 
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)

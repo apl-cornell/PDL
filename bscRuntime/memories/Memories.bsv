@@ -297,7 +297,7 @@ typedef struct {
    Bool isValid;
 } LdQEntry#(type addr, type data, type entId) deriving(Bits, Eq);
 
-module mkLSQ#(parameter Bool init, parameter String fileInit)(BramPort#(addr, elem, MemId#(inflight)) memwrap,
+module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
  LSQ#(addr, elem, MemId#(inflight)) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Eq#(addr));
 
