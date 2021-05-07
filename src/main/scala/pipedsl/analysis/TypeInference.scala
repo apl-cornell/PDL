@@ -86,7 +86,8 @@ object TypeInference {
     val modEnv = env.add(m.name, TModType(inputTypes, modTypes, m.ret, Some(m.name)))
     val inEnv = m.inputs.foldLeft[Environment[Id, Type]](modEnv)((env, p) => env.add(p.name, p.typ))
     val pipeEnv = m.modules.foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m.name, m.typ))
-    checkCommand(m.body, pipeEnv.asInstanceOf[TypeEnv], List())
+    println(checkCommand(m.body, pipeEnv.asInstanceOf[TypeEnv], List()))
+    
     modEnv
   }
   
@@ -106,7 +107,7 @@ object TypeInference {
 //INVARIANTS
 //Transforms the argument sub by composing any additional substitution
 //Transforms the argument env by subbing in the returned substitution and adding any relevatn variables
-  def checkCommand(c: Command, env: TypeEnv, sub: Subst): (TypeEnv, Subst) = c match {
+  def checkCommand(c: Command, env: TypeEnv, sub: Subst): (TypeEnv, Subst) = {println(sub); c match {
     case CLockOp(mem, op) =>  //test basic first
       (env, sub)
     case CEmpty() => (env, sub)
@@ -152,7 +153,10 @@ object TypeInference {
       (env, sub)
       //How to check wellformedness with the module body
     case CRecv(lhs, rhs, typ) =>
-      val (slhs, tlhs, lhsEnv) = infer(env, lhs)
+      val (slhs, tlhs, lhsEnv) = lhs match {
+        case EVar(id) => (List(), typ.getOrElse(generateTypeVar()), env)
+        case _ => infer(env, lhs)
+      }
       val (srhs, trhs, rhsEnv) = infer(lhsEnv, rhs)
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
@@ -168,11 +172,18 @@ object TypeInference {
       }
       (newEnv.asInstanceOf[TypeEnv].apply_subst_typeenv(sret), sret)
     case CAssign(lhs, rhs, typ) =>
-      val (slhs, tlhs, lhsEnv) = infer(env, lhs)
+      println(lhs)
+      println(rhs)
+      val (slhs, tlhs, lhsEnv) = (List(), typ.getOrElse(generateTypeVar()), env)
       val (srhs, trhs, rhsEnv) = infer(lhsEnv, rhs)
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
-      val rhstyp = apply_subst_typ(tempSub, trhs)
+      val rhstyp = apply_subst_typ(tempSub, trhs)      
+      println(tlhs)
+      println(trhs)
+      println(lhstyp)
+      println(rhstyp)
+      
       val s1 = unify(lhstyp, rhstyp)
       val sret = compose_many_subst(tempSub, s1, typ match {
         case Some(value) => compose_subst(unify(lhstyp, value), unify(rhstyp, value))
@@ -188,8 +199,12 @@ object TypeInference {
       val (e2, s2) = checkCommand(c2, e1, s)
       (e2, s2)
   }
+}
 
-  private def generateTypeVar(): TNamedType = TNamedType(Id("__TYPE__" + counter)); counter += 1
+  private def generateTypeVar(): TNamedType = {
+    counter += 1
+    TNamedType(Id("__TYPE__" + counter))
+  }
   private def occursIn(name: Id, b: Type): Boolean = b match {
     case TSizedInt(len, unsigned) => false
     case TString() => false
@@ -282,8 +297,9 @@ object TypeInference {
       val subTemp = compose_subst(s1, s2)
       val t1New = apply_subst_typ(subTemp, t1)
       val t2New = apply_subst_typ(subTemp, t2)
+      val argSub = unify(t1New, t2New)
       val subst = unify(TFun(List(t2New,t1New), retType), binOpExpectedType(op))
-      val retSubst = compose_subst(subTemp, subst)
+      val retSubst = compose_many_subst(subTemp, argSub, subst)
       val retTyp = apply_subst_typ(retSubst, retType)
       (retSubst, retTyp, env2.apply_subst_typeenv(retSubst))
     case EMemAccess(mem, index) => 

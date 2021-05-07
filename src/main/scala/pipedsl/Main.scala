@@ -6,7 +6,7 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.microsoft.z3.Context
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.io.FilenameUtils
-import pipedsl.analysis.{PredicateAnalysis, TimingAnalysis, TypeAnalysis}
+import pipedsl.analysis.{PredicateAnalysis, TimingAnalysis, TypeAnalysis, TypeInference}
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
@@ -45,6 +45,7 @@ object Main {
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile.toPath)))
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".parse"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
+    println(r)
     if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(r.get)
     r.get
   }
@@ -68,10 +69,11 @@ object Main {
     val pinfo = new ProgInfo(prog)
     try {
       val canonProg = CanonicalizePass.run(prog)
-      TypeAnalysis.get(prog).checkProg()
-      TimingAnalysis.get(prog).checkProg()
-      MarkNonRecursiveModulePass.run(prog)
-      val recvProg = SimplifyRecvPass.run(prog)
+      TypeInference.checkProgram(canonProg)
+      TypeAnalysis.get(canonProg).checkProg()
+      TimingAnalysis.get(canonProg).checkProg()
+      MarkNonRecursiveModulePass.run(canonProg)
+      val recvProg = SimplifyRecvPass.run(canonProg)
       new LockRegionChecker(recvProg).check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker()
       val locks = lockWellformedChecker.check(canonProg)
