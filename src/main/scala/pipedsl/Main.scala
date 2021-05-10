@@ -45,7 +45,6 @@ object Main {
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile.toPath)))
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".parse"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
-    println(r)
     if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(r.get)
     r.get
   }
