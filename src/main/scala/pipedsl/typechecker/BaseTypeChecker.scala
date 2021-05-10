@@ -1,3 +1,4 @@
+/**
 package pipedsl.typechecker
 
 import pipedsl.common.Errors._
@@ -118,11 +119,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ast = checkModuleBodyWellFormed(cons, assignees)
       val asf = checkModuleBodyWellFormed(alt, assignees)
       ast ++ asf
-    case CRecv(lhs@EVar(id), _) =>
+    case CRecv(lhs@EVar(id), _, _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
       }
-    case CAssign(lhs@EVar(id), _) =>
+    case CAssign(lhs@EVar(id), _, _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
     }
@@ -227,13 +228,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val efalse = checkCommand(alt, cenv)
       etrue.intersect(efalse)
     }
-    case CAssign(lhs, rhs) => {
+    case CAssign(lhs, rhs, _) => {
       val (rTyp, renv) = checkExpression(rhs, tenv)
       val (lTyp, lenv) = checkExpression(lhs, renv)
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "assignment", lTyp, rTyp)
     }
-    case CRecv(lhs, rhs) => {
+    case CRecv(lhs, rhs, _) => {
       val (rTyp, renv) = checkExpression(rhs, tenv)
       val (lTyp, lenv) = checkExpression(lhs, renv)
       if (isSubtype(rTyp, lTyp)) lenv
@@ -301,7 +302,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
       
-    case CEmpty => tenv
+    case CEmpty() => tenv
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -468,3 +469,4 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case _ => Set()
   }
 }
+ */

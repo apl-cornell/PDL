@@ -272,9 +272,10 @@ object DAGSyntax {
     def specId = Id("__spec__" + specVar.id.v)
 
     val predVar = EVar(predId)
-    predVar.typ = specVar.typ
+    //TODO Uncomment
+    //predVar.typ = specVar.typ
     //extract prediction to variable
-    this.addCmd(CAssign(predVar, specVal))
+    //this.addCmd(CAssign(predVar, specVal))
     //set pred(specId) = prediction
     this.addCmd(ISpeculate(specId, specVar, predVar))
     //At end of verification update the predction success
@@ -290,9 +291,9 @@ object DAGSyntax {
    * Additionally, it will send data to the head of either the true or false stages based
    * on the result of the condition
    * @param n The unique identifier for this stage
-   * @param cond The conditional expression
-   * @param trueStages The list of stages to execute if cond is true
-   * @param falseStages The list of stages to execute if cond is false
+   * @param conds The conditional expressions
+   * @param condStages The list of stages to execute with cond
+   * @param defaultStages The list of stages to execute if all conds are false
    * @param joinStage The stage to execute after one of the branches.
    */
   class IfStage(n: Id, val conds: List[Expr], var condStages: List[List[PStage]],
@@ -304,13 +305,11 @@ object DAGSyntax {
     val defaultNum = conds.size
     val condVar = EVar(Id("__cond" + n.v))
     val intSize = log2(defaultNum)
-    condVar.typ = Some(TSizedInt(intSize, true))
-    condVar.id.typ = condVar.typ
     var eTernary = ETernary(conds(defaultNum - 1), EInt(defaultNum - 1, bits = intSize), EInt(defaultNum, bits = intSize))
     for(i <- defaultNum-2 to 0 by -1 ) {
       eTernary = ETernary(conds(i), EInt(i, bits = intSize), eTernary.copy())
     }
-    this.addCmd(CAssign(condVar, eTernary))
+    this.addCmd(CAssign(condVar, eTernary, Some(TSizedInt(intSize, true))))
     for (i <- 0 until defaultNum) {
       this.addEdgeTo(condStages(i).head, condSend = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))
       condStages(i).last.addEdgeTo(joinStage, condRecv = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))

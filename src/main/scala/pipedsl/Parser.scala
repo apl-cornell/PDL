@@ -143,14 +143,13 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
-    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t; CAssign(n, r) } |
-      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
-        CRecv(l, r)
+    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => CAssign(n, r, t) } |
+      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => CRecv(l, r, t)
       } |
       check |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
-      "acquire" ~> parens(lockArg) ^^ { i => CSeq(CLockOp(i, Reserved), CLockOp(i, Acquired)) } |
+      "acquire" ~> parens(lockArg) ^^ { i => CSeq(CLockOp(i, Reserved), CLockOp(copyLockArg(i), Acquired)) } |
       "reserve" ~> parens(lockArg) ^^ { i => CLockOp(i, Reserved)} |
       "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired) } |
       "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released)} |
@@ -159,6 +158,15 @@ class Parser extends RegexParsers with PackratParsers {
       "print" ~> parens(variable) ^^ (e => CPrint(e)) |
       expr ^^ (e => CExpr(e)) 
   }
+  
+  private def copyLockArg(l: LockArg): LockArg = {
+    val evar = l.evar match {
+      case Some(e) => Some(e.copy(id = e.id.copy()))
+      case None => None
+    }
+    LockArg(l.id.copy(), evar)
+  }
+  
   
   lazy val lockArg: P[LockArg] = positioned { 
     iden ~ brackets(variable).? ^^ {case i ~ v => LockArg(i, v)}
@@ -171,7 +179,6 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val speculate: P[Command] = positioned {
     "speculate" ~> parens(typ ~ variable ~ "=" ~ expr ~ "," ~ block ~ "," ~ block) ^^ {
       case t ~ v ~ _ ~ ev ~ _ ~ cv ~ _ ~ cs =>
-        v.typ = Some(t)
         CSpeculate(v, ev, cv, cs)
     }
   }
@@ -186,23 +193,23 @@ class Parser extends RegexParsers with PackratParsers {
     "default:" ~> block
   }
   lazy val split: P[Command] = positioned {
-    "split" ~> braces(rep(casestmt) ~ defaultcase.?) ^^ { case cl ~ dc => CSplit(cl, if (dc.isDefined) dc.get else CEmpty) }
+    "split" ~> braces(rep(casestmt) ~ defaultcase.?) ^^ { case cl ~ dc => CSplit(cl, if (dc.isDefined) dc.get else CEmpty()) }
   }
 
   lazy val block: P[Command] = {
-    braces(cmd.?) ^^ (c => c.getOrElse(CEmpty))
+    braces(cmd.?) ^^ (c => c.getOrElse(CEmpty()))
   }
 
   lazy val conditional: P[Command] = positioned {
     "if" ~> parens(expr) ~ block ~ ("else" ~> blockCmd).? ^^ {
-      case cond ~ cons ~ alt => CIf(cond, cons, if (alt.isDefined) alt.get else CEmpty)
+      case cond ~ cons ~ alt => CIf(cond, cons, if (alt.isDefined) alt.get else CEmpty())
     }
   }
 
-  lazy val seqCmd: P[Command] = {
+  lazy val seqCmd: P[Command] = { 
     simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
       blockCmd ~ seqCmd ^^ { case c1 ~ c2 => CSeq(c1, c2) } |
-      simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty }
+      simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty() }
   }
 
   lazy val cmd: P[Command] = positioned {
@@ -234,7 +241,6 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val typeName: P[Type] = iden ^^ { i => TNamedType(i) }
 
   lazy val param: P[Param] = iden ~ ":" ~ (typ | typeName) ^^ { case i ~ _ ~ t =>
-    i.typ = Some(t)
     Param(i, t)
   }
 

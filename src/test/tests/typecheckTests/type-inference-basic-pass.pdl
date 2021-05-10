@@ -1,0 +1,143 @@
+
+def helper1(a: int<32>, b:bool, c: String): int<32> {
+  d = a + 1<32>;
+  e = b && false;
+  if (e) {
+    f = c;
+  }
+  return d;
+}
+
+def helper2(a:bool, b: bool): bool {
+  c = a && b;
+  return c;
+}
+
+pipe test1(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  }
+}
+
+pipe test2(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  } else {
+    d = b;
+  }
+}
+
+pipe test3()[] {
+  a = true;
+  b = a;
+  c = a || b;
+  d = c || b;
+  if (c) {
+    e = 1<32>;
+  }
+  if (d) {
+    f = 1<32>;
+  }
+}
+
+pipe test4()[] {
+  a = true;
+  b = false;
+  c = a == b;
+  d = 5<32>;
+  e = 6<32>;
+  f = e==d;
+  if (c) {
+
+  }
+  if (f) {
+
+  }
+}
+
+pipe test5()[] {
+  a = 5<32>;
+  b = 6<32>;
+  c = a + b;
+  d = c * b;
+  e = c / d;
+  f = e % d;
+  g = e - f;
+  h = g > f;
+  i = g <= f;
+  j = h && i;
+  if (j) {
+
+  }
+}
+
+
+pipe test6(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  } else {
+    d = b;
+  }
+}
+
+pipe test7()[rf: int<32>[32]] {
+  a = 1<32>;
+  b = a;
+  c = rf[a];
+  d = c == a;
+  e = d && d;
+} 
+
+pipe test8()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = true;
+  c = false;
+  if (helper2(helper2(b, c),b)) {
+    d = a;
+  }
+  f = a;
+  s = "yES";
+  e = helper1(f, helper2(b, c), s);
+  if (e==f) {
+
+  }
+}
+
+pipe test9()[rf: int<32>[32]] {
+  a = true || false;
+  b = a;
+  c = b ;
+  d = b && c;
+  e = (b) ? d : c;
+  if (!e) {
+
+  }
+}
+
+pipe test10(a: bool, b: int<32>)[rf: int<32>[32]]: int<32> {
+  output(5<32>);
+}
+
+pipe test11()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = 10<32>;
+  c = a + b;
+  d = false;
+  e = true;
+  f = e || d;
+  g = call test10(f, c);
+  h = g == b;
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

@@ -5,6 +5,7 @@ import pipedsl.common.Errors._
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities._
+import pipedsl.analysis.TypeInference._
 
 object Environments {
 
@@ -49,7 +50,10 @@ object Environments {
     case class TypeEnv(
             typeMap: Map[Id, Type] = Map()) extends Environment[Id, Type] {
         
-        override def apply(id: Id) = this.get(id).getOrThrow(MissingType(id.pos, id.v))
+        override def apply(id: Id) = this.get(id) match {
+            case Some(value) => value
+            case None => throw MissingType(id.pos, id.v)
+        }
         
         override def add(name: Id, typ: Type): Environment[Id, Type] = typeMap.get(name) match {
             case Some(t) => throw AlreadyBoundType(name.pos, name.v, t, typ)
@@ -80,6 +84,7 @@ object Environments {
                 }
             }))
         }
+        def apply_subst_typeenv(subst: List[(Id, Type)]): TypeEnv = TypeEnv(typeMap.foldLeft[Map[Id, Type]](Map())((e, kv) => e + (kv._1 -> apply_subst_typ(subst, kv._2))))
     }
 
     case class LockEnv(lockMap: Map[Id, LockState] = Map()) extends Environment[Id, LockState] {
@@ -179,6 +184,6 @@ object Environments {
 
         //This is filler code, I don't think we ever actually need this
         override def union(other: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = other
-        
+
     }
 }

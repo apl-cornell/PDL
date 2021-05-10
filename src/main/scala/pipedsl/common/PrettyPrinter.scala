@@ -2,6 +2,7 @@ package pipedsl.common
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
 
+import pipedsl.analysis.TypeAnalysis
 import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage}
 import pipedsl.common.Errors.UnexpectedType
 import pipedsl.common.Syntax._
@@ -25,7 +26,10 @@ class PrettyPrinter(output: Option[File]) {
 
   def printHelper(s: String, i: Int): Unit = pline((" " * i) + s)
 
+  var typeAnalysis: TypeAnalysis = null
+  
   def printProgram(p: Prog): Unit = {
+    typeAnalysis = TypeAnalysis.get(p)
     p.fdefs.foreach(f => printFunction(f))
     p.moddefs.foreach(m => printModule(m))
     printCircuit(p.circ)
@@ -85,9 +89,9 @@ class PrettyPrinter(output: Option[File]) {
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
 
-      case Syntax.CAssign(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
+      case Syntax.CAssign(lhs, rhs, typ) => ins + (if (typ.isDefined) printTypeToString(typeAnalysis.typeCheck(lhs)) + " " else "") +
         printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
-      case Syntax.CRecv(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") + 
+      case Syntax.CRecv(lhs, rhs, typ) => ins + (if (typ.isDefined) printTypeToString(typeAnalysis.typeCheck(lhs)) + " " else "") + 
         printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
@@ -97,16 +101,16 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
       case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
-        printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + 
+        printTypeToString(typeAnalysis.typeCheck(predVar)) + " " + printExprToString(predVar) + " = " + 
         printExprToString(predVal) + ", {\n" +
         printCmdToString(verify, indent + 4) + "\n" + ins + "}, {\n" +
         printCmdToString(body, indent + 4) + "\n" + ins + "}"
       case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
-      case Syntax.CEmpty => ins
+      case Syntax.CEmpty() => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +
         cmd.foldLeft("")((s, c) => s + printCmdToString(c))
-      case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +
+      case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(typeAnalysis.typeCheck(originalSpec)) + " " +
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ISpeculate(specId, specVar, value) => ins + specId + "= speculate(" + printExprToString(specVar) + ", " + 
         printExprToString(value) + ");"

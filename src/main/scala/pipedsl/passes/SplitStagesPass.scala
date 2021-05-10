@@ -81,7 +81,7 @@ class SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PSt
     case CSeq(c1, c2) =>
       val nstage = splitToStages(c1, curStage)
       nstage.init ++ splitToStages(c2, nstage.last)
-    case CEmpty => List(curStage)
+    case CEmpty() => List(curStage)
     case _ => curStage.addCmd(c); List(curStage)
   }
 

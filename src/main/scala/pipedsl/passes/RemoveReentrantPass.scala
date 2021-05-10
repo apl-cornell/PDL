@@ -120,9 +120,9 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
 
   private def getReassignedHandle(handle: EVar): EVar = {
     val newId = Id(handle.id.v + "_done")
-    newId.typ = handle.id.typ
+    //newId.typ = handle.id.typ
     val newVar = EVar(newId)
-    newVar.typ = handle.typ
+    //newVar.typ = handle.typ
     newVar
   }
 

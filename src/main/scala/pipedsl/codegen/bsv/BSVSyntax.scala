@@ -1,5 +1,6 @@
 package pipedsl.codegen.bsv
 
+import pipedsl.analysis.TypeAnalysis
 import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
@@ -26,7 +27,7 @@ object BSVSyntax {
   case object BEmptyModule extends BSVType
 
   class BSVTranslator(val bsints: BluespecInterfaces,
-    val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map()) {
+    val modmap: Map[Id, BSVType] = Map(), val handleMap: Map[BSVType, BSVType] = Map(), val typeAnalysis: TypeAnalysis) {
 
     private var variablePrefix = ""
 
@@ -46,15 +47,15 @@ object BSVSyntax {
         if (isLock) {
           BInterface("Maybe", List(BVar("basehandletyp", bsints.getDefaultLockHandleType)))
         } else {
-          val modtyp = toBSVType(n.typ.get)
+          val modtyp = toBSVType(typeAnalysis.typeCheck(n))
           if (handleMap.contains(modtyp)) {
             handleMap(modtyp)
           } else {
             //if not in the handle map, use the appropriate default handle size. If the
             //handle is for a normal module then there is no default
-            n.typ.get match {
+            typeAnalysis.typeCheck(n) match {
               case _: TMemType => bsints.getDefaultMemHandleType
-              case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
+              case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", typeAnalysis.typeCheck(n))
             }
           }
         }
@@ -71,7 +72,7 @@ object BSVSyntax {
     }
 
     def toBSVVar(i: Id): BVar = {
-      BVar(variablePrefix + i.v, toBSVType(i.typ.get))
+      BVar(variablePrefix + i.v, toBSVType(typeAnalysis.typeCheck(i)))
     }
 
     def toBSVVar(v: EVar): BVar = {
@@ -105,7 +106,7 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toBSVExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index) => bsints.getCombRead(BVar(mem.v, toBSVType(mem.typ.get)), toBSVExpr(index))
+      case EMemAccess(mem, index) => bsints.getCombRead(BVar(mem.v, toBSVType(typeAnalysis.typeCheck(mem))), toBSVExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toBSVExpr(ex))
       case EInvalid => BInvalid
@@ -153,14 +154,14 @@ object BSVSyntax {
         translateFuncBody(c1) ++ translateFuncBody(c2)
       case CIf(cond, cons, alt) =>
         List(BIf(toBSVExpr(cond), translateFuncBody(cons), translateFuncBody(alt)))
-      case CAssign(lhs, rhs) =>
+      case CAssign(lhs, rhs, _) =>
         List(BDecl(toBSVVar(lhs), Some(toBSVExpr(rhs))))
       case CReturn(exp) =>
         List(BReturnStmt(toBSVExpr(exp)))
       case CExpr(exp) =>
         List(BExprStmt(toBSVExpr(exp)))
       //TODO case Syntax.CSplit(cases, default) =>
-      case CEmpty => List()
+      case CEmpty() => List()
       case _ => throw UnexpectedCommand(c)
     }
   }

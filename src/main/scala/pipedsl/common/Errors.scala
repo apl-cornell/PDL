@@ -128,4 +128,8 @@ object Errors {
   case class UnexpectedBSVType(msg: String) extends RuntimeException(msg)
   
   case class MalformedLockTypes(msg: String) extends RuntimeException(msg)
+  
+  case class UnificationError(t1: Type, t2: Type) extends RuntimeException(
+    s"Unable to unify type $t1 and type $t2"
+  )
 }

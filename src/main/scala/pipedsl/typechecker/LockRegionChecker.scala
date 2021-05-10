@@ -6,6 +6,7 @@ import pipedsl.common.{Locks, Syntax}
 import pipedsl.common.Syntax._
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
+import pipedsl.analysis.TypeAnalysis
 
 /**
  * This checks that all lock reservations happen only within a valid lock region.
@@ -14,8 +15,9 @@ import pipedsl.typechecker.TypeChecker.TypeChecks
  * - Checks: That all lock "reserve" statements occur inside the appropriate lock region.
  * - Checks: That all lock regions are well formed according to the above.
  */
-object LockRegionChecker extends TypeChecks[Id, LockState] {
+class LockRegionChecker(prog:Prog) extends TypeChecks[Id, LockState] {
 
+  val typeAnalysis = TypeAnalysis.get(prog)
   override def emptyEnv(): Environment[Id, LockState] = Environments.EmptyLockEnv
 
   //Functions can't interact with locks or memories right now.
@@ -23,7 +25,8 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
   override def checkFunc(f: FuncDef, env: Environment[Id, LockState]): Environment[Id, LockState] = env
 
   override def checkModule(m: ModuleDef, env: Environment[Id, LockState]): Environment[Id, LockState] = {
-    val nenv = m.modules.foldLeft[Environment[Id, LockState]](env)( (e, m) => m.typ match {
+    // TODO: Do we need this now that we have attributes? 
+    val nenv = m.modules.foldLeft[Environment[Id, LockState]](env)( (e, m) => typeAnalysis.typeCheck(m.name) match {
       case TMemType(_, _, _, _) => e.add(m.name, Free)
       case TModType(_, _, _, _) => e.add(m.name, Free)
       case _ => throw UnexpectedCase(m.pos)
@@ -87,7 +90,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }
       env
-    case Syntax.CEmpty => env
+    case Syntax.CEmpty() => env
     case _ => env
   }
 

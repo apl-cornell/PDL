@@ -47,7 +47,7 @@ object SpeculationChecker extends TypeChecks[Id, Type] {
       } else {
         specVarsT
       }
-    case CRecv(lhs, _) => lhs match {
+    case CRecv(lhs, _, _) => lhs match {
       case EMemAccess(_, _) if specVars.nonEmpty =>
         throw UnresolvedSpeculation(lhs.pos, "Memory Write")
       case _ => specVars

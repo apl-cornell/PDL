@@ -9,6 +9,9 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2",
   "com.lihaoyi" %% "pprint" % "0.5.6",
 
+  // Language Processing
+  "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.4.0",
+
   // SMT Solving
   "io.github.tudo-aqua" % "z3-turnkey" % "4.8.7.1",
 
