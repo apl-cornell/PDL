@@ -88,7 +88,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       }
     case CLockStart(_) => (vars, nextVars)
     case CLockEnd(_) => (vars, nextVars)
-    case CLockOp(mem, _) =>
+    case CLockOp(mem, _, _) =>
       if (mem.evar.isDefined) {
         checkExpr(mem.evar.get, vars, isRhs = true)
       }
@@ -138,7 +138,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
     case EMemAccess(m, index) => m.typ.get match {
-      case TMemType(_, _, rLat, wLat) =>
+      case TLockedMemType(TMemType(_, _, rLat, wLat),_,_) =>
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)
         indexExpr match {

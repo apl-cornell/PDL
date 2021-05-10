@@ -1,38 +1,19 @@
-LABNAME = Stages Stuff
-
 BSC=bsc -no-show-timestamps -no-show-version --aggressive-conditions
-B_IN=Memories.bsv
-B_LIB=Memories.bo
+BMOD=Memories
+B_IN=$(BMOD).bsv
+B_LIB=$(BMOD).bo
 B_SIM=tb.bsv
 OUT=Top
+
+TOBUILD=Ehr.bo Locks.bo Memories.bo
 
 ## Default simulator is iverilog
 VSIM = -vsim iverilog
 
-ifdef cvc
-     VSIM = -vsim cvc
-endif
+all: $(TOBUILD)
 
-ifdef vcs
-    VSIM = -vsim vcs
-endif
-
-ifdef vcsi
-    VSIM = -vsim vcsi
-endif
-
-ifdef ncverilog
-    VSIM = -vsim ncverilog
-endif
-
-ifdef ncsim
-    VSIM = -vsim ncsim
-endif
-
-ifdef modelsim
-    VSIM = -vsim modelsim
-endif
-
+%.bo: %.bsv
+	$(BSC) -show-schedule $<
 
 $(B_LIB): $(B_IN)
 	$(BSC) -show-schedule $<

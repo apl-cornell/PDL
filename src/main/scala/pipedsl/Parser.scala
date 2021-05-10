@@ -3,6 +3,7 @@ import scala.util.parsing.combinator._
 import common.Syntax._
 import common.Utilities._
 import common.Locks._
+import pipedsl.common.LockImplementation
 
 import scala.util.matching.Regex
 
@@ -150,10 +151,10 @@ class Parser extends RegexParsers with PackratParsers {
       check |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
-      "acquire" ~> parens(lockArg) ^^ { i => CSeq(CLockOp(i, Reserved), CLockOp(i, Acquired)) } |
-      "reserve" ~> parens(lockArg) ^^ { i => CLockOp(i, Reserved)} |
-      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired) } |
-      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released)} |
+      "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t), CLockOp(i, Acquired, t)) } |
+      "reserve" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CLockOp(i, Reserved, t)} |
+      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired, None) } |
+      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None)} |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => COutput(e)) |
       "print" ~> parens(variable) ^^ (e => CPrint(e)) |
@@ -162,6 +163,13 @@ class Parser extends RegexParsers with PackratParsers {
   
   lazy val lockArg: P[LockArg] = positioned { 
     iden ~ brackets(variable).? ^^ {case i ~ v => LockArg(i, v)}
+  }
+
+  lazy val lockType: P[LockType] = positioned {
+    "R" ^^ {_ => LockRead} |
+    "r" ^^ {_ => LockRead} |
+    "W" ^^ {_ => LockWrite} |
+    "w" ^^ {_ => LockWrite}
   }
 
   lazy val blockCmd: P[Command] = positioned {
@@ -211,22 +219,31 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
-  lazy val latency: P[Latency.Latency] = "c" ^^ { _ => Latency.Combinational } |
-    "s" ^^ { _ => Latency.Sequential } |
+  lazy val latency: P[Latency.Latency] =
+    "c" ^^ { _ => Latency.Combinational } |
+    "s" ^^ { _ => Latency.Sequential }    |
     "a" ^^ { _ => Latency.Asynchronous }
-  lazy val memory: P[Type] = sizedInt ~ brackets(posint) ~ angular(latency ~ ("," ~> latency)).? ^^ { case elem ~ size ~ lats =>
-    if (lats.isDefined) {
-      val rlat = lats.get._1
-      val wlat = lats.get._2
-      TMemType(elem, size, rlat, wlat)
-    } else {
-      TMemType(elem, size)
-    }
+
+  lazy val lockedMemory: P[Type] = sizedInt ~ brackets(posint) ~ (angular(latency ~ ("," ~> latency)) ~ parens(iden).?).?  ^^ {
+    case elem ~ size ~ lats =>
+      if (lats.isDefined) {
+        val rlat = lats.get._1._1
+        val wlat = lats.get._1._2
+        val lock = lats.get._2
+        val mtyp = TMemType(elem, size, rlat, wlat)
+        if (lock.isDefined)
+          TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock.get))
+        else
+          TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+      } else {
+        val mtyp = TMemType(elem, size,  Latency.Asynchronous, Latency.Asynchronous)
+        TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+      }
   }
 
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
   lazy val string: P[Type] = "String".r ^^ {_ => TString() }
-  lazy val baseTyp: P[Type] = memory | sizedInt | bool | string
+  lazy val baseTyp: P[Type] = lockedMemory | sizedInt | bool | string
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp
@@ -264,12 +281,26 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val cmem: P[CirExpr] = positioned {
     "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(elem, addr) }
   }
+
   lazy val crf: P[CirExpr] = positioned {
     "regfile" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirRegFile(elem, addr) }
   }
 
+  lazy val clockrf: P[CirExpr] = positioned {
+    "rflock" ~> parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
+      case elem ~ _ ~ addr ~ szs =>
+        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(Id("RenameRF")), szs.getOrElse(List()))
+    }
+  }
+
+  lazy val clock: P[CirExpr] = positioned {
+    iden ~ parens(iden) ~ angular(repsep(posint,",")).? ^^ {
+      case lid ~ mem ~ szs => CirLock(mem, LockImplementation.getLockImpl(lid), szs.getOrElse(List()))
+    }
+  }
+
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | cmem | crf | clockrf | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cexpr: P[Circuit] = positioned {

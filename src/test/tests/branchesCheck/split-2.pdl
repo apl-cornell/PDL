@@ -15,7 +15,7 @@ pipe test(inarg: int<32>)[rf: int<32>[5]] {
             int<5> addr = 3<5>;
         }
     }
-    acquire(rf[addr]);
+    acquire(rf[addr], W);
     end(rf);
     ---
     rf[addr] <- 0<32>;

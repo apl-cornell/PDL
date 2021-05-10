@@ -1,7 +1,6 @@
 export SCALA_V := 2.13
 export COMPILER_JAR := target/scala-$(SCALA_V)/pdl.jar
 
-export BSV_LOCKS := $(realpath bscRuntime/locks)
 export BSV_MEMS := $(realpath bscRuntime/memories)
 
 all: setup compiler runtime
@@ -10,16 +9,13 @@ setup:
 	@echo "--- Checking setup ---"
 	@./bin/check-setup.sh
 
-compiler: $(COMPILER_JAR)
-
-$(COMPILER_JAR):
+compiler:
 	@echo "--- Building Compiler ---"
 	@sbt assembly
 	@echo
 
 runtime:
 	@echo "--- Building BSV Libraries ---"
-	@$(MAKE) -C $(BSV_LOCKS)
 	@$(MAKE) -C $(BSV_MEMS)
 	@echo
 clean:

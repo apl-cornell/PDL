@@ -15,8 +15,25 @@ object BSVPrettyPrinter {
     mkExprString(toBSVTypeStr(v.typ), v.name)
   }
 
+  private def toProvisoString(name: String, p: Proviso): String = p match {
+    case PBits(szName) => "Bits#(" + name + "," + szName +")"
+  }
+
+  private def getTypeParams(typ: BSVType): Set[BTypeParam] = typ match {
+    case BCombMemType(elem, _) => getTypeParams(elem)
+    case BAsyncMemType(elem, _) => getTypeParams(elem)
+    case BStruct(_, fields) => fields.foldLeft(Set[BTypeParam]())((s, f) => s ++ getTypeParams(f.typ))
+    case BInterface(_, tparams) => tparams.foldLeft(Set[BTypeParam]())((s, f) => s ++ getTypeParams(f.typ))
+    case t@BTypeParam(_, _) => Set(t)
+    case _ => Set()
+  }
+
   def toBSVTypeStr(t: BSVType): String = t match {
-    case BStruct(name, _) => name
+    case BStruct(name, _) =>
+      val tparams = getTypeParams(t).map(tp => tp.name)
+      if (tparams.isEmpty) { name } else {
+        name + "#(" + tparams.mkString(", ") + ")"
+      }
     case BEmptyModule => "Empty"
     case BInterface(name, tparams) =>
       if (tparams.nonEmpty) {
@@ -39,7 +56,7 @@ object BSVPrettyPrinter {
       toBSVTypeStr(BSizedInt(unsigned = true, addrSize)) + ")"
     case BSizedType(name, sizeParams) => name + "#(" + sizeParams.map(i => i.toString).mkString(",") + ")"
     case BNumericType(sz) => sz.toString
-    case BTypeParam(name) => name
+    case BTypeParam(name, _) => name
     case BString => "String"
   }
 
@@ -55,6 +72,7 @@ object BSVPrettyPrinter {
     case BIsValid(exp) => mkExprString("isValid(",toBSVExprStr(exp), ")")
     case BFromMaybe(d, exp) => mkExprString("fromMaybe(",toBSVExprStr(d), ",", toBSVExprStr(exp), ")")
     case BInvalid => mkExprString("tagged", "Invalid")
+    case BTaggedValid(exp) => mkExprString("tagged", "Valid", toBSVExprStr(exp))
     case BTernaryExpr(cond, trueex, falseex) => mkExprString("(", toBSVExprStr(cond), "?",
       toBSVExprStr(trueex), ":", toBSVExprStr(falseex), ")")
     case BBoolLit(v) => if (v) {
@@ -62,6 +80,7 @@ object BSVPrettyPrinter {
     } else {
       "False"
     }
+    case BUnsizedInt(v) => v.toString
     case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
     case BStringLit(v) => "\"" + v + "\""
     case BStructLit(typ, fields) =>
@@ -140,11 +159,15 @@ object BSVPrettyPrinter {
     }
 
     def printStructDef(sdef: BStructDef): Unit = {
+      val typeparams = getTypeParams(sdef.typ).map(s => "type " + s.name)
+      val typeparamStr = if (typeparams.nonEmpty) {
+        mkExprString("#(", typeparams.mkString(","), ")")
+      } else { "" }
       val structstring = mkExprString("struct {",
         sdef.typ.fields.map(f => {
           toDeclString(f)
         }).mkString("; "),
-        "; }", sdef.typ.name)
+        "; }", sdef.typ.name + typeparamStr)
       w.write(
         mkStatementString("typedef", structstring,
           "deriving(", sdef.derives.mkString(","), ")"
@@ -152,14 +175,19 @@ object BSVPrettyPrinter {
       )
     }
 
+    private def getLetString(stmt: BStatement): String = if (stmt.useLet) "let " else ""
+
     def printBSVStatement(stmt: BStatement): Unit = stmt match {
       case BStmtSeq(stmts) => stmts.foreach(s => printBSVStatement(s))
       case BExprStmt(expr) => w.write(mkStatementString(toBSVExprStr(expr)))
       case BReturnStmt(expr) => w.write(mkStatementString("return", toBSVExprStr(expr)))
       case BModInst(lhs, rhs) => w.write(mkStatementString(toDeclString(lhs), "<-", toBSVExprStr(rhs)))
-      case BInvokeAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
-      case BModAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
-      case BAssign(lhs, rhs) => w.write(mkStatementString(toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
+      case BInvokeAssign(lhs, rhs) =>
+        w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
+      case BModAssign(lhs, rhs) =>
+        w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
+      case BAssign(lhs, rhs) =>
+        w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BIntAssign(lhs, rhs) =>
         val intname = lhs.typ.matchOrError() { case BInterface(n, _) => n }
         w.write(mkStatementString("interface", intname, lhs.name, "=", toBSVExprStr(rhs)))
@@ -262,13 +290,21 @@ object BSVPrettyPrinter {
       } else {
         BVar("_unused_", BEmptyModule)
       }
+
       val paramStr = (mod.params :+ interfaceParam).map(p => toDeclString(p)).mkString(", ")
       val paramString = mkExprString("(", paramStr, ")")
+      //generate the Bits#(tvar,sztvar) proviso for any unspecified type variables
+      val typeVars = mod.params.foldLeft(Set[BTypeParam]())((s, p) => s ++ getTypeParams(p.typ))
+      val provisos = typeVars.flatMap(tp => tp.provisos match {
+        case List() => None
+        case _ => tp.provisos.map(p => toProvisoString(tp.name, p))
+      })
+      val provisoString = mkExprString("provisos(", provisos.mkString(","), ")")
       //can synthesize if there are no parameters
       if (mod.params.isEmpty) {
         w.write("(* synthesize *)\n")
       }
-      w.write(mkStatementString("module", mod.name, paramString))
+      w.write(mkStatementString("module", mod.name, paramString, provisoString))
       incIndent()
       mod.body.foreach(s => printBSVStatement(s))
       mkStatementString("") //for readability only

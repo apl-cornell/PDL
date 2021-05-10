@@ -78,15 +78,15 @@ pipe cpu(pc:int<16>)[rf:int<32>[5]<c, s>,imem:int<32>[16]<a, a>,m:multi_stg_mul,
   int<5> rs2 = insn{11:7};
   int<5> rd = insn{16:12};
   start(rf);
-  reserved(rf[rs1]);
-  acquired(rf[rs1]);
-  reserved(rf[rs2]);
-  acquired(rf[rs2]);
+  reserved(rf[rs1],R);
+  acquired(rf[rs1],R);
+  reserved(rf[rs2],R);
+  acquired(rf[rs2],R);
   int<32> rf1 = rf[rs1];
   int<32> rf2 = rf[rs2];
   released(rf[rs1]);
   released(rf[rs2]);
-  reserved(rf[rd]);
+  reserved(rf[rd],W);
   end(rf);
   
   ---

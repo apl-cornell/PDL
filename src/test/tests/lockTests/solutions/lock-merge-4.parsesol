@@ -1,13 +1,13 @@
 pipe ex4(in:bool)[rf:int<32>[5]<a, a>] {
   start(rf);
   int<5> addr = 1<5>;
-  reserved(rf[addr]);
+  reserved(rf[addr],R);
   
   ---
   int<5> addr2 = 2<5>;
   bool cond2 = true;
   if ( cond2 ) {
-      reserved(rf[addr2]);
+      reserved(rf[addr2],R);
       
   } else {
       
@@ -18,7 +18,6 @@ pipe ex4(in:bool)[rf:int<32>[5]<a, a>] {
       ---
       if ( in ) {
           acquired(rf[addr]);
-          released(rf[addr]);
           
       } else {
           
@@ -39,11 +38,11 @@ pipe ex4(in:bool)[rf:int<32>[5]<a, a>] {
       
       ---
       acquired(rf[addr]);
-      released(rf[addr]);
       
       ---
       
   }
+  released(rf[addr]);
   if ( !in && cond2 ) {
       acquired(rf[addr2]);
       released(rf[addr2]);

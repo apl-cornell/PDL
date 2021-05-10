@@ -149,10 +149,31 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
+    case CirLockMem(elemTyp, addrSize, limpl, _) => {
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
+      val ltyp = TLockedMemType(mtyp, None, limpl)
+      c.typ = Some(ltyp)
+      (ltyp, tenv)
+    }
+    case CirLock(mem, lockimpl, _) => {
+      val mtyp: TMemType = tenv(mem).
+        matchOrError(mem.pos, "lock instantiation", "memory") { case c: TMemType => c }
+      mem.typ = Some(mtyp)
+      val newtyp = TLockedMemType(mtyp, None, lockimpl)
+      c.typ = Some(newtyp)
+      (newtyp, tenv)
+    }
     case CirRegFile(elemTyp, addrSize) => {
       val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
       c.typ = Some(mtyp)
       (mtyp, tenv)
+    }
+    case CirLockRegFile(elemTyp, addrSize, lockimpl, params) => {
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
+      val idsz = params.headOption
+      val ltyp = TLockedMemType(mtyp, idsz, lockimpl)
+      c.typ = Some(ltyp)
+      (ltyp, tenv)
     }
     case CirNew(mod, mods) => {
       val mtyp = tenv(mod)
@@ -239,22 +260,20 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
-    case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+    case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
-        case _: TModType => tenv
-        case _: TMemType => tenv
+        case _: TLockedMemType => tenv
       }
-    case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Memory or Module Type")
+    case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
-        case _: TModType => tenv
-        case _: TMemType => tenv
+        case _: TLockedMemType => tenv
       }
-    case CLockOp(mem, _) => {
-      tenv(mem.id).matchOrError(mem.pos, "lock operation", "Memory or Module Type")
-      { case t: TModType =>
-          if (mem.evar.isDefined) throw UnexpectedType(t.pos, "address lock operation", "Memory Type", t)
-          else tenv
-        case memt: TMemType => {
+    case CLockOp(mem, _, _) => {
+      tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
+      {
+        case t: TLockedMemType => {
+          val memt = t.mem
+          mem.id.typ = Some(t)
           if(mem.evar.isEmpty) tenv
           else {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv)
@@ -277,7 +296,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
       else throw UnexpectedSubtype(predval.pos, "speculate", ltyp, predtyp)
     }
-    case CCheck(predVar) => {
+    case CCheck(_) => {
       tenv
     }
     case COutput(exp) => {
@@ -378,7 +397,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv)
       (memt, idxt) match {
-        case (TMemType(e, s, _, _), TSizedInt(l, true)) if l == s => (e, env1)
+        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }

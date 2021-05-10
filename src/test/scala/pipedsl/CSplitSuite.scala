@@ -15,8 +15,8 @@ class CSplitSuite extends AnyFunSuite {
 
   private val memInputs = folder + "/memInputs"
   def defaultInputMap(testName: String): Map[String,String] = Map(
-    "i" -> (memInputs + "/i_" + testName ),
-    "r" -> (memInputs + "/r_" + testName )
+    "ti" -> (memInputs + "/i_" + testName ),
+    "tr" -> (memInputs + "/r_" + testName )
   )
 
   testFiles.foreach(t => {
@@ -25,24 +25,22 @@ class CSplitSuite extends AnyFunSuite {
 
     //TODO find a way to only run the right set of tests
     //based on whether we expect success or not
+
+    /* for now, skip these as they aren't that useful atm.
     test((testBaseName + " Parse")) {
       testParse(testFolder, t)
-    }
+    }*/
 
     var doesTypecheck = false
-    test((testBaseName + " Typecheck")) {
+    test((testBaseName + " Typecheck; Compile; Simulate")) {
       doesTypecheck = testTypecheck(testFolder, t)
-    }
 
-    if (doesTypecheck) {
-      test((testBaseName + " BSV Compile")) {
-        testBlueSpecCompile(testFolder, t, None, Map())
+      if (doesTypecheck) {
+          testBlueSpecCompile(testFolder, t, None, Map())
       }
-    }
 
-    if (doesTypecheck && simFile.exists) {
-      test((testBaseName + " Simulation")) {
-        testBlueSpecSim(testFolder, t, None, defaultInputMap(testBaseName))
+      if (doesTypecheck && simFile.exists) {
+          testBlueSpecSim(testFolder, t, None, defaultInputMap(testBaseName))
       }
     }
   })

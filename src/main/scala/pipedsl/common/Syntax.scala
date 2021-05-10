@@ -2,7 +2,8 @@ package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
 import Security._
-import pipedsl.common.Locks.LockState
+import pipedsl.common.LockImplementation.LockInterface
+import pipedsl.common.Locks.{General, LockGranularity, LockState}
 
 
 object Syntax {
@@ -22,13 +23,17 @@ object Syntax {
     sealed trait SpeculativeAnnotation {
       var maybeSpec: Boolean = false
     }
+    sealed trait LockInfoAnnotation {
+      var memOpType: Option[LockType] = None
+      var granularity: LockGranularity = General
+    }
   }
 
   object Latency extends Enumeration {
     type Latency = Value
-    val Combinational = Value("c")
-    val Sequential = Value("s")
-    val Asynchronous = Value("a")
+    val Combinational: Latency = Value("c")
+    val Sequential: Latency = Value("s")
+    val Asynchronous: Latency = Value("a")
 
     def join(l1: Latency, l2: Latency): Latency = l1 match {
       case Combinational => l2
@@ -74,8 +79,11 @@ object Syntax {
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
+      case TLockedMemType(m, sz, impl) => s"${m.toString}(${impl.toString})".concat(
+        if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
+      case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
     }
   }
@@ -88,11 +96,14 @@ object Syntax {
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TMemType(elem: Type, addrSize: Int, readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
+  case class TMemType(elem: Type, addrSize: Int,
+    readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
+  case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
   case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
+  case class TMaybe(btyp: Type) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -173,11 +184,14 @@ object Syntax {
     }
   }
   
-  case class LockArg(id: Id, evar: Option[EVar]) extends Positional
-
+  case class LockArg(id: Id, evar: Option[EVar]) extends Positional with LockInfoAnnotation
+  sealed trait LockType extends Positional
+  case object LockRead extends LockType
+  case object LockWrite extends LockType
   case object EInvalid extends Expr
   case class EIsValid(ex: Expr) extends Expr
   case class EFromMaybe(ex: Expr) extends Expr
+  case class EToMaybe(ex: Expr) extends Expr
   case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
   case class EString(v: String) extends Expr
   case class EBool(v: Boolean) extends Expr
@@ -185,7 +199,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr) extends Expr
+  case class EMemAccess(mem: Id, index: Expr) extends Expr with LockInfoAnnotation
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
@@ -193,14 +207,12 @@ object Syntax {
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
-  def MemoryWrite(index: Expr, value: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index), (Id("value"),value)))
-  def MemoryRead(index: Expr): ERecLiteral = ERecLiteral(Map((Id("index"), index)))
 
   sealed trait Command extends Positional
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: EVar, rhs: Expr) extends Command {
+  case class CAssign(lhs: EVar, rhs: Expr) extends Command{
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
@@ -212,7 +224,7 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
-  case class CLockOp(mem: LockArg, op: LockState) extends Command
+  case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
@@ -226,15 +238,17 @@ object Syntax {
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
-  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand
-  case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand
+  //TODO Clean up what actually needs the lock info annotation
+  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand
-  case class ICheckLockFree(mem: LockArg) extends InternalCommand
-  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand
-  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand
-  case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand
-  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand
+
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand with LockInfoAnnotation
+  case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
+  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
+  case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
+  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
   //needed for internal compiler passes to track branches with explicitly no lockstate change
   case class ILockNoOp(mem: LockArg) extends InternalCommand
 
@@ -270,6 +284,12 @@ object Syntax {
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
+  //TODO do these ever need other kinds of parameters besides ints?
+  //this allows us to build a "locked" version of a memory
+  case class CirLock(mem: Id, impl: LockInterface, szParams: List[Int]) extends CirExpr
+  //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
+  case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
+  case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
   case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }

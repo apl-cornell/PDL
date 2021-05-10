@@ -5,6 +5,7 @@ import pipedsl.common.Errors.UnexpectedCase
 import pipedsl.common.Locks
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities.updateSetMap
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
 
@@ -15,18 +16,30 @@ import scala.collection.mutable
  * only happen when appropriate.
  * - Checks: Whenever a memory is read or written, the lock for that memory has been acquired
  * - Checks: That all locks are released (or never acquired) by the end of the program
+ * - Checks: That all read locks are reserved before any write locks
+ * - Checks: That all read locks are released before any write locks
  * When checking a lock state, it checks whether it is possible for the lock state to NOT be the expected. If it is
  * possible, the type checking fails.
  */
 //TODO: Make error case classes
-class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, Map[Id, LockType]]) extends TypeChecks[LockArg, Z3AST] {
+class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, Map[Id, LockGranularity]]) extends TypeChecks[LockArg, Z3AST] {
   
   private val ctx: Z3Context = new Z3Context()
   private val solver: Z3Solver = ctx.mkSolver()
 
   private val predicates: mutable.Stack[Z3AST] = mutable.Stack(ctx.mkTrue())
   private val predicateGenerator = new PredicateGenerator(ctx)
-  
+
+  private val lockReserveMode = ctx.mkIntConst("ReservedMode")
+  private val lockReleaseMode = ctx.mkIntConst("ReleasedMode")
+
+  private var topLevelReserveModeMap: Map[Id, Z3BoolExpr] = Map()
+  private var topLevelReleaseModeMap: Map[Id, Z3BoolExpr] = Map()
+  private var SMTReserveModeListMap: Map[Id, Set[Z3BoolExpr]] = Map()
+  private var SMTReleaseModeListMap: Map[Id, Set[Z3BoolExpr]] = Map()
+  private val READ = 0
+  private val WRITE = 1
+
   private var incrementer = 0
 
   private var currentMod = Id("-invalid-")
@@ -37,6 +50,16 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
   override def checkFunc(f: FuncDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
 
   override def checkModule(m: ModuleDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
+    //Reads must go before writes, so the modes are initialized to read
+    lockTypeMap(m.name)
+      .filter( l => l._2 == Specific)
+      .keys
+      .foreach(l => {
+        topLevelReserveModeMap += (l -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(READ))))
+        topLevelReleaseModeMap += (l -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(READ))))
+        SMTReserveModeListMap += (l -> Set())
+        SMTReleaseModeListMap += (l -> Set())
+      })
     currentMod = m.name
     val nenv = lockMap(m.name).foldLeft[Environment[LockArg, Z3AST]](env)((e, mem) => e.add(mem, makeEquals(mem, Free)))
     val finalenv = checkCommand(m.body, nenv)
@@ -145,27 +168,27 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           checkAcquired(mem, expr, env)
         case (_, EMemAccess(mem, expr)) =>
           checkAcquired(mem, expr, env)
-        case (_, ECall(mod, _)) =>
-          //TODO Maybe just from null
-          checkAcquired(mod, null, env)
+        case (_, ECall(mod, args)) =>
+          args.foldLeft(env)((e, a) => checkExpr(a, e))
         case _ => throw UnexpectedCase(c.pos)
       }
-
-      case CLockOp(mem, op) =>
+      case c@CLockOp(mem, op, _) =>
+        checkReadWriteOrder(c)
         val expectedLockState = op match {
           case Locks.Free => throw new IllegalStateException() // TODO: is this right?
           case Locks.Reserved => Free
           case Locks.Acquired => Reserved
           case Locks.Released => Acquired
         }
-      checkState(mem, env, expectedLockState.order) match {
-        case Z3Status.UNSATISFIABLE =>
-          env.add(mem, mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, op)))
-        case Z3Status.UNKNOWN =>
-          throw new RuntimeException("An error occurred while attempting to solve the constraints")
-        case Z3Status.SATISFIABLE =>
-          throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before releasing")
-      }
+        checkState(mem, env, expectedLockState.order) match {
+          case Z3Status.UNSATISFIABLE =>
+            env.add(mem, mkImplies(mkAnd(predicates.toSeq: _*), makeEquals(mem, op)))
+          case Z3Status.UNKNOWN =>
+            throw new RuntimeException("An error occurred while attempting to solve the constraints")
+          case Z3Status.SATISFIABLE =>
+            throw new RuntimeException(s"A possible thread of execution can cause this to fail: memories needs to be $expectedLockState before $op")
+        }
+
 
       case _ => env
     }
@@ -186,7 +209,59 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     case _ => env
   }
   override def checkCircuit(c: Circuit, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
-  
+
+  private def checkReadWriteOrder(c: CLockOp): Unit = {
+    (c.op, c.lockType) match {
+      case (Reserved, Some(LockWrite)) =>
+        if (predicates.size == 1) {
+          topLevelReserveModeMap += (c.mem.id -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
+        } else {
+          SMTReserveModeListMap = updateSetMap(
+            SMTReserveModeListMap,
+            c.mem.id,
+            mkImplies(mkAnd(predicates.toSeq: _*), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
+        }
+
+      case (Released, Some(LockWrite)) =>
+        if (predicates.size == 1) {
+          topLevelReleaseModeMap += (c.mem.id -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
+        } else {
+          SMTReleaseModeListMap = updateSetMap(
+            SMTReleaseModeListMap,
+            c.mem.id,
+            mkImplies(mkAnd(predicates.toSeq: _*), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
+        }
+      case (r@(Reserved | Released), Some(LockRead)) => checkLockWrite(r, c.mem.id) match {
+        case Z3Status.UNSATISFIABLE =>
+        case Z3Status.UNKNOWN => throw new RuntimeException("An error occurred while attempting to solve the constraints")
+        case Z3Status.SATISFIABLE => throw new RuntimeException("Read type locks must be reserved or released before all write type locks " + c.pos)
+      }
+      case _ =>
+
+    }
+  }
+
+  private def checkLockWrite(ls: LockState, mem: Id): Z3Status = {
+    solver.add(ctx.mkEq(mkAnd(predicates.toSeq: _*), ctx.mkTrue()))
+    val expectedName = ls match {
+      case Released => lockReleaseMode
+      case Reserved => lockReserveMode
+    }
+    val assertion = ls match
+      {
+        case Released => ctx.mkAnd((SMTReleaseModeListMap(mem) + topLevelReleaseModeMap(mem)).toSeq: _*)
+        case Reserved => ctx.mkAnd((SMTReserveModeListMap(mem) + topLevelReserveModeMap(mem)).toSeq: _*)
+      }
+    solver.add(mkAnd(assertion, ctx.mkEq(expectedName, ctx.mkInt(WRITE))))
+    //If satisfiable, this means that the lock mode is in the wrong state.
+    //This is because we only call this method when checking that
+    //The locks are still in Read mode, so if it is possible to be in
+    //Write mode, it is error.
+    val check = solver.check()
+    solver.reset
+    check
+  }
+
   private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], lockStateOrders: Int*): Z3Status = {
 
   // Makes an OR of all given lock states

@@ -90,28 +90,31 @@ object Dataflow {
    * @param used Variables used in later stages.
    * @return All variables unioned together
    */
-  def mergeUsedVars(node: PStage, used: DFMap[Set[Id]]): Set[Id] = node match {
-    case stg: SpecStage =>
-      //only add the variables that are used in the join
-      //but not written in *either* branch
-      val joinNeeds = used(stg.joinStage.name)
-      val verifNeeds = used(stg.verifyStages.head.name)
-      val verifWritten = joinNeeds -- joinNeeds.intersect(verifNeeds)
-      val specNeeds = used(stg.specStages.head.name)
-      val specWritten = joinNeeds -- joinNeeds.intersect(specNeeds)
-      specNeeds.union(verifNeeds) -- specWritten -- verifWritten
-    case stg: IfStage =>
-      val joinNeeds = used(stg.joinStage.name)
-      val caseNeeds = (stg.condStages :+ stg.defaultStages).foldLeft[Set[Id]](Set())((set, stgs) =>
-        set ++ used(stgs.head.name)) ++ used(stg.defaultStages.head.name)
-      val caseWritten = (stg.condStages :+ stg.defaultStages).foldLeft[Set[Id]](Set())((set, stgs) =>
-        set ++ (joinNeeds -- used(stgs.head.name)))
-      caseNeeds -- caseWritten
-    case _ => used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
+  def mergeUsedVars(node: PStage, used: DFMap[Set[Id]]): Set[Id] = {
+    used.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ used(n))
+  }
+
+
+  /**
+   * This takes in the sets of variables that can be sent by earlier
+   * stages and simply unions them together (since they all are available now).
+   * @param node
+   * @param canSend
+   * @return
+   */
+  def mergeCanSend(node: PStage, canSend: DFMap[Set[Id]]): Set[Id] = {
+    canSend.keySet.foldLeft[Set[Id]](Set())( (s, n) => s ++ canSend(n))
+  }
+
+  def transferCanSend(p: PStage, earlierCan: Set[Id]): Set[Id] = {
+    earlierCan ++ getWrittenVars(p.getCmds)
+    //if a var was written this stage, or a prior stage, then we can send it to the next stage
   }
 
   val UsedInLaterStages: Analysis[Set[Id]] =
     Analysis[Set[Id]](isForward = false, Set(), mergeUsedVars, transferUsedVars)
+  def CanSendToLaterStages(inputs: Set[Id]): Analysis[Set[Id]] =
+    Analysis[Set[Id]](isForward = true, inputs, mergeCanSend, transferCanSend)
   val LockStateInfo: Analysis[Map[LockArg, LockState]] = {
     Analysis[Map[LockArg, LockState]](isForward = true, Map(), Locks.mergeLockStates, Locks.transferLockStates)
   }

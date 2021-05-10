@@ -9,7 +9,7 @@ void matrix_power( inout_int_t x[20][20], in_int_t row[20], in_int_t col[20], in
 }
 */
 
-pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<a,a>, row: int<5>[5]<a,a>, col: int<5>[5]<a,a>, a: int<32>[5]<a,a>]: bool {
+pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<a,a>(FAQueue), row: int<5>[5]<a,a>(Queue), col: int<5>[5]<a,a>(Queue), a: int<32>[5]<a,a>(Queue)]: bool {
      if (p == 19<5>) {
      	if (k != 19<5>) {
 	   call matpow(k + 1<5>, 0<5>);
@@ -32,10 +32,10 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<a,a>, row: int<5>[5]<a,a>, col: 
      int<9> x_in_idx = x_in_mul{8:0} + (0<4> ++ col_p);
      int<18> x_out_mul = (20<9> * (0<4> ++ k)); 
      int<9> x_out_idx =  x_out_mul{8:0} + (0<4> ++ row_p);
+     int<9> x_out_idx_cp = x_out_idx;
      start(x);
-     acquire(x[x_in_idx]);
-     reserve(x[x_out_idx]);
-     end(x);
+     acquire(x[x_in_idx], R);
+     acquire(x[x_out_idx], R);
      int<32> x_in_val <- x[x_in_idx];
      release(x[x_in_idx]);
      start(a);
@@ -44,15 +44,18 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<a,a>, row: int<5>[5]<a,a>, col: 
      release(a);
      end(a);
      ---
-     block(x[x_out_idx]);
+     reserve(x[x_out_idx_cp], W);
+     end(x);
      int<64> nmul = a_val * x_in_val;
      int<32> nval = nmul{31:0};
      int<32> oldx <- x[x_out_idx];
+     release(x[x_out_idx]);
      ---
+     block(x[x_out_idx_cp]);
      int<32> newval = nval + oldx;
      print(newval);
-     x[x_out_idx] <- newval;
-     release(x[x_out_idx]);
+     x[x_out_idx_cp] <- newval;
+     release(x[x_out_idx_cp]);
      ---
      if ((k == 19<5>) && (p == 19<5>)) {
      	output(true);
@@ -60,10 +63,14 @@ pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<a,a>, row: int<5>[5]<a,a>, col: 
 }
 
 circuit {
-  x = memory(int<32>, 9);
-  a = memory(int<32>, 5);
-  r = memory(int<5>, 5);
-  c = memory(int<5>, 5);
+  tx = memory(int<32>, 9);
+  x = FAQueue(tx);
+  ta = memory(int<32>, 5);
+  a = Queue(ta);
+  tr = memory(int<5>, 5);
+  r = Queue(tr);
+  tc = memory(int<5>, 5);
+  c = Queue(tc);
   mp = new matpow[x, r, c, a];
   call mp(1<5>, 0<5>);
 }

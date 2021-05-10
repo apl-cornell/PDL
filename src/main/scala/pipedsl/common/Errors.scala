@@ -30,6 +30,10 @@ object Errors {
   case class UnexpectedCommand(c: Command) extends RuntimeException(
     withPos(s"Reached unexpected command $c", c.pos)
   )
+  case class UnexpectedLockImpl(i: Id) extends RuntimeException(
+    withPos(s"$i is not a valid lock implementation name", i.pos)
+  )
+
   case class InvalidBitExtraction(s: Int, e: Int) extends RuntimeException(
     s"Start: $s must be less than or equal to End: $e"
   )
@@ -80,6 +84,9 @@ object Errors {
   case class IllegalLockAcquisition(pos: Position) extends TypeError(
     s"Cannot acquire or reserve locks inside multiple branches", pos)
 
+  case class IllegalOOOLockRelease(pos: Position) extends TypeError(
+    s"Cannot release locks inside multiple branches", pos)
+
   case class IllegalLockRelease(pos: Position) extends TypeError(
     s"Cannot release locks inside of a speculative block", pos)
 
@@ -128,4 +135,8 @@ object Errors {
   case class UnexpectedBSVType(msg: String) extends RuntimeException(msg)
   
   case class MalformedLockTypes(msg: String) extends RuntimeException(msg)
+
+  case class IllegalMemoryAccessOperation(pos: Position) extends TypeError(
+    s"Memory access's associated lock must have the correct READ or WRITE capabilities", pos
+  )
 }

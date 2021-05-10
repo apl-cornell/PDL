@@ -84,7 +84,7 @@ object Environments {
 
     case class LockEnv(lockMap: Map[Id, LockState] = Map()) extends Environment[Id, LockState] {
         override def apply(id: Id) = this.get(id).getOrThrow(MissingType(id.pos, id.v))
-        
+
         private def updateMapping(n: Id, ns: LockState): Environment[Id, LockState] = {
             this.copy(lockMap = lockMap + (n -> ns))
         }

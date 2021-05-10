@@ -1,0 +1,46 @@
+//Expected Fail
+pipe test3(input: int<32>)[rf: int<32>[5]] {
+    int<5> rs1 = input{0:4};
+    int<5> rs2 = input{5:9};
+    bool a = rs1 == rs2;
+    bool b = rs1 + 5<5> == rs2 + 5<5>;
+    bool c = rs1 + 6<5> == rs2 + 6<5>;
+    bool d = rs1 + 7<5> == rs2 + 7<5>;
+
+    start(rf);
+    acquire(rf[rs1],R);
+    acquire(rf[rs2],R);
+    end(rf);
+    split {
+        case: (a) {
+            if(c) {
+               release(rf[rs2]);
+            }
+        }
+        case: (b) {
+        }
+        default: {
+            if(c) {
+                release(rf[rs2]);
+            }
+        }
+    }
+    if(b && !a) {
+        release(rf[rs2]);
+    }
+    if (a && !c) {
+        release(rf[rs2]);
+    }
+    if(!a) {
+        if(!b) {
+            if(!c) {
+                release(rf[rs2]);
+            }
+        }
+    }
+    release(rf[rs1]);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

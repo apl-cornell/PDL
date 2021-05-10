@@ -17,12 +17,13 @@ class MainSuite extends AnyFunSuite {
   private val inputH = histInputs + "/h"
   private val inputF = histInputs + "/f"
   private val inputW = histInputs + "/w"
-  private val inputMap = Map("h" -> inputH, "f" -> inputF, "w" -> inputW)
+  private val inputMap = Map("th" -> inputH, "tf" -> inputF, "tw" -> inputW)
 
+  /*for now, skip these as they aren't that useful atm.
   test("Histogram Parse Test") {
     testParse(new File(histFolder),
       new File(histFile))
-  }
+  }*/
 
   test("Histogram Typecheck Test") {
     testTypecheck(new File(histFolder),
@@ -45,10 +46,11 @@ class MainSuite extends AnyFunSuite {
     )
   }
 
+  /*for now, skip these as they aren't that useful atm.
   test("Histogram BRAM Parse Test") {
     testParse(new File(histFolder),
       new File(histBram))
-  }
+  }*/
 
   test("Histogram BRAM Typecheck Test") {
     testTypecheck(new File(histFolder),
@@ -71,10 +73,11 @@ class MainSuite extends AnyFunSuite {
     )
   }
 
+  /*for now, skip these as they aren't that useful atm.
   test("Histogram SHORT Parse Test") {
     testParse(new File(histFolder),
       new File(histShort))
-  }
+  }*/
 
   test("Histogram SHORT Typecheck Test") {
     testTypecheck(new File(histFolder),
@@ -101,16 +104,17 @@ class MainSuite extends AnyFunSuite {
   private val matpowBram = matpowFolder + "/matpow_bram.pdl"
   private val matpowAlt = matpowFolder + "/matpow_alt.pdl"
   private val matpowInputs = matpowFolder + "/memInputs"
-  private val matpowMap = Map("a" -> (matpowInputs + "/a_2"),
-    "x" -> (matpowInputs + "/x"),
-    "r" -> (matpowInputs + "/r"),
-    "c" -> (matpowInputs + "/c")
+  private val matpowMap = Map("ta" -> (matpowInputs + "/a_2"),
+    "tx" -> (matpowInputs + "/x"),
+    "tr" -> (matpowInputs + "/r"),
+    "tc" -> (matpowInputs + "/c")
   )
 
+  /*
   test("Matrix Power Parse Test") {
     testParse(new File(matpowFolder),
       new File(matpowFile))
-  }
+  }*/
   
   test("Matrix Power Typecheck Test") {
     testTypecheck(new File(matpowFolder),
@@ -133,10 +137,11 @@ class MainSuite extends AnyFunSuite {
     )
   }
 
+  /*for now, skip these as they aren't that useful atm.
   test("Matrix Power BRAM Parse Test") {
     testParse(new File(matpowFolder),
       new File(matpowBram))
-  }
+  }*/
 
   test("Matrix Power BRAM Typecheck Test") {
     testTypecheck(new File(matpowFolder),
@@ -158,11 +163,12 @@ class MainSuite extends AnyFunSuite {
       matpowMap
     )
   }
-  
+
+  /*
   test("Matrix Power ALT Parse Test") {
     testParse(new File(matpowFolder),
       new File(matpowAlt))
-  }
+  }*/
 
   test("Matrix Power ALT Typecheck Test") {
     testTypecheck(new File(matpowFolder),
@@ -191,14 +197,15 @@ class MainSuite extends AnyFunSuite {
   private val multiSplit = multiFolder + "/multiexec_split.pdl"
   private val multiInputs = multiFolder + "/memInputs"
   private val memMap = Map(
-    "i" -> (multiInputs + "/i"),
-    "r" -> (multiInputs + "/r")
+    "ti" -> (multiInputs + "/i"),
+    "tr" -> (multiInputs + "/r")
   )
 
+  /* for now, skip these as they aren't that useful atm.
   test("Multiple Execution Parse Test") {
     testParse(new File(multiFolder),
       new File(multiFile))
-  }  
+  }  */
   
   test("Multiple Execution Typecheck Test") {
     testTypecheck(new File(multiFolder),
@@ -221,10 +228,11 @@ class MainSuite extends AnyFunSuite {
     )
   }
 
+  /*
   test("Multiple Execution OOO WB Parse Test") {
     testParse(new File(multiFolder),
       new File(multiFile))
-  }
+  }*/
   
   test("Multiple Execution OOO WB Typecheck Test") {
     testTypecheck(new File(multiFolder),
@@ -247,10 +255,11 @@ class MainSuite extends AnyFunSuite {
     )
   }
 
+  /*
   test("Multiple Execution Split Parse Test") {
     testParse(new File(multiFolder),
       new File(multiSplit))
-  }
+  }*/
 
   test("Multiple Execution Split Typecheck Test") {
     testTypecheck(new File(multiFolder),
@@ -271,14 +280,6 @@ class MainSuite extends AnyFunSuite {
       None,
       memMap
     )
-  }
-
-
-  test("Lock Typechecking Tests") {
-    val testDir = new File("src/test/tests/typecheckTests")
-    for (file <- testDir.listFiles().filter(f => f.isFile)) {
-      testTypecheck(testDir, file)
-    }
   }
 
 }

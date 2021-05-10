@@ -92,8 +92,9 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
-      case Syntax.CLockOp(mem, op) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" + 
-        printExprToString(mem.evar.get) + "]" else "") +  ");"
+      case Syntax.CLockOp(mem, op, t) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" +
+        printExprToString(mem.evar.get) + "]" else "") + (if (t.isDefined) "," + (if (t.get == LockRead) "R" else "W") else "") + ");"
+
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
       case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
@@ -137,7 +138,13 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
+      case CirLockMem(elemTyp, addrSize, _, sz) => "memlock(" +
+        printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
       case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
+      case CirLockRegFile(elemTyp, addrSize, _, sz) => "rflock(" +
+        printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
+      case CirLock(mem, impl, sz) => impl.toString + "(" + mem.v + ")" +
+        "<" + sz.map(a => a.toString).mkString(",") + ">"
       case CirNew(mod, mods) => "new " + mod.v +
         "[" + mods.map(m => m.v).mkString(",") + "]"
       case CirCall(mod, args) => "call " + mod.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
@@ -152,7 +159,8 @@ class PrettyPrinter(output: Option[File]) {
     case TBool() => "bool"
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)
     case TRecType(name, fields) => name.v + " : " + "{ " + fields.keySet.map(f => f.v + ":" + fields(f)).mkString(",") + " }"
-    case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" + "<" + rlat + ", " + wlat + ">"
+    case TMemType(elem, addrSize, rlat, wlat) => printTypeToString(elem) + "[" + addrSize.toString + "]" +
+      "<" + rlat + ", " + wlat + ">"
     case TModType(_, _, _, _) => "TODO MOD TYPE"
     case TNamedType(name) =>  name.v
     case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)
