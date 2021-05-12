@@ -74,7 +74,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           val write = IMemWrite(mem, index, data).setPos(e.pos)
           write.memOpType = e.memOpType
           write.granularity = e.granularity
-          (write, CEmpty)
+          (write, CEmpty())
         case _ => throw UnexpectedType(mem.pos, "Memory Write Statement", "Memory Type", mem.typ.get)
       }
       //module calls
