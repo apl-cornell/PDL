@@ -87,7 +87,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }
       env
-    case Syntax.CEmpty => env
+    case Syntax.CEmpty() => env
     case _ => env
   }
 

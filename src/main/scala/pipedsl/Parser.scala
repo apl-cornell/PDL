@@ -194,23 +194,23 @@ class Parser extends RegexParsers with PackratParsers {
     "default:" ~> block
   }
   lazy val split: P[Command] = positioned {
-    "split" ~> braces(rep(casestmt) ~ defaultcase.?) ^^ { case cl ~ dc => CSplit(cl, if (dc.isDefined) dc.get else CEmpty) }
+    "split" ~> braces(rep(casestmt) ~ defaultcase.?) ^^ { case cl ~ dc => CSplit(cl, if (dc.isDefined) dc.get else CEmpty()) }
   }
 
   lazy val block: P[Command] = {
-    braces(cmd.?) ^^ (c => c.getOrElse(CEmpty))
+    braces(cmd.?) ^^ (c => c.getOrElse(CEmpty()))
   }
 
   lazy val conditional: P[Command] = positioned {
     "if" ~> parens(expr) ~ block ~ ("else" ~> blockCmd).? ^^ {
-      case cond ~ cons ~ alt => CIf(cond, cons, if (alt.isDefined) alt.get else CEmpty)
+      case cond ~ cons ~ alt => CIf(cond, cons, if (alt.isDefined) alt.get else CEmpty())
     }
   }
 
   lazy val seqCmd: P[Command] = {
     simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
       blockCmd ~ seqCmd ^^ { case c1 ~ c2 => CSeq(c1, c2) } |
-      simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty }
+      simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty() }
   }
 
   lazy val cmd: P[Command] = positioned {

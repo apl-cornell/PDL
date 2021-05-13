@@ -82,7 +82,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           .setPos(c.pos)
       case (EVar(_), ECall(id, args)) =>
         //TODO cleanup and stop copying code
-        val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty, List()))((cs, a) => {
+        val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty(), List()))((cs, a) => {
           val argAssn = CAssign(newVar("carg", a.pos, a.typ), a).setPos(a.pos)
           (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
         })
@@ -93,7 +93,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
     }
     //calls also get translated to send statements later
     case CExpr(ECall(id, args)) =>
-      val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty, List()))((cs, a) => {
+      val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty(), List()))((cs, a) => {
         val argAssn = CAssign(newVar("carg", a.pos, a.typ), a).setPos(a.pos)
         (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
       })

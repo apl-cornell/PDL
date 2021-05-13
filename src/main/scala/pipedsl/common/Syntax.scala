@@ -4,6 +4,7 @@ import Errors._
 import Security._
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
+import com.microsoft.z3.{BoolExpr}
 
 
 object Syntax {
@@ -26,6 +27,9 @@ object Syntax {
     sealed trait LockInfoAnnotation {
       var memOpType: Option[LockType] = None
       var granularity: LockGranularity = General
+    }
+    sealed trait SMTPredicate {
+      var predicateCtx: Option[BoolExpr] = None
     }
   }
 
@@ -208,7 +212,7 @@ object Syntax {
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
 
-  sealed trait Command extends Positional
+  sealed trait Command extends Positional with SMTPredicate
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
@@ -228,7 +232,7 @@ object Syntax {
   case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
-  case object CEmpty extends Command
+  case class CEmpty() extends Command
 
   sealed trait InternalCommand extends Command
 

@@ -199,7 +199,7 @@ object BSVSyntax {
       case CExpr(exp) =>
         List(BExprStmt(toExpr(exp)))
       //TODO case Syntax.CSplit(cases, default) =>
-      case CEmpty => List()
+      case CEmpty() => List()
       case _ => throw UnexpectedCommand(c)
     }
   }
