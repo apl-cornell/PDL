@@ -117,4 +117,5 @@ class PredicateGenerator(ctx: Z3Context) {
       }
       case None => throw new RuntimeException("Missing type")
     }
+
 }

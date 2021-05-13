@@ -81,7 +81,7 @@ object Main {
       val ctx = new Context()
       val predicateGenerator = new PredicateGenerator(ctx)
       predicateGenerator.checkProgram(recvProg)
-      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockTypeMap, ctx)
+      val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
       SpeculationChecker.check(recvProg, Some(basetypes))

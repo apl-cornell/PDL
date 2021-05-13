@@ -9,6 +9,8 @@ import pipedsl.common.Utilities.{mkAnd, mkImplies, updateSetMap}
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
 
+import scala.collection.mutable
+
 /**
  * This checks that all reads and writes to memories
  * only happen when appropriate.
@@ -20,12 +22,11 @@ import pipedsl.typechecker.TypeChecker.TypeChecks
  * possible, the type checking fails.
  */
 //TODO: Make error case classes
-class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id, Map[Id, LockType]], val ctx: Z3Context)
+class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: Map[Id, Map[Id, LockGranularity]], val ctx: Z3Context)
   extends TypeChecks[LockArg, Z3AST] {
   private val solver: Z3Solver = ctx.mkSolver()
 
   private val predicates: mutable.Stack[Z3AST] = mutable.Stack(ctx.mkTrue())
-  private val predicateGenerator = new PredicateGenerator(ctx)
 
   private val lockReserveMode = ctx.mkIntConst("ReservedMode")
   private val lockReleaseMode = ctx.mkIntConst("ReleasedMode")
@@ -37,23 +38,23 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
   private val READ = 0
   private val WRITE = 1
 
-  private var incrementer = 0
 
   private var currentMod = Id("-invalid-")
 
   override def emptyEnv(): Environment[LockArg, Z3AST] = ConditionalLockEnv(ctx = ctx)
+
   //Functions can't interact with locks or memories right now.
   //Could add that to the function types explicitly to be able to check applications
   override def checkFunc(f: FuncDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
 
   override def checkModule(m: ModuleDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
     //Reads must go before writes, so the modes are initialized to read
-    lockTypeMap(m.name)
-      .filter( l => l._2 == Specific)
+    lockGranularityMap(m.name)
+      .filter(l => l._2 == Specific)
       .keys
       .foreach(l => {
-        topLevelReserveModeMap += (l -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(READ))))
-        topLevelReleaseModeMap += (l -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(READ))))
+        topLevelReserveModeMap += (l -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(READ))))
+        topLevelReleaseModeMap += (l -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(READ))))
         SMTReserveModeListMap += (l -> Set())
         SMTReleaseModeListMap += (l -> Set())
       })
@@ -65,12 +66,12 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
       checkState(id, finalenv, ctx.mkTrue(), Released.order, Free.order) match {
         case Z3Status.SATISFIABLE =>
           throw new RuntimeException("We want everything at end to be free or released")
-        case _ => 
+        case _ =>
       }
     })
     env //no change to lock map after checking module
   }
-  
+
   def checkCommand(c: Command, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
     c match {
       case CSeq(c1, c2) =>
@@ -141,17 +142,18 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
           case Locks.Acquired => Reserved
           case Locks.Released => Acquired
         }
-      checkState(mem, env, c.predicateCtx.get, expectedLockState.order) match {
-        case Z3Status.UNSATISFIABLE =>
-          env.add(mem, mkImplies(ctx, c.predicateCtx.get, makeEquals(mem, op)))
-        case Z3Status.UNKNOWN =>
-          throw new RuntimeException("An error occurred while attempting to solve the constraints")
-        case Z3Status.SATISFIABLE =>
-          throw new RuntimeException(s"A possible thread of execution can cause this to fail: memories needs to be $expectedLockState before $op")
-      }
+        checkState(mem, env, c.predicateCtx.get, expectedLockState.order) match {
+          case Z3Status.UNSATISFIABLE =>
+            env.add(mem, mkImplies(ctx, c.predicateCtx.get, makeEquals(mem, op)))
+          case Z3Status.UNKNOWN =>
+            throw new RuntimeException("An error occurred while attempting to solve the constraints")
+          case Z3Status.SATISFIABLE =>
+            throw new RuntimeException(s"A possible thread of execution can cause this to fail: memories needs to be $expectedLockState before $op")
+        }
       case _ => env
     }
   }
+
   private def checkExpr(e: Expr, env: Environment[LockArg, Z3AST], predicates: Z3BoolExpr): Environment[LockArg, Z3AST] = e match {
     case EUop(_, ex) => checkExpr(ex, env, predicates)
     case EBinop(_, e1, e2) =>
@@ -174,22 +176,22 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     (c.op, c.lockType) match {
       case (Reserved, Some(LockWrite)) =>
         if (predicates.size == 1) {
-          topLevelReserveModeMap += (c.mem.id -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
+          topLevelReserveModeMap += (c.mem.id -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
         } else {
           SMTReserveModeListMap = updateSetMap(
             SMTReserveModeListMap,
             c.mem.id,
-            mkImplies(mkAnd(predicates.toSeq: _*), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
+            mkImplies(ctx, mkAnd(ctx, predicates.toSeq: _*), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
         }
 
       case (Released, Some(LockWrite)) =>
         if (predicates.size == 1) {
-          topLevelReleaseModeMap += (c.mem.id -> mkImplies(ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
+          topLevelReleaseModeMap += (c.mem.id -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
         } else {
           SMTReleaseModeListMap = updateSetMap(
             SMTReleaseModeListMap,
             c.mem.id,
-            mkImplies(mkAnd(predicates.toSeq: _*), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
+            mkImplies(ctx, mkAnd(ctx, predicates.toSeq: _*), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
         }
       case (r@(Reserved | Released), Some(LockRead)) => checkLockWrite(r, c.mem.id) match {
         case Z3Status.UNSATISFIABLE =>
@@ -201,17 +203,16 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
   }
 
   private def checkLockWrite(ls: LockState, mem: Id): Z3Status = {
-    solver.add(ctx.mkEq(mkAnd(predicates.toSeq: _*), ctx.mkTrue()))
+    solver.add(ctx.mkEq(mkAnd(ctx, predicates.toSeq: _*), ctx.mkTrue()))
     val expectedName = ls match {
       case Released => lockReleaseMode
       case Reserved => lockReserveMode
     }
-    val assertion = ls match
-      {
-        case Released => ctx.mkAnd((SMTReleaseModeListMap(mem) + topLevelReleaseModeMap(mem)).toSeq: _*)
-        case Reserved => ctx.mkAnd((SMTReserveModeListMap(mem) + topLevelReserveModeMap(mem)).toSeq: _*)
-      }
-    solver.add(mkAnd(assertion, ctx.mkEq(expectedName, ctx.mkInt(WRITE))))
+    val assertion = ls match {
+      case Released => ctx.mkAnd((SMTReleaseModeListMap(mem) + topLevelReleaseModeMap(mem)).toSeq: _*)
+      case Reserved => ctx.mkAnd((SMTReserveModeListMap(mem) + topLevelReserveModeMap(mem)).toSeq: _*)
+    }
+    solver.add(mkAnd(ctx, assertion, ctx.mkEq(expectedName, ctx.mkInt(WRITE))))
     //If satisfiable, this means that the lock mode is in the wrong state.
     //This is because we only call this method when checking that
     //The locks are still in Read mode, so if it is possible to be in
@@ -220,13 +221,13 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     solver.reset
     check
   }
-  
+
   private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], predicates: Z3BoolExpr, lockStateOrders: Int*): Z3Status = {
 
-  // Makes an OR of all given lock states
+    // Makes an OR of all given lock states
     val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) =>
       ctx.mkOr(ast, ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(order))))
-    
+
     // Makes all the current predicates true
     solver.add(ctx.mkEq(predicates, ctx.mkTrue()))
 
@@ -236,20 +237,20 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockTypeMap: Map[Id,
     solver.reset()
     check
   }
-  
+
   private def makeEquals(mem: LockArg, lockState: LockState): Z3AST = {
     ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(lockState.order))
   }
-  
+
   private def constructVarName(mem: LockArg): String = {
     mem.id + (if (mem.evar.isDefined) "[" + mem.evar.get.id.v + "]" else "")
   }
-  
+
   private def checkAcquired(mem: Id, expr: Expr, env: Environment[LockArg, Z3AST], predicates: Z3BoolExpr): Environment[LockArg, Z3AST] = {
-    if (lockTypeMap(currentMod)(mem).equals(Specific) && !expr.isInstanceOf[EVar]) {
+    if (lockGranularityMap(currentMod)(mem).equals(Specific) && !expr.isInstanceOf[EVar]) {
       throw new RuntimeException("We expect the argument in the memory access to be a variable")
     }
-    checkState(if (lockTypeMap(currentMod)(mem).equals(General)) LockArg(mem, None) else LockArg(mem, Some(expr.asInstanceOf[EVar])),
+    checkState(if (lockGranularityMap(currentMod)(mem).equals(General)) LockArg(mem, None) else LockArg(mem, Some(expr.asInstanceOf[EVar])),
       env,
       predicates,
       Acquired.order)
