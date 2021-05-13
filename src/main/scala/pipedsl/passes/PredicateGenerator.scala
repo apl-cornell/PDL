@@ -1,28 +1,31 @@
-package pipedsl.typechecker
+package pipedsl.passes
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Expr => Z3Expr}
 import pipedsl.common.Syntax
 import pipedsl.common.Syntax.{BoolOp, BoolUOp, CSeq, Command, EVar, EqOp, Expr, ModuleDef, Prog}
 import pipedsl.common.Utilities.mkAnd
+import pipedsl.passes.Passes.ProgPass
 
 import scala.collection.mutable
 
-class PredicateGenerator(ctx: Z3Context) {
+class PredicateGenerator extends ProgPass[Z3Context] {
 
+  private val ctx = new Z3Context()
   private val intArray = ctx.mkArraySort(ctx.getIntSort, ctx.getIntSort)
   private val predicates: mutable.Stack[Z3AST] = mutable.Stack(ctx.mkTrue())
   private var incrementer = 0
 
-  def checkProgram(p: Prog): Unit = {
-    p.moddefs.foreach(m => checkModule(m))
+  override def run(p: Prog): Z3Context = {
+    p.moddefs.foreach(m => run(m))
+    ctx
   }
 
-  def checkModule(m: ModuleDef):Unit = {
+  private def run(m: ModuleDef): Unit = {
     //no need to reset any state here, at the end of a module predicates will be just true
     annotateCommand(m.body)
   }
 
-  def annotateCommand(c: Command): Unit =  {
+  private def annotateCommand(c: Command): Unit =  {
     c match {
       case CSeq(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
       case Syntax.CTBar(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
@@ -72,7 +75,7 @@ class PredicateGenerator(ctx: Z3Context) {
     }
   }
 
-  def abstractInterpExpr(e: Expr): Option[Z3Expr] = e match {
+  private def abstractInterpExpr(e: Expr): Option[Z3Expr] = e match {
     case evar: EVar => Some(declareConstant(evar))
     case Syntax.EInt(v, base, bits) => Some(ctx.mkInt(v))
     case Syntax.EBool(v) => if (v) Some(ctx.mkTrue()) else Some(ctx.mkFalse())
@@ -107,7 +110,7 @@ class PredicateGenerator(ctx: Z3Context) {
     case _ => None
   }
 
-  def declareConstant(evar: EVar): Z3Expr =
+  private def declareConstant(evar: EVar): Z3Expr =
     evar.typ match {
       case Some(value) => value match {
         case _: Syntax.TSizedInt => ctx.mkIntConst(evar.id.v);
