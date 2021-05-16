@@ -1,0 +1,50 @@
+
+def helper1(a: int<32>, b:bool, c: String): int<32> {
+  d = a + 1;
+  f = d + 4;
+  if (f == d) {
+    return f;
+  }
+}
+
+def helper2(a:bool, b: bool): bool {
+  c = a && b;
+  return c;
+}
+
+pipe test1(input: int<32>)[rf: int<32>[32]] {
+  a = 6 * 6;
+  int<32> b = a;
+  int<32> c = a + b;
+}
+
+pipe test2(input: int<32>)[rf: int<32>[32]] {
+  a = 1;
+  b = rf[a];
+}
+
+pipe test3(input: int<32>)[rf: int<32>[32]] {
+  a = 1;
+  int<32> b = a << 4;
+  int<5> c = a << 4;
+}
+
+pipe test4(input: int<32>)[rf: int<32>[32]] {
+  a = 15<32>;
+  int<32> b = a{0:8};
+}
+
+pipe test5()[] {
+  a = 6 * 6;
+  int<6> b = a;
+  int<64> c = helper1(a, true, "hi");
+}
+
+pipe test6()[] {
+  a = 6 - 6;
+  int<3> b = a;
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

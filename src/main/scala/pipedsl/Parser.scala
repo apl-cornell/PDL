@@ -217,7 +217,7 @@ class Parser extends RegexParsers with PackratParsers {
       seqCmd
   }
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
+  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), unsigned = true) }
   lazy val latency: P[Latency.Latency] = "c" ^^ { _ => Latency.Combinational } |
     "s" ^^ { _ => Latency.Sequential } |
     "a" ^^ { _ => Latency.Asynchronous }

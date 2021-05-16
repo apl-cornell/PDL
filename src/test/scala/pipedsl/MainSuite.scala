@@ -274,11 +274,13 @@ class MainSuite extends AnyFunSuite {
   }
 
 
-  test("Lock Typechecking Tests") {
-    val testDir = new File("src/test/tests/typecheckTests")
+
+  val testDir = new File("src/test/tests/typecheckTests")
     for (file <- testDir.listFiles().filter(f => f.isFile)) {
-      testTypecheck(testDir, file)
+      test(file.toString()) { 
+        testTypecheck(testDir, file)
+      }
     }
-  }
+  
 
 }

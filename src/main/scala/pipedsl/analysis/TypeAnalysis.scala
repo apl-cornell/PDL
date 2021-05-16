@@ -5,7 +5,7 @@ import org.bitbucket.inkytonik.kiama.relation.Tree
 import pipedsl.common.Errors.{ArgLengthMismatch, IllegalCast, MalformedFunction, MissingType, UnexpectedAssignment, UnexpectedCase, UnexpectedCommand, UnexpectedReturn, UnexpectedSubtype, UnexpectedType}
 import pipedsl.common.Syntax
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
-import pipedsl.common.Syntax.{BitOp, BitUOp, BoolOp, BoolUOp, CAssign, CCheck, CIf, CLockEnd, CLockOp, CLockStart, COutput, CRecv, CReturn, CSeq, CSpeculate, CSplit, CTBar, CirCall, CirConnect, CirExpr, CirExprStmt, CirMem, CirNew, CirRegFile, CirSeq, Circuit, CmpOp, Command, EVar, EqOp, Expr, FuncDef, Id, ModuleDef, NumOp, NumUOp, Prog, ProgramNode, TBool, TFun, TMemType, TModType, TNamedType, TRecType, TSizedInt, TString, TVoid, Type}
+import pipedsl.common.Syntax._
 import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{areEqual, isSubtype}
 
@@ -143,7 +143,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
             if(!mem.evar.isEmpty) {
               val idxt = typeCheck(mem.evar.get)
               idxt match {
-                case TSizedInt(l, true) if l == memt.addrSize => ()
+                case TSizedInt(l, true) if l.asInstanceOf[TBitWidthLen].len == memt.addrSize => ()
                 case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
               }
             }
@@ -253,7 +253,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
   private def checkExpr(e: Expr): Type = {
     val tenv = context(e)
     e match {
-      case Syntax.EInt(v, base, bits) => TSizedInt(bits, unsigned = true)
+      case Syntax.EInt(v, base, bits) => TSizedInt(TBitWidthLen(bits), unsigned = true)
       case Syntax.EString(v) =>TString()
       case Syntax.EBool(v) =>TBool()
       case Syntax.EUop(op, ex) =>
@@ -268,7 +268,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
         val t2 = typeCheck(e2)
         op match {
           case BitOp("++", _) => (t1, t2) match {
-            case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => TSizedInt(l1 + l2, u1)
+            case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => TSizedInt(TBitWidthLen(l1.asInstanceOf[TBitWidthLen].len + l2.asInstanceOf[TBitWidthLen].len), u1)
             case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
           }
           case BitOp("<<", _) => (t1, t2) match {
@@ -278,7 +278,7 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
             case (TSizedInt(l1, u1), TSizedInt(_, _)) => TSizedInt(l1, u1)
           }
           case NumOp("*", _) => (t1, t2) match {
-            case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => TSizedInt(l1 + l2, u1)
+            case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => TSizedInt(TBitWidthLen(l1.asInstanceOf[TBitWidthLen].len + l2.asInstanceOf[TBitWidthLen].len), u1)
             case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
           }
           case _ => if (!areEqual(t1, t2)) { throw UnexpectedType(e2.pos, e2.toString, t1.toString(), t2) } else {
@@ -307,14 +307,14 @@ class TypeAnalysis(program: Tree[ProgramNode, Prog]) extends Attribution {
         val memt = tenv(mem)
         val idxt= typeCheck(index)
         (memt, idxt) match {
-          case (TMemType(e, s, _, _), TSizedInt(l, true)) if l == s => e
+          case (TMemType(e, s, _, _), TSizedInt(l, true)) if l.asInstanceOf[TBitWidthLen].len == s => e
           case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
         }
       case Syntax.EBitExtract(num, start, end) =>
         val ntyp = typeCheck(num)
         val bitsLeft = math.abs(end - start) + 1
         ntyp.matchOrError(e.pos, "bit extract", "sized number") {
-          case TSizedInt(l, u) if l >= bitsLeft => TSizedInt(bitsLeft, u)
+          case TSizedInt(l, u) if l.asInstanceOf[TBitWidthLen].len >= bitsLeft => TSizedInt(TBitWidthLen(bitsLeft), u)
           case _ => throw UnexpectedType(e.pos, "bit extract", "sized number larger than extract range", ntyp)
         }
       case Syntax.ETernary(cond, tval, fval) =>

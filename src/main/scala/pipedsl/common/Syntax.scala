@@ -74,11 +74,15 @@ object Syntax {
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
       case TNamedType(n) => n.toString
+      case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")" 
+      case TBitWidthLen(len) => len.toString()
+      case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")" 
+      case TBitWidthVar(name) => "bitVar(" + name + ")"
     }
   }
   // Types that can be upcast to Ints
   sealed trait IntType
-  case class TSizedInt(len: Int, unsigned: Boolean) extends Type with IntType
+  case class TSizedInt(len: TBitWidth, unsigned: Boolean) extends Type with IntType
   // Use case class instead of case object to get unique positions
   case class TString() extends Type
   case class TVoid() extends Type
@@ -90,6 +94,11 @@ object Syntax {
   case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
+  sealed trait TBitWidth extends Type
+  case class TBitWidthVar(name: Id) extends TBitWidth
+  case class TBitWidthLen(len: Int) extends TBitWidth
+  case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
 
   /**
    * Define common helper methods implicit classes.

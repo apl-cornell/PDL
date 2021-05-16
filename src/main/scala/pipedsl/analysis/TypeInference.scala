@@ -114,7 +114,8 @@ object TypeInference {
 //INVARIANTS
 //Transforms the argument sub by composing any additional substitution
 //Transforms the argument env by subbing in the returned substitution and adding any relevatn variables
-  def checkCommand(c: Command, env: TypeEnv, sub: Subst): (TypeEnv, Subst) =  c match {
+  def checkCommand(c: Command, env: TypeEnv, sub: Subst): (TypeEnv, Subst) = {
+    c match {
     case CLockOp(mem, op) =>  //test basic first
       env(mem.id) match {
         case t@TMemType(elem, addrSize, readLatency, writeLatency) => mem.evar match {
@@ -122,7 +123,7 @@ object TypeInference {
             val (s, t, e) = infer(env, value)
             val tempSub = compose_subst(sub, s)
             val tNew = apply_subst_typ(tempSub, t)
-            val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(addrSize, true)))
+            val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(TBitWidthLen(addrSize), true)))
             (e.apply_subst_typeenv(newSub), newSub)
           case None => (env, sub)
         }
@@ -215,7 +216,7 @@ object TypeInference {
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
       val rhstyp = apply_subst_typ(tempSub, trhs)
-      val s1 = unify(lhstyp, rhstyp)
+      val s1 = unify(rhstyp, lhstyp)
       val sret = compose_many_subst(tempSub, s1, typ match {
         case Some(value) => compose_subst(unify(lhstyp, value), unify(rhstyp, value))
         case None => List()
@@ -231,7 +232,7 @@ object TypeInference {
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
       val rhstyp = apply_subst_typ(tempSub, trhs)
-      val s1 = unify(lhstyp, rhstyp)
+      val s1 = unify(rhstyp, lhstyp)
       val sret = compose_many_subst(tempSub, s1, typ match {
         case Some(value) => compose_subst(unify(lhstyp, value), unify(rhstyp, value))
         case None => List()
@@ -246,13 +247,20 @@ object TypeInference {
       val (e2, s2) = checkCommand(c2, e1, s)
       (e2, s2)
 }
+  }
 
   private def generateTypeVar(): TNamedType = {
     counter += 1
     TNamedType(Id("__TYPE__" + counter))
   }
+
+  private def generateBitWidthTypeVar(): TBitWidthVar = {
+    counter += 1
+    TBitWidthVar(Id("__BITWIDTH__" + counter))
+  }
+
   private def occursIn(name: Id, b: Type): Boolean = b match {
-    case TSizedInt(len, unsigned) => false
+    case TSizedInt(len, unsigned) => occursIn(name, len)
     case TString() => false
     case TVoid() => false
     case TBool() => false
@@ -260,13 +268,16 @@ object TypeInference {
     case TRecType(name, fields) =>false
     case TMemType(elem, addrSize, readLatency, writeLatency) => false
     case TModType(inputs, refs, retType, name) => false
-    case TNamedType(name) => false
+    case TNamedType(name1) => name1 == name
+    case TBitWidthVar(name1) => name1 == name
+    case TBitWidthAdd(b1, b2) => occursIn(name, b1) || occursIn(name, b2)
+    case TBitWidthMax(b1, b2) => occursIn(name, b1) || occursIn(name, b2)
+    case TBitWidthLen(len) => false
   }
 
   private def subst_into_type(typevar: Id, toType: Type, inType: Type): Type = inType match {
-    case TRecType(name, fields) => inType //TODO 
     case t@TMemType(elem, addrSize, readLatency, writeLatency) => t.copy(elem=subst_into_type(typevar, toType, elem))
-    case TSizedInt(len, unsigned) => inType
+    case TSizedInt(len, unsigned) => TSizedInt(subst_into_type(typevar, toType, len).asInstanceOf[TBitWidth], unsigned)
     case TString() => inType
     case TBool() => inType
     case TVoid() => inType 
@@ -280,6 +291,23 @@ object TypeInference {
           case Some(value) => Some(subst_into_type(typevar, toType, value))
           case None => None
         }, name)
+    case t: TBitWidth => 
+      t match {
+        case TBitWidthVar(name) => if (name == typevar) toType else inType
+        case TBitWidthLen(len) => inType
+        case TBitWidthAdd(b1, b2) => 
+          val t1 = TBitWidthAdd(subst_into_type(typevar, toType, b1).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, b2).asInstanceOf[TBitWidth])
+          (t1.b1, t1.b2) match {
+            case (TBitWidthLen(len1), TBitWidthLen(len2)) => TBitWidthLen(len1 + len2)
+            case _ => t1
+          }
+        case TBitWidthMax(b1, b2) => 
+          val t1 = TBitWidthMax(subst_into_type(typevar, toType, b1).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, b2).asInstanceOf[TBitWidth])
+          (t1.b1, t1.b2) match {
+            case (TBitWidthLen(len1), TBitWidthLen(len2)) => TBitWidthLen(len1.max(len2))
+            case _ => t1
+          }
+      }
   }
 
   def apply_subst_typ(subst: Subst, t: Type): Type = subst.foldLeft[Type](t)((t1, s) => subst_into_type(s._1, s._2, t1))
@@ -293,39 +321,42 @@ object TypeInference {
   private def compose_many_subst(subs: Subst*): Subst = 
     subs.foldRight[Subst](List())((s1, s2) => compose_subst(s1, s2))
 
-  
+  //for subtyping bit widths, t1 is the subtype, t2 is the supertype. so t2 is the expected
   private def unify(a: Type, b: Type): Subst = (a,b) match {
     case (t1: TNamedType, t2) => if (!occursIn(t1.name, t2)) List((t1.name, t2)) else List()
     case (t1, t2: TNamedType) => if (!occursIn(t2.name, t1)) List((t2.name, t1)) else List()
     case (_:TString, _:TString) => List()
     case (_: TBool, _:TBool) => List()
     case (_: TVoid, _:TVoid) => List()
-    case (_: TSizedInt, _: TSizedInt) => List()
+    case (TSizedInt(len1, unsigned1), TSizedInt(len2, unsigned)) => unify(len1, len2)
       //TODO: TSIZEDINT
     case (TFun(args1, ret1), TFun(args2, ret2)) if args1.length == args2.length =>  
-      compose_subst(args1.zip(args2).foldLeft[Subst](List())((s, t) => s ++ unify(t._1, t._2)), unify(ret1, ret2))
+      val s1 = args1.zip(args2).foldLeft[Subst](List())((s, t) => compose_subst(s, unify(apply_subst_typ(s, t._1), apply_subst_typ(s, t._2))))
+      compose_subst(s1, unify(apply_subst_typ(s1, ret1), apply_subst_typ(s1, ret2)))
     case (TModType(input1, refs1, retType1, name1), TModType(input2, refs2, retType2, name2)) => 
     //TODO: Name?\
       if (name1 != name2) throw UnificationError(a,b)
-      compose_subst(
-        input1.zip(input2).foldLeft[Subst](List())((s, t) => s ++ unify(t._1, t._2)), 
-        compose_subst(
-          refs1.zip(refs2).foldLeft[Subst](List())((s,t) => s ++ unify(t._1, t._2)),
+      val s1 = input1.zip(input2).foldLeft[Subst](List())((s, t) => compose_subst(s, unify(apply_subst_typ(s, t._1), apply_subst_typ(s, t._2))))
+      val s2 = refs1.zip(refs2).foldLeft[Subst](s1)((s,t) => compose_subst(s, unify(apply_subst_typ(s, t._1), apply_subst_typ(s, t._2))))
+      compose_subst(s2,
           ((retType1, retType2) match {
-            case (Some(t1:Type), Some(t2:Type)) => unify(t1, t2)
+            case (Some(t1:Type), Some(t2:Type)) => unify(apply_subst_typ(s2, t1), apply_subst_typ(s2,t2))
             case (None, None) => List()
             case _ => throw UnificationError(a,b)
-          })))
+          }))
     case (TMemType(elem1, addrSize1, readLatency1, writeLatency1), TMemType(elem2, addrSize2, readLatency2, writeLatency2)) =>
       if (addrSize1 != addrSize2 || readLatency1 != readLatency2 || writeLatency1 != writeLatency2) throw UnificationError(a, b)
       unify(elem1, elem2)
+    case (t1: TBitWidthVar, t2: TBitWidth) => if(!occursIn(t1.name, t2)) List((t1.name, t2)) else List()
+    case (t1: TBitWidth, t2: TBitWidthVar) => if(!occursIn(t2.name, t1)) List((t2.name, t1)) else List()
+    case (t1: TBitWidthLen, t2: TBitWidthLen) => if (t2.len < t1.len) throw UnificationError(t1, t2) else List() //TODO: need to figure this out: we want this subtyping rule to throw error when its being used, but not when its a binop!!!
     case _ => throw UnificationError(a, b)
   }
   
   //Updating the type environment with the new substitution whenever you generate one allows errors to be found :D
   //The environment returned is guaratneed to already have been substituted into with the returned substitution
   private def infer(env: TypeEnv, e: Expr): (Subst, Type, TypeEnv) = e match {
-    case EInt(v, base, bits) => (List(), TSizedInt(bits, true), env)
+    case EInt(v, base, bits) => (List(), TSizedInt(TBitWidthLen(bits), true), env)
     case EString(v) => (List(), TString(), env)
     case EBool(v) => (List(), TBool(), env)
     case EUop(op, ex) => 
@@ -343,9 +374,8 @@ object TypeInference {
       val subTemp = compose_subst(s1, s2)
       val t1New = apply_subst_typ(subTemp, t1)
       val t2New = apply_subst_typ(subTemp, t2)
-      val argSub = unify(t1New, t2New)
-      val subst = unify(TFun(List(t2New,t1New), retType), binOpExpectedType(op))
-      val retSubst = compose_many_subst(subTemp, argSub, subst)
+      val subst = unify(TFun(List(t1New,t2New), retType), binOpExpectedType(op))
+      val retSubst = compose_many_subst(subTemp, subst)
       val retTyp = apply_subst_typ(retSubst, retType)
       (retSubst, retTyp, env2.apply_subst_typeenv(retSubst))
     case EMemAccess(mem, index) => 
@@ -355,15 +385,14 @@ object TypeInference {
       val tTemp = apply_subst_typ(s, t)
       val subst = unify(TFun(List(tTemp), retType), getMemAccessType(env1(mem).asInstanceOf[TMemType]))
       val retSubst = compose_subst(s,subst)
-      val retTyp = apply_subst_typ(retSubst, tTemp)
+      val retTyp = apply_subst_typ(retSubst, retType)
       (retSubst, retTyp, env1.apply_subst_typeenv(retSubst))
     case EBitExtract(num, start, end) =>  
       val (s, t, e) = infer(env, num)
       t match {
-        case TSizedInt(len, unsigned) if len >= (math.abs(end - start) + 1) => (s, t, e)
-        case b => throw UnificationError(b, TSizedInt(32, true))
+        case TSizedInt(TBitWidthLen(len), unsigned) if len >= (math.abs(end - start) + 1) => (s, TSizedInt(TBitWidthLen(math.abs(end - start) + 1), true), e)
+        case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), true)) //TODO Add better error message
       }
-      
       //TODO
     case ETernary(cond, tval, fval) =>  
       val (sc, tc, env1) = infer(env, cond)
@@ -374,7 +403,7 @@ object TypeInference {
       val ttNew = apply_subst_typ(substSoFar, tt)
       val tfNew = apply_subst_typ(substSoFar, tf)
       val substc = unify(tcNew, TBool())
-      val subst = unify(ttNew, tfNew)
+      val subst = unify(ttNew, tfNew) //TODO this will fail with bad subtyping stuff going on currently bc for sized ints, we don't care which one is bigger right
       val retSubst = compose_many_subst(sc, st, sf, substc, subst)
       val retType = apply_subst_typ(retSubst, ttNew)
       (retSubst, retType, env3.apply_subst_typeenv(retSubst))
@@ -390,7 +419,7 @@ object TypeInference {
         typeList = typeList :+ typ
         runningEnv = env1
       }
-      typeList = typeList.map(t=> apply_subst_typ(runningSubst, t))
+      typeList = typeList.map(t => apply_subst_typ(runningSubst, t))
       val subst = unify(TFun(typeList, retType), expectedType)
       val retSubst = compose_subst(runningSubst, subst)
       val retEnv = runningEnv.apply_subst_typeenv(retSubst)
@@ -423,21 +452,43 @@ object TypeInference {
       if (!areEqual(ctyp, newT)) throw Errors.IllegalCast(e.pos, ctyp, newT)
       (s, ctyp, env1)
   }
+
   
   private def binOpExpectedType(b: BOp): Type = b match {
     case EqOp(op) => 
       val t = generateTypeVar() // TODO: This can be anything?
       TFun(List(t, t), TBool())
-    case CmpOp(op) => TFun(List(TSizedInt(32, true), TSizedInt(32, true)), TBool())//TODO: TSizedInt?
+    case CmpOp(op) => TFun(List(TSizedInt(generateBitWidthTypeVar(), true), TSizedInt(generateBitWidthTypeVar(), true)), TBool())//TODO: TSizedInt?
     case BoolOp(op, fun) => TFun(List(TBool(), TBool()), TBool())
-    case NumOp(op, fun) => TFun(List(TSizedInt(32, true), TSizedInt(32, true)), TSizedInt(32, true))
-    case BitOp(op, fun) => TFun(List(TSizedInt(32, true), TSizedInt(32, true)), TSizedInt(32, true))
+    case NumOp(op, fun) => 
+      val b1 = generateBitWidthTypeVar()
+      val b2 = generateBitWidthTypeVar()
+      op match {
+        case "/" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(b1, true))
+        case "*" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthAdd(b1, b2), true))
+        case "+" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthMax(b1, b2), true))
+        case "-" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthMax(b1, b2), true))
+        case "%" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(b1, true))
+      }
+    case BitOp(op, fun) => 
+      val b1 = generateBitWidthTypeVar()
+      val b2 = generateBitWidthTypeVar()
+      op match {
+        case "++" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthAdd(b1, b2), true))
+        case _ => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(b1, true)) 
+      } 
   }
 
   private def uOpExpectedType(u: UOp): Type = u match {
-      case BitUOp(op) => TFun(List(TSizedInt(32, true)), TSizedInt(32, true))
+      case BitUOp(op) =>       
+        val b1 = generateBitWidthTypeVar()
+        //TODO: Fix this
+        TFun(List(TSizedInt(b1, true)), TSizedInt(b1, true))
       case BoolUOp(op) => TFun(List(TBool()), TBool())
-      case NumUOp(op) => TFun(List(TSizedInt(32, true)), TSizedInt(32, true))
+      case NumUOp(op) =>  
+        val b1 = generateBitWidthTypeVar()
+        TFun(List(TSizedInt(b1, true)), TSizedInt(b1, true))
+
   }
 
   private def getArrowModType(t: TModType): TFun = {
@@ -448,7 +499,7 @@ object TypeInference {
   }
 
   private def getMemAccessType(t: TMemType): TFun = {
-    TFun(List(TSizedInt(t.addrSize, unsigned=true)), t.elem)
+    TFun(List(TSizedInt(TBitWidthLen(t.addrSize), unsigned=true)), t.elem)
   }
     
 }

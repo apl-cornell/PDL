@@ -38,7 +38,7 @@ object BSVSyntax {
         bsints.getMemType(isAsync = rlat != Combinational,
           BSizedInt(unsigned = true, addrSize), toBSVType(elem),
           Some(bsints.getDefaultMemHandleType))
-      case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
+      case TSizedInt(len, unsigned) => BSizedInt(unsigned, len.asInstanceOf[TBitWidthLen].len)
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)

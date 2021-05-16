@@ -187,7 +187,7 @@ class TimingAnalysis(program: Tree[ProgramNode, Prog], typeAnalysis: TypeAnalysi
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Asynchronous
-    case e@EVar(id) => if(!availableNow(e)(id) && isRhs(e)) { println(availableNow(e)); println(availableNext(e)); println(generatedAvailableNext(NoneAvailable)(e)); println(generatedAvailableNow(NoneAvailable)(e)); throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
+    case e@EVar(id) => if(!availableNow(e)(id) && isRhs(e)) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
     case ECast(_, exp) => latency(exp)
     case _ => Combinational
   }
