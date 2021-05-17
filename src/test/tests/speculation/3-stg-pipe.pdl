@@ -1,0 +1,54 @@
+spec pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
+     print(pc);
+     //nonblocking spec check
+     start(imem);
+     acquire(imem);
+     int<8> insn <- imem[pc];
+     release(imem);
+     end(imem);
+
+     s <- spec call(pc + 1<8>);
+     ---
+     
+     int<1> op = insn{0:0};
+     int<8> brImm = 0<4> ++ insn{4:1};
+     int<5> rs1 = insn{9:5};
+     int<5> rs2 = insn{14:10};
+     int<5> rd = insns{19:15};
+
+     //blocking spec check
+     if (op == 0<1>) {
+     	verify(s, pc + 1<8>);
+	//maybe implement an unconditional verify
+     }
+
+     start(rf);
+     reserve(rf[rs1], R);
+     reserve(rf[rs2], R);
+     if (op == 0<1>) {
+     	reserve(rf[rd], W);
+     }
+     end(rf);
+     ---
+     block(rf[rs1]);
+     block(rf[rs2]);
+     if (op == 1<1>) {
+       int<8> npc = (rf[rs1] == rf[rs2]) ? pc + brImm : pc + 1<8>;
+       verify(s, npc);
+     }
+     int<32> out = rf[rs1] + rf[rs2];
+     release(rf[rs1]);
+     release(rf[rs2]);
+     ---
+     block(rf[rd]);
+     rf[rd] <- out;
+     release(rf[rd]);
+}
+
+circuit {
+   rename = rflock(int<32>, 5, 128);
+   ti = memory(int<32>, 8);
+   i = Queue(ti);
+   t = new test[rename,i];
+   call t(0<32>);
+}
