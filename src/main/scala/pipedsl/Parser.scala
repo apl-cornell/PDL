@@ -148,8 +148,9 @@ class Parser extends RegexParsers with PackratParsers {
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r)
       } |
-      check |
       speccall |
+      check |
+      resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
       "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t), CLockOp(i, Acquired, t)) } |
@@ -184,14 +185,14 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val speccall: P[Command] = positioned {
-    iden ~ "spec call" ~ iden ~ parens(repsep(expr, ",")) ^^ {
-      case h ~ _ ~ i ~ args => CSpecCall(EVar(h), i, args)
+    iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(expr, ",")) ^^ {
+      case h ~ _ ~ _ ~ i ~ args => CSpecCall(EVar(h), i, args)
     }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
     "verify" ~> parens(variable ~ "," ~ expr) ^^ { case i ~ _ ~ e => CVerify(i, e) } |
-    "invalidate" ~> parens(variable) ^^ { case i => CInvalidate(i) }
+    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 
   lazy val casestmt: P[CaseObj] = positioned {

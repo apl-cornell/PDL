@@ -1,25 +1,26 @@
-spec pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
+pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
      print(pc);
-     //nonblocking spec check
+     // nonblocking spec check
      start(imem);
      acquire(imem);
-     int<8> insn <- imem[pc];
+     int<32> insn <- imem[pc];
      release(imem);
      end(imem);
-
-     s <- spec call(pc + 1<8>);
+     s <- speccall(pc + 1<8>);
      ---
-     
      int<1> op = insn{0:0};
      int<8> brImm = 0<4> ++ insn{4:1};
      int<5> rs1 = insn{9:5};
      int<5> rs2 = insn{14:10};
      int<5> rd = insns{19:15};
 
-     //blocking spec check
+     // blocking spec check
      if (op == 0<1>) {
+        int<1> x = 1;
      	verify(s, pc + 1<8>);
-	//maybe implement an unconditional verify
+	    // maybe implement an unconditional verify
+     } else {
+        invalidate(s);
      }
 
      start(rf);
@@ -33,8 +34,8 @@ spec pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]
      block(rf[rs1]);
      block(rf[rs2]);
      if (op == 1<1>) {
-       int<8> npc = (rf[rs1] == rf[rs2]) ? pc + brImm : pc + 1<8>;
-       verify(s, npc);
+       int<8> npc = (rf[rs1] == rf[rs2]) ? (pc + brImm) : (pc + 1<8>);
+       call cpu(s, npc);
      }
      int<32> out = rf[rs1] + rf[rs2];
      release(rf[rs1]);
