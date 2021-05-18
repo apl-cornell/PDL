@@ -6,7 +6,7 @@ pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: boo
      int<32> insn <- imem[pc];
      release(imem);
      end(imem);
-     s <- speccall(pc + 1<8>);
+     s <- speccall cpu(pc + 1<8>);
      ---
      int<1> op = insn{0:0};
      int<8> brImm = 0<4> ++ insn{4:1};

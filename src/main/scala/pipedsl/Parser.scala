@@ -144,11 +144,11 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
+    speccall |
     typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r)
       } |
-      speccall |
       check |
       resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
