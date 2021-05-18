@@ -57,7 +57,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case (None, None) => None
       }
     }
-    case _: CTBar | _: CSplit | _: CCheck | _:COutput =>
+    case _: CTBar | _: CSplit | _:COutput =>
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     case CIf(_, cons, alt) =>
       val rt = checkFuncWellFormed(cons, tenv)
@@ -284,9 +284,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
         }
       }
-    }
-    case CCheck(_) => {
-      tenv
     }
     case COutput(exp) => {
       checkExpression(exp, tenv)

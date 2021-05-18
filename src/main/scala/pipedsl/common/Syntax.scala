@@ -222,6 +222,10 @@ object Syntax {
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
+  case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
+  case class CCheckSpec(isBlocking: Boolean) extends Command
+  case class CVerify(handle: EVar, exp: Expr) extends Command
+  case class CInvalidate(handle: EVar) extends Command
   case class CPrint(evar: EVar) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
@@ -229,9 +233,9 @@ object Syntax {
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
-  case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
+
 
   sealed trait InternalCommand extends Command
 

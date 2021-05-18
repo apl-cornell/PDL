@@ -93,8 +93,6 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(mem.evar.get, vars, isRhs = true)
       }
       (vars, nextVars)
-    case CCheck(_) =>
-      (vars, nextVars)
     case COutput(exp) =>
       if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)

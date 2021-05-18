@@ -97,7 +97,6 @@ class PrettyPrinter(output: Option[File]) {
 
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
-      case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
       case Syntax.CEmpty() => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +

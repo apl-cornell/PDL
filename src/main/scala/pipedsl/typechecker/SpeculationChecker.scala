@@ -54,10 +54,6 @@ object SpeculationChecker extends TypeChecks[Id, Type] {
     }
     case COutput(_) if specVars.nonEmpty => throw UnresolvedSpeculation(c.pos, "Module Output")
     case CLockOp(_, _, _) => specVars
-    case CCheck(predVar) => specVars match {
-      case v :: tail if v == predVar=> tail
-      case _ => throw AlreadyResolvedSpeculation(c.pos)
-    }
     case CExpr(ECall(_, _)) => if (!modIsSpec && specVars.nonEmpty)
         throw UnresolvedSpeculation(c.pos, "pipeline call statement")
       else
