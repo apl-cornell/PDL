@@ -173,16 +173,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val blockCmd: P[Command] = positioned {
-    block | conditional | speculate | split
+    block | conditional | split
   }
 
-  lazy val speculate: P[Command] = positioned {
-    "speculate" ~> parens(typ ~ variable ~ "=" ~ expr ~ "," ~ block ~ "," ~ block) ^^ {
-      case t ~ v ~ _ ~ ev ~ _ ~ cv ~ _ ~ cs =>
-        v.typ = Some(t)
-        CSpeculate(v, ev, cv, cs)
-    }
-  }
   lazy val check: P[Command] = positioned {
     "check" ~> parens(iden) ^^ { id => CCheck(id) }
   }

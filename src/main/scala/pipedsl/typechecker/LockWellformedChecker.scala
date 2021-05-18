@@ -2,7 +2,7 @@ package pipedsl.typechecker
 
 import pipedsl.common.Errors.MalformedLockTypes
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
-import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSpeculate, CSplit, CTBar, Command, Id, LockArg, LockType, ModuleDef, Prog}
+import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSplit, CTBar, Command, Id, LockArg, ModuleDef, Prog}
 
 /**
  * A class to check whether a program's locks are well formed. Locks are well formed if 
@@ -47,7 +47,6 @@ class LockWellformedChecker() {
     case CSeq(c1, c2) => val s1 = checkCommand(c1, lockArgs); checkCommand(c2, s1)
     case CTBar(c1, c2) => val s1 = checkCommand(c1, lockArgs); checkCommand(c2, s1)
     case CIf(_, cons, alt) => val s1 = checkCommand(cons, lockArgs); checkCommand(alt, s1)
-    case CSpeculate(_, _, verify, body) => val s1 = checkCommand(verify, lockArgs); checkCommand(body, s1)
     case CSplit(cases, default) =>
       val s1 = cases.foldLeft[Set[LockArg]](lockArgs)((s, c) => checkCommand(c.body, s))
       checkCommand(default, s1)

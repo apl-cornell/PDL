@@ -57,7 +57,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case (None, None) => None
       }
     }
-    case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput =>
+    case _: CTBar | _: CSplit | _: CCheck | _:COutput =>
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     case CIf(_, cons, alt) =>
       val rt = checkFuncWellFormed(cons, tenv)
@@ -285,17 +285,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
       }
     }
-    case CSpeculate(nvar, predval, verify, body) => {
-      val (predtyp, env1) = checkExpression(predval, tenv)
-      val ltyp = nvar.typ.get //parser ensures type is defined
-      val nenv = env1.add(nvar.id, ltyp)
-      if (isSubtype(predtyp, ltyp)) {
-        val venv = checkCommand(verify, nenv)
-        val senv = checkCommand(body, nenv)
-        venv.union(senv)
-      }
-      else throw UnexpectedSubtype(predval.pos, "speculate", ltyp, predtyp)
-    }
     case CCheck(_) => {
       tenv
     }
@@ -483,7 +472,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CSeq(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
     case CTBar(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
     case CIf(_, cons, alt) => getSpeculativeVariables(cons) ++ getSpeculativeVariables(alt)
-    case CSpeculate(predVar, _, _, _) => Set(predVar.id)
     case _ => Set()
   }
 }

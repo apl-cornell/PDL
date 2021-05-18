@@ -26,7 +26,6 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       case CIf(cond, cons, alt) => CIf(cond, removeTimingConstructs(cons), removeTimingConstructs(alt))
       case CTBar(c1, c2) => CSeq(removeTimingConstructs(c1), removeTimingConstructs(c2));
       case CLockOp(_, _, _) => CEmpty()
-      case CSpeculate(_, _, _, _) => CEmpty()
       case CCheck(_) => CEmpty()
       case CSplit(cases, default) =>
         val newCases = List[CaseObj]()

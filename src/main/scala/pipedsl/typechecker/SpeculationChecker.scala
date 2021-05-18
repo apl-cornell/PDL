@@ -54,14 +54,6 @@ object SpeculationChecker extends TypeChecks[Id, Type] {
     }
     case COutput(_) if specVars.nonEmpty => throw UnresolvedSpeculation(c.pos, "Module Output")
     case CLockOp(_, _, _) => specVars
-    case CSpeculate(predVar, _, verify, body) =>
-      val specVarsVerify = checkCommand(verify, specVars, modIsSpec)
-      val specVarsWithPred = predVar.id +: specVars
-      val specVarsSpec = checkCommand(body, specVarsWithPred, modIsSpec)
-      if (specVarsSpec != specVarsWithPred) {
-        throw MismatchedSpeculationState(c.pos)
-      }
-      specVarsVerify
     case CCheck(predVar) => specVars match {
       case v :: tail if v == predVar=> tail
       case _ => throw AlreadyResolvedSpeculation(c.pos)

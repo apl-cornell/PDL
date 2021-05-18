@@ -770,7 +770,6 @@ object BluespecGeneration {
       case CLockOp(_, _, _) => None
       case CCheck(_) => None
       case CEmpty() => None
-      case _: ISpeculate => None
       case _: IUpdate => None
       case _: ICheck => None
       case _: IMemSend => None
@@ -783,7 +782,6 @@ object BluespecGeneration {
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
-      case CSpeculate(_, _, _, _) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
     }
 
@@ -955,7 +953,6 @@ object BluespecGeneration {
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
-      case CSpeculate(_, _, _, _) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
       case CLockOp(_, _, _) => throw UnexpectedCommand(cmd)
     }

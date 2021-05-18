@@ -255,34 +255,6 @@ object DAGSyntax {
   }
 
 
-  class SpecStage(n: Id, val specVar: EVar, val specVal: Expr,
-    val verifyStages: List[PStage],
-    val specStages: List[PStage],
-    val joinStage: PStage) extends PStage(n) {
-
-    this.addEdgeTo(verifyStages.head)
-    this.addEdgeTo(specStages.head)
-    specStages.last.addEdgeTo(joinStage)
-    verifyStages.last.addEdgeTo(joinStage)
-    //used only for computing dataflow merge function
-    //does not get synthesized
-    this.addEdgeTo(joinStage)
-
-    def predId = Id("__pred__" + specVar.id.v)
-    def specId = Id("__spec__" + specVar.id.v)
-
-    val predVar = EVar(predId)
-    predVar.typ = specVar.typ
-    //extract prediction to variable
-    this.addCmd(CAssign(predVar, specVal))
-    //set pred(specId) = prediction
-    this.addCmd(ISpeculate(specId, specVar, predVar))
-    //At end of verification update the predction success
-    verifyStages.last.addCmd(IUpdate(specId, specVar, predVar))
-    //At end of speculation side check whether or not pred(specId) == specVar
-    specStages.last.addCmd(ICheck(specId, specVar))
-  }
-
   /**
    * This subclass is used to represent conditional execution as a set of stages,
    * coordinated by this stage. This stage will generate the conditional expression

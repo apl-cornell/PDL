@@ -229,7 +229,6 @@ object Syntax {
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
-  case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
   case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
@@ -237,7 +236,6 @@ object Syntax {
   sealed trait InternalCommand extends Command
 
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
-  case class ISpeculate(specId: Id, specVar: EVar, value: EVar) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
