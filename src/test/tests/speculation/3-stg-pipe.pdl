@@ -1,4 +1,4 @@
-pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
+pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
      print(pc);
      // nonblocking spec check
      start(imem);
@@ -12,7 +12,7 @@ pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: boo
      int<8> brImm = 0<4> ++ insn{4:1};
      int<5> rs1 = insn{9:5};
      int<5> rs2 = insn{14:10};
-     int<5> rd = insns{19:15};
+     int<5> rd = insn{19:15};
 
      // blocking spec check
      if (op == 0<1>) {
@@ -35,21 +35,23 @@ pipe test(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: boo
      block(rf[rs2]);
      if (op == 1<1>) {
        int<8> npc = (rf[rs1] == rf[rs2]) ? (pc + brImm) : (pc + 1<8>);
-       call cpu(s, npc);
+       call cpu(npc);
      }
      int<32> out = rf[rs1] + rf[rs2];
      release(rf[rs1]);
      release(rf[rs2]);
      ---
-     block(rf[rd]);
-     rf[rd] <- out;
-     release(rf[rd]);
+     if (op == 0<1>) {
+        block(rf[rd]);
+        rf[rd] <- out;
+        release(rf[rd]);
+     }
 }
 
 circuit {
    rename = rflock(int<32>, 5, 128);
    ti = memory(int<32>, 8);
    i = Queue(ti);
-   t = new test[rename,i];
-   call t(0<32>);
+   t = new cpu[rename,i];
+   call t(0<8>);
 }

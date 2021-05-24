@@ -55,6 +55,9 @@ object Utilities {
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
+    case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
+    case CVerify(handle, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
+    case CInvalidate(handle) => Set(handle.id)
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
@@ -82,6 +85,7 @@ object Utilities {
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
     case IAssignLock(handle, _, _) => Set(handle.id)
+    case CSpecCall(handle, _, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -143,6 +147,9 @@ object Utilities {
     case ICheckLockFree(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
+    case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => getUsedVars(a))
+    case CVerify(handle, args) => args.foldLeft(Set(handle.id))((s, a) => getUsedVars(a))
+    case CInvalidate(handle) => Set(handle.id)
     case CEmpty() => Set()
   }
 

@@ -93,6 +93,26 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(mem.evar.get, vars, isRhs = true)
       }
       (vars, nextVars)
+    case CSpecCall(handle, _, args) =>
+    //args must be available, but handle is available next cycle
+    args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      (vars, nextVars + handle.id)
+    case CVerify(handle, args) =>
+      //handle and args must be available this cycle
+      if(checkExpr(handle, vars) != Combinational) {
+        throw UnexpectedAsyncReference(handle.pos, handle.toString)
+      }
+      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      (vars, nextVars)
+    case CInvalidate(handle) =>
+      if(checkExpr(handle, vars) != Combinational) {
+        throw UnexpectedAsyncReference(handle.pos, handle.toString)
+      }
+      (vars, nextVars)
     case COutput(exp) =>
       if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)

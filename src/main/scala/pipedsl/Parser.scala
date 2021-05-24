@@ -186,12 +186,16 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val speccall: P[Command] = positioned {
     iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(expr, ",")) ^^ {
-      case h ~ _ ~ _ ~ i ~ args => CSpecCall(EVar(h), i, args)
+      case h ~ _ ~ _ ~ i ~ args =>
+        val sv = EVar(h)
+        sv.typ = Some(TRequestHandle(i, RequestType.Speculation))
+        h.typ = sv.typ
+        CSpecCall(sv, i, args)
     }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
-    "verify" ~> parens(variable ~ "," ~ expr) ^^ { case i ~ _ ~ e => CVerify(i, e) } |
+    "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ^^ { case i ~ _ ~ e => CVerify(i, e) } |
     "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 

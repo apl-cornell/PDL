@@ -260,6 +260,27 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
+    case CSpecCall(h, mod, args) => {
+      val mtyp = tenv(mod)
+      mod.typ = Some(mtyp)
+      //Check that args to recursive 'call' are correct
+      mtyp match {
+        case TModType(inputs, _, _, _) => {
+          if (inputs.length != args.length) {
+            throw ArgLengthMismatch(c.pos, inputs.length, args.length)
+          }
+          inputs.zip(args).foreach {
+            case (expectedT, a) =>
+              val (atyp, _) = checkExpression(a, tenv)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(c.pos, a.toString, expectedT, atyp)
+              }
+          }
+        }
+      }
+      //add spec handle type to env
+      tenv.add(h.id, h.typ.get)
+    }
     case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
         case _: TLockedMemType => tenv
@@ -285,6 +306,33 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
       }
     }
+    case CVerify(handle, args) =>
+      //check that handle has been created via speccall and that arg types line up
+      val (htyp, _) = checkExpression(handle, tenv)
+      htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
+        case TRequestHandle(mod, RequestType.Speculation) =>
+          val mtyp = tenv(mod)
+          mtyp match {
+            case TModType(inputs, _, _, _) =>
+              if (inputs.length != args.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, args.length)
+              }
+              inputs.zip(args).foreach {
+                case (expectedT, a) =>
+                  val (atyp, _) = checkExpression(a, tenv)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, a.toString, expectedT, atyp)
+                  }
+              }
+          }
+          tenv
+      }
+    case CInvalidate(handle) =>
+      val (htyp, _) = checkExpression(handle, tenv)
+      htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
+        case TRequestHandle(_, RequestType.Speculation) => ()
+      }
+      tenv
     case COutput(exp) => {
       checkExpression(exp, tenv)
       tenv
@@ -299,13 +347,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CPrint(evar) => {
       val (t, _) = checkExpression(evar, tenv)
       t match {
-        case TSizedInt(len, unsigned) => tenv
+        case TSizedInt(_, _) => tenv
         case TString() => tenv
         case TBool() => tenv
         case _ => throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
       }
     }
-      
     case CEmpty() => tenv
     case _ => throw UnexpectedCommand(c)
   }
