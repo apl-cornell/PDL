@@ -1,5 +1,6 @@
 package Speculation;
 
+import Vector :: *;
 typedef UInt#(TLog#(n)) SpecId#(numeric type n);
 
 interface SpecTable#(type sid);
@@ -19,7 +20,7 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
     Bool full = inUse[head];
 
     //allocate a new entry in the table to track speculation
-    method ActionValue#(SpecId#(entries)) alloc() if !full;
+   method ActionValue#(SpecId#(entries)) alloc() if (!full);
         head <= head + 1;
         inUse[head] <= True;
         specStatus[head] <= tagged Invalid;
@@ -43,10 +44,11 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
     //mark s and all newer entries as invalid (misspeculated)
     method Action invalidate(SpecId#(entries) s);
         SpecId#(entries) tmp = s;
-        while (tmp != head) {
-            specStatus[tmp] <= tagged Valid False;
-            tmp = tmp + 1;
-        }
+        while (tmp != head)
+	   begin
+              specStatus[tmp] <= tagged Valid False;
+              tmp = tmp + 1;
+	   end
         if (full) specStatus[tmp] <= tagged Valid False;
     endmethod
 
