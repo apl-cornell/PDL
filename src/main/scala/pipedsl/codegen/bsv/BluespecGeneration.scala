@@ -307,6 +307,9 @@ object BluespecGeneration {
         bsInts.getLockRegionType))
     })
 
+    //TODO make this parameterized correctly - move it to BSVInterfaces
+    private val specTable: BVar = BVar("_specTable", BInterface("SpecTable"))
+
     //Generate statements and rules for each stage
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
       m + (s -> getStageCode(s))
@@ -768,6 +771,9 @@ object BluespecGeneration {
       case CLockStart(_) => None
       case CLockEnd(_) => None
       case CLockOp(_, _, _) => None
+      case CSpecCall(_, _, _) => None
+      case CVerify(_, _, _) => None
+      case CInvalidate(_) => None
       case CEmpty() => None
       case _: IUpdate => None
       case _: ICheck => None
@@ -832,6 +838,8 @@ object BluespecGeneration {
         }))
       case IMemSend(handle, _, _, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
+      case CSpecCall(handle, _, _) =>
+        Some(BDecl(translator.toVar(handle), None))
       case _ => None
     }
 
@@ -877,11 +885,7 @@ object BluespecGeneration {
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
         if (receiver == mod.name) {
-          Some(BStmtSeq(
-            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
-              //need to add threadid var explicitly, its not in the surface syntax
-              Some(args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar)))
-          ))
+          Some(BStmtSeq(sendToModuleInput(args)))
         } else {
           Some(BInvokeAssign(translator.toVar(handle),
             bsInts.getModRequest(modParams(receiver), args.map(a => translator.toExpr(a)))))
@@ -942,6 +946,27 @@ object BluespecGeneration {
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
+      case CSpecCall(handle, _, args) =>
+        //send to input
+        val sendStmts = sendToModuleInput(args)
+        //write to handle (make allocCall)
+        val allocExpr = bsInts.getSpecAlloc(specTable)
+        val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
+        Some(BStmtSeq(allocAssign +: sendStmts))
+      case CVerify(handle, args, preds) =>
+        val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
+          val a = l._1
+          val p = l._2
+          BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
+        })
+        Some(BIf(correct,
+          //true branch, just update spec table
+          List(BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle)))),
+          //false branch, update spec table _and_ resend call with correct arguments
+          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))) +: sendToModuleInput(args)
+        ))
+        //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
+      case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
@@ -955,6 +980,11 @@ object BluespecGeneration {
       case CLockOp(_, _, _) => throw UnexpectedCommand(cmd)
     }
 
+    private def sendToModuleInput(args: List[Expr]) = {
+        getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
+          //need to add threadid var explicitly, its not in the surface syntax
+          Some(args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar)))
+    }
   }
 
 }

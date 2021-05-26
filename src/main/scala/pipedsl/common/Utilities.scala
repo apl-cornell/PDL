@@ -56,7 +56,8 @@ object Utilities {
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
     case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
-    case CVerify(handle, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
+    case CVerify(handle, args, preds) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
     case CInvalidate(handle) => Set(handle.id)
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
@@ -147,8 +148,9 @@ object Utilities {
     case ICheckLockFree(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
-    case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => getUsedVars(a))
-    case CVerify(handle, args) => args.foldLeft(Set(handle.id))((s, a) => getUsedVars(a))
+    case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
+    case CVerify(handle, args, preds) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
     case CInvalidate(handle) => Set(handle.id)
     case CEmpty() => Set()
   }

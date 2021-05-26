@@ -66,7 +66,8 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir)
     val pinfo = new ProgInfo(prog)
     try {
-      val canonProg = CanonicalizePass.run(prog)
+      val verifProg = AddVerifyValuesPass.run(prog)
+      val canonProg = CanonicalizePass.run(verifProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))

@@ -139,4 +139,8 @@ object Errors {
   case class IllegalMemoryAccessOperation(pos: Position) extends TypeError(
     s"Memory access's associated lock must have the correct READ or WRITE capabilities", pos
   )
+
+  case class MissingPredictionValues(pos: Position, handle: String) extends TypeError(
+    s"Cannot find the predicted values for speculation ${handle}", pos
+  )
 }

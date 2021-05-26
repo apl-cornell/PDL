@@ -230,7 +230,7 @@ object Syntax {
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
   case class CCheckSpec(isBlocking: Boolean) extends Command
-  case class CVerify(handle: EVar, args: List[Expr]) extends Command
+  case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr]) extends Command
   case class CInvalidate(handle: EVar) extends Command
   case class CPrint(evar: EVar) extends Command
   case class COutput(exp: Expr) extends Command

@@ -85,10 +85,8 @@ object BSVSyntax {
               case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
             }
           }
-          //not yet implemented
-        case pipedsl.common.Syntax.RequestType.Speculation =>
-          throw UnexpectedType(n.pos, "Speculation request handle"
-            , "A handle for tracking speculation entries", n.typ.get)
+          //TODO allow this to be specified somewhere
+        case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
       }
       case TVoid() => BVoid
       case TNamedType(name) => BTypeParam(name.v, List(PBits("_sz" + name.v)))

@@ -216,6 +216,35 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     BMethodInvoke(f, fifoFirstMethodName, List())
   }
 
+  private val specHandleName = "SpecId"
+  private val defaultSpecHandleSize = 4
+  def getDefaultSpecHandleType: BSizedType = getSpecHandleType(defaultSpecHandleSize)
+  def getSpecHandleType(i: Integer): BSizedType = {
+    BSizedType(specHandleName, List(i))
+  }
+
+  private val specAllocName = "alloc"
+  private val specCheckName = "check"
+  private val specFreeName = "free"
+  private val specValidateName = "validate"
+  private val specInvalidateName = "invalidate"
+
+  def getSpecAlloc(st: BVar): BExpr = {
+    BMethodInvoke(st, specAllocName, List())
+  }
+  def getSpecCheck(st: BVar, h: BVar): BExpr = {
+    BMethodInvoke(st, specCheckName, List(h))
+  }
+  def getSpecFree(st: BVar, h: BVar): BExpr = {
+    BMethodInvoke(st, specFreeName, List(h))
+  }
+  def getSpecValidate(st: BVar, h: BVar): BExpr = {
+    BMethodInvoke(st, specValidateName, List(h))
+  }
+  def getSpecInvalidate(st: BVar, h: BVar): BExpr = {
+    BMethodInvoke(st, specInvalidateName, List(h))
+  }
+
   /**
    * Uses the configured register interface type and the provided
    * BSV type to make a paramterized register type.
