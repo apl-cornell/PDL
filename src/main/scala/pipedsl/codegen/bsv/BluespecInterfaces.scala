@@ -2,8 +2,6 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
-import pipedsl.common.LockImplementation._
-import pipedsl.common.Syntax.TMemType
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
@@ -218,16 +216,23 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   private val specHandleName = "SpecId"
   private val defaultSpecHandleSize = 4
-  def getDefaultSpecHandleType: BSizedType = getSpecHandleType(defaultSpecHandleSize)
-  def getSpecHandleType(i: Integer): BSizedType = {
-    BSizedType(specHandleName, List(i))
-  }
-
+  private val specModuleName = "SpecTable"
   private val specAllocName = "alloc"
   private val specCheckName = "check"
   private val specFreeName = "free"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
+
+  def getDefaultSpecHandleType: BSizedType = getSpecHandleType(defaultSpecHandleSize)
+  def getSpecHandleType(i: Integer): BSizedType = {
+    BSizedType(specHandleName, List(i))
+  }
+
+  def getSpecTable: BModule = BModule(specModuleName, List())
+
+  def getSpecTableType(typ: BSVType): BInterface = {
+    BInterface(specModuleName, List(BVar("sidTyp", typ)))
+  }
 
   def getSpecAlloc(st: BVar): BExpr = {
     BMethodInvoke(st, specAllocName, List())

@@ -307,8 +307,8 @@ object BluespecGeneration {
         bsInts.getLockRegionType))
     })
 
-    //TODO make this parameterized correctly - move it to BSVInterfaces
-    private val specTable: BVar = BVar("_specTable", BInterface("SpecTable"))
+    //TODO make the sid size parameterizable
+    private val specTable: BVar = BVar("_specTable",  bsInts.getSpecTableType(bsInts.getDefaultSpecHandleType))
 
     //Generate statements and rules for each stage
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
@@ -633,8 +633,11 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, bsInts.getFifo)
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
+      //Instantiate the speculation table
+      val specInst = BModInst(specTable, bsInts.getSpecTable)
       var stmts: List[BStatement] = edgeFifos.values.toList ++ memRegions.values.toList
       if (mod.isRecursive) stmts = stmts :+ busyInst
+      if (mod.maybeSpec) stmts = stmts :+ specInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()

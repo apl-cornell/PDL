@@ -26,6 +26,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
     usedVars = m.modules.foldLeft[Set[Id]](usedVars)((s,p) => s + p.name)
     val nm = m.copy(body = run(m.body)).setPos(m.pos)
     nm.isRecursive = m.isRecursive
+    nm.maybeSpec = m.maybeSpec
     nm
   }
 

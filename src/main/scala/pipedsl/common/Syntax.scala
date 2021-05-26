@@ -279,7 +279,7 @@ object Syntax {
     inputs: List[Param],
     modules: List[Param],
     ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation
+    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation
 
   case class Param(name: Id, typ: Type) extends Positional
 
