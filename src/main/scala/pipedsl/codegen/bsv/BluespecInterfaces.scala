@@ -234,19 +234,19 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     BInterface(specModuleName, List(BVar("sidTyp", typ)))
   }
 
-  def getSpecAlloc(st: BVar): BExpr = {
+  def getSpecAlloc(st: BExpr): BExpr = {
     BMethodInvoke(st, specAllocName, List())
   }
-  def getSpecCheck(st: BVar, h: BVar): BExpr = {
+  def getSpecCheck(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specCheckName, List(h))
   }
-  def getSpecFree(st: BVar, h: BVar): BExpr = {
+  def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))
   }
-  def getSpecValidate(st: BVar, h: BVar): BExpr = {
+  def getSpecValidate(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specValidateName, List(h))
   }
-  def getSpecInvalidate(st: BVar, h: BVar): BExpr = {
+  def getSpecInvalidate(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specInvalidateName, List(h))
   }
 

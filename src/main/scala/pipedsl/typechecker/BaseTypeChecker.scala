@@ -343,6 +343,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case TRequestHandle(_, RequestType.Speculation) => ()
       }
       tenv
+    case CCheckSpec(_) => tenv
     case COutput(exp) => {
       checkExpression(exp, tenv, None)
       tenv

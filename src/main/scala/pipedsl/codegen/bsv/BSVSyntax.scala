@@ -30,6 +30,8 @@ object BSVSyntax {
   case object BVoid extends BSVType
   case object BEmptyModule extends BSVType
 
+  def BMaybe(t: BSVType): BInterface = BInterface("Maybe", List(BVar("basetype", t)))
+
   class BSVTranslator(val bsints: BluespecInterfaces, val modmap: Map[Id, BSVType] = Map(),
     val handleMap: Map[BSVType, BSVType] = Map()) extends Translator[BSVType, BExpr, BVar, BFuncDef] {
 
@@ -67,7 +69,7 @@ object BSVSyntax {
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
-      case TMaybe(btyp) => BInterface("Maybe", List(BVar("basetype", toType(btyp))))
+      case TMaybe(btyp) => BMaybe(toType(btyp))
       case TRequestHandle(n, rtyp) => rtyp match {
         case pipedsl.common.Syntax.RequestType.Lock =>
           //These are passed in the modmap rather than the handle map
