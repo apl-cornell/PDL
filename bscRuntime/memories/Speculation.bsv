@@ -19,7 +19,25 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
     Reg#(SpecId#(entries)) head <- mkReg(0);
     Bool full = inUse[head];
 
-    //allocate a new entry in the table to track speculation
+   //return true if entry a is a valid newer entry than b
+   function Bool isNewer(SpecId#(entries) a, SpecId#(entries) b);
+      let nohmid = a > b && !(b < head && a >= head);
+      let hmid = a < head && b >= head;
+      return nohmid || hmid;
+   endfunction
+
+   /*
+   rule debug;
+      $display("Head: %d", head);
+      for (Integer i = 0; i < valueOf(entries); i = i + 1)
+	 begin
+	    $display("Idx %d, InUse: %b", i, inUse[fromInteger(i)]);   
+	    $display("Idx %d, Status: %b", i, specStatus[fromInteger(i)]);
+	 end
+   endrule
+    */
+   
+    //allocate a new entry in the table to track speculation	       
    method ActionValue#(SpecId#(entries)) alloc() if (!full);
         head <= head + 1;
         inUse[head] <= True;
@@ -43,13 +61,10 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
 
     //mark s and all newer entries as invalid (misspeculated)
     method Action invalidate(SpecId#(entries) s);
-        SpecId#(entries) tmp = s;
-        while (tmp != head)
-	   begin
-              specStatus[tmp] <= tagged Valid False;
-              tmp = tmp + 1;
-	   end
-        if (full) specStatus[tmp] <= tagged Valid False;
+       for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
+	  SpecId#(entries) lv = fromInteger(i);
+	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv] <= tagged Valid False;
+       end
     endmethod
 
 endmodule
