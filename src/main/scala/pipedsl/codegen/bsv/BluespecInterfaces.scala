@@ -216,7 +216,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   private val specHandleName = "SpecId"
   private val defaultSpecHandleSize = 4
-  private val specModuleName = "SpecTable"
+  private val specModuleName = "mkSpecTable"
+  private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
   private val specCheckName = "check"
   private val specFreeName = "free"
@@ -231,7 +232,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getSpecTable: BModule = BModule(specModuleName, List())
 
   def getSpecTableType(typ: BSVType): BInterface = {
-    BInterface(specModuleName, List(BVar("sidTyp", typ)))
+    BInterface(specModuleType, List(BVar("sidTyp", typ)))
   }
 
   def getSpecAlloc(st: BExpr): BExpr = {

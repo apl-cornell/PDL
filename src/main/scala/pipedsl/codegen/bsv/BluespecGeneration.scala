@@ -1038,7 +1038,7 @@ object BluespecGeneration {
       case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
         //only free speculation entries for the blocking call
       case CCheckSpec(isBlocking) if isBlocking =>
-        Some(BExprStmt(bsInts.getSpecFree(specTable, translator.toBSVVar(specIdVar))))
+        Some(BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal)))
       case CCheckSpec(isBlocking) if !isBlocking => None
       case CAssign(_, _) => None
       case CExpr(_) => None
@@ -1065,7 +1065,7 @@ object BluespecGeneration {
     private def getRecvCmd(c: Command): Option[BStatement] = c match {
       case ICondCommand(cond: Expr, cs) =>
         val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
-          getEffectCmd(c) match {
+          getRecvCmd(c) match {
             case Some(bc) => l :+ bc
             case None => l
           }
@@ -1081,7 +1081,7 @@ object BluespecGeneration {
     private def sendToModuleInput(args: List[Expr], specHandle: Option[EVar] = None) = {
       //need to add threadid and specid vars explicitly, its not in the surface syntax
       val argmap = args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar) :+
-        (if (specHandle.isDefined) { translator.toVar(specHandle.get) } else { BInvalid })
+        (if (specHandle.isDefined) { BTaggedValid(translator.toVar(specHandle.get)) } else { BInvalid })
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
   }
