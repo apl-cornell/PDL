@@ -47,7 +47,10 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
 
     //lookup a given entry
     method Maybe#(Bool) check(SpecId#(entries) s);
-        return tagged Invalid;
+       if (!inUse[s])
+	  return tagged Invalid;
+       else
+	  return specStatus[s];
     endmethod
 
     method Action free(SpecId#(entries) s);
