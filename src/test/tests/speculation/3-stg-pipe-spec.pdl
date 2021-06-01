@@ -12,15 +12,15 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool
      	  ---
           int<1> op = insn{0:0};
      	  int<8> brImm = 0<4> ++ insn{4:1};
- 	  int<5> rs1 = insn{9:5};
+     	  int<5> rs1 = insn{9:5};
      	  int<5> rs2 = insn{14:10};
      	  int<5> rd = insn{19:15};
-
+          spec_barrier(); //blocking check
      	  if (op == 0<1>) {
-	     verify(s, pc + 1<8>);
+	        verify(s, pc + 1<8>);
      	  } else {
-	    invalidate(s);
-	  }
+	        invalidate(s);
+	      }
      	  start(rf);
      	  reserve(rf[rs1], R);
      	  reserve(rf[rs2], R);
