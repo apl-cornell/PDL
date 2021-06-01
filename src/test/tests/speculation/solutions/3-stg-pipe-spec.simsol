@@ -1,0 +1,8 @@
+WARNING: /home/drew/volume/bluespec/bsc/src/Verilog/BRAM1Load.v:50: $readmemh(ti): Not enough words in the file for the requested range [0:255].
+         0
+         0
+  4
+         2
+  6
+  8
+ 10

@@ -1,5 +1,4 @@
 pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
-     print(pc);
      spec_check(); //nonblocking check
      start(imem);
      acquire(imem);
@@ -20,7 +19,7 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool
 	        verify(s, pc + 1<8>);
      	  } else {
 	        invalidate(s);
-	      }
+	  }
      	  start(rf);
      	  reserve(rf[rs1], R);
      	  reserve(rf[rs2], R);
@@ -33,6 +32,7 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool
      	  block(rf[rs2]);
      	  if (op == 1<1>) {
        	     int<8> npc = (rf[rs1] == rf[rs2]) ? (pc + brImm) : (pc + 1<8>);
+	     print(npc);
        	     call cpu(npc);
      	  }
      	  int<32> out = rf[rs1] + rf[rs2];
@@ -41,6 +41,7 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool
     	  ---
      	  if (op == 0<1>) {
              block(rf[rd]);
+	     print(out);
              rf[rd] <- out;
              release(rf[rd]);
      	  }
