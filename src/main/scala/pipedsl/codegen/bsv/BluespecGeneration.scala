@@ -488,9 +488,10 @@ object BluespecGeneration {
     private def getKillConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
           //check definitely misspeculated
-          // !fromMaybe(True, check(spec))
+          // isValid(spec) && !fromMaybe(True, check(spec))
         case CCheckSpec(_) =>
-          l :+ BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal)))
+          l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
+            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))          
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
           if (condconds.nonEmpty) {
@@ -550,15 +551,17 @@ object BluespecGeneration {
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
         case CCheckSpec(isBlocking) if isBlocking => List(
-          BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
+          BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
             BFromMaybe(BBoolLit(false), bsInts.getSpecCheck(specTable, getSpecIdVal))
-        ))
+          )
+        )
           //Execute if check(specid) != Valid(False)
           //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
         case CCheckSpec(isBlocking) if !isBlocking => List(
-          BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
-            BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))
-        ))
+          BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
+              BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))
+          )
+        )
         case ICondCommand(cond, cs) =>
           val condconds = getBlockingConds(cs)
           if (condconds.nonEmpty) {
