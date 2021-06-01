@@ -1044,8 +1044,10 @@ object BluespecGeneration {
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
       case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
         //only free speculation entries for the blocking call
+        //but do so conditionally based on being Speculative at all
       case CCheckSpec(isBlocking) if isBlocking =>
-        Some(BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal)))
+        Some(BIf(BIsValid(translator.toBSVVar(specIdVar)),
+          List(BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))), List()))
       case CCheckSpec(isBlocking) if !isBlocking => None
       case CAssign(_, _) => None
       case CExpr(_) => None
