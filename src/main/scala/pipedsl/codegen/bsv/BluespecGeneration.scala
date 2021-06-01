@@ -479,9 +479,13 @@ object BluespecGeneration {
       if (killConds.isEmpty) {
         None
       } else {
+        val debugStmt = if (debug) {
+          BDisplay(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t",
+            List(getSpecIdVal, BTime))
+        } else { BEmpty }
         val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
         val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
-        Some(BRuleDef( genParamName(stg) + "_kill", killConds, deqStmts :+ freeStmt))
+        Some(BRuleDef( genParamName(stg) + "_kill", killConds, deqStmts :+ freeStmt :+ debugStmt))
       }
     }
 
