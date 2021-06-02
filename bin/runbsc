@@ -80,7 +80,7 @@ case "$CMD" in
     "s")
 	#Run simulation in Verilog
 	"$BSC" $ARGS $BPATH $VPATH $VSIM -vdir $VDIR -simdir $SDIR -u "$TOP".bsv
-	"$BSC" $ARGS $VPATH $VSIM -verilog -vdir $VDIR -simdir $SDIR -o "$TB".bexe -e "$TB" "$TB".v
+	"$BSC" $ARGS $VPATH $VSIM -verilog -vdir $VDIR -simdir $SDIR -o "$TB".bexe -e "$TB" "$VDIR"/"$TB".v
 	timeout 10s ./"$TB".bexe | grep -v "WARNING" > "$SIMOUT"
 	;;
     "c")
