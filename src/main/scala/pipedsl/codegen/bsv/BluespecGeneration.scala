@@ -291,11 +291,15 @@ object BluespecGeneration {
     private val outputQueue = BVar("outputQueue", bsInts.getFifoType(outputQueueElem))
 
     //Data types for passing between stages
-    private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true)
+    private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
     //First stage should have exactly one input edge by definition
-    private val firstStageStruct = getFirstEdgeStructInfo(firstStage, mod.inputs.map(i => i.name))
-    //remove both specid and threadid
-    private val inputFields = firstStageStruct.typ.fields.init.init
+    private val firstStageStruct = getFirstEdgeStructInfo(firstStage, mod.inputs.map(i => i.name), addSpecId = mod.maybeSpec)
+    //remove both threadid (and spec Id if necessary)
+    private val inputFields = if (mod.maybeSpec) {
+      firstStageStruct.typ.fields.init.init
+    } else {
+      firstStageStruct.typ.fields.init
+    }
     //This map returns the correct struct type based on the destination stage
     private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
     val allEdges: Set[PipelineEdge] = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
@@ -378,11 +382,12 @@ object BluespecGeneration {
       })
     }
 
-    private def getFirstEdgeStructInfo(stg: PStage, fieldOrder: Iterable[Id]): BStructDef = {
+    private def getFirstEdgeStructInfo(stg: PStage, fieldOrder: Iterable[Id], addSpecId: Boolean = true): BStructDef = {
       val inedge = stg.inEdges.head //must be only one for the first stage
-      val sfields = fieldOrder.foldLeft(List[BVar]())((l, id) => {
+      val fieldstmp = fieldOrder.foldLeft(List[BVar]())((l, id) => {
         l :+ BVar(id.v, translator.toType(id.typ.get))
-      }) :+ threadIdVar :+ specIdVar
+      }) :+ threadIdVar
+      val sfields = if (addSpecId) fieldstmp :+ specIdVar else fieldstmp
       val styp = BStruct(genStructName(inedge), sfields)
       BStructDef(styp, List("Bits", "Eq"))
     }
@@ -645,8 +650,10 @@ object BluespecGeneration {
         //only read threadIDs and specIDs from an unconditional edge
         body = body :+ BDecl(translator.toBSVVar(threadIdVar),
           Some(BStructAccess(paramExpr, threadIdVar)))
-        body = body :+ BDecl(translator.toBSVVar(specIdVar),
-          Some(BStructAccess(paramExpr, specIdVar)))
+        if (mod.maybeSpec) {
+          body = body :+ BDecl(translator.toBSVVar(specIdVar),
+            Some(BStructAccess(paramExpr, specIdVar)))
+        }
       })
       //generate a conditional assignment expression to choose
       //which conditional edge we're reading inputs from
@@ -704,8 +711,8 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, bsInts.getFifo)
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
-      //Instantiate the speculation table
-      val specInst = BModInst(specTable, bsInts.getSpecTable)
+      //Instantiate the speculation table if the module is speculative
+      val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
       var stmts: List[BStatement] = edgeFifos.values.toList ++ memRegions.values.toList
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
@@ -1089,8 +1096,10 @@ object BluespecGeneration {
     }
     private def sendToModuleInput(args: List[Expr], specHandle: Option[EVar] = None) = {
       //need to add threadid and specid vars explicitly, its not in the surface syntax
-      val argmap = args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar) :+
-        (if (specHandle.isDefined) { BTaggedValid(translator.toVar(specHandle.get)) } else { BInvalid })
+      var argmap = args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar)
+      if (mod.maybeSpec) {
+        argmap = argmap :+ (if (specHandle.isDefined) { BTaggedValid(translator.toVar(specHandle.get)) } else { BInvalid })
+      }
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
   }
