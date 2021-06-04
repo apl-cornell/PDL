@@ -27,7 +27,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
   override def checkModule(m: ModuleDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
     if (m.maybeSpec) {
       val finalSpec = checkSpecOps(m.body, Unknown)
-      if (finalSpec != NonSpeculative) throw UnresolvedSpeculation(m.pos, "end of pipeline")
+      if (finalSpec != NonSpeculative) throw UnresolvedSpeculation(m.pos)
       val finalEnv = checkResolved(m.body, env)
       //check that all spechandles are definitely resolved
       finalEnv.getMappedKeys().foreach(k => {
@@ -112,7 +112,6 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CIf(_, cons, alt) =>
       val lt = checkResolved(cons, env)
       val rt = checkResolved(alt, env)
-      //merge logic lives in Environments (conjunction of branches)
       lt.intersect(rt)
     case CSplit(cases, default) =>
       cases.foldLeft[Environment[Id,Z3AST]](checkResolved(default, env))((menv, cobj) => {
@@ -132,24 +131,30 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
 
   override def checkCircuit(c: Circuit, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
 
-  private def makeEquals(specId: Id, isResolved: Boolean): Z3AST = {
+  private def makeEquals(specId: Id, isResolved: Boolean): Z3BoolExpr = {
     ctx.mkEq(ctx.mkBoolConst(specId.v), ctx.mkBool(isResolved))
   }
 
   private def checkResolved(specId: Id, env: Environment[Id, Z3AST], preds: Z3BoolExpr, expected: Boolean): Unit = {
-    val expResolved = makeEquals(specId, expected)
+    //Prove that the UNexpected, CAN'T happen
+    val expResolved = ctx.mkNot(makeEquals(specId, expected))
     //Assume current context predicates
     solver.add(ctx.mkEq(preds, ctx.mkTrue()))
-    //Assert current state of the speculation based on env and what we expect
+    //Assert current state of the speculation based on env and what we expect not to happen
     solver.add(mkAnd(ctx, env(specId), expResolved))
     val check = solver.check()
     solver.reset()
     check match {
-      case Z3Status.UNSATISFIABLE =>
-        throw AlreadyResolvedSpeculation(specId.pos)
+        //error! bad thing can happen
+      case Z3Status.SATISFIABLE =>
+        if (expected) {
+          throw UnresolvedSpeculation(specId.pos)
+        } else {
+          throw AlreadyResolvedSpeculation(specId.pos)
+        }
       case Z3Status.UNKNOWN =>
         throw new RuntimeException("An error occurred while attempting to check speculation resolution")
-      case Z3Status.SATISFIABLE => ()
+      case Z3Status.UNSATISFIABLE => ()
     }
   }
 

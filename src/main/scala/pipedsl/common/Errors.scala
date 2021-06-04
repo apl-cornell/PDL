@@ -117,11 +117,11 @@ object Errors {
   case class UnexpectedSyncReference(pos: Position, msg: String) extends TypeError (
     msg, pos
   )
-  case class UnresolvedSpeculation(pos: Position, operation: String) extends TypeError (
-    s"Tried to perform $operation while in a potentially speculative state", pos)
+  case class UnresolvedSpeculation(pos: Position) extends TypeError (
+    s"Speculation was never resolved", pos)
 
   case class AlreadyResolvedSpeculation(pos: Position) extends TypeError(
-    s"Reduntant resolve operation, not possible to be speculative here", pos)
+    s"Redundant resolve operation, not possible to be speculative here", pos)
 
   case class MismatchedSpeculationState(pos: Position) extends TypeError(
     s"All execution branches must resolve in the same speculation state", pos)

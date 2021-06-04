@@ -69,15 +69,19 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
     CAssign(aVar, arg).setPos(handle.pos)
   }
 
+  //if the values are defined in either branch, take those.
+  //if defined in both branches, then only add if they match
   private def intersectEnv(e1: VEnv, e2: VEnv): VEnv = {
-    val keys = e1.keySet.intersect(e2.keySet)
+    val keys = e1.keySet.union(e2.keySet)
     keys.foldLeft[VEnv](Map())((m, k) => {
-      val l = e1(k)
-      val r = e2(k)
-      if (l == r) {
-        m + (k -> l)
-      } else {
-        m
+      val l = e1.get(k)
+      val r = e2.get(k)
+      (l, r) match {
+        case (Some(lv), Some(rv)) if lv == rv => m + (k -> lv)
+        case (Some(lv), Some(rv)) => m //TODO, generate a set of conditional expressions
+        case (None, Some(rv)) => m + (k -> rv) //use only value if only 1 branch defines
+        case (Some(lv), None) => m + (k -> lv)
+        case (None, None) => m
       }
     })
   }
