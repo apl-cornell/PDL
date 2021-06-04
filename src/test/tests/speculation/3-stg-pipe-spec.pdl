@@ -1,9 +1,9 @@
 pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
      spec_check(); //nonblocking check
      start(imem);
-     acquire(imem);
+     acquire(imem[pc], R);
      int<32> insn <- imem[pc];
-     release(imem);
+     release(imem[pc]);
      end(imem);
      s <- speccall cpu(pc + 1<8>);
      ---

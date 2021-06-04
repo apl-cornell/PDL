@@ -130,6 +130,10 @@ object Errors {
     withPos("Speculation initiation and verification must be in separate stages", pos)
   )
 
+  case class IllegalSpeculativeOperation(pos: Position, exp: String) extends TypeError(
+    s"Operation cannot be performed speculatively, must be in speculative state: ${exp}", pos
+  )
+
   case class IllegalBSVStage(msg: String) extends RuntimeException(msg)
 
   case class UnexpectedBSVType(msg: String) extends RuntimeException(msg)

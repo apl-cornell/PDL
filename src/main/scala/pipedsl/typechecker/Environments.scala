@@ -144,8 +144,44 @@ object Environments {
         override def union(other: Environment[Id, Boolean]): Environment[Id, Boolean] =
             BoolEnv(boolSet.union(other.getMappedKeys()))
     }
-    
-    case class ConditionalLockEnv(lockMap: Map[LockArg, Z3AST] = Map(), ctx: Z3Context) 
+
+    case class ConditionalEnv(m: Map[Id, Z3AST] = Map(), ctx: Z3Context)
+     extends Environment[Id, Z3AST] {
+        override def apply(key: Id) = this.get(key).getOrThrow(MissingType(key.pos, key.v))
+        private def updateMapping(n: Id, ns: Z3AST): Environment[Id, Z3AST] = {
+            this.copy(m = m + (n -> ns))
+        }
+        //only allow legal lock state transitions
+        override def add(name: Id, ns: Z3AST): Environment[Id, Z3AST] =
+            updateMapping(name, ns)
+
+        override def remove(key: Id): Environment[Id, Z3AST] = ConditionalEnv(m - key, ctx)
+
+        override def get(name: Id): Option[Z3AST] = m.get(name)
+
+        override def getMappedKeys(): Set[Id] = m.keySet
+
+        override def intersect(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
+            var newMap: Map[Id, Z3AST] = Map()
+            for (key <- other.getMappedKeys()) {
+                this.get(key) match {
+                    case Some(value) => {
+                        //Just takes the and of both states to merge. This works because if state
+                        // is unchanged from a branch, it will be "cond implies a and (not cond) implies a"
+                        val and = ctx.mkAnd(value.asInstanceOf[Z3BoolExpr] , other(key).asInstanceOf[Z3BoolExpr])
+                        newMap = newMap + (key -> and)
+                    }
+                    case None => newMap = newMap + (key -> other(key))
+                }
+            }
+            this.copy(m = newMap)
+        }
+        //This is filler code, I don't think we ever actually need this
+        override def union(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = other
+    }
+
+    //TODO merge code for this into the plain ConditionalEnv to reduce copy-pasta
+    case class ConditionalLockEnv(lockMap: Map[LockArg, Z3AST] = Map(), ctx: Z3Context)
       extends Environment[LockArg, Z3AST] {
         override def apply(key: LockArg) = this.get(key).getOrThrow(MissingType(key.pos, key.id.v))
         private def updateMapping(n: LockArg, ns: Z3AST): Environment[LockArg, Z3AST] = {

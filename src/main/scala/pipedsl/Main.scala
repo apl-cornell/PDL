@@ -84,7 +84,8 @@ object Main {
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
-      SpeculationChecker.check(recvProg, Some(basetypes))
+      val specChecker = new SpeculationChecker(ctx)
+      specChecker.check(recvProg, None)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")
