@@ -90,21 +90,21 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     bool writerd = opcode{6:5} == 0<2>;
     start(rf);
     if (needrs1) {
-       acquire(rf[rs1]);
+       acquire(rf[rs1], R);
        int<32> rf1 = rf[rs1];
        release(rf[rs1]);
     } else {
       int<32> rf1 = 0<32>;
     }
     if (needrs2) {
-       acquire(rf[rs2]);
+       acquire(rf[rs2], R);
        int<32> rf2 = rf[rs2];
        release(rf[rs2]);
     } else {
        int<32> rf2 = 0<32>;
     }
     if (writerd) {
-       reserve(rf[rd]);
+       reserve(rf[rd], W);
     }
     end(rf);
     ---
@@ -131,19 +131,22 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     }}
     ---
     if (isStore || isLoad) {
-       start(dmem);
-       acquire(dmem[memaddr]);
-       end(dmem);
-       if (isStore) {
-    	 dmem[memaddr] <- rf2;
-    	 release(dmem[memaddr]);
-    	 ---
-    	 int<32> wdata = 0<32>;
-       } else {
-       	 int<32> wdata <- dmem[memaddr];
-       	 release(dmem[memaddr]);
-       	 ---
-       }
+        start(dmem);
+	if (isLoad) {
+ 	   int<16> raddr = memaddr;
+	   acquire(dmem[raddr], R);
+	   int<32> wdata <- dmem[raddr];
+	   release(dmem[raddr]);
+	   ---
+	} else {
+	    int<16> waddr = memaddr;
+	    acquire(dmem[waddr], W);
+	    dmem[waddr] <- rf2;
+	    release(dmem[waddr]);
+    	    ---
+    	    int<32> wdata = 0<32>;
+	}
+	end(dmem);
     } else {
       ---
       int<32> wdata = 0<32>;
@@ -164,8 +167,8 @@ circuit {
     i = Queue(ti);
     td = memory(int<32>, 16);
     d = FAQueue(td);
-    tr = regfile(int<32>, 5);
-    r = FAQueue(tr);
+    rf = regfile(int<32>, 5);
+    r = FAQueue(rf);
     c = new cpu[r, i, d];
     call c(0<16>);
 }

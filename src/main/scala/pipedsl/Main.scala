@@ -115,7 +115,9 @@ object Main {
       //Convert lock ops into ops that track explicit handles
       LockOpTranslationPass.run(stgs)
       //Add in extra conditionals to ensure address locks are not double acquired
-      RemoveReentrantPass.run(stgs)
+      //TODO fix this pass -- currently no examples NEED it and thus we're OK.
+      //we will need it to support more flexible versions of the lock libraries (multiple stateful modifications per cycle)
+      //RemoveReentrantPass.run(stgs)
       //Must be done after all passes that introduce new variables
       AddEdgeValuePass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
