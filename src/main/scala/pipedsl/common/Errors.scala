@@ -117,17 +117,21 @@ object Errors {
   case class UnexpectedSyncReference(pos: Position, msg: String) extends TypeError (
     msg, pos
   )
-  case class UnresolvedSpeculation(pos: Position, operation: String) extends TypeError (
-    s"Tried to perform $operation while in a potentially speculative state", pos)
+  case class UnresolvedSpeculation(pos: Position) extends TypeError (
+    s"Speculation was never resolved", pos)
 
   case class AlreadyResolvedSpeculation(pos: Position) extends TypeError(
-    s"Reduntant resolve operation, not possible to be speculative here", pos)
+    s"Redundant resolve operation, not possible to be speculative here", pos)
 
   case class MismatchedSpeculationState(pos: Position) extends TypeError(
     s"All execution branches must resolve in the same speculation state", pos)
 
   case class IllegalSpeculationBlock(pos: Position) extends RuntimeException(
     withPos("Speculation initiation and verification must be in separate stages", pos)
+  )
+
+  case class IllegalSpeculativeOperation(pos: Position, exp: String) extends TypeError(
+    s"Operation cannot be performed speculatively, must be in speculative state: ${exp}", pos
   )
 
   case class IllegalBSVStage(msg: String) extends RuntimeException(msg)
@@ -138,5 +142,9 @@ object Errors {
 
   case class IllegalMemoryAccessOperation(pos: Position) extends TypeError(
     s"Memory access's associated lock must have the correct READ or WRITE capabilities", pos
+  )
+
+  case class MissingPredictionValues(pos: Position, handle: String) extends TypeError(
+    s"Cannot find the predicted values for speculation ${handle}", pos
   )
 }

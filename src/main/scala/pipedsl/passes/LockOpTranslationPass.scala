@@ -26,7 +26,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def lockVar(l: LockArg): EVar = {
     val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "")
     val res = EVar(Id(lockname))
-    res.typ = Some(TMaybe(TRequestHandle(l.id, isLock = true)))
+    res.typ = Some(TMaybe(TRequestHandle(l.id, RequestType.Lock)))
     res.id.typ = res.typ
     res
   }
@@ -158,30 +158,26 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   //TODO make this cleaner lol
     c.op match {
-      case Free => {
+      case Free =>
         val i = ICheckLockFree(c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i
-      }
-      case Reserved => {
+      case Reserved =>
         val i = IReserveLock(lockVar(c.mem), c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i
-      }
-      case Acquired => {
+      case Acquired =>
         val i = ICheckLockOwned(c.mem, lockVar(c.mem)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i
-      }
-      case Released => {
+      case Released =>
         val i = IReleaseLock(c.mem, lockVar(c.mem)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i
-      }
     }
 
   }

@@ -2,7 +2,7 @@ package pipedsl.typechecker;
 
 import pipedsl.common.Errors.{IllegalMemoryAccessOperation, MalformedLockTypes, UnexpectedCase}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
-import pipedsl.common.Syntax.{CAssign, CIf, CLockOp, CRecv, CSeq, CSpeculate, CSplit, CTBar, Command, EApp, EBinop, ECall, ECast, EMemAccess, ETernary, EUop, EVar, Expr, Id, LockArg, LockRead, LockType, LockWrite, ModuleDef, Prog}
+import pipedsl.common.Syntax._
 
 /**
  * A class to check whether a program's lock types are correct, and to check the memory accesses are correct
@@ -50,7 +50,6 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
     case CSeq(c1, c2) => checkCommand(c1); checkCommand(c2)
     case CTBar(c1, c2) => checkCommand(c1); checkCommand(c2)
     case CIf(_, cons, alt) => checkCommand(cons); checkCommand(alt)
-    case CSpeculate(_, _, verify, body) => checkCommand(verify); checkCommand(body)
     case CSplit(cases, default) =>
       cases.foreach(c => checkCommand(c.body))
       checkCommand(default)
@@ -58,14 +57,14 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
       if (c.granularity == General && lockType.isDefined)
         throw MalformedLockTypes("Can only specify lock type for address specific locks")
       if (lockType.isDefined) {
-        if (getLockAnnotationMap.get(mem).isDefined && getLockAnnotationMap(mem) != lockType.get) {
+        if (getLockAnnotationMap.contains(mem) && getLockAnnotationMap(mem) != lockType.get) {
           throw MalformedLockTypes("Only one lock type per an address specific lock is allowed")
         }
         c.memOpType = lockType
         mem.memOpType = lockType
         updateLockAnnotationMap(mem, lockType.get)
       } else if (c.granularity == Specific) {
-        if (getLockAnnotationMap.get(mem).isEmpty) {
+        if (!getLockAnnotationMap.contains(mem)) {
           throw MalformedLockTypes("Address specific locks must have an associated lock type")
         }
         c.lockType = getLockAnnotationMap.get(mem)
@@ -74,26 +73,21 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
       }
       //general locks stay as none
     case c@CRecv(lhs, rhs) => (lhs, rhs) match {
-      case (e@EMemAccess(mem, index), _) => {
+      case (e@EMemAccess(mem, index), _) =>
         //check if it exists and is lock read, otherwise is ok. If it is None, it means it is general
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
           case Some(LockRead) => throw IllegalMemoryAccessOperation(c.pos)
-          case _ => {
+          case _ =>
             e.granularity = getLockGranularityMap(mem)
             e.memOpType = Some(LockWrite)
-          }
         }
-      }
-      case (_, e@EMemAccess(mem, index)) => {
+      case (_, e@EMemAccess(mem, index)) =>
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
           case Some(LockWrite) => throw IllegalMemoryAccessOperation(c.pos)
-          case _ => {
+          case _ =>
             e.memOpType = Some(LockRead)
             e.granularity = getLockGranularityMap(mem)
-          }
         }
-
-      }
       case (_, ECall(mod, _)) =>
       case _ => throw UnexpectedCase(c.pos)
     }
@@ -115,10 +109,9 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
       } else {
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
           case Some(LockWrite) => throw IllegalMemoryAccessOperation(e.pos)
-          case _ => {
+          case _ =>
             e.memOpType = Some(LockRead)
             e.granularity = Specific
-          }
         }
       }
     case ETernary(cond, tval, fval) =>

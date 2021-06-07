@@ -144,11 +144,13 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
+    speccall |
     typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
         CRecv(l, r)
       } |
       check |
+      resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
       "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t), CLockOp(i, Acquired, t)) } |
@@ -173,18 +175,28 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val blockCmd: P[Command] = positioned {
-    block | conditional | speculate | split
+    block | conditional | split
   }
 
-  lazy val speculate: P[Command] = positioned {
-    "speculate" ~> parens(typ ~ variable ~ "=" ~ expr ~ "," ~ block ~ "," ~ block) ^^ {
-      case t ~ v ~ _ ~ ev ~ _ ~ cv ~ _ ~ cs =>
-        v.typ = Some(t)
-        CSpeculate(v, ev, cv, cs)
+  //TODO better syntax for these
+  lazy val check: P[Command] = positioned {
+    "spec_barrier()" ^^ { _ => CCheckSpec(true) } |
+    "spec_check()" ^^ { _ => CCheckSpec(false) }
+  }
+
+  lazy val speccall: P[Command] = positioned {
+    iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(expr, ",")) ^^ {
+      case h ~ _ ~ _ ~ i ~ args =>
+        val sv = EVar(h)
+        sv.typ = Some(TRequestHandle(i, RequestType.Speculation))
+        h.typ = sv.typ
+        CSpecCall(sv, i, args)
     }
   }
-  lazy val check: P[Command] = positioned {
-    "check" ~> parens(iden) ^^ { id => CCheck(id) }
+
+  lazy val resolveSpec: P[Command] = positioned {
+    "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ^^ { case i ~ _ ~ e => CVerify(i, e, List()) } |
+    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 
   lazy val casestmt: P[CaseObj] = positioned {

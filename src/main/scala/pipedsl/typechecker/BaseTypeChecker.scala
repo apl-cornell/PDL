@@ -57,7 +57,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case (None, None) => None
       }
     }
-    case _: CTBar | _: CSplit | _: CSpeculate | _: CCheck | _:COutput =>
+    case _: CTBar | _: CSplit | _:COutput =>
       throw MalformedFunction(c.pos, "Command not supported in combinational functions")
     case CIf(_, cons, alt) =>
       val rt = checkFuncWellFormed(cons, tenv)
@@ -203,7 +203,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           ityps.zip(inits).foreach {
             case (expectedT, arg) => {
-              val (atyp, aenv) = checkExpression(arg, tenv)
+              val (atyp, aenv) = checkExpression(arg, tenv, None)
               if (!isSubtype(atyp, expectedT)) {
                 throw UnexpectedSubtype(arg.pos, arg.toString, expectedT, atyp)
               }
@@ -234,7 +234,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CSplit(cases, default) => {
       var endEnv = checkCommand(default, tenv)
       for (c <- cases) {
-        val (condTyp, cenv) = checkExpression(c.cond, tenv)
+        val (condTyp, cenv) = checkExpression(c.cond, tenv, None)
         condTyp.matchOrError(c.cond.pos, "case condition", "boolean") { case _: TBool => () }
         val benv = checkCommand(c.body, cenv)
         endEnv = endEnv.intersect(benv)
@@ -242,23 +242,44 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       endEnv
     }
     case CIf(cond, cons, alt) => {
-      val (condTyp, cenv) = checkExpression(cond, tenv)
+      val (condTyp, cenv) = checkExpression(cond, tenv, None)
       condTyp.matchOrError(cond.pos, "if condition", "boolean") { case _: TBool => () }
       val etrue = checkCommand(cons, cenv)
       val efalse = checkCommand(alt, cenv)
       etrue.intersect(efalse)
     }
     case CAssign(lhs, rhs) => {
-      val (rTyp, renv) = checkExpression(rhs, tenv)
-      val (lTyp, lenv) = checkExpression(lhs, renv)
+      val (rTyp, renv) = checkExpression(rhs, tenv, None)
+      val (lTyp, lenv) = checkExpression(lhs, renv, Some(rTyp))
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "assignment", lTyp, rTyp)
     }
     case CRecv(lhs, rhs) => {
-      val (rTyp, renv) = checkExpression(rhs, tenv)
-      val (lTyp, lenv) = checkExpression(lhs, renv)
+      val (rTyp, renv) = checkExpression(rhs, tenv, None)
+      val (lTyp, lenv) = checkExpression(lhs, renv, None)
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
+    }
+    case CSpecCall(h, mod, args) => {
+      val mtyp = tenv(mod)
+      mod.typ = Some(mtyp)
+      //Check that args to recursive 'call' are correct
+      mtyp match {
+        case TModType(inputs, _, _, _) => {
+          if (inputs.length != args.length) {
+            throw ArgLengthMismatch(c.pos, inputs.length, args.length)
+          }
+          inputs.zip(args).foreach {
+            case (expectedT, a) =>
+              val (atyp, _) = checkExpression(a, tenv, None)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(c.pos, a.toString, expectedT, atyp)
+              }
+          }
+        }
+      }
+      //add spec handle type to env
+      tenv.add(h.id, h.typ.get)
     }
     case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
@@ -276,7 +297,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           mem.id.typ = Some(t)
           if(mem.evar.isEmpty) tenv
           else {
-            val (idxt, _) =  checkExpression(mem.evar.get, tenv)
+            val (idxt, _) =  checkExpression(mem.evar.get, tenv, None)
             idxt match {
               case TSizedInt(l, true) if l == memt.addrSize => tenv
               case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
@@ -285,64 +306,85 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
       }
     }
-    case CSpeculate(nvar, predval, verify, body) => {
-      val (predtyp, env1) = checkExpression(predval, tenv)
-      val ltyp = nvar.typ.get //parser ensures type is defined
-      val nenv = env1.add(nvar.id, ltyp)
-      if (isSubtype(predtyp, ltyp)) {
-        val venv = checkCommand(verify, nenv)
-        val senv = checkCommand(body, nenv)
-        venv.union(senv)
+    case CVerify(handle, args, preds) =>
+      //check that handle has been created via speccall and that arg types line up
+      val (htyp, _) = checkExpression(handle, tenv, None)
+      htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
+        case TRequestHandle(mod, RequestType.Speculation) =>
+          val mtyp = tenv(mod)
+          mtyp match {
+            case TModType(inputs, _, _, _) =>
+              if (inputs.length != args.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, args.length)
+              }
+              if (inputs.length != preds.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, preds.length)
+              }
+              inputs.zip(args).foreach {
+                case (expectedT, a) =>
+                  val (atyp, _) = checkExpression(a, tenv, None)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, a.toString, expectedT, atyp)
+                  }
+              }
+              inputs.zip(preds).foreach {
+                case (expectedT, p) =>
+                  val (atyp, _) = checkExpression(p, tenv, None)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
+                  }
+              }
+          }
+          tenv
       }
-      else throw UnexpectedSubtype(predval.pos, "speculate", ltyp, predtyp)
-    }
-    case CCheck(_) => {
+    case CInvalidate(handle) =>
+      val (htyp, _) = checkExpression(handle, tenv, None)
+      htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
+        case TRequestHandle(_, RequestType.Speculation) => ()
+      }
       tenv
-    }
+    case CCheckSpec(_) => tenv
     case COutput(exp) => {
-      checkExpression(exp, tenv)
+      checkExpression(exp, tenv, None)
       tenv
     }
     case CReturn(exp) =>
-      checkExpression(exp, tenv)
+      checkExpression(exp, tenv, None)
       tenv
     case CExpr(exp) =>{
-      checkExpression(exp, tenv)
+      checkExpression(exp, tenv, None)
       tenv
     }
     case CPrint(evar) => {
-      val (t, _) = checkExpression(evar, tenv)
+      val (t, _) = checkExpression(evar, tenv, None)
       t match {
-        case TSizedInt(len, unsigned) => tenv
+        case TSizedInt(_, _) => tenv
         case TString() => tenv
         case TBool() => tenv
         case _ => throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
       }
     }
-      
     case CEmpty() => tenv
     case _ => throw UnexpectedCommand(c)
   }
 
-  def checkExpression(e: Expr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = {
-    val (typ, nenv) = _checkE(e, tenv);
+  def checkExpression(e: Expr, tenv: Environment[Id, Type],
+    defaultType: Option[Type]): (Type, Environment[Id, Type]) = {
+    val (typ, nenv) = _checkE(e, tenv, defaultType);
     if (e.typ.isDefined) {
-      if (e.isLVal) {
-        if (!areEqual(e.typ.get, typ)) throw UnexpectedType(e.pos, e.toString, typ.toString(), e.typ.get)
-      } else {
-        throw AlreadyBoundType(e.pos, e.toString, e.typ.get, typ)
-      }
+      if (!areEqual(e.typ.get, typ)) throw UnexpectedType(e.pos, e.toString, typ.toString(), e.typ.get)
     }
     e.typ = Some(typ)
     (typ, nenv)
   }
 
-  private def _checkE(e: Expr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = e match {
-    case EInt(v, base, bits) => (TSizedInt(bits, unsigned = true), tenv)
+  private def _checkE(e: Expr, tenv: Environment[Id, Type], defaultType: Option[Type]): (Type, Environment[Id, Type] ) = e match {
+    case EInt(v, base, bits) =>
+      (TSizedInt(bits, unsigned = true), tenv)
     case EBool(v) => (TBool(), tenv)
     case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
-      val (t1, env1) = checkExpression(e, tenv)
+      val (t1, env1) = checkExpression(e, tenv, None)
       op match {
         case BoolUOp(op) => t1.matchOrError(e.pos, "boolean op", "boolean") { case _: TBool => (TBool(), env1) }
         case NumUOp(op) => t1.matchOrError(e.pos, "number op", "number") { case t: TSizedInt => (t, env1) }
@@ -350,8 +392,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
     case EBinop(op, e1, e2) => {
-      val (t1, env1) = checkExpression(e1, tenv)
-      val (t2, env2) = checkExpression(e2, env1)
+      val (t1, env1) = checkExpression(e1, tenv, None)
+      val (t2, env2) = checkExpression(e2, env1, None)
       op match {
         case BitOp("++", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
@@ -379,7 +421,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
     case ERecAccess(rec, fieldName) => {
-      val (rt, renv) = checkExpression(rec, tenv)
+      val (rt, renv) = checkExpression(rec, tenv, None)
       rt match {
         case TRecType(n, fs) => fs.get(fieldName) match {
           case Some(t) => (t, renv)
@@ -389,20 +431,20 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
     case ERecLiteral(fields) => {
-      val ftyps = fields map { case (n, e) => (n, checkExpression(e, tenv)._1) }
+      val ftyps = fields map { case (n, e) => (n, checkExpression(e, tenv, None)._1) }
       (TRecType(Id("anon"), ftyps) , tenv)//TODO these are wrong, maybe just remove these
     }
     case EMemAccess(mem, index) => {
       val memt = tenv(mem)
       mem.typ = Some(memt)
-      val (idxt, env1) = checkExpression(index, tenv)
+      val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
         case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }
     case EBitExtract(num, start, end) => {
-      val (ntyp, nenv) = checkExpression(num, tenv)
+      val (ntyp, nenv) = checkExpression(num, tenv, None)
       val bitsLeft = math.abs(end - start) + 1
       ntyp.matchOrError(e.pos, "bit extract", "sized number") {
         case TSizedInt(l, u) if l >= bitsLeft => (TSizedInt(bitsLeft, u), nenv)
@@ -410,10 +452,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
     case ETernary(cond, tval, fval) => {
-      val (ctyp, cenv) = checkExpression(cond, tenv)
+      val (ctyp, cenv) = checkExpression(cond, tenv, None)
       ctyp.matchOrError(cond.pos, "ternary condition", "boolean") { case _: TBool => () }
-      val (ttyp, trenv) = checkExpression(tval, cenv)
-      val (ftyp, fenv) = checkExpression(fval, cenv)
+      val (ttyp, trenv) = checkExpression(tval, cenv, None)
+      val (ftyp, fenv) = checkExpression(fval, cenv, None)
       if (areEqual(ttyp, ftyp)) (ttyp, trenv.intersect(fenv))
       else throw UnexpectedType(e.pos, "ternary", s"false condition must match ${ttyp.toString}", ftyp)
     }
@@ -426,7 +468,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           targs.zip(args).foreach {
             case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv)
+              val (atyp, aenv) = checkExpression(a, tenv, None)
               if (!isSubtype(atyp, expectedT)) {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
@@ -446,7 +488,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           inputs.zip(args).foreach {
             case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv)
+              val (atyp, aenv) = checkExpression(a, tenv, None)
               if (!isSubtype(atyp, expectedT)) {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
@@ -464,11 +506,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       } else {
         throw UnexpectedType(id.pos, "variable", "variable type set to new conflicting type", t)
       }
-      case None => id.typ = Some(tenv(id)); (tenv(id), tenv)
+      case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
+      case None => id.typ = defaultType; (defaultType.get, tenv)
     }
     //TODO some other rules for casting
     case ECast(ctyp, exp) =>
-      val (etyp, tenv2) = checkExpression(exp, tenv)
+      val (etyp, tenv2) = checkExpression(exp, tenv, None)
       (ctyp, etyp) match {
         case (t1, t2) if !areEqual(t1, t2) => throw IllegalCast(e.pos, t1, t2)
         case _ => ()
@@ -483,7 +526,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CSeq(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
     case CTBar(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
     case CIf(_, cons, alt) => getSpeculativeVariables(cons) ++ getSpeculativeVariables(alt)
-    case CSpeculate(predVar, _, _, _) => Set(predVar.id)
     case _ => Set()
   }
 }

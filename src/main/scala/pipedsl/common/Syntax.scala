@@ -4,7 +4,7 @@ import Errors._
 import Security._
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
-import com.microsoft.z3.{BoolExpr}
+import com.microsoft.z3.BoolExpr
 
 
 object Syntax {
@@ -47,10 +47,16 @@ object Syntax {
       }
       case Asynchronous => l1
     }
-
   }
 
   import Latency._
+
+  object RequestType extends Enumeration {
+    type RequestType = Value
+    val Lock, Module, Speculation = Value
+  }
+
+  import RequestType._
 
   object OpConstructor {
     val add: (Int, Int) => Int = (_ + _)
@@ -104,7 +110,7 @@ object Syntax {
     readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
-  case class TRequestHandle(mod: Id, isLock: Boolean) extends Type
+  case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
   case class TMaybe(btyp: Type) extends Type
@@ -222,6 +228,10 @@ object Syntax {
   case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
+  case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
+  case class CCheckSpec(isBlocking: Boolean) extends Command
+  case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr]) extends Command
+  case class CInvalidate(handle: EVar) extends Command
   case class CPrint(evar: EVar) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
@@ -229,15 +239,13 @@ object Syntax {
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
-  case class CSpeculate(predVar: EVar, predVal: Expr, verify: Command, body: Command) extends Command
-  case class CCheck(predVar: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
+
 
   sealed trait InternalCommand extends Command
 
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
-  case class ISpeculate(specId: Id, specVar: EVar, value: EVar) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
@@ -271,7 +279,7 @@ object Syntax {
     inputs: List[Param],
     modules: List[Param],
     ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation
+    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation
 
   case class Param(name: Id, typ: Type) extends Positional
 

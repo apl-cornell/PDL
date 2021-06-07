@@ -2,8 +2,6 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
-import pipedsl.common.LockImplementation._
-import pipedsl.common.Syntax.TMemType
 
 class BluespecInterfaces(val addrlockmod: Option[String]) {
 
@@ -214,6 +212,43 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
   def getFifoPeek(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoFirstMethodName, List())
+  }
+
+  private val specHandleName = "SpecId"
+  private val defaultSpecHandleSize = 4
+  private val specModuleName = "mkSpecTable"
+  private val specModuleType = "SpecTable"
+  private val specAllocName = "alloc"
+  private val specCheckName = "check"
+  private val specFreeName = "free"
+  private val specValidateName = "validate"
+  private val specInvalidateName = "invalidate"
+
+  def getDefaultSpecHandleType: BSizedType = getSpecHandleType(defaultSpecHandleSize)
+  def getSpecHandleType(i: Integer): BSizedType = {
+    BSizedType(specHandleName, List(i))
+  }
+
+  def getSpecTable: BModule = BModule(specModuleName, List())
+
+  def getSpecTableType(typ: BSVType): BInterface = {
+    BInterface(specModuleType, List(BVar("sidTyp", typ)))
+  }
+
+  def getSpecAlloc(st: BExpr): BExpr = {
+    BMethodInvoke(st, specAllocName, List())
+  }
+  def getSpecCheck(st: BVar, h: BExpr): BExpr = {
+    BMethodInvoke(st, specCheckName, List(h))
+  }
+  def getSpecFree(st: BVar, h: BExpr): BExpr = {
+    BMethodInvoke(st, specFreeName, List(h))
+  }
+  def getSpecValidate(st: BVar, h: BExpr): BExpr = {
+    BMethodInvoke(st, specValidateName, List(h))
+  }
+  def getSpecInvalidate(st: BVar, h: BExpr): BExpr = {
+    BMethodInvoke(st, specInvalidateName, List(h))
   }
 
   /**

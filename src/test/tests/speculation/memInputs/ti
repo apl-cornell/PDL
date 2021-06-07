@@ -1,0 +1,13 @@
+// 1111 1111 1111  11111   11111     11111  1111    1
+//                   rd     rs2       rs1   brImm   op
+00000000 // rf[0] <= rf[0] + rf[0] ; pc + 1 PRED CORRECT (print 0)
+00000000 // rf[0] <= rf[0] + rf[0] ; pc + 1 PRED CORRECT (print 0)
+00000005 // beq rf[0], rf[0], pc  + 2 ; pc + 2 PRED WRONG
+00000005 // beq rf[0], rf[0], pc  + 2 ; SKIPPED
+00008420 // rf[1] <= rf[1] + rf[1] ; pc + 1 PRED CORRECT (print 2)
+00000025 // beq rf[0], rf[1], pc + 2 ; pc + 1 PRED CORRECT
+00000425 // beq rf[1], rf[1], pc + 2 ; pc + 2 PRED WRONG
+00000420 // rf[0] <= rf[1] + rf[1] ; pc + 1  SKIPPED
+00000845 // beq rf[2], rf[2], pc + 2 ; pc + 2 PRED WRONG
+00000000 // w/e SKIPPED
+ffffffff // END

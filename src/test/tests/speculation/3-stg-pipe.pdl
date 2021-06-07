@@ -1,0 +1,55 @@
+pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
+     start(imem);
+     acquire(imem);
+     int<32> insn <- imem[pc];
+     release(imem);
+     end(imem);
+     ---
+     if (insn{31:31} != 1<1>) {
+     	  ---
+          int<1> op = insn{0:0};
+     	  int<8> brImm = 0<4> ++ insn{4:1};
+ 	  int<5> rs1 = insn{9:5};
+     	  int<5> rs2 = insn{14:10};
+     	  int<5> rd = insn{19:15};
+
+     	  if (op == 0<1>) {
+	     call cpu(pc + 1<8>);
+     	  }
+     	  start(rf);
+     	  reserve(rf[rs1], R);
+     	  reserve(rf[rs2], R);
+     	  if (op == 0<1>) {
+     	     reserve(rf[rd], W);
+     	  }
+     	  end(rf);
+     	  ---
+     	  block(rf[rs1]);
+     	  block(rf[rs2]);
+     	  if (op == 1<1>) {
+       	     int<8> npc = (rf[rs1] == rf[rs2]) ? (pc + brImm) : (pc + 1<8>);
+	     print(npc);
+	     call cpu(npc);
+     	  }
+     	  int<32> out = rf[rs1] + rf[rs2];
+     	  release(rf[rs1]);
+     	  release(rf[rs2]);
+    	  ---
+     	  if (op == 0<1>) {
+             block(rf[rd]);
+	     print(out);
+             rf[rd] <- out;
+             release(rf[rd]);
+     	  }
+     } else {
+       output(true);
+     }
+}
+
+circuit {
+   rename = rflock(int<32>, 5, 128);
+   ti = memory(int<32>, 8);
+   i = Queue(ti);
+   t = new cpu[rename,i];
+   call t(0<8>);
+}

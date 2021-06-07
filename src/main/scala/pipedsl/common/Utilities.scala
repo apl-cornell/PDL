@@ -55,15 +55,16 @@ object Utilities {
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
-    case CSpeculate(predVar, predVal, verify, body) =>
-     getUsedVars(predVal) ++ getAllVarNames(verify) ++ getAllVarNames(body) + predVar.id
-    case CCheck(predVar) => Set(predVar)
+    case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
+    case CVerify(handle, args, preds) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
+    case CInvalidate(handle) => Set(handle.id)
+    case CCheckSpec(_) => Set()
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
     case CPrint(evar) => Set(evar.id)
     case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
-    case ISpeculate(specId, specVar, value) => getUsedVars(value) + specId ++ getUsedVars(specVar)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty() => Set()
     case _ => throw UnexpectedCommand(c)
@@ -79,15 +80,14 @@ object Utilities {
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
     case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case CRecv(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
-    case CSpeculate(_, _, verify, body) => getWrittenVars(verify) ++ getWrittenVars(body)
     case ICondCommand(_, c2) => getWrittenVars(c2)
-    case ISpeculate(s, svar, _) => Set(s, svar.id)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
     case IMemSend(handle, _, _, _, _) => Set(handle.id)
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
     case IAssignLock(handle, _, _) => Set(handle.id)
+    case CSpecCall(handle, _, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -120,12 +120,9 @@ object Utilities {
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case CSpeculate(_, predVal, verify, body) => getUsedVars(predVal) ++ getUsedVars(verify) ++ getUsedVars(body)
-    case CCheck(predVar) => Set(predVar)
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
-    case ISpeculate(_,_, value) => getUsedVars(value)
     case IMemSend(_, _, _, data, addr) =>
       if (data.isDefined) {
         Set(data.get.id, addr.id)
@@ -152,6 +149,11 @@ object Utilities {
     case ICheckLockFree(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
+    case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
+    case CVerify(handle, args, preds) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
+    case CInvalidate(handle) => Set(handle.id)
+    case CCheckSpec(_) => Set()
     case CEmpty() => Set()
   }
 
@@ -229,14 +231,13 @@ object Utilities {
 
   def flattenStageList(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
-      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.map(stg => flattenStageList(stg)).flatten ++ flattenStageList(s.defaultStages)
-      case s: DAGSyntax.SpecStage => (l :+ s) ++ flattenStageList(s.verifyStages) ++ flattenStageList(s.specStages)
+      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.flatMap(stg => flattenStageList(stg)) ++ flattenStageList(s.defaultStages)
       case _ => l :+ stg
     })
   }
   def flattenIfStages(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
-      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.map(stg => flattenStageList(stg)).flatten ++ flattenStageList(s.defaultStages)
+      case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.flatMap(stg => flattenStageList(stg)) ++ flattenStageList(s.defaultStages)
       case _ => l :+ stg
     })
   }

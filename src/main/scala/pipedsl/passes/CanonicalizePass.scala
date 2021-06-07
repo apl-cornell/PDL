@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax.{CEmpty, CIf, CSeq, CSpeculate, CTBar, Command, ModuleDef, Prog}
+import pipedsl.common.Syntax.{CEmpty, CIf, CSeq, CTBar, Command, ModuleDef, Prog}
 import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
 /**
@@ -30,7 +30,6 @@ object CanonicalizePass extends CommandPass[Command] with ModulePass[ModuleDef] 
     case CSeq(c1, c2) => CSeq(removeCEmpty(c1), removeCEmpty(c2)).setPos(c.pos)
     case CTBar(c1, c2) => CTBar(removeCEmpty(c1), removeCEmpty(c2)).setPos(c.pos)
     case CIf(cond, cons, alt) => CIf(cond, removeCEmpty(cons), removeCEmpty(alt)).setPos(c.pos)
-    case CSpeculate(predVar, predVal, verify, body) => CSpeculate(predVar, predVal, removeCEmpty(verify), removeCEmpty(body)).setPos(c.pos)
     case _ => c
   }
 }

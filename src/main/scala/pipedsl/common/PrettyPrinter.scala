@@ -2,7 +2,7 @@ package pipedsl.common
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
 
-import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage}
+import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge}
 import pipedsl.common.Errors.UnexpectedType
 import pipedsl.common.Syntax._
 
@@ -97,20 +97,12 @@ class PrettyPrinter(output: Option[File]) {
 
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
-      case Syntax.CSpeculate(predVar, predVal, verify, body) => ins + "speculate (" +
-        printTypeToString(predVar.typ.get) + " " + printExprToString(predVar) + " = " + 
-        printExprToString(predVal) + ", {\n" +
-        printCmdToString(verify, indent + 4) + "\n" + ins + "}, {\n" +
-        printCmdToString(body, indent + 4) + "\n" + ins + "}"
-      case Syntax.CCheck(predVar) => ins + "check(" + predVar.v + ");"
       case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
       case Syntax.CEmpty() => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +
         cmd.foldLeft("")((s, c) => s + printCmdToString(c))
       case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
-      case Syntax.ISpeculate(specId, specVar, value) => ins + specId + "= speculate(" + printExprToString(specVar) + ", " + 
-        printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case _ => "TODO PRINTING COMMAND"
     }
@@ -185,16 +177,6 @@ class PrettyPrinter(output: Option[File]) {
         s.condStages.foreach(stg => printStagesForDot(stg))
         printStagesForDot(s.defaultStages)
         pline("}")
-      case s: SpecStage =>
-        pline("  subgraph cluster__" + s.name + " {")
-        pline("style=filled;")
-        pline("color=pink;")
-        pline("node [style=filled,color=white];")
-        pline("label = \"Spec(" + printExprToString(s.specVar) + " = " + printExprToString(s.specVal) + ")\";")
-        s.outEdges.foreach(e => printEdge(e))
-        printStagesForDot(s.verifyStages)
-        printStagesForDot(s.specStages)
-        pline("}")
       case stg =>
         stg.outEdges.foreach(edge => {
           printEdge(edge)
@@ -212,7 +194,6 @@ class PrettyPrinter(output: Option[File]) {
     stgs.foreach( stg => {
       val stagetyp = stg match {
         case _:IfStage => "If Stage"
-        case _:SpecStage => "Speculation Stage"
         case _ => "Stage"
       }
       pline(stagetyp + ": " + stg.name.v + ":\n")
@@ -226,12 +207,6 @@ class PrettyPrinter(output: Option[File]) {
           printStages(s.condStages(0))
           pline("False block:")
           printStages(s.defaultStages)
-        case s:SpecStage =>
-          pline("predict " + printExprToString(s.specVar) + " = " + printExprToString(s.specVal))
-          pline("Verify Block: ")
-          printStages(s.verifyStages)
-          pline("Speculate Block: ")
-          printStages(s.specStages)
         case _ => ()
       }
       pline("Out Edges = " + stg.outEdges.foldLeft("")((str, edge) => {

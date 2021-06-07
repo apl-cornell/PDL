@@ -11,7 +11,7 @@ class LockTypecheckSuite extends AnyFunSuite {
 
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)
-    test((testBaseName + " Typecheck")) {
+    test(testBaseName + " Typecheck") {
       testTypecheck(testFolder, t)
     }
 

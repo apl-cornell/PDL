@@ -15,6 +15,7 @@ object BluespecGeneration {
 
   private val lockLib = "Locks"
   private val memLib = "Memories"
+  private val specLib = "Speculation"
   private val fifoLib = "FIFOF"
   private val combLib = "RegFile"
   private val asyncLib = "BRAMCore"
@@ -269,6 +270,12 @@ object BluespecGeneration {
 
     }
 
+    //TODO make the sid size parameterizable
+    private val specIdName = "_specId"
+    private val specIdTyp: BSVType = bsInts.getDefaultSpecHandleType
+    private val specTable: BVar = BVar("_specTable",  bsInts.getSpecTableType(specIdTyp))
+    private val specIdVar = BVar(specIdName, BMaybe(specIdTyp))
+    private def getSpecIdVal = BFromMaybe(BDontCare, translator.toBSVVar(specIdVar))
     //Registers for external communication
     private val busyReg = BVar("busyReg", bsInts.getRegType(BBool))
     private val threadIdVar = BVar(threadIdName, getThreadIdType)
@@ -284,10 +291,15 @@ object BluespecGeneration {
     private val outputQueue = BVar("outputQueue", bsInts.getFifoType(outputQueueElem))
 
     //Data types for passing between stages
-    private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true)
+    private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
     //First stage should have exactly one input edge by definition
-    private val firstStageStruct = getFirstEdgeStructInfo(firstStage, mod.inputs.map(i => i.name))
-    private val inputFields = firstStageStruct.typ.fields.init
+    private val firstStageStruct = getFirstEdgeStructInfo(firstStage, mod.inputs.map(i => i.name), addSpecId = mod.maybeSpec)
+    //remove both threadid (and spec Id if necessary)
+    private val inputFields = if (mod.maybeSpec) {
+      firstStageStruct.typ.fields.init.init
+    } else {
+      firstStageStruct.typ.fields.init
+    }
     //This map returns the correct struct type based on the destination stage
     private val edgeMap = new EdgeMap(firstStage, firstStageStruct.typ, edgeStructInfo)
     val allEdges: Set[PipelineEdge] = (firstStage +: otherStages).foldLeft(Set[PipelineEdge]())((es, s) => {
@@ -311,6 +323,7 @@ object BluespecGeneration {
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
       m + (s -> getStageCode(s))
     })
+
     //The Interface this module exposes to the outside world
     private val modInterfaceDef = bsInts.defineInterface(
       mod.name.v,
@@ -336,7 +349,8 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), funcImport) ++
+        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib),
+          BImport(verilogLib), BImport(specLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
@@ -352,13 +366,15 @@ object BluespecGeneration {
      * @param addTId - If true, then add a ThreadID field to the struct
      * @return - A map from edges to the BSV type definitions that represent their values.
      */
-    private def getEdgeStructInfo(stgs: Iterable[PStage], addTId: Boolean = true): Map[PipelineEdge, BStructDef] = {
+    private def getEdgeStructInfo(stgs: Iterable[PStage],
+      addTId: Boolean = true, addSpecId: Boolean = true): Map[PipelineEdge, BStructDef] = {
       stgs.foldLeft[Map[PipelineEdge, BStructDef]](Map())((m, s) => {
         s.inEdges.foldLeft[Map[PipelineEdge, BStructDef]](m)((ms, e) => {
           var sfields = e.values.foldLeft(List[BVar]())((l, id) => {
             l :+ BVar(id.v, translator.toType(id.typ.get))
           })
           if (addTId) sfields = sfields :+ threadIdVar
+          if (addSpecId) sfields = sfields :+ specIdVar
           val styp = BStruct(genStructName(e), sfields)
           val structdef = BStructDef(styp, List("Bits", "Eq"))
           ms + (e -> structdef)
@@ -366,11 +382,12 @@ object BluespecGeneration {
       })
     }
 
-    private def getFirstEdgeStructInfo(stg: PStage, fieldOrder: Iterable[Id]): BStructDef = {
+    private def getFirstEdgeStructInfo(stg: PStage, fieldOrder: Iterable[Id], addSpecId: Boolean = true): BStructDef = {
       val inedge = stg.inEdges.head //must be only one for the first stage
-      val sfields = fieldOrder.foldLeft(List[BVar]())((l, id) => {
+      val fieldstmp = fieldOrder.foldLeft(List[BVar]())((l, id) => {
         l :+ BVar(id.v, translator.toType(id.typ.get))
       }) :+ threadIdVar
+      val sfields = if (addSpecId) fieldstmp :+ specIdVar else fieldstmp
       val styp = BStruct(genStructName(inedge), sfields)
       BStructDef(styp, List("Bits", "Eq"))
     }
@@ -427,8 +444,10 @@ object BluespecGeneration {
       val sBody = getStageBody(stg)
       //Generate the set of execution rules for reading args and writing outputs
       val execRule = getStageRule(stg)
+      //Add a stage kill rule if it needs one
+      val killRule = getStageKillRule(stg)
       translator.setVariablePrefix("")
-      (sBody, List(execRule))
+      (sBody, List(Some(execRule), killRule).flatten)
     }
 
     /**
@@ -451,6 +470,50 @@ object BluespecGeneration {
       } else BEmpty
       BRuleDef( genParamName(stg) + "_execute", blockingConds,
         writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
+    }
+
+    /**
+     * If a stage can be killed instead of executed we generate
+     * a separate rule for that behavior instead of executing it conditionally
+     * inside the original rule.
+     * @param stg - The stage to process
+     * @return Some(BSV) rule if the stage can be killed, else None
+     */
+    private def getStageKillRule(stg: PStage): Option[BRuleDef] = {
+      val killConds = getKillConds(stg.getCmds)
+      if (killConds.isEmpty) {
+        None
+      } else {
+        val debugStmt = if (debug) {
+          BDisplay(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t",
+            List(getSpecIdVal, BTime))
+        } else { BEmpty }
+        val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
+        val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
+        Some(BRuleDef( genParamName(stg) + "_kill", killConds, deqStmts :+ freeStmt :+ debugStmt))
+      }
+    }
+
+    private def getKillConds(cmds: Iterable[Command]): List[BExpr] = {
+      cmds.foldLeft(List[BExpr]())((l, c) => c match {
+          //check definitely misspeculated
+          // isValid(spec) && !fromMaybe(True, check(spec))
+        case CCheckSpec(_) =>
+          l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
+            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))          
+        case ICondCommand(cond, cs) =>
+          val condconds = getKillConds(cs)
+          if (condconds.nonEmpty) {
+            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
+              BBOp("&&", exp, n)
+            })
+            val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
+            l :+ newCond
+          } else {
+            l
+          }
+        case _ => l
+      })
     }
 
     private def translateMethod(mod: BVar, mi: MethodInfo): BMethodInvoke = {
@@ -494,6 +557,20 @@ object BluespecGeneration {
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case COutput(_) => if (mod.isRecursive) List(busyReg) else List()
+          //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
+          // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
+        case CCheckSpec(isBlocking) if isBlocking => List(
+          BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
+            BFromMaybe(BBoolLit(false), bsInts.getSpecCheck(specTable, getSpecIdVal))
+          )
+        )
+          //Execute if check(specid) != Valid(False)
+          //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
+        case CCheckSpec(isBlocking) if !isBlocking => List(
+          BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
+              BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))
+          )
+        )
         case ICondCommand(cond, cs) =>
           val condconds = getBlockingConds(cs)
           if (condconds.nonEmpty) {
@@ -570,9 +647,13 @@ object BluespecGeneration {
               BVar(v.v, translator.toType(v.typ.get)))))
           declaredVars = declaredVars + pvar
         })
-        //only read threadIDs from an unconditional edge
+        //only read threadIDs and specIDs from an unconditional edge
         body = body :+ BDecl(translator.toBSVVar(threadIdVar),
           Some(BStructAccess(paramExpr, threadIdVar)))
+        if (mod.maybeSpec) {
+          body = body :+ BDecl(translator.toBSVVar(specIdVar),
+            Some(BStructAccess(paramExpr, specIdVar)))
+        }
       })
       //generate a conditional assignment expression to choose
       //which conditional edge we're reading inputs from
@@ -630,16 +711,20 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, bsInts.getFifo)
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
+      //Instantiate the speculation table if the module is speculative
+      val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
       var stmts: List[BStatement] = edgeFifos.values.toList ++ memRegions.values.toList
       if (mod.isRecursive) stmts = stmts :+ busyInst
+      if (mod.maybeSpec) stmts = stmts :+ specInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()
+      val inargs: List[BExpr] = inputFields :+ threadIdVar :+ BInvalid
       val reqMethodDef = BMethodDef(
         sig = bsInts.getRequestMethod(modInterfaceDef),
         cond = if (mod.isRecursive) Some(BUOp("!", busyReg)) else None,
         //send input data (arguments to this method) to pipeline
-        body = getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges) :+
+        body = getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(inargs)) :+
           //And set busy status to true if recursive
           (if (mod.isRecursive) BModAssign(busyReg, BBoolLit(true)) else BEmpty) :+
           //increment thread id
@@ -768,9 +853,11 @@ object BluespecGeneration {
       case CLockStart(_) => None
       case CLockEnd(_) => None
       case CLockOp(_, _, _) => None
-      case CCheck(_) => None
+      case CSpecCall(_, _, _) => None
+      case CVerify(_, _, _) => None
+      case CInvalidate(_) => None
+      case CCheckSpec(_) => None
       case CEmpty() => None
-      case _: ISpeculate => None
       case _: IUpdate => None
       case _: ICheck => None
       case _: IMemSend => None
@@ -783,7 +870,6 @@ object BluespecGeneration {
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
-      case CSpeculate(_, _, _, _) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
     }
 
@@ -835,6 +921,8 @@ object BluespecGeneration {
         }))
       case IMemSend(handle, _, _, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
+      case CSpecCall(handle, _, _) =>
+        Some(BDecl(translator.toVar(handle), None))
       case _ => None
     }
 
@@ -880,11 +968,7 @@ object BluespecGeneration {
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
         if (receiver == mod.name) {
-          Some(BStmtSeq(
-            getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges,
-              //need to add threadid var explicitly, its not in the surface syntax
-              Some(args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar)))
-          ))
+          Some(BStmtSeq(sendToModuleInput(args)))
         } else {
           Some(BInvokeAssign(translator.toVar(handle),
             bsInts.getModRequest(modParams(receiver), args.map(a => translator.toExpr(a)))))
@@ -945,21 +1029,79 @@ object BluespecGeneration {
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
+      case CSpecCall(handle, _, args) =>
+        //send to input
+        val sendStmts = sendToModuleInput(args, Some(handle))
+        //write to handle (make allocCall)
+        val allocExpr = bsInts.getSpecAlloc(specTable)
+        val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
+        Some(BStmtSeq(allocAssign +: sendStmts))
+      case CVerify(handle, args, preds) =>
+        val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
+          val a = l._1
+          val p = l._2
+          BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
+        })
+        Some(BIf(correct,
+          //true branch, just update spec table
+          List(BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle)))),
+          //false branch, update spec table _and_ resend call with correct arguments
+          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))) +: sendToModuleInput(args)
+        ))
+        //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
+      case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
+        //only free speculation entries for the blocking call
+        //but do so conditionally based on being Speculative at all
+      case CCheckSpec(isBlocking) if isBlocking =>
+        Some(BIf(BIsValid(translator.toBSVVar(specIdVar)),
+          List(BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))), List()))
+      case CCheckSpec(isBlocking) if !isBlocking => None
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
       case _: InternalCommand => throw UnexpectedCommand(cmd)
-      case CCheck(_) => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
-      case CSpeculate(_, _, _, _) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
       case CLockOp(_, _, _) => throw UnexpectedCommand(cmd)
     }
 
+    private def getRecvCmds(cmds: Iterable[Command]): List[BStatement] = {
+      cmds.foldLeft(List[BStatement]())((l, c) => {
+        getRecvCmd(c) match {
+          case Some(bs) => l :+ bs
+          case None => l
+        }
+      })
+    }
+    //This is the same as getEffectCmd but only for a small subset of the commands
+    private def getRecvCmd(c: Command): Option[BStatement] = c match {
+      case ICondCommand(cond: Expr, cs) =>
+        val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
+          getRecvCmd(c) match {
+            case Some(bc) => l :+ bc
+            case None => l
+          }
+        })
+        if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
+      //This is an effectful op b/c is modifies the mem queue its reading from
+      case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
+        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle))))
+      case IRecv(_, sender, _) =>
+        Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
+      case _ => None
+    }
+    private def sendToModuleInput(args: List[Expr], specHandle: Option[EVar] = None) = {
+      //need to add threadid and specid vars explicitly, its not in the surface syntax
+      var argmap = args.map(a => translator.toExpr(a)) :+ translator.toBSVVar(threadIdVar)
+      if (mod.maybeSpec) {
+        argmap = argmap :+ (if (specHandle.isDefined) { BTaggedValid(translator.toVar(specHandle.get)) } else { BInvalid })
+      }
+      getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
+    }
   }
 
 }

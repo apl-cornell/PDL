@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, SpecStage}
+import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge}
 import pipedsl.common.Syntax._
 import Passes.{CommandPass, ModulePass, ProgPass}
 
@@ -53,15 +53,6 @@ class SplitStagesPass extends CommandPass[List[PStage]] with ModulePass[List[PSt
       //sequential pipeline, end of left sends to beginning of right
       leftStages.last.addEdgeTo(nextStage)
       leftStages ++ rightStages
-    case CSpeculate(predVar, predVal, verify, body) =>
-      val firstVerif = new PStage(nextStageId())
-      val verifStages = splitToStages(verify, firstVerif)
-      val firstSpec = new PStage(nextStageId())
-      val specStages = splitToStages(body, firstSpec)
-      val joinStage = new PStage(nextStageId())
-      val specStage = new SpecStage(nextStageId(), predVar, predVal, verifStages, specStages, joinStage)
-      curStage.addEdgeTo(specStage)
-      List(curStage, specStage, joinStage)
     case CIf(cond, cons, alt) =>
       val firstTrueStage = new PStage(nextStageId())
       val trueStages = splitToStages(cons, firstTrueStage)

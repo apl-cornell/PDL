@@ -49,7 +49,6 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       val priorstg = s.inEdges.head.from
       //merge this into the prior stage since that delay was added unnecessarily
       mergeStages(priorstg, List(s))
-    case _: SpecStage =>
     case _ =>
   }
 

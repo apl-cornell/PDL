@@ -66,7 +66,8 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir)
     val pinfo = new ProgInfo(prog)
     try {
-      val canonProg = CanonicalizePass.run(prog)
+      val verifProg = AddVerifyValuesPass.run(prog)
+      val canonProg = CanonicalizePass.run(verifProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
@@ -83,7 +84,8 @@ object Main {
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
-      SpeculationChecker.check(recvProg, Some(basetypes))
+      val specChecker = new SpeculationChecker(ctx)
+      specChecker.check(recvProg, None)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")

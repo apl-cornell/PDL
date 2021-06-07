@@ -116,7 +116,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
 
   private def freshMessage(m: Id): EVar = {
     val res = EVar(Id("_request_" + msgCount))
-    res.typ = Some(TRequestHandle(m, isLock = false))
+    res.typ = Some(TRequestHandle(m, RequestType.Module))
     res.id.typ = res.typ
     msgCount += 1
     res

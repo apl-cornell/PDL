@@ -2,7 +2,7 @@ package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedSyncReference, UnexpectedType}
+import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedType}
 import pipedsl.common.Syntax
 import Environments.Environment
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency}
@@ -93,15 +93,30 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(mem.evar.get, vars, isRhs = true)
       }
       (vars, nextVars)
-    case CSpeculate(predVar, predVal, verify, body) =>
-      if(checkExpr(predVal, vars) != Combinational) {
-        throw UnexpectedAsyncReference(predVal.pos, "Speculative value must be combinational")
+    case CSpecCall(handle, _, args) =>
+    //args must be available, but handle is available next cycle
+    args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      (vars, nextVars + handle.id)
+    case CVerify(handle, args, preds) =>
+      //handle and args must be available this cycle
+      if(checkExpr(handle, vars) != Combinational) {
+        throw UnexpectedAsyncReference(handle.pos, handle.toString)
       }
-      val (varsv, nvarsv) = checkCommand(verify, vars ++ nextVars, NoneAvailable)
-      val (vars2, nvars2) = checkCommand(body, vars + predVar.id ++ nextVars, NoneAvailable)
-      (varsv ++ vars2, nvarsv ++ nvars2)
-    case CCheck(_) =>
+      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      preds.foreach(p => if(checkExpr(p, vars) != Combinational) {
+        throw UnexpectedAsyncReference(p.pos, p.toString)
+      })
       (vars, nextVars)
+    case CInvalidate(handle) =>
+      if(checkExpr(handle, vars) != Combinational) {
+        throw UnexpectedAsyncReference(handle.pos, handle.toString)
+      }
+      (vars, nextVars)
+    case CCheckSpec(_) => (vars, nextVars)
     case COutput(exp) =>
       if (checkExpr(exp, vars) != Combinational) {
         throw UnexpectedAsyncReference(exp.pos, exp.toString)

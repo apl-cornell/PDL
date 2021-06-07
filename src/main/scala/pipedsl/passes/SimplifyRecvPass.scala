@@ -26,6 +26,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
     usedVars = m.modules.foldLeft[Set[Id]](usedVars)((s,p) => s + p.name)
     val nm = m.copy(body = run(m.body)).setPos(m.pos)
     nm.isRecursive = m.isRecursive
+    nm.maybeSpec = m.maybeSpec
     nm
   }
 
@@ -55,7 +56,6 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       })
       CSplit(newcases, runHelper(default).setPos(default.pos)).setPos(c.pos)
     case CIf(cond, cons, alt) => CIf(cond, runHelper(cons), runHelper(alt)).setPos(c.pos)
-    case CSpeculate(predVar, predVal, verify, body) => CSpeculate(predVar, predVal, runHelper(verify), runHelper(body)).setPos(c.pos)
     case CRecv(lhs, rhs) => (lhs, rhs) match {
       case (EVar(_), EMemAccess(_, EVar(_))) => c //leave it alone, already in the form we want
       case (EVar(_), EMemAccess(mem, idx)) => //separate out the index computation
