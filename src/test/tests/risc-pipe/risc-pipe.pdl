@@ -35,7 +35,8 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
 }
 
 def br(pc: int<16>, off:int<16>, op:int<3>, arg1:int<32>, arg2:int<32>): int<16> {
-    int<16> offpc = pc + off;
+    //divide by 4 b/c we count instructions not bytes
+    int<16> offpc = pc + (off >> 2);
     int<16> npc = pc + 1<16>;
     if (op == 0<3>) { //BEQ
         if (arg1 == arg2) { return offpc; } else { return npc; }
@@ -63,10 +64,12 @@ def br(pc: int<16>, off:int<16>, op:int<3>, arg1:int<32>, arg2:int<32>): int<16>
 pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)] {
     start(imem);
     acquire(imem);
+    print(pc);
     int<32> insn <- imem[pc];
     release(imem);
     end(imem);
     ---
+    print(insn);
     int<7> opcode = insn{6:0};
     int<5> rs1 = insn{19:15};
     int<5> rs2 = insn{24:20};
@@ -76,18 +79,23 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     int<1> flip = insn{30:30};
     int<32> immI = 0<20> ++ insn{31:20}; //todo support signextend
     int<32> immS = 0<20> ++ (insn{31:25} ++ insn{11:7}); //todo signextend
-    int<16> immB = 0<5> ++ insn{7:7} ++ insn{30:25} ++ insn{11:8}; //todo real risc5
-    int<16> immJ = insn{16:12} ++ insn{20:20} ++ insn{30:25} ++ insn{24:21}; //todo real risc5
+    int<13> immBTmp = insn{31:31} ++ insn{7:7} ++ insn{30:25} ++ insn{11:8} ++ 0<1>;
+    int<16> immB = 0<3> ++  immBTmp; //todo support signextend
+    int<21> immJTmp = insn{31:31} ++ insn{19:12} ++ insn{20:20} ++ insn{30:21} ++ 0<1>;
+    int<16> immJ = immJTmp{15:0}; //todo support signextend and also make correct length
+    int<12> immJRTmp = insn{31:20};
+    int<16> immJR = 0<4> ++ immJRTmp; //todo support signextend
     int<32> immU = insn{31:12} ++ 0<12>;
     bool isOpImm = opcode == 0b0010011<7>;
     bool isOp    = opcode == 0b0110011<7>;
     bool isJal   = opcode == 0b1101111<7>;
+    bool isJalr  = opcode == 0b1100111<7>;
     bool isBranch = opcode == 0b1100011<7>;
     bool isStore = opcode == 0b0100011<7>;
     bool isLoad = opcode == 0b0000011<7>;
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore;
-    bool writerd = opcode{6:5} == 0<2>;
+    bool writerd = (rd != 0<5>) && ((opcode{6:5} == 0<2>) || isJal || isJalr);
     start(rf);
     if (needrs1) {
        acquire(rf[rs1], R);
@@ -112,10 +120,14 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        int<16> npc = br(pc, immB, funct3, rf1, rf2);
     } else {
     if (isJal) {
-       int<16> npc = pc + 1<16>; //todo
+       //divide by 4 since it counts bytes instead of insns
+       int<16> npc = pc + (immJ >> 2);
+    } else {
+    if (isJalr) {
+       int<16> npc = pc + (immJR >> 2);
     } else {
        int<16> npc = pc + 1<16>;
-    }}
+    }}}
     call cpu(npc);
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
     int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
@@ -156,8 +168,11 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        if (isLoad) {
        	  rf[rd] <- wdata;
        } else {
+       if (isJal || isJalr) {
+       	  rf[rd] <- 0<16> ++ (pc + 1<16>); //todo make pc 32 bits
+       } else {
        	  rf[rd] <- alu_res;
-       }
+       }}
        release(rf[rd]);
     }    
 }
