@@ -379,8 +379,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def _checkE(e: Expr, tenv: Environment[Id, Type], defaultType: Option[Type]): (Type, Environment[Id, Type] ) = e match {
-    case EInt(v, base, bits) =>
-      (TSizedInt(bits, unsigned = true), tenv)
+    case EInt(_, _, bits) =>
+      (TSizedInt(bits, unsigned = false), tenv)
     case EBool(v) => (TBool(), tenv)
     case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
@@ -509,23 +509,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
       case None => id.typ = defaultType; (defaultType.get, tenv)
     }
-    //TODO some other rules for casting
-    case ECast(ctyp, exp) =>
+    case ECast(totyp, exp) =>
       val (etyp, tenv2) = checkExpression(exp, tenv, None)
-      (ctyp, etyp) match {
-        case (t1, t2) if !areEqual(t1, t2) => throw IllegalCast(e.pos, t1, t2)
-        case _ => ()
-      }
-      (ctyp, tenv2)
+       if (!canCast(etyp, totyp)) throw IllegalCast(e.pos, totyp, etyp)
+      (totyp, tenv2)
     case _ => throw UnexpectedCase(e.pos)
   }
-
-  //Returns all variables which could cause the first pipeline stage
-  //to start speculatively
-  def getSpeculativeVariables(c: Command): Set[Id] = c match {
-    case CSeq(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
-    case CTBar(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
-    case CIf(_, cons, alt) => getSpeculativeVariables(cons) ++ getSpeculativeVariables(alt)
-    case _ => Set()
-  }
+  
 }

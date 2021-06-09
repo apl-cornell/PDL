@@ -141,9 +141,38 @@ object BSVSyntax {
     //TODO handle casts better
     private def translateCast(e: ECast): BExpr = {
       e.ctyp match {
+        case to@TSizedInt(_, _) => e.exp.typ match {
+          case Some(from@TSizedInt(_, _)) => translateIntCast(from, to, e.exp)
+          case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
+          "TSizedInt", e.ctyp)
+        }
         case TBool() => toExpr(e.exp)
         case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
           "TBool", e.ctyp)
+      }
+    }
+
+    //This appropriately extends, truncates and packs/unpacks the
+    //expression as appropriate to convert from one type to the other.
+    //Extension must be made explicit since the pack/unpack operations will not
+    //automatically determine an output type
+    private def translateIntCast(from: TSizedInt, to:TSizedInt, e: Expr): BExpr = {
+      val baseExpr = toExpr(e)
+      val needsExtend = from.len < to.len
+      val needsTruncate = to.len < from.len
+      val needsPack = from.unsigned != to.unsigned
+      val extended = if (needsExtend) {
+        //If making a signed number, sign extend
+        BExtend(baseExpr, useSign = !to.unsigned)
+      } else if (needsTruncate) {
+        BTruncate(baseExpr)
+      } else {
+        baseExpr
+      }
+      if (needsPack) {
+        BUnpack(BPack(extended))
+      } else {
+        extended
       }
     }
 
@@ -252,6 +281,8 @@ object BSVSyntax {
   case class BTaggedValid(exp: BExpr) extends BExpr
   case class BFromMaybe(default: BExpr, exp: BExpr) extends BExpr
   case class BIsValid(exp: BExpr) extends BExpr
+  case class BExtend(e: BExpr, useSign: Boolean) extends BExpr
+  case class BTruncate(e: BExpr) extends BExpr
   case class BPack(e: BExpr) extends BExpr
   case class BUnpack(e: BExpr) extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr

@@ -90,6 +90,9 @@ object BSVPrettyPrinter {
       mkExprString(typ.name, "{", fieldStr, "}")
     case BPack(e) => mkExprString("pack(", toBSVExprStr(e), ")")
     case BUnpack(e) => mkExprString("unpack(", toBSVExprStr(e), ")")
+    case BExtend(e, useSign) => mkExprString(
+      if (useSign) "signExtend(" else "zeroExtend(", toBSVExprStr(e), ")")
+    case BTruncate(e) => mkExprString("truncate(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
     case BBOp(op, lhs, rhs) if op == "*" => mkExprString(

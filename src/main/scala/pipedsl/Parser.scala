@@ -32,13 +32,13 @@ class Parser extends RegexParsers with PackratParsers {
     "\"" ~> "[^\"]*".r <~ "\"" ^^ {n => EString(n)}
 
   // Atoms
-  lazy val uInt: P[Expr] = "[0-9]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(n.toInt, 10, if (bits.isDefined) bits.get else log2(n.toInt)) }
-  lazy val hex: Parser[EInt] = "0x[0-9a-fA-F]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(Integer.parseInt(n.substring(2), 16), 16,
+  lazy val uInt: P[Expr] = "-?[0-9]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(n.toInt, 10, if (bits.isDefined) bits.get else log2(n.toInt)) }
+  lazy val hex: Parser[EInt] = "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(Integer.parseInt(n.substring(2), 16), 16,
     if (bits.isDefined) bits.get else 4 * n.substring(2).length()) }
-  lazy val octal: Parser[EInt] = "0[0-7]+".r ~ angular(posint).? ^^ {
+  lazy val octal: Parser[EInt] = "0-?[0-7]+".r ~ angular(posint).? ^^ {
     case n ~ bits => EInt(Integer.parseInt(n.substring(1), 8), 8,
       if (bits.isDefined) bits.get else 3 * n.substring(1).length()) }
-  lazy val binary: Parser[EInt] = "0b[0-1]+".r ~ angular(posint).? ^^ {
+  lazy val binary: Parser[EInt] = "0b-?[0-1]+".r ~ angular(posint).? ^^ {
     case n ~ bits => EInt(Integer.parseInt(n.substring(2), 2), 2,
       if (bits.isDefined) bits.get else n.substring(2).length()) }
   lazy val boolean: Parser[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
@@ -230,7 +230,9 @@ class Parser extends RegexParsers with PackratParsers {
       seqCmd
   }
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
+  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = false) } |
+  "uint" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
+
   lazy val latency: P[Latency.Latency] =
     "c" ^^ { _ => Latency.Combinational } |
     "s" ^^ { _ => Latency.Sequential }    |
