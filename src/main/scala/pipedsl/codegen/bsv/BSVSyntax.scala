@@ -170,7 +170,11 @@ object BSVSyntax {
         baseExpr
       }
       if (needsPack) {
-        BUnpack(BPack(extended))
+        extended match {
+            //don't nest unpacks
+          case BUnpack(_) => extended
+          case ex => BUnpack(BPack(ex))
+        }
       } else {
         extended
       }
