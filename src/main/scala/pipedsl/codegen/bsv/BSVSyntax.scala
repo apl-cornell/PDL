@@ -190,7 +190,7 @@ object BSVSyntax {
       case NumOp("*",_) => b.typ match {
         case Some(TSizedInt(_, unsigned)) =>
           val op = if (unsigned) { "unsignedMul" } else { "signedMul" }
-          BBOp(op, toExpr(b.e1), toExpr(b.e2))
+          BBOp(op, toExpr(b.e1), toExpr(b.e2), isInfix = false)
         case None => throw MissingType(b.pos, "Missing Type on Multiply BinOp")
         case _ => throw UnexpectedType(b.pos, "Mul Op", "Sized Integers", b.typ.get)
       }
@@ -299,7 +299,7 @@ object BSVSyntax {
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
   case class BVar(name: String, typ: BSVType) extends BExpr
-  case class BBOp(op: String, lhs: BExpr, rhs: BExpr) extends BExpr
+  case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
   case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr

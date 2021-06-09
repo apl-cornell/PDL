@@ -95,7 +95,8 @@ object BSVPrettyPrinter {
     case BTruncate(e) => mkExprString("truncate(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
-    case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix) if isInfix => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix) if !isInfix => mkExprString( op + "(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
     //TODO incorporate bit types into the typesystem properly
     //and then remove the custom pack/unpack operations
