@@ -95,8 +95,6 @@ object BSVPrettyPrinter {
     case BTruncate(e) => mkExprString("truncate(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
-    case BBOp(op, lhs, rhs) if op == "*" => mkExprString(
-      "unsignedMul(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs),")")
     case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
     //TODO incorporate bit types into the typesystem properly

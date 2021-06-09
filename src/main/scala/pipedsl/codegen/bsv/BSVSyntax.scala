@@ -1,7 +1,7 @@
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
-import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
@@ -187,6 +187,13 @@ object BSVSyntax {
           case e => BPack(e)
         }
         BUnpack(BConcat(left, List(right)))
+      case NumOp("*",_) => b.typ match {
+        case Some(TSizedInt(_, unsigned)) =>
+          val op = if (unsigned) { "unsignedMul" } else { "signedMul" }
+          BBOp(op, toExpr(b.e1), toExpr(b.e2))
+        case None => throw MissingType(b.pos, "Missing Type on Multiply BinOp")
+        case _ => throw UnexpectedType(b.pos, "Mul Op", "Sized Integers", b.typ.get)
+      }
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
 
