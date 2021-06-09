@@ -7,7 +7,7 @@ pipe test22(input: uint<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]
         case: randomBool2 {
             acquire(rf);
         }
-        case: (input{0:0} == 1) {
+        case: (input{0:0} == u1) {
             acquire(rf);
         }
         default: {

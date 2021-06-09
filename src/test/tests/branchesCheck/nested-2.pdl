@@ -1,15 +1,15 @@
-pipe test(inarg: int<32>)[] {
+pipe test(inarg: uint<32>)[] {
     if (cast (inarg{0:0}, bool)) {
-        if (inarg{1:1} == 0) {
-            int<2> x = 0<2>;
+        if (inarg{1:1} == u0) {
+            uint<2> x = u0<2>;
         } else {
             ---
-            int<2> x = 1<2>;
+            uint<2> x = u1<2>;
         }
     } else {
-       int<2> x = 3<2>;
+       uint<2> x = u3<2>;
     }
-    call test(0<30> ++ x);
+    call test(u0<30> ++ x);
 }
 
 circuit {

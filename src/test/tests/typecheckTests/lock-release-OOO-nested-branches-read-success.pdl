@@ -5,7 +5,7 @@ pipe test3(input: uint<32>)[rf: int<32>[5]] {
     bool a = rs1 == rs2;
     bool b = rs1 + u5<5> == rs2 + u5<5>;
     bool c = rs1 + u6<5> == rs2 + u6<5>;
-    bool d = rs1 + u7<5> == rs2 + 7u<5>;
+    bool d = rs1 + u7<5> == rs2 + u7<5>;
 
     start(rf);
     acquire(rf[rs1],R);
