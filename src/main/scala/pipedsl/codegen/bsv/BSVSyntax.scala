@@ -175,7 +175,6 @@ object BSVSyntax {
         extended
       }
     }
-
     //TODO a better way to translate operators
     private def toBSVBop(b: EBinop): BExpr = b.op match {
       case BitOp("++", _) =>

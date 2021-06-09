@@ -31,16 +31,25 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val stringVal: P[Expr] =
     "\"" ~> "[^\"]*".r <~ "\"" ^^ {n => EString(n)}
 
+  private def toInt(n: Int, base: Int, bits: Option[Int], isUnsigned: Boolean): EInt = {
+    val e = EInt(n, base, if (bits.isDefined) bits.get else log2(n))
+    e.typ = Some(TSizedInt(e.bits, unsigned = isUnsigned))
+    e
+  }
+
   // Atoms
-  lazy val uInt: P[Expr] = "-?[0-9]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(n.toInt, 10, if (bits.isDefined) bits.get else log2(n.toInt)) }
-  lazy val hex: Parser[EInt] = "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ { case n ~ bits => EInt(Integer.parseInt(n.substring(2), 16), 16,
-    if (bits.isDefined) bits.get else 4 * n.substring(2).length()) }
-  lazy val octal: Parser[EInt] = "0-?[0-7]+".r ~ angular(posint).? ^^ {
-    case n ~ bits => EInt(Integer.parseInt(n.substring(1), 8), 8,
-      if (bits.isDefined) bits.get else 3 * n.substring(1).length()) }
-  lazy val binary: Parser[EInt] = "0b-?[0-1]+".r ~ angular(posint).? ^^ {
-    case n ~ bits => EInt(Integer.parseInt(n.substring(2), 2), 2,
-      if (bits.isDefined) bits.get else n.substring(2).length()) }
+  lazy val dec: P[Expr] = "u".? ~ "-?[0-9]+".r ~ angular(posint).? ^^ {
+    case u ~ n ~ bits => toInt(n.toInt, 10, bits, u.isDefined)
+  }
+  lazy val hex: Parser[EInt] = "u".? ~ "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ {
+    case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 16), 16, bits, u.isDefined)
+  }
+  lazy val octal: Parser[EInt] = "u".? ~ "0-?[0-7]+".r ~ angular(posint).? ^^ {
+    case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(1), 8), 8, bits, u.isDefined)
+  }
+  lazy val binary: Parser[EInt] = "u".? ~ "0b-?[0-1]+".r ~ angular(posint).? ^^ {
+    case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 2), 2, bits, u.isDefined)
+  }
   lazy val boolean: Parser[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
   lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
@@ -87,7 +96,7 @@ class Parser extends RegexParsers with PackratParsers {
       hex |
       octal |
       binary |
-      uInt |
+      dec |
       stringVal | 
       boolean ^^ (b => EBool(b)) |
       iden ~ parens(repsep(expr, ",")) ^^ { case f ~ args => EApp(f, args) } |

@@ -56,14 +56,14 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
  }
  start(imem);
  acquire(imem);
- int<32> insn <- imem[pc];
+ int<32> insn <- imem[cast(pc, uint<16>)];
  release(imem);
  end(imem);
  ---
  int<2> op = insn{1:0};
- int<5> rs1 = insn{6:2};
- int<5> rs2 = insn{11:7};
- int<5> rd = insn{16:12};
+ uint<5> rs1 = cast(insn{6:2}, uint<5>);
+ uint<5> rs2 = cast(insn{11:7}, uint<5>);
+ uint<5> rd = cast(insn{16:12}, uint<5>);
  start(rf);
  acquire(rf[rs1], R);
  acquire(rf[rs2], R);
@@ -77,10 +77,10 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
  split {
     case: (op == 0<2>) {
         split {
-            case: (rs1 % 3<5> == 0<5>) {
+            case: (rs1 % u3<5> == u0<5>) {
                 int<32> res <- rf1 + rf2;
             }
-            case: (rs1 % 3<5> == 1<5>) {
+            case: (rs1 % u3<5> == u1<5>) {
                 int<32> res <- rf1 - rf2;
             }
             default: {
@@ -90,10 +90,10 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     }
     case: (op == 1<2>) {
         split {
-            case: (rs2 % 3<5> == 0<5>) {
+            case: (rs2 % u3<5> == u0<5>) {
                 int<32> res <- call f(rf1, rf2, 0<32>, 0<32>, 0<5>);
             }
-            case: (rs2 % 3<5> == 1<5>){
+            case: (rs2 % u3<5> == u1<5>){
                 int<32> res <- rf1 >> rf2;
             }
             default: {

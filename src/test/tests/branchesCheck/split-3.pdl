@@ -3,17 +3,17 @@ pipe test(inarg: int<32>)[rf: int<32>[5]] {
     int<2> cond = inarg{1:0};
     split {
         case: (cond == 0<2>) {
-	    int<5> addr = 7<5>;
+	    uint<5> addr = u7<5>;
             acquire(rf[addr], W);
         }
         case: (cond == 1<2>) {
-            int<5> addr = 1<5>;
+            uint<5> addr = u1<5>;
         }
         case: (cond == 2<2>) {
-            int<5> addr = 2<5>;
+            uint<5> addr = u2<5>;
         }
         default: {
-            int<5> addr = 0<5>;
+            uint<5> addr = u0<5>;
         }
     }
     end(rf);

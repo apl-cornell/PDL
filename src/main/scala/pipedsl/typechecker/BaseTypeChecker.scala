@@ -379,8 +379,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def _checkE(e: Expr, tenv: Environment[Id, Type], defaultType: Option[Type]): (Type, Environment[Id, Type] ) = e match {
-    case EInt(_, _, bits) =>
-      (TSizedInt(bits, unsigned = false), tenv)
+    case e1@EInt(_, _, bits) =>
+      if (e1.typ.isDefined) { (e1.typ.get, tenv) }
+      else { (TSizedInt(bits, unsigned = false), tenv) }
     case EBool(v) => (TBool(), tenv)
     case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
@@ -515,5 +516,5 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       (totyp, tenv2)
     case _ => throw UnexpectedCase(e.pos)
   }
-  
+
 }
