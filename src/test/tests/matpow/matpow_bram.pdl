@@ -9,68 +9,68 @@ void matrix_power( inout_int_t x[20][20], in_int_t row[20], in_int_t col[20], in
 }
 */
 
-pipe matpow(k: int<5>, p: int<5>)[x: int<32>[9]<a,a>(FAQueue), row: int<5>[5]<a,a>(Queue), col: int<5>[5]<a,a>(Queue), a: int<32>[5]<a,a>(Queue)]: bool {
-     if (p == 19<5>) {
-     	if (k != 19<5>) {
-	   call matpow(k + 1<5>, 0<5>);
+pipe matpow(k: uint<5>, p: uint<5>)[x: uint<32>[9]<a,a>(FAQueue), row: uint<5>[5]<a,a>(Queue), col: uint<5>[5]<a,a>(Queue), a: uint<32>[5]<a,a>(Queue)]: bool {
+     if (p == u19<5>) {
+     	if (k != u19<5>) {
+	   call matpow(k + u1<5>, u0<5>);
 	}
      } else {
-       call matpow(k, p + 1<5>);
+       call matpow(k, p + u1<5>);
      }
      start(col);
      acquire(col);
-     int<5> col_p <- col[p];
+     uint<5> col_p <- col[p];
      release(col);
      end(col);
      start(row);
      acquire(row);
-     int<5> row_p <- row[p];
+     uint<5> row_p <- row[p];
      release(row);
      end(row);
      ---
-     int<18> x_in_mul = 20<9> * (0<4> ++ (k - 1<5>));
-     int<9> x_in_idx = x_in_mul{8:0} + (0<4> ++ col_p);
-     int<18> x_out_mul = (20<9> * (0<4> ++ k)); 
-     int<9> x_out_idx =  x_out_mul{8:0} + (0<4> ++ row_p);
-     int<9> x_out_idx_cp = x_out_idx;
+     uint<18> x_in_mul = u20<9> * (u0<4> ++ (k - u1<5>));
+     uint<9> x_in_idx = x_in_mul{8:0} + (u0<4> ++ col_p);
+     uint<18> x_out_mul = (u20<9> * (u0<4> ++ k));
+     uint<9> x_out_idx =  x_out_mul{8:0} + (u0<4> ++ row_p);
+     uint<9> x_out_idx_cp = x_out_idx;
      start(x);
      acquire(x[x_in_idx], R);
      acquire(x[x_out_idx], R);
-     int<32> x_in_val <- x[x_in_idx];
+     uint<32> x_in_val <- x[x_in_idx];
      release(x[x_in_idx]);
      start(a);
      acquire(a);
-     int<32> a_val <- a[p];
+     uint<32> a_val <- a[p];
      release(a);
      end(a);
      ---
      reserve(x[x_out_idx_cp], W);
      end(x);
-     int<64> nmul = a_val * x_in_val;
-     int<32> nval = nmul{31:0};
-     int<32> oldx <- x[x_out_idx];
+     uint<64> nmul = a_val * x_in_val;
+     uint<32> nval = nmul{31:0};
+     uint<32> oldx <- x[x_out_idx];
      release(x[x_out_idx]);
      ---
      block(x[x_out_idx_cp]);
-     int<32> newval = nval + oldx;
+     uint<32> newval = nval + oldx;
      print(newval);
      x[x_out_idx_cp] <- newval;
      release(x[x_out_idx_cp]);
      ---
-     if ((k == 19<5>) && (p == 19<5>)) {
+     if ((k == u19<5>) && (p == u19<5>)) {
      	output(true);
      }
 }
 
 circuit {
-  tx = memory(int<32>, 9);
+  tx = memory(uint<32>, 9);
   x = FAQueue(tx);
-  ta = memory(int<32>, 5);
+  ta = memory(uint<32>, 5);
   a = Queue(ta);
-  tr = memory(int<5>, 5);
+  tr = memory(uint<5>, 5);
   r = Queue(tr);
-  tc = memory(int<5>, 5);
+  tc = memory(uint<5>, 5);
   c = Queue(tc);
   mp = new matpow[x, r, c, a];
-  call mp(1<5>, 0<5>);
+  call mp(u1<5>, u0<5>);
 }

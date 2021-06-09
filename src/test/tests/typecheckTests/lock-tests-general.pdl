@@ -12,7 +12,7 @@ pipe test4(input: int<32>)[rf: int<32>[5]] {
     start(rf);
     if (input{0:0} == 1) {
         acquire(rf);
-        int<32> arg <- rf[input{4:0}];
+        int<32> arg <- rf[cast(input{4:0}, uint<5>)];
         release(rf);
     } else {
         ---
@@ -31,7 +31,7 @@ pipe test5(input: int<32>)[rf: int<32>[5]] {
     if (input{0:0} == 1) {
         release(rf);
     } else {
-        int<32> arg <- rf[input{31:27}];
+        int<32> arg <- rf[cast(input{31:27}, uint<5>)];
         release(rf);
     }
     end(rf);
@@ -42,14 +42,14 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
     if (input{0:0} == 1) {
         ---
         acquire(rf);
-        int<32> out <- rf[0<5>];
+        int<32> out <- rf[u0<5>];
     } else {
         ---
         acquire(rf);
-        int<32> out <- rf[1<5>];
+        int<32> out <- rf[u1<5>];
     }
     ---
-    rf[2<5>] <- out;
+    rf[u2<5>] <- out;
     release(rf);
     end(rf);
 }

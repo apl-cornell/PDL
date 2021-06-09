@@ -65,15 +65,15 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     start(imem);
     acquire(imem);
     print(pc);
-    int<32> insn <- imem[pc];
+    int<32> insn <- imem[cast(pc, uint<16>)];
     release(imem);
     end(imem);
     ---
     print(insn);
     int<7> opcode = insn{6:0};
-    int<5> rs1 = insn{19:15};
-    int<5> rs2 = insn{24:20};
-    int<5> rd = insn{11:7};
+    uint<5> rs1 = cast(insn{19:15}, uint<5>);
+    uint<5> rs2 = cast(insn{24:20}, uint<5>);
+    uint<5> rd = cast(insn{11:7}, uint<5>);
     int<7> funct7 = insn{31:25};
     int<3> funct3 = insn{14:12};
     int<1> flip = insn{30:30};
@@ -95,7 +95,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     bool isLoad = opcode == 0b0000011<7>;
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore;
-    bool writerd = (rd != 0<5>) && ((opcode{6:5} == 0<2>) || isJal || isJalr);
+    bool writerd = (rd != u0<5>) && ((opcode{6:5} == 0<2>) || isJal || isJalr);
     start(rf);
     if (needrs1) {
        acquire(rf[rs1], R);
@@ -145,13 +145,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     if (isStore || isLoad) {
         start(dmem);
 	if (isLoad) {
- 	   int<16> raddr = memaddr;
+ 	   uint<16> raddr = cast(memaddr, uint<16>);
 	   acquire(dmem[raddr], R);
 	   int<32> wdata <- dmem[raddr];
 	   release(dmem[raddr]);
 	   ---
 	} else {
-	    int<16> waddr = memaddr;
+	    uint<16> waddr = cast(memaddr, uint<16>);
 	    acquire(dmem[waddr], W);
 	    dmem[waddr] <- rf2;
 	    release(dmem[waddr]);
