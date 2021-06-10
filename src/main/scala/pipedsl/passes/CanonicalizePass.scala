@@ -2,7 +2,7 @@ package pipedsl.passes
 
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.getAllVarNames
-import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
+import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
 
 /**
  * This pass puts the program into a canonical form. For now all this does is clean
@@ -11,7 +11,8 @@ import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
  * Now it also lifts all cast expressions into temporary variables to simplify code generation
  * and remove problems with implicit casting in the generated code.
  */
-class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
+class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
+  with FunctionPass[FuncDef] with ProgPass[Prog] {
 
   var usedNames: Set[String] = Set()
   var counter = 0
@@ -36,7 +37,10 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
 
   override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).setPos(m.pos)
 
-  override def run(p: Prog): Prog =  p.copy(moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
+  override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
+
+  override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m)),
+    fdefs = p.fdefs.map(f => run(f))).setPos(p.pos)
 
 
 
