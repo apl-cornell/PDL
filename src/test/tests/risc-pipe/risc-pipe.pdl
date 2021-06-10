@@ -53,17 +53,21 @@ def br(pc: int<16>, off:int<16>, op:int<3>, arg1:int<32>, arg2:int<32>): int<16>
        if (arg1 >= arg2)  { return offpc; } else { return npc; }
     } else {
     if (op == 6<3>) { //BLTU
-       if (arg1 < arg2)  { return offpc; } else { return npc; } //todo unsigned
+        uint<32> un1 = cast(arg1, uint<32>);
+        uint<32> un2 = cast(arg2, uint<32>);
+        if (un1 < un2)  { return offpc; } else { return npc; }
     } else {
     if (op == 7<3>) { //BGEU
-       if (arg1 >= arg2) { return offpc; } else { return npc; } //todo unsigned
+        uint<32> un1 = cast(arg1, uint<32>);
+        uint<32> un2 = cast(arg2, uint<32>);
+        if (un1 >= un2) { return offpc; } else { return npc; }
     } else {
       return npc;
     }}}}}}
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)] {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)]: bool {
     start(imem);
     acquire(imem);
     int<16> debugpc = pc << 2;
@@ -73,6 +77,10 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     end(imem);
     ---
     print(insn);
+    //This OPCODE is J Self and thus we're using it to signal termination
+    if (insn == 0x0000006f<32>) {
+        output(true);
+    } else {
     int<7> opcode = insn{6:0};
     uint<5> rs1 = cast(insn{19:15}, uint<5>);
     uint<5> rs2 = cast(insn{24:20}, uint<5>);
@@ -194,7 +202,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        	  rf[rd] <- alu_res;
        }}
        release(rf[rd]);
-    }    
+    }
+    }
 }
 
 circuit {
