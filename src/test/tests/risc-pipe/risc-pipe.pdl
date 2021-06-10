@@ -78,9 +78,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     ---
     print(insn);
     //This OPCODE is J Self and thus we're using it to signal termination
-    if (insn == 0x0000006f<32>) {
-        output(true);
-    } else {
+    bool done = insn == 0x0000006f<32>;
     int<7> opcode = insn{6:0};
     uint<5> rs1 = cast(insn{19:15}, uint<5>);
     uint<5> rs2 = cast(insn{24:20}, uint<5>);
@@ -143,7 +141,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     } else {
        int<16> npc = pc + 1<16>;
     }}}
-    call cpu(npc);
+    if (!done) { call cpu(npc); }
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
     split {
     	  case: (isLui) {
@@ -203,7 +201,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        }}
        release(rf[rd]);
     }
-    }
+    if (done) { output(true); }
 }
 
 circuit {
