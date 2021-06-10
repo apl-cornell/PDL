@@ -5,6 +5,8 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{andExpr, getReachableStages, getUsedVars, isReceivingCmd, updateListMap}
 import pipedsl.passes.Passes.StagePass
 
+import scala.collection.immutable.ListMap
+
 /**
  * The SplitStages pass forces IF statements to create
  * a new stage for each of their branches. In the event
@@ -73,7 +75,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
 
   //Ensures that ICondCommands don't contain any ICondCommands
   private def flattenCondStmts(cond: Expr, stmts: Iterable[Command]): List[Command] = {
-    var condMap: Map[Expr, List[Command]] = Map()
+    var condMap: Map[Expr, List[Command]] = ListMap()
     stmts.foreach {
       case ICondCommand(cex, cs) =>
         val mapcondition = andExpr(Some(cond), Some(cex)).get
