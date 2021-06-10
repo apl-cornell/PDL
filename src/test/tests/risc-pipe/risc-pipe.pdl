@@ -77,14 +77,14 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     int<7> funct7 = insn{31:25};
     int<3> funct3 = insn{14:12};
     int<1> flip = insn{30:30};
-    int<32> immI = 0<20> ++ insn{31:20}; //todo support signextend
-    int<32> immS = 0<20> ++ (insn{31:25} ++ insn{11:7}); //todo signextend
+    int<32> immI = cast(insn{31:20}, int<32>);
+    int<32> immS = cast((insn{31:25} ++ insn{11:7}), int<32>);
     int<13> immBTmp = insn{31:31} ++ insn{7:7} ++ insn{30:25} ++ insn{11:8} ++ 0<1>;
-    int<16> immB = 0<3> ++  immBTmp; //todo support signextend
+    int<16> immB = cast(immBTmp, int<16>);
     int<21> immJTmp = insn{31:31} ++ insn{19:12} ++ insn{20:20} ++ insn{30:21} ++ 0<1>;
-    int<16> immJ = immJTmp{15:0}; //todo support signextend and also make correct length
+    int<32> immJ = cast(immJTmp, int<32>);
     int<12> immJRTmp = insn{31:20};
-    int<16> immJR = 0<4> ++ immJRTmp; //todo support signextend
+    int<16> immJR = cast(immJRTmp, int<16>);
     int<32> immU = insn{31:12} ++ 0<12>;
     bool isOpImm = opcode == 0b0010011<7>;
     bool isOp    = opcode == 0b0110011<7>;
@@ -94,7 +94,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     bool isStore = opcode == 0b0100011<7>;
     bool isLoad = opcode == 0b0000011<7>;
     bool needrs1 = !isJal;
-    bool needrs2 = isOp || isBranch || isStore;
+    bool needrs2 = isOp || isBranch || isStore || isJalr;
     bool writerd = (rd != u0<5>) && ((opcode{6:5} == 0<2>) || isJal || isJalr);
     start(rf);
     if (needrs1) {
@@ -121,10 +121,11 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     } else {
     if (isJal) {
        //divide by 4 since it counts bytes instead of insns
-       int<16> npc = pc + (immJ >> 2);
+       int<32> npc32 = cast(pc, int<32>) + (immJ >> 2);
+       int<16> npc = npc32{15:0};
     } else {
     if (isJalr) {
-       int<16> npc = pc + (immJR >> 2);
+       int<16> npc = pc + ((rf1{15:0} + immJR) >> 2);
     } else {
        int<16> npc = pc + 1<16>;
     }}}
@@ -169,7 +170,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        	  rf[rd] <- wdata;
        } else {
        if (isJal || isJalr) {
-       	  rf[rd] <- 0<16> ++ (pc + 1<16>); //todo make pc 32 bits
+       	  //need to do pc +4 (instead of 1) b/c it is arch visible.
+       	  rf[rd] <- 0<16> ++ (pc + 4<16>); //todo make pc 32 bits
        } else {
        	  rf[rd] <- alu_res;
        }}
