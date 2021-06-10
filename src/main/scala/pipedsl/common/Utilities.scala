@@ -63,7 +63,7 @@ object Utilities {
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case CPrint(_, args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
+    case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty() => Set()
@@ -109,7 +109,7 @@ object Utilities {
       cases.foldLeft(getUsedVars(default))((v, c) => {
         v ++ getUsedVars(c.cond) ++ getUsedVars(c.body)
       })
-    case CPrint(_, args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
+    case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
     case CAssign(_, rhs) => getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {

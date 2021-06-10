@@ -71,12 +71,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     start(imem);
     acquire(imem);
     int<16> debugpc = pc << 2;
-    print(debugpc);
+    print("PC: %h", debugpc);
     int<32> insn <- imem[cast(pc, uint<16>)];
     release(imem);
     end(imem);
     ---
-    print(insn);
+    print("INSN: %h",insn);
     //This OPCODE is J Self and thus we're using it to signal termination
     bool done = insn == 0x0000006f<32>;
     int<7> opcode = insn{6:0};
@@ -190,15 +190,17 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     if (writerd) {
        block(rf[rd]);
        if (isLoad) {
-       	  rf[rd] <- wdata;
+       	  int<32> insnout = wdata;
        } else {
        if (isJal || isJalr) {
        	  //need to multiply by 4 b/c it is arch visible.
 	  int<16> nextpc = pc + 1<16>;
-       	  rf[rd] <- 0<16> ++ (nextpc << 2); //todo make pc 32 bits
+	  int<32> insnout =  0<16> ++ (nextpc << 2); //todo make pc 32 bits
        } else {
-       	  rf[rd] <- alu_res;
+       	 int<32> insnout = alu_res;
        }}
+       print("Writing %h to r%h",insnout, rd);
+       rf[rd] <- insnout;
        release(rf[rd]);
     }
     if (done) { output(true); }
