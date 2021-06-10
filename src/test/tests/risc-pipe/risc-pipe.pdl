@@ -1,5 +1,5 @@
 def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: bool): int<32> {
-    int<5> shamt = arg2{4:0};
+    uint<5> shamt = cast(arg2{4:0}, uint<5>);
     if (op == 0<3>) {  //000 == ADD , flip == sub
        if (!flip) {
          return arg1 + arg2;
@@ -11,23 +11,25 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: bool): int<32> {
         return arg1 << shamt;
     } else {
     if (op == 2<3>) { //010 == SLT 
-        return (arg1 < arg2) ? 1<32> : 0<32>; //todo signed vs unsigned
+        return (arg1 < arg2) ? 1<32> : 0<32>;
     } else {
     if (op == 3<3>) { //011 == SLTU
-        return (arg1 < arg2) ? 1<32> : 0<32>;
+       uint<32> un1 = cast(arg1, uint<32>);
+       uint<32> un2 = cast(arg2, uint<32>);
+       return (un1 < un2) ? 1<32> : 0<32>;
     } else {
     if (op == 4<3>) { //100 == XOR
         return arg1 ^ arg2;
     } else {
     if (op == 5<3>) { //101 == SRL / SRA
       if (!flip) {
-        return arg1 >> shamt; //SRL
+        return cast((cast(arg1, uint<32>)) >> shamt, int<32>); //SRL
       } else {
-        return arg1 >> shamt; //SRA todo support difference here
+        return arg1 >> shamt; //SRA
       }
     } else {
     if (op == 6<3>) { //110 == OR
-        return arg1 ^ arg2;
+        return arg1 | arg2;
     } else { //111 == AND
         return arg1 & arg2;
     }}}}}}}
@@ -64,7 +66,8 @@ def br(pc: int<16>, off:int<16>, op:int<3>, arg1:int<32>, arg2:int<32>): int<16>
 pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)] {
     start(imem);
     acquire(imem);
-    print(pc);
+    int<16> debugpc = pc << 2;
+    print(debugpc);
     int<32> insn <- imem[cast(pc, uint<16>)];
     release(imem);
     end(imem);
@@ -88,6 +91,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     int<32> immU = insn{31:12} ++ 0<12>;
     bool isOpImm = opcode == 0b0010011<7>;
     bool flip = (!isOpImm) && (flipBit == 1<1>);
+    bool isLui   = opcode == 0b0110111<7>;
+    bool isAui   = opcode == 0b0010111<7>;
     bool isOp    = opcode == 0b0110011<7>;
     bool isJal   = opcode == 0b1101111<7>;
     bool isJalr  = opcode == 0b1100111<7>;
@@ -96,7 +101,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     bool isLoad = opcode == 0b0000011<7>;
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore || isJalr;
-    bool writerd = (rd != u0<5>) && ((opcode{6:5} == 0<2>) || isJal || isJalr);
+    bool writerd = (rd != u0<5>) && ((opcode{6:5} == 0<2>) || isJal || isJalr || isLui || isAui);
     start(rf);
     if (needrs1) {
        acquire(rf[rs1], R);
@@ -132,7 +137,18 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     }}}
     call cpu(npc);
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
-    int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
+    split {
+    	  case: (isLui) {
+	  	int<32> alu_res = immU;
+	  }
+	  case: (isAui) {
+	  	int<32> pc32 = 0<16> ++ pc;
+	  	int<32> alu_res = pc32 + immU;
+	  }
+	  default: {
+	        int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
+	  }
+    }
     if (isStore) {
        int<32> tmp = (immS + rf1);
        int<16> memaddr = tmp{15:0};
