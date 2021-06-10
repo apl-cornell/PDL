@@ -864,7 +864,7 @@ object BluespecGeneration {
       case _: ISend => None
       case _: InternalCommand => None
       case COutput(_) => None
-      case CPrint(_,_) => None
+      case CPrint(_) => None
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
@@ -1025,10 +1025,7 @@ object BluespecGeneration {
         } else { None }
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
-      case CPrint(fmt, args) => Some(fmt match {
-        case Some(value) => BDisplay(Some(value.v), args.map(a => translator.toExpr(a)))
-        case None => BDisplay(None, args.map(a => translator.toExpr(a)))
-      })
+      case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None

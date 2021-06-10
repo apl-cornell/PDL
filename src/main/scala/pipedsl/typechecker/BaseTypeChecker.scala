@@ -355,7 +355,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       checkExpression(exp, tenv, None)
       tenv
     }
-    case CPrint(_, args) =>
+    case CPrint(args) =>
       args.foreach(a => {
         val (t, _) = checkExpression(a, tenv, None)
         t match {

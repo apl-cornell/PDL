@@ -166,9 +166,9 @@ class Parser extends RegexParsers with PackratParsers {
       "reserve" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CLockOp(i, Reserved, t)} |
       "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired, None) } |
       "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None)} |
+      "print" ~> parens(repsep(expr, ",")) ^^ (e => CPrint(e)) |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => COutput(e)) |
-      "print" ~> parens((stringVal <~ ":").? ~ repsep(expr, ",")) ^^ { case s ~ e => CPrint(s, e) }
       expr ^^ (e => CExpr(e)) 
   }
   

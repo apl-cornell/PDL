@@ -232,7 +232,7 @@ object Syntax {
   case class CCheckSpec(isBlocking: Boolean) extends Command
   case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr]) extends Command
   case class CInvalidate(handle: EVar) extends Command
-  case class CPrint(fmt: Option[EString], args: List[Expr]) extends Command
+  case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
