@@ -1,7 +1,7 @@
-def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
+def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: bool): int<32> {
     int<5> shamt = arg2{4:0};
     if (op == 0<3>) {  //000 == ADD , flip == sub
-       if (flip == 0<1>) {
+       if (!flip) {
          return arg1 + arg2;
        } else {
          return arg1 - arg2;
@@ -20,7 +20,7 @@ def alu(arg1: int<32>, arg2: int<32>, op: int<3>, flip: int<1>): int<32> {
         return arg1 ^ arg2;
     } else {
     if (op == 5<3>) { //101 == SRL / SRA
-      if (flip == 0<1>) {
+      if (!flip) {
         return arg1 >> shamt; //SRL
       } else {
         return arg1 >> shamt; //SRA todo support difference here
@@ -76,7 +76,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     uint<5> rd = cast(insn{11:7}, uint<5>);
     int<7> funct7 = insn{31:25};
     int<3> funct3 = insn{14:12};
-    int<1> flip = insn{30:30};
+    int<1> flipBit = insn{30:30};
     int<32> immI = cast(insn{31:20}, int<32>);
     int<32> immS = cast((insn{31:25} ++ insn{11:7}), int<32>);
     int<13> immBTmp = insn{31:31} ++ insn{7:7} ++ insn{30:25} ++ insn{11:8} ++ 0<1>;
@@ -87,6 +87,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     int<16> immJR = cast(immJRTmp, int<16>);
     int<32> immU = insn{31:12} ++ 0<12>;
     bool isOpImm = opcode == 0b0010011<7>;
+    bool flip = (!isOpImm) && (flipBit == 1<1>);
     bool isOp    = opcode == 0b0110011<7>;
     bool isJal   = opcode == 0b1101111<7>;
     bool isJalr  = opcode == 0b1100111<7>;
@@ -125,7 +126,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        int<16> npc = npc32{15:0};
     } else {
     if (isJalr) {
-       int<16> npc = pc + ((rf1{15:0} + immJR) >> 2);
+       int<16> npc = (rf1{15:0} + immJR) >> 2;
     } else {
        int<16> npc = pc + 1<16>;
     }}}
@@ -170,8 +171,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        	  rf[rd] <- wdata;
        } else {
        if (isJal || isJalr) {
-       	  //need to do pc +4 (instead of 1) b/c it is arch visible.
-       	  rf[rd] <- 0<16> ++ (pc + 4<16>); //todo make pc 32 bits
+       	  //need to multiply by 4 b/c it is arch visible.
+	  int<16> nextpc = pc + 1<16>;
+       	  rf[rd] <- 0<16> ++ (nextpc << 2); //todo make pc 32 bits
        } else {
        	  rf[rd] <- alu_res;
        }}
