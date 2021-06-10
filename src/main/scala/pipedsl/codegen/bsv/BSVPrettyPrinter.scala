@@ -210,7 +210,9 @@ object BSVPrettyPrinter {
           decIndent()
           w.write(mkIndentedExpr("end\n"))
         }
-      case BDisplay(fmt, args) => w.write(mkStatementString("$display(\"" + fmt + "\",",
+      case BDisplay(fmt, args) if fmt.isDefined => w.write(mkStatementString("$display(\"" + fmt.get + "\",",
+        args.map(a => toBSVExprStr(a)).mkString(","), ")"))
+      case BDisplay(fmt, args) if fmt.isEmpty => w.write(mkStatementString("$display(",
         args.map(a => toBSVExprStr(a)).mkString(","), ")"))
       case BFinish => w.write(mkStatementString("$finish()"))
       case BDisplayVar(bvar) => w.write(mkStatementString("$display(" + toBSVExprStr(bvar) + ")"))

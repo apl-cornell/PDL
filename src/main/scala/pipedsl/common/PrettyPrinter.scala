@@ -97,7 +97,8 @@ class PrettyPrinter(output: Option[File]) {
 
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
-      case Syntax.CPrint(evar) => ins + "print(" + printExprToString(evar) + ");"
+      case Syntax.CPrint(fmt, args) if fmt.isDefined => ins + "print(" + fmt.get.v +":" +
+        args.foldLeft("")((s, a) => s + printExprToString(a) + ",").init + ");"
       case Syntax.CEmpty() => ins
       case Syntax.ICondCommand(cond, cmd) => ins + printExprToString(cond) + " ? " +
         cmd.foldLeft("")((s, c) => s + printCmdToString(c))

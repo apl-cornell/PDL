@@ -28,7 +28,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     val startedReg = startedRegInst.lhs
     val initCond = BUOp("!", startedReg)
     val setStartReg = BModAssign(startedReg, BBoolLit(true))
-    val debugStart = if (debug) { BDisplay("Starting Pipeline %t", List(BTime)) } else BEmpty
+    val debugStart = if (debug) { BDisplay(Some("Starting Pipeline %t"), List(BTime)) } else BEmpty
     val initRule = BRuleDef(
       name = "initTB",
       conds = List(initCond),

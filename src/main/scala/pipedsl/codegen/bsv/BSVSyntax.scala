@@ -336,7 +336,7 @@ object BSVSyntax {
 
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
 
-  case class BDisplay(fmt: String, args: List[BExpr]) extends BStatement
+  case class BDisplay(fmt: Option[String], args: List[BExpr]) extends BStatement
 
   case object BFinish extends BStatement
   

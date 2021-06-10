@@ -465,7 +465,7 @@ object BluespecGeneration {
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.getCmds)
       val debugStmt = if (debug) {
-        BDisplay(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t",
+        BDisplay(Some(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t"),
           List(translator.toBSVVar(threadIdVar), BTime))
       } else BEmpty
       BRuleDef( genParamName(stg) + "_execute", blockingConds,
@@ -485,7 +485,7 @@ object BluespecGeneration {
         None
       } else {
         val debugStmt = if (debug) {
-          BDisplay(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t",
+          BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t"),
             List(getSpecIdVal, BTime))
         } else { BEmpty }
         val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
@@ -864,7 +864,7 @@ object BluespecGeneration {
       case _: ISend => None
       case _: InternalCommand => None
       case COutput(_) => None
-      case CPrint(_) => None
+      case CPrint(_,_) => None
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
@@ -1025,7 +1025,10 @@ object BluespecGeneration {
         } else { None }
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
-      case CPrint(evar) => Some(BDisplayVar(translator.toVar(evar)))
+      case CPrint(fmt, args) => Some(fmt match {
+        case Some(value) => BDisplay(Some(value.v), args.map(a => translator.toExpr(a)))
+        case None => BDisplay(None, args.map(a => translator.toExpr(a)))
+      })
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None

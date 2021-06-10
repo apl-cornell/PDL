@@ -28,7 +28,7 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val posint: Parser[Int] = "[0-9]+".r ^^ { n => n.toInt } | err("Expected positive number")
 
-  lazy val stringVal: P[Expr] =
+  lazy val stringVal: P[EString] =
     "\"" ~> "[^\"]*".r <~ "\"" ^^ {n => EString(n)}
 
   private def toInt(n: Int, base: Int, bits: Option[Int], isUnsigned: Boolean): EInt = {
@@ -168,7 +168,7 @@ class Parser extends RegexParsers with PackratParsers {
       "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None)} |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => COutput(e)) |
-      "print" ~> parens(variable) ^^ (e => CPrint(e)) |
+      "print" ~> parens((stringVal <~ ":").? ~ repsep(expr, ",")) ^^ { case s ~ e => CPrint(s, e) }
       expr ^^ (e => CExpr(e)) 
   }
   

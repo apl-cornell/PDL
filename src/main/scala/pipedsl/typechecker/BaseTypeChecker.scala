@@ -355,15 +355,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       checkExpression(exp, tenv, None)
       tenv
     }
-    case CPrint(evar) => {
-      val (t, _) = checkExpression(evar, tenv, None)
-      t match {
-        case TSizedInt(_, _) => tenv
-        case TString() => tenv
-        case TBool() => tenv
-        case _ => throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
-      }
-    }
+    case CPrint(_, args) =>
+      args.foreach(a => {
+        val (t, _) = checkExpression(a, tenv, None)
+        t match {
+          case TSizedInt(_, _) => tenv
+          case TString() => tenv
+          case TBool() => tenv
+          case _ => throw UnexpectedType(a.pos, a.toString, "Need a printable type", t)
+        }
+      })
+      tenv
     case CEmpty() => tenv
     case _ => throw UnexpectedCommand(c)
   }
