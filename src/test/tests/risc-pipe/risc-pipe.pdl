@@ -91,13 +91,10 @@ def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16
 pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)]: bool {
     start(imem);
     acquire(imem);
-    int<16> debugpc = pc << 2;
-    print("PC: %h", debugpc);
     int<32> insn <- imem[cast(pc, uint<16>)];
     release(imem);
     end(imem);
     ---
-    print("INSN: %h",insn);
     //This OPCODE is J Self and thus we're using it to signal termination
     bool done = insn == 0x0000006f<32>;
     int<7> opcode = insn{6:0};
@@ -175,7 +172,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	  }
 	  case: (isMDiv) {
 	  	int<32> mout = mul(rf1, rf2, funct3); //TODO handle DIV
-		print("Computing mout %d", mout);
 	  	int<32> alu_res = mout;
 	  }
 	  default: {
@@ -214,6 +210,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
       ---
       int<32> wdata = 0<32>;
     }
+    print("PC: %h", pc << 2);
+    print("INSN: %h", insn);
     if (writerd) {
        block(rf[rd]);
        if (isLoad) {
@@ -224,10 +222,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	  int<16> nextpc = pc + 1<16>;
 	  int<32> insnout =  0<16> ++ (nextpc << 2); //todo make pc 32 bits
        } else {
-       	 print("Writing alu_res %d", alu_res);
        	 int<32> insnout = alu_res;
        }}
-       print("Writing %d to %d", insnout, rd);
+       print("Writing %d to r%d", insnout, rd);
        rf[rd] <- insnout;
        release(rf[rd]);
     }
