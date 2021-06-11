@@ -167,7 +167,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	  	int<32> alu_res = immU;
 	  }
 	  case: (isAui) {
-	  	int<32> pc32 = 0<16> ++ pc;
+	  //all pc computation needs to be multiplied by 4
+	  	int<32> pc32 = (0<16> ++ pc) << 2;
 	  	int<32> alu_res = pc32 + immU;
 	  }
 	  case: (isMDiv) {
@@ -179,11 +180,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	  }
     }
     if (isStore) {
-       int<32> tmp = (immS + rf1);
+            //addresses also are word-sized
+       int<32> tmp = (immS + rf1) >> 2;
        int<16> memaddr = tmp{15:0};
     } else {
     if (isLoad) {
-       int<32> tmp = (immI + rf1);
+        //addresses also are word-sized    
+       int<32> tmp = (immI + rf1) >> 2;
        int<16> memaddr = tmp{15:0};
     } else {
       int<16> memaddr = 0<16>;
