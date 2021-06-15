@@ -81,6 +81,13 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val cast: P[Expr] = positioned {
     "cast" ~> parens(expr ~ "," ~ typ) ^^ {  case e ~ _ ~ t => ECast(t, e) }
   }
+
+  lazy val mag: P[Expr] = positioned {
+    "abs" ~> parens(expr) ^^ {  case e => EUop(MagOp, e) }
+  }
+  lazy val sign: P[Expr] = positioned {
+    "sign" ~> parens(expr) ^^ {  case e => EUop(SignOp, e) }
+  }
   //UOps
   lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
 
@@ -110,8 +117,9 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val mulOps: P[BOp] = positioned {
     "/" ^^ { _ => NumOp("/", OC.div) } |
-      "*" ^^ { _ => NumOp("*", OC.mul) } |
-      "%" ^^ { _ => NumOp("%", OC.mod) }
+    "*" ^^ { _ => NumOp("*", OC.mul) } |
+    "%" ^^ { _ => NumOp("%", OC.mod) } |
+    "$*" ^^ { _ => NumOp("$*", OC.mul) }
   }
   lazy val addOps: P[BOp] = positioned {
     "+" ^^ { _ => NumOp("+", OC.add) } |
