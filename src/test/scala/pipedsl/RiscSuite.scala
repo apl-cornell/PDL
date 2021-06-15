@@ -13,21 +13,28 @@ class RiscSuite extends AnyFunSuite{
   private val inputRF = inputFolder + "/rf"
   private val inputIMEM = inputFolder + "/ti"
   private val inputDMEM = inputFolder + "/td"
-  private val inputMap = Map("rf" -> inputRF, "ti" -> inputIMEM, "td" -> inputDMEM)
 
+  private def getInputMap(s: String): Map[String, String] = {
+    Map("rf" -> inputRF, "ti" -> (inputIMEM + s), "td" -> (inputDMEM + s))
+  }
 
+  private val sims = getListOfSims(folder).map(s => getTestName(s))
 
+  //For each processor impl
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)
-    val simFile = getSimFile(testFolder, testBaseName)
-    test(testBaseName + " Typecheck; Compile; Simulate") {
-      val doesTypecheck = testTypecheck(testFolder, t)
-      if (doesTypecheck) {
-        testBlueSpecCompile(testFolder, t, None, inputMap)
-        if (simFile.exists) {
-            testBlueSpecSim(testFolder, t, None, inputMap)
-        }
-      }
+    test(testBaseName + " Typecheck") {
+      testTypecheck(testFolder, t)
     }
+    test(testBaseName + " BSV Compile") {
+      testBlueSpecCompile(testFolder, t, None, Map())
+    }
+    //For each program
+    sims.foreach(s => {
+      val simInputs = getInputMap(s)
+      test(testBaseName + " Simulate " + s) {
+        testBlueSpecSim(testFolder, t, None, simInputs, Some(s + ".simsol"))
+      }
+    })
   })
 }
