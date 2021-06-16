@@ -4,11 +4,9 @@ def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
     //MULHU => positive sign always
     int<32> s1 = (op == u3<3>) ? 1<32> : sign(arg1);
     //MULHU/MULHSU => positive sign always
-    int<32> s2 = (op >= u2<3>) ? 1<32> : sign(arg2);    
+    int<32> s2 = (op >= u2<3>) ? 1<32> : sign(arg2);
     int<64> magRes = cast((mag1 * mag2), int<64>);
-    int<64> sm = s1 * s2;
-    //multiply but preserve bit width
-    int<64> m = magRes $* sm;
+    int<64> m = (s1 == s2) ? (magRes) : (- magRes);
     if (op == u0<3>) { //MUL
       	return m{31:0};
     } else {
@@ -84,20 +82,21 @@ def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16
     }}}}}}
 }
 
-pipe multi_mul(a1: int<32>, a2: int<32>, op: uint<3>)[]: int<32> {
-     uint<32> ua1 = cast(a1, uint<32>);
-     uint<32> ua2 = cast(a2, uint<32>);
-     int<32> rr = a1{15:0} * a2{15:0};
-     int<32> rl = a1{15:0} * a2{31:16};
-     int<32> lr = a1{31:16} * a2{15:0};
-     int<32> ll = a1{31:16} * a2{31:16};
-     ---
-     int<32> t1 = rl + lr;
-     int<32> res = (t1 << 16<5>) + rr;
-     output(res);
+
+pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>, cnt: uint<5>, retQuot: bool)[]: uint<32> {
+    uint<32> tmp = acc{30:0} ++ num{31:31};
+    uint<32> na = (tmp >= denom) ? (tmp - denom) : (tmp);
+    uint<32> nq = (tmp >= denom) ? ((quot << 1){31:1} ++ u1<1>) : (quot << 1);
+    uint<32> nnum = num << 1;
+    if (cnt == u31<5>) {
+        output( (retQuot) ? nq : na );
+    } else {
+        call multi_stg_div(nnum, denom, nq, na, cnt + u1<5>, retQuot);
+    }
 }
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue)]: bool {
+
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div]: bool {
     start(imem);
     acquire(imem);
     int<32> insn <- imem[cast(pc, uint<16>)];
@@ -171,6 +170,18 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     }}}
     if (!done) { call cpu(npc); }
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
+    /**
+    if (isMDiv && funct3 >= u4<3>) {
+       uint<32> dividend = cast(mag(rf1), uint<32>);
+       uint<32> divisor = cast(mag(rf2), uint<32>);
+       bool retQuot = funct3 <= u5<3>;
+       uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
+       ---          
+    } else {
+      ---
+      int<32> divout = 0<32>;
+    }
+    */
     split {
     	  case: (isLui) {
 	  	int<32> alu_res = immU;
@@ -250,6 +261,7 @@ circuit {
     d = FAQueue(td);
     rf = regfile(int<32>, 5);
     r = FAQueue(rf);
-    c = new cpu[r, i, d];
+    div = new multi_stg_div[];
+    c = new cpu[r, i, d, div];
     call c(0<16>);
 }

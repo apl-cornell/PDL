@@ -145,6 +145,7 @@ object Syntax {
   case class NumUOp(op: String) extends UOp
   case class BitUOp(op: String) extends UOp
 
+  def NegOp(): NumUOp = NumUOp("-")
   def NotOp(): BoolUOp = BoolUOp("!")
   def MagOp(): NumUOp = NumUOp("abs")
   def SignOp(): NumUOp = NumUOp("signum")

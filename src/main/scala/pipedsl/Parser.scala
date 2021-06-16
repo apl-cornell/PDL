@@ -82,18 +82,23 @@ class Parser extends RegexParsers with PackratParsers {
     "cast" ~> parens(expr ~ "," ~ typ) ^^ {  case e ~ _ ~ t => ECast(t, e) }
   }
 
+  //UOps
+  lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
+
   lazy val mag: P[Expr] = positioned {
     "mag" ~> parens(expr) ^^ (e => EUop(MagOp(), e))
   }
   lazy val sign: P[Expr] = positioned {
     "sign" ~> parens(expr) ^^ (e => EUop(SignOp(), e))
   }
-  //UOps
-  lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
 
+  lazy val neg: P[Expr] = positioned {
+    "-" ~> expr ^^ (e => EUop(NegOp(), e))
+  }
   lazy val simpleAtom: P[Expr] = positioned {
     "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |
       not ~ expr ^^ { case n ~ e => EUop(n, e) } |
+      neg |
       cast |
       mag |
       sign |
