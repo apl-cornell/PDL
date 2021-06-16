@@ -93,7 +93,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val neg: P[Expr] = positioned {
-    "-" ~> expr ^^ (e => EUop(NegOp(), e))
+    "-" ~> parens(expr) ^^ (e => EUop(NegOp(), e))
   }
   lazy val simpleAtom: P[Expr] = positioned {
     "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |

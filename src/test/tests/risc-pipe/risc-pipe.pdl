@@ -6,7 +6,7 @@ def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
     //MULHU/MULHSU => positive sign always
     int<32> s2 = (op >= u2<3>) ? 1<32> : sign(arg2);
     int<64> magRes = cast((mag1 * mag2), int<64>);
-    int<64> m = (s1 == s2) ? (magRes) : (- magRes);
+    int<64> m = (s1 == s2) ? (magRes) : -(magRes);
     if (op == u0<3>) { //MUL
       	return m{31:0};
     } else {
@@ -181,7 +181,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        //For REM, ignore sign of divisor
        int<32> sdivisor  = (funct3 == u6<3>) ? 1<32> : sign(rf2);  
        bool invertRes = isSignedDiv && (sdividend != sdivisor);
-       int<32> divout = (invertRes) ? - cast(udivout, int<32>) :  cast(udivout, int<32>);
+       int<32> divout = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
     } else {
       ---
       int<32> divout = 0<32>;
