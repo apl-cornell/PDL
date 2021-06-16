@@ -170,18 +170,21 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     }}}
     if (!done) { call cpu(npc); }
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
-    /**
     if (isMDiv && funct3 >= u4<3>) {
        uint<32> dividend = cast(mag(rf1), uint<32>);
        uint<32> divisor = cast(mag(rf2), uint<32>);
        bool retQuot = funct3 <= u5<3>;
        uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
-       ---          
+       ---
+       //DIVU and REMU ignore sign
+       int<32> sdividend = ((funct3 == u5<3>) || (funct3 == u7<3>)) ? 1<32> : sign(rf1);
+       //DIVU, REMU and REM ignore sign
+       int<32> sdivisor  = (funct3 >= u5<3>) ? 1<32> :sign(rf2);
+       int<32> divout = (sdividend == sdivisor) ? cast(udivout, int<32>) : - cast(udivout, int<32>);
     } else {
       ---
       int<32> divout = 0<32>;
     }
-    */
     split {
     	  case: (isLui) {
 	  	int<32> alu_res = immU;
@@ -192,8 +195,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	  	int<32> alu_res = pc32 + immU;
 	  }
 	  case: (isMDiv) {
-	  	int<32> mout = mul(rf1, rf2, funct3); //TODO handle DIV
-	  	int<32> alu_res = mout;
+	  	int<32> mout = mul(rf1, rf2, funct3);
+	  	int<32> alu_res = (funct3 >= u4<3>) ? divout : mout;
 	  }
 	  default: {
 	        int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
