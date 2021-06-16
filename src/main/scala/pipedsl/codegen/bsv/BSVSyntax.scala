@@ -114,7 +114,7 @@ object BSVSyntax {
       case EInt(v, base, bits) => BIntLit(v, base, bits)
       case EBool(v) => BBoolLit(v)
       case EString(v) => BStringLit(v)
-      case EUop(op, ex) => BUOp(op.op, toExpr(ex))
+      case eu@EUop(_, _) => translateUOp(eu)
       case eb@EBinop(_, _, _) => toBSVBop(eb)
       case EBitExtract(num, start, end) =>
           val bnum = toExpr(num)
@@ -138,6 +138,10 @@ object BSVSyntax {
       case _ => throw UnexpectedExpr(e)
     }
 
+    private def translateUOp(e: EUop): BExpr = e.op match {
+      case NumUOp(op) if (op == "abs" || op == "signum") => BFuncCall(op, List(toExpr(e.ex)))
+      case _ => BUOp(e.op.op, toExpr(e.ex))
+    }
     //TODO handle casts better
     private def translateCast(e: ECast): BExpr = {
       e.ctyp match {
@@ -191,6 +195,8 @@ object BSVSyntax {
           case e => BPack(e)
         }
         BUnpack(BConcat(left, List(right)))
+      case NumOp("$*",_) =>
+        BBOp("*",toExpr(b.e1), toExpr(b.e2))
       case NumOp("*",_) => b.typ match {
         case Some(TSizedInt(_, unsigned)) =>
           val op = if (unsigned) { "unsignedMul" } else { "signedMul" }

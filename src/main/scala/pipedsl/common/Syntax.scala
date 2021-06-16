@@ -147,7 +147,7 @@ object Syntax {
 
   def NotOp(): BoolUOp = BoolUOp("!")
   def MagOp(): NumUOp = NumUOp("abs")
-  def SignOp(): NumUOp = NumUOp("abs")  
+  def SignOp(): NumUOp = NumUOp("signum")
   def AndOp(e1: Expr,e2: Expr): EBinop = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
   def OrOp(e1: Expr, e2: Expr): EBinop = EBinop(BoolOp("||", OpConstructor.or), e1, e2)
   def EqOp(e1: Expr, e2: Expr): EBinop = EBinop(EqOp("=="), e1, e2)

@@ -83,10 +83,10 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val mag: P[Expr] = positioned {
-    "abs" ~> parens(expr) ^^ {  case e => EUop(MagOp, e) }
+    "mag" ~> parens(expr) ^^ (e => EUop(MagOp(), e))
   }
   lazy val sign: P[Expr] = positioned {
-    "sign" ~> parens(expr) ^^ {  case e => EUop(SignOp, e) }
+    "sign" ~> parens(expr) ^^ (e => EUop(SignOp(), e))
   }
   //UOps
   lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
@@ -95,6 +95,8 @@ class Parser extends RegexParsers with PackratParsers {
     "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |
       not ~ expr ^^ { case n ~ e => EUop(n, e) } |
       cast |
+      mag |
+      sign |
       memAccess |
       bitAccess |
       recAccess |
