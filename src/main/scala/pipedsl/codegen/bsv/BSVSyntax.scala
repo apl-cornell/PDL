@@ -67,8 +67,8 @@ object BSVSyntax {
             bsints.getLockHandleType(idsz.get)
           } else bsints.getDefaultLockHandleType
         } else {
-          //re-use the id from the memory
-          mtyp.tparams.last.typ
+          //re-use the rid from the memory
+          mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
         getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
@@ -226,9 +226,16 @@ object BSVSyntax {
         } else {
           BVar("_unused_", BNumericType(sz))
        }})
-      //replace last tparam w/ lockidtyp if not using a unique id
-      val tmpparams = if (limpl.useUniqueLockId()) { mtyp.tparams } else { mtyp.tparams.init }
-      val params = (tmpparams :+ BVar("lidtyp", lockIdTyp)) ++ lparams
+      //replace tparam named 'ridtyp' w/ lockidtyp if not using a unique id
+      val newLid = BVar("lidtyp", lockIdTyp)
+      val tmpparams = if (limpl.useUniqueLockId()) {
+        mtyp.tparams :+ newLid
+      } else {
+        mtyp.tparams.map(bv => {
+          if (bv.name == bsints.reqIdName) { newLid } else { bv }
+        })
+      }
+      val params = tmpparams ++ lparams
       BInterface(intName, params)
     }
 
