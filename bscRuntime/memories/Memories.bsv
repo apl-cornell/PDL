@@ -351,6 +351,7 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
 					     ldQStr[i][1] <= tagged Invalid;					     
 					     //order this after reserve (so reserve addr ;write addr forwards data appropriately)
 					     if (wmask == '1) ldQData[i][1] <= tagged Valid b;
+					     else ldQData[i][1] <= tagged Invalid;
 					     //If the store doesn't actually write all of the data, we need to do a real load so don't forward
 					  end
 				    end
