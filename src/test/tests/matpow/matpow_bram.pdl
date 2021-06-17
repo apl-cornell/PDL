@@ -9,7 +9,7 @@ void matrix_power( inout_int_t x[20][20], in_int_t row[20], in_int_t col[20], in
 }
 */
 
-pipe matpow(k: uint<5>, p: uint<5>)[x: uint<32>[9]<a,a>(FAQueue), row: uint<5>[5]<a,a>(Queue), col: uint<5>[5]<a,a>(Queue), a: uint<32>[5]<a,a>(Queue)]: bool {
+pipe matpow(k: uint<5>, p: uint<5>)[x: uint<32>[9]<a,a>(FAQueue), row: uint<8>[5]<a,a>(Queue), col: uint<8>[5]<a,a>(Queue), a: uint<32>[5]<a,a>(Queue)]: bool {
      if (p == u19<5>) {
      	if (k != u19<5>) {
 	   call matpow(k + u1<5>, u0<5>);
@@ -19,19 +19,19 @@ pipe matpow(k: uint<5>, p: uint<5>)[x: uint<32>[9]<a,a>(FAQueue), row: uint<5>[5
      }
      start(col);
      acquire(col);
-     uint<5> col_p <- col[p];
+     uint<8> col_p <- col[p];
      release(col);
      end(col);
      start(row);
      acquire(row);
-     uint<5> row_p <- row[p];
+     uint<8> row_p <- row[p];
      release(row);
      end(row);
      ---
      uint<18> x_in_mul = u20<9> * (u0<4> ++ (k - u1<5>));
-     uint<9> x_in_idx = x_in_mul{8:0} + (u0<4> ++ col_p);
+     uint<9> x_in_idx = x_in_mul{8:0} + (u0<1> ++ col_p);
      uint<18> x_out_mul = (u20<9> * (u0<4> ++ k));
-     uint<9> x_out_idx =  x_out_mul{8:0} + (u0<4> ++ row_p);
+     uint<9> x_out_idx =  x_out_mul{8:0} + (u0<1> ++ row_p);
      uint<9> x_out_idx_cp = x_out_idx;
      start(x);
      acquire(x[x_in_idx], R);
@@ -67,9 +67,9 @@ circuit {
   x = FAQueue(tx);
   ta = memory(uint<32>, 5);
   a = Queue(ta);
-  tr = memory(uint<5>, 5);
+  tr = memory(uint<8>, 5);
   r = Queue(tr);
-  tc = memory(uint<5>, 5);
+  tc = memory(uint<8>, 5);
   c = Queue(tc);
   mp = new matpow[x, r, c, a];
   call mp(u1<5>, u0<5>);
