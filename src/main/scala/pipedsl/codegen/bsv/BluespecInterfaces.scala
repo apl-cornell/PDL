@@ -145,6 +145,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val combMemType = "RegFile"
   private val combMemMod = "mkRegFile"
 
+  val reqIdName = "ridtyp"
 
   def getBaseMemType(isAsync: Boolean, elemSize: Int, addr: BSVType, data: BSVType): BInterface = {
     if (isAsync) {
@@ -152,7 +153,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       val reqTyp = getDefaultMemHandleType
       val maskSize = elemSize / 8
       BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
-        BVar("ridtyp", reqTyp), BVar("nsz", BNumericType(maskSize))))
+        BVar(reqIdName, reqTyp), BVar("nsz", BNumericType(maskSize))))
     } else {
       BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
     }
