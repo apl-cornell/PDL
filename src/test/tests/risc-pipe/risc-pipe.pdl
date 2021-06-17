@@ -83,6 +83,32 @@ def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16
 }
 
 
+def maskLoad(data: int<32>, op: uint<3>, start: uint<2>): int<32> {
+    uint<8> bdata = cast((data >> start), uint<8>);
+    uint<2> hoff = start >> 1;
+    uint<16> hdata = cast((data >> hoff), uint<16>);
+
+    if (op == u0<3>) { //LB
+       return cast(bdata, int<32>);
+    } else {
+    if (op == u1<3>) { //LH
+       return cast(hdata, int<32>);
+    } else {
+    if (op == u2<3>) { //LW
+       return data;
+    } else {
+    if (op == u4<3>) { //LBU
+       uint<32> zext = cast(bdata, uint<32>);
+       return cast(zext, int<32>);
+    } else {
+    if (op == u5<3>) { //LHU
+       uint<32> zext = cast(hdata, uint<32>);
+       return cast(zext, int<32>);
+    } else {
+      return 0<32>;
+    }}}}}
+}
+
 pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>, cnt: uint<5>, retQuot: bool)[]: uint<32> {
     uint<32> tmp = acc{30:0} ++ num{31:31};
     uint<32> na = (tmp >= denom) ? (tmp - denom) : (tmp);
@@ -210,16 +236,19 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     split {
     	  case: (isStore) {
 	  	//addresses also are word-sized
-		int<32> tmp = (immS + rf1) >> 2;
-		int<16> memaddr = tmp{15:0};
+		int<32> tmp = (immS + rf1);
+		int<16> memaddr = (tmp >> 2){15:0};
+		uint<2> boff = cast(tmp{1:0}, uint<2>);
 	  }
 	  case: (isLoad) {
 	  	//addresses also are word-sized
-		int<32> tmp = (immI + rf1) >> 2;
-		int<16> memaddr = tmp{15:0};
+		int<32> tmp = (immI + rf1);
+		int<16> memaddr = (tmp >> 2){15:0};
+		uint<2> boff = cast(tmp{1:0}, uint<2>);
 	  }
 	  default: {
   	  	int<16> memaddr = 0<16>;
+		uint<2> boff = u0<2>;
 	  }
     }
     ---
@@ -249,7 +278,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     if (writerd) {
        block(rf[rd]);
        if (isLoad) {
-       	  int<32> insnout = wdata;
+       	  int<32> insnout = maskLoad(wdata, funct3, boff);
        } else {
        if (isJal || isJalr) {
        	  //need to multiply by 4 b/c it is arch visible.
