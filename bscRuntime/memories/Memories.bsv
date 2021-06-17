@@ -72,10 +72,7 @@ interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, ty
 endinterface
 
 interface LSQ#(type addr, type elem, type name, numeric type nsz);
-   method ActionValue#(name) req(name a, elem b, Bit#(nsz) wmask);
-   method elem peekResp(name i);
-   method Bool checkRespId(name i);
-   method Action resp(name i);
+   interface AsyncMem#(name, elem, name, nsz) mem;
    method ActionValue#(name) reserveRead(addr a);
    method ActionValue#(name) reserveWrite(addr a);
    method Bool isValid(name n);
@@ -461,23 +458,26 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
       stIssueQ.enq(StIssue { a: stQAddr[n], m: wmask, d: data });
    endmethod
 
-  method ActionValue#(MemId#(inflight)) req(MemId#(inflight) a, elem b, Bit#(n) wmask);
-    write(a, b, wmask);
-    return a;
-  endmethod
+   interface AsyncMem mem;
+      method ActionValue#(MemId#(inflight)) req(MemId#(inflight) a, elem b, Bit#(n) wmask);
+	 write(a, b, wmask);
+	 return a;
+      endmethod
 
-   method elem peekResp(MemId#(inflight) i);
-    return read(i);
-  endmethod
+      method elem peekResp(MemId#(inflight) i);
+	 return read(i);
+      endmethod
 
-  //Dummy methods needed to fit interface
-   method Bool checkRespId(MemId#(inflight) i);
-    return True;
-  endmethod
+      //Dummy methods needed to fit interface
+      method Bool checkRespId(MemId#(inflight) i);
+	 return True;
+      endmethod
 
-  method Action resp(MemId#(inflight) i);
-  endmethod
+      method Action resp(MemId#(inflight) i);
+      endmethod
 
+   endinterface
+   
 endmodule
 
 
