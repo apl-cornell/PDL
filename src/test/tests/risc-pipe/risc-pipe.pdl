@@ -132,6 +132,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     bool isStore = opcode == 0b0100011<7>;
     bool isLoad = opcode == 0b0000011<7>;
     bool isMDiv = (funct7 == u1<7>) && isOp;
+    bool isDiv = isMDiv && (funct3 >= u4<3>);
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore || isJalr;
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
@@ -169,23 +170,24 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
        int<16> npc = pc + 1<16>;
     }}}
     if (!done) { call cpu(npc); }
+
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
-    if (isMDiv && funct3 >= u4<3>) {
+    
+    if (isDiv) {
+       int<32> sdividend = sign(rf1);
+       //For REM, ignore sign of divisor
+       int<32> sdivisor  = (funct3 == u6<3>) ? 1<32> : sign(rf2);
        bool isSignedDiv = ((funct3 == u4<3>) || (funct3 == u6<3>));
+       bool invertRes = isSignedDiv && (sdividend != sdivisor);
        uint<32> dividend = (isSignedDiv) ? cast(mag(rf1), uint<32>) : cast(rf1, uint<32>);
        uint<32> divisor =  (isSignedDiv) ? cast(mag(rf2), uint<32>) : cast(rf2, uint<32>);
        bool retQuot = funct3 <= u5<3>;
        uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
-       ---
-       int<32> sdividend = sign(rf1);
-       //For REM, ignore sign of divisor
-       int<32> sdivisor  = (funct3 == u6<3>) ? 1<32> : sign(rf2);  
-       bool invertRes = isSignedDiv && (sdividend != sdivisor);
-       int<32> divout = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
     } else {
-      ---
-      int<32> divout = 0<32>;
+       uint<32> udivout <- u0<32>;
+       bool invertRes = false;
     }
+    ---
     split {
     	  case: (isLui) {
 	  	int<32> alu_res = immU;
@@ -195,48 +197,53 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	  	int<32> pc32 = (0<16> ++ pc) << 2;
 	  	int<32> alu_res = pc32 + immU;
 	  }
-	  case: (isMDiv) {
-	  	int<32> mout = mul(rf1, rf2, funct3);
-	  	int<32> alu_res = (funct3 >= u4<3>) ? divout : mout;
+	  case: (isDiv) {
+	       int<32> alu_res = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
+	  }
+ 	  case: (isMDiv) {
+	  	int<32> alu_res = mul(rf1, rf2, funct3);
 	  }
 	  default: {
 	        int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
 	  }
     }
-    if (isStore) {
-            //addresses also are word-sized
-       int<32> tmp = (immS + rf1) >> 2;
-       int<16> memaddr = tmp{15:0};
-    } else {
-    if (isLoad) {
-        //addresses also are word-sized    
-       int<32> tmp = (immI + rf1) >> 2;
-       int<16> memaddr = tmp{15:0};
-    } else {
-      int<16> memaddr = 0<16>;
-    }}
+    split {
+    	  case: (isStore) {
+	  	//addresses also are word-sized
+		int<32> tmp = (immS + rf1) >> 2;
+		int<16> memaddr = tmp{15:0};
+	  }
+	  case: (isLoad) {
+	  	//addresses also are word-sized
+		int<32> tmp = (immI + rf1) >> 2;
+		int<16> memaddr = tmp{15:0};
+	  }
+	  default: {
+  	  	int<16> memaddr = 0<16>;
+	  }
+    }
     ---
-    if (isStore || isLoad) {
-        start(dmem);
-	if (isLoad) {
- 	   uint<16> raddr = cast(memaddr, uint<16>);
+    start(dmem);
+    split {
+        case: (isLoad) {
+	   uint<16> raddr = cast(memaddr, uint<16>);
 	   acquire(dmem[raddr], R);
 	   int<32> wdata <- dmem[raddr];
 	   release(dmem[raddr]);
-	   ---
-	} else {
-	    uint<16> waddr = cast(memaddr, uint<16>);
-	    acquire(dmem[waddr], W);
-	    dmem[waddr] <- rf2;
-	    release(dmem[waddr]);
-    	    ---
-    	    int<32> wdata = 0<32>;
 	}
-	end(dmem);
-    } else {
-      ---
-      int<32> wdata = 0<32>;
+	case: (isStore) {
+	      uint<16> waddr = cast(memaddr, uint<16>);
+	      acquire(dmem[waddr], W);
+	      dmem[waddr] <- rf2;
+	      release(dmem[waddr]);
+	      int<32> wdata <- 0<32>;
+	}
+	default: {
+	    int<32> wdata <- 0<32>;
+	}
     }
+    end(dmem);
+    ---
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
