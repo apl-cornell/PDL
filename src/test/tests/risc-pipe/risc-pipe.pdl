@@ -83,6 +83,17 @@ def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16
 }
 
 
+def storeMask(off: uint<2>, op: uint<3>): uint<4> {
+    if (op == u0<2>) { //SB
+       return (u0b0001<4> << off);
+    } else {
+    if (op == u1<2>) { //SH
+       return (u0b0011<4> << off{1:1});
+    } else { //SW
+      return u0b1111<4>;
+    }}
+}
+
 def maskLoad(data: int<32>, op: uint<3>, start: uint<2>): int<32> {
     uint<8> bdata = cast((data >> start), uint<8>);
     uint<2> hoff = start >> 1;
@@ -262,7 +273,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
 	}
 	case: (isStore) {
 	      uint<16> waddr = cast(memaddr, uint<16>);
-	      acquire(dmem[waddr], W);
+	      acquire(dmem[waddr, storeMask(boff, funct3)], W);
 	      dmem[waddr] <- rf2;
 	      release(dmem[waddr]);
 	      int<32> wdata <- 0<32>;
