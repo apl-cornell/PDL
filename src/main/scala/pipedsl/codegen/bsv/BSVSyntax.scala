@@ -43,16 +43,23 @@ object BSVSyntax {
     def toTypeForMod(t: Type, n: Id): BSVType = t match {
       case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
+        val elemTyp = toType(mem.elem)
         val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
-          BSizedInt(unsigned = true, mem.addrSize), toType(mem.elem))
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp)
         getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
+    def getTypeSize(b: BSVType): Int = b match {
+      case BSizedInt(_, size) => size
+      case _ => throw UnexpectedBSVType("The size of the given BSV Type cannot be determined")
+    }
+
     def toType(t: Type): BSVType = t match {
       case TMemType(elem, addrSize, rlat, _) =>
+        val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
-          BSizedInt(unsigned = true, addrSize), toType(elem))
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
         val lidtyp =  if (limpl.useUniqueLockId()) {
@@ -291,6 +298,7 @@ object BSVSyntax {
 
   case object BDontCare extends BExpr
   case object BZero extends BExpr
+  case object BAllOnes extends BExpr
   case object BOne extends BExpr
   case object BTime extends BExpr
   case object BInvalid extends BExpr

@@ -105,16 +105,18 @@ object BluespecGeneration {
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
       case CirMem(elemTyp, addrSize) =>
-        val memtyp = bsInts.getBaseMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
-          translator.toType(elemTyp))
+        val bElemTyp = translator.toType(elemTyp)
+        val memtyp = bsInts.getBaseMemType(isAsync = true,
+          translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp)
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLockMem(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
         val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous)
         (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
       case CirRegFile(elemTyp, addrSize) =>
-        val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
-          translator.toType(elemTyp))
+        val bElemTyp = translator.toType(elemTyp)
+        val memtyp = bsInts.getBaseMemType(isAsync = false,
+          translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp)
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLockRegFile(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)

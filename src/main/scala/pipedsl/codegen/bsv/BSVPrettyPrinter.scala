@@ -120,6 +120,7 @@ object BSVPrettyPrinter {
     case BDontCare => "?"
     case BZero => "0"
     case BOne => "1"
+    case BAllOnes => "'1"
     case BTime => "$time()"
   }
 

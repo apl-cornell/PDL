@@ -146,11 +146,13 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val combMemMod = "mkRegFile"
 
 
-  def getBaseMemType(isAsync: Boolean, addr: BSVType, data: BSVType): BInterface = {
+  def getBaseMemType(isAsync: Boolean, elemSize: Int, addr: BSVType, data: BSVType): BInterface = {
     if (isAsync) {
       //TODO make this type parameterizable
       val reqTyp = getDefaultMemHandleType
-      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data), BVar("ridtyp", reqTyp)))
+      val maskSize = elemSize / 8
+      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
+        BVar("ridtyp", reqTyp), BVar("nsz", BNumericType(maskSize))))
     } else {
       BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
     }
@@ -164,13 +166,22 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
+
   private val memCombReadName = "read"
   private val memCombWriteName = "write"
+  private val memAsyncPeekName = "mem.peekResp"
+  private val memAsyncReqName = "mem.req"
+  private val memAsyncRespName = "mem.resp"
+  private val memAsyncCheckName = "mem.checkRespId"
 
-  private val memAsyncPeekName = "peekResp"
-  private val memAsyncReqName = "req"
-  private val memAsyncRespName = "resp"
-  private val memAsyncCheckName = "checkRespId"
+  //TODO expose other masks
+  def toMask(isWrite: Boolean): BExpr = {
+    if (isWrite) {
+      BAllOnes
+    } else {
+      BZero
+    }
+  }
 
   def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memAsyncPeekName, List(handle))
@@ -182,7 +193,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     BMethodInvoke(mem, memCombWriteName, List(addr, data))
   }
   def getMemReq(mem: BVar, isWrite: Boolean, addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, BBoolLit(isWrite)))
+    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, toMask(isWrite)))
   }
   def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memAsyncCheckName, List(handle))
