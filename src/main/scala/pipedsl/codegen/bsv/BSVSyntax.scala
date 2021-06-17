@@ -135,7 +135,7 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index) =>
+      case EMemAccess(mem, index, _) =>
         bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toExpr(ex))

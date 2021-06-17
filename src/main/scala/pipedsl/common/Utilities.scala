@@ -168,7 +168,7 @@ object Utilities {
     case EUop(_, ex) => getUsedVars(ex)
     case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, _) => getUsedVars(rec)
-    case EMemAccess(_, index) => getUsedVars(index) //memories aren't variables, they're externally defined
+    case EMemAccess(_, index,_) => getUsedVars(index) //memories aren't variables, they're externally defined
     case EBitExtract(num, _, _) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })

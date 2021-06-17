@@ -122,7 +122,8 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EBinop(op, e1, e2) => printExprToString(e1) + " " + op.op + " " + printExprToString(e2)
     case Syntax.ERecAccess(rec, fieldName) => printExprToString(rec) + "." + fieldName
     case Syntax.ERecLiteral(fields) => "{" + fields.keySet.map(i => i.v + printExprToString(fields(i))).mkString(",") + "}"
-    case Syntax.EMemAccess(mem, index) => mem.v + "[" + printExprToString(index) + "]"
+    case Syntax.EMemAccess(mem, index, m) => mem.v + "[" + printExprToString(index) +
+      (if (m.isDefined) "," + printExprToString(m.get) else "") +"]"
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"
     case Syntax.ETernary(cond, tval, fval) => printExprToString(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"

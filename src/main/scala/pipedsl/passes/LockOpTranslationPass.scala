@@ -63,11 +63,11 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   private def modifyMemArg(e: Expr, isLhs: Boolean): Expr = e match {
     //no translation needed here since locks aren't address specific
-    case em@EMemAccess(_, _) if em.granularity == General => em
+    case em@EMemAccess(_, _, _) if em.granularity == General => em
     //SimplifyRecvPass ensures that the index expression is always a variable
-    case em@EMemAccess(mem, idx@EVar(_)) if em.granularity == Specific =>
+    case em@EMemAccess(mem, idx@EVar(_), wm) if em.granularity == Specific =>
       val newArg: Expr = modifyMemAddrArg(isLhs, mem, idx)
-      val res = EMemAccess(mem, newArg).setPos(em.pos)
+      val res = EMemAccess(mem, newArg, wm).setPos(em.pos)
       res.typ = em.typ
       res.memOpType = em.memOpType
       res
@@ -129,15 +129,15 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
       //lhs should not contain _any_ memaccesses thanks to the ConvertAsyncPass (but adding this doesn't hurt)
       case CExpr(exp) => List(CExpr(modifyMemArg(exp, isLhs = false)).setPos(c.pos))
       case im@IMemSend(_, _, _, _, _) if im.granularity == General => List(im)
-      case im@IMemSend(h, isWrite, mem, d, addr) if im.granularity == Specific =>
-        val newAddr = modifyMemAddrArg(isWrite, mem, addr)
+      case im@IMemSend(h, writeMask, mem, d, addr) if im.granularity == Specific =>
+        val newAddr = modifyMemAddrArg(im.isWrite, mem, addr)
         //TODO find cleaner WAY than this
         val newVar = EVar(
-          Id("_tmp_" + mem.v + "_" + addr.id.v + "_lock_var_" + (if (isWrite) "W" else "R"))
+          Id("_tmp_" + mem.v + "_" + addr.id.v + "_lock_var_" + (if (im.isWrite) "W" else "R"))
         ).setPos(im.pos)
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
-        val newSend = IMemSend(h, isWrite, mem, d, newVar).setPos(im.pos)
+        val newSend = IMemSend(h, writeMask, mem, d, newVar).setPos(im.pos)
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         List(newAssn, newSend)
       case im@IMemWrite(_, _, _) if im.granularity == General => List(im)

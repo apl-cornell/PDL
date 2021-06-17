@@ -955,9 +955,9 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
-      case IMemSend(handle, isWrite, mem: Id, data: Option[EVar], addr: EVar) => Some(
+      case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar) => Some(
         BInvokeAssign(translator.toVar(handle),
-          bsInts.getMemReq(modParams(mem), isWrite, translator.toExpr(addr),
+          bsInts.getMemReq(modParams(mem), wMask, translator.toExpr(addr),
             data.map(e => translator.toExpr(e)))
       ))
       //This is an effectful op b/c is modifies the mem queue its reading from

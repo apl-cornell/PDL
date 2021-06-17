@@ -175,12 +175,12 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val memAsyncRespName = "mem.resp"
   private val memAsyncCheckName = "mem.checkRespId"
 
-  //TODO expose other masks
-  def toMask(isWrite: Boolean): BExpr = {
-    if (isWrite) {
-      BAllOnes
+  def toMask(isWrite: Boolean, m: Option[Int]): BExpr = {
+    val default = if (isWrite) { BAllOnes } else { BZero }
+    if (m.isDefined) {
+      BUnsizedInt(m.get)
     } else {
-      BZero
+      default
     }
   }
 
@@ -193,8 +193,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombWriteName, List(addr, data))
   }
-  def getMemReq(mem: BVar, isWrite: Boolean, addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, toMask(isWrite)))
+  def getMemReq(mem: BVar, writeMask: Option[Int], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+    val isWrite = data.isDefined
+    val mask = toMask(isWrite, writeMask)
+    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, mask))
   }
   def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memAsyncCheckName, List(handle))

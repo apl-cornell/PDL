@@ -437,10 +437,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ftyps = fields map { case (n, e) => (n, checkExpression(e, tenv, None)._1) }
       (TRecType(Id("anon"), ftyps) , tenv)//TODO these are wrong, maybe just remove these
     }
-    case EMemAccess(mem, index) => {
+    case EMemAccess(mem, index, wm) => {
       val memt = tenv(mem)
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
+      //TODO do mask checking - right now BSV will complain if its too big etc.
       (memt, idxt) match {
         case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)

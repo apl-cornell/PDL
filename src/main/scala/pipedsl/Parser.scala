@@ -38,19 +38,22 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   // Atoms
-  lazy val dec: P[Expr] = "u".? ~ "-?[0-9]+".r ~ angular(posint).? ^^ {
+  lazy val dec: P[EInt] = "u".? ~ "-?[0-9]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(n.toInt, 10, bits, u.isDefined)
   }
-  lazy val hex: Parser[EInt] = "u".? ~ "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ {
+  lazy val hex: P[EInt] = "u".? ~ "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 16), 16, bits, u.isDefined)
   }
-  lazy val octal: Parser[EInt] = "u".? ~ "0-?[0-7]+".r ~ angular(posint).? ^^ {
+  lazy val octal: P[EInt] = "u".? ~ "0-?[0-7]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(1), 8), 8, bits, u.isDefined)
   }
-  lazy val binary: Parser[EInt] = "u".? ~ "0b-?[0-1]+".r ~ angular(posint).? ^^ {
+  lazy val binary: P[EInt] = "u".? ~ "0b-?[0-1]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 2), 2, bits, u.isDefined)
   }
-  lazy val boolean: Parser[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
+
+  lazy val num: P[EInt] = dec | hex | octal | binary
+
+  lazy val boolean: P[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
   lazy val recLiteralField: P[(Id, Expr)] = iden ~ ("=" ~> expr) ^^ { case i ~ e => (i, e) }
   lazy val recLiteral: Parser[ERecLiteral] = positioned {
@@ -66,8 +69,11 @@ class Parser extends RegexParsers with PackratParsers {
       expr
   }
 
+  //Mask write:
+  // int<32> w;
+  // m[a, 0b1100] <- w;
   lazy val memAccess: P[Expr] = positioned {
-    iden ~ brackets(expr) ^^ { case m ~ i => EMemAccess(m, i) }
+    iden ~ brackets(expr ~ ("," ~> num).?) ^^ { case m ~ (i ~ n) => EMemAccess(m, i, n) }
   }
 
   lazy val bitAccess: P[Expr] = positioned {
