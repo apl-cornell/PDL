@@ -13,6 +13,7 @@ import Ehr :: *;
 
 export MemId(..);
 export BramPort(..);
+export AsyncMem(..);
 export QueueLockCombMem(..);
 export QueueLockAsyncMem(..);
 export AddrLockCombMem(..);
@@ -34,13 +35,13 @@ typedef UInt#(TLog#(n)) MemId#(numeric type n);
 //Types of memories X Locks:
 //For the built-in types of locks & mems:
 
-interface BramPort#(type addr, type elem, type mid);
-   interface BRAM_PORT#(addr, elem) port;
+interface BramPort#(type addr, type elem, type mid, numeric type nsz);
+   interface BRAM_PORT_BE#(addr, elem, nsz) port;
 endinterface
 
 
-interface AsyncMem#(type addr, type elem, type mid);
-   method ActionValue#(mid) req(addr a, elem b, Bool isWrite);
+interface AsyncMem#(type addr, type elem, type mid, numeric type nsz);
+   method ActionValue#(mid) req(addr a, elem b, Bit#(nsz) wmask);
    method elem peekResp(mid a);
    method Bool checkRespId(mid a);
    method Action resp(mid a);
@@ -54,11 +55,8 @@ interface QueueLockCombMem#(type addr, type elem, type id);
    interface QueueLock#(id) lock;   
 endinterface
 
-interface QueueLockAsyncMem#(type addr, type elem, type rid, type lid);
-   method ActionValue#(rid) req(addr a, elem b, Bool isWrite);
-   method elem peekResp(rid i);
-   method Bool checkRespId(rid i);
-   method Action resp(rid i);
+interface QueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid);
+   interface AsyncMem#(addr, elem, rid, nsz) mem;
    interface QueueLock#(lid) lock;
 endinterface
 
@@ -68,16 +66,13 @@ interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
    interface AddrLock#(id, addr, size) lock;
 endinterface
 
-interface AddrLockAsyncMem#(type addr, type elem, type rid, type lid, numeric type size);
-   method ActionValue#(rid) req(addr a, elem b, Bool isWrite);
-   method elem peekResp(rid i);
-   method Bool checkRespId(rid i);
-   method Action resp(rid i);
+interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid, numeric type size);
+   interface AsyncMem#(addr, elem, rid, nsz) mem;
    interface AddrLock#(lid, addr, size) lock;
 endinterface
 
-interface LSQ#(type addr, type elem, type name);
-   method ActionValue#(name) req(name a, elem b, Bool isWrite);
+interface LSQ#(type addr, type elem, type name, numeric type nsz);
+   method ActionValue#(name) req(name a, elem b, Bit#(nsz) wmask);
    method elem peekResp(name i);
    method Bool checkRespId(name i);
    method Action resp(name i);
@@ -98,21 +93,21 @@ module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr,
    return rf;
 endmodule
 
-module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, elem, MemId#(inflight)))
-   provisos (Bits#(addr,szAddr), Bits#(elem,szElem));
-   BRAM_PORT#(addr, elem) p;
+module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, elem, MemId#(inflight), nsz))
+   provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Mul#(TDiv#(szElem, nsz), nsz, szElem));
+   BRAM_PORT_BE#(addr, elem, nsz) p;
    let memSize = 2 ** valueOf(szAddr);
    let hasOutputReg = False;
    if (init)
-      p <- mkBRAMCore1Load(memSize, hasOutputReg, file, False);
+      p <- mkBRAMCore1BELoad(memSize, hasOutputReg, file, False);
    else
-      p <- mkBRAMCore1(memSize, hasOutputReg);
+      p <- mkBRAMCore1BE(memSize, hasOutputReg);
    
    interface port = p;
 
 endmodule
 
-module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memwrap, AsyncMem#(addr, elem, MemId#(inflight)) _unused_)
+module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
    let memory = memwrap.port;
@@ -131,8 +126,8 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memwrap, AsyncMem#(add
       valid[idx] <= True;
    endrule
    
-   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite) if (okToRequest);
-      memory.put(isWrite, a, b);
+   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest);
+      memory.put(wmask, a, b);
       head <= head + 1;
       nextData <= tagged Valid head;
       return head;
@@ -198,97 +193,50 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    interface lock = l;
 endmodule
    
-module mkQueueLockAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d)) _unused_)
+module mkQueueLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
+   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem(memory);
    QueueLock#(LockId#(d)) l <- mkQueueLock();
-   
-   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
-      let r <- amem.req(a, b, isWrite);
-      return r;
-   endmethod
-   
-   method elem peekResp(MemId#(inflight) i);
-      return amem.peekResp(i);
-   endmethod
-   
-   method Bool checkRespId(MemId#(inflight) i);
-      return amem.checkRespId(i);
-   endmethod
-   
-   method Action resp(MemId#(inflight) i);
-      amem.resp(i);
-   endmethod   
-   
+      
+   interface mem = amem;
    interface lock = l;
    
 endmodule
 
-module mkFAAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
+module mkFAAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
    
-   AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
+   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem(memory);
    AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
    
-   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
-      let r <- amem.req(a, b, isWrite);
-      return r;
-   endmethod
-   
-   method elem peekResp(MemId#(inflight) i);
-      return amem.peekResp(i);
-   endmethod
-   
-   method Bool checkRespId(MemId#(inflight) i);
-      return amem.checkRespId(i);
-   endmethod
-   
-   method Action resp(MemId#(inflight) i);
-      amem.resp(i);
-   endmethod   
-   
+   interface mem = amem;
    interface lock = l;
    
 endmodule
 
-module mkDMAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight)) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), LockId#(d), numlocks) _unused_)
+module mkDMAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem#(addr, elem, MemId#(inflight)) amem <- mkAsyncMem(memory);
+   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem(memory);
    AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
    
-   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bool isWrite);
-      let r <- amem.req(a, b, isWrite);
-      return r;
-   endmethod
-   
-   method elem peekResp(MemId#(inflight) i);
-      return amem.peekResp(i);
-   endmethod
-   
-   method Bool checkRespId(MemId#(inflight) i);
-      return amem.checkRespId(i);
-   endmethod
-   
-   method Action resp(MemId#(inflight) i);
-      amem.resp(i);
-   endmethod   
-   
+   interface mem = amem;
    interface lock = l;
    
 endmodule
 
+
 typedef struct {
-   addr a;
-   Maybe#(data) d;
-   Bool isValid;
-} StQEntry#(type addr, type data) deriving(Bits, Eq);
+   data d;
+   mask m;
+} StReq#(type data, type mask) deriving (Bits, Eq);
 
 typedef struct {
    addr a;
+   mask m;
    data d;
-} StIssue#(type addr, type data) deriving(Bits, Eq);
+} StIssue#(type addr, type data, type mask) deriving(Bits, Eq);
 
 typedef struct {
    addr a;
@@ -297,8 +245,8 @@ typedef struct {
    Bool isValid;
 } LdQEntry#(type addr, type data, type entId) deriving(Bits, Eq);
 
-module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
- LSQ#(addr, elem, MemId#(inflight)) _unused_) provisos
+module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
+ LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Eq#(addr));
 
    /*
@@ -324,8 +272,8 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
    Reg#(MemId#(inflight)) stHead <- mkReg(unpack(0));
    Vector#(inflight, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
    Vector#(inflight, Reg#(addr)) stQAddr <- replicateM (mkReg(unpack(0)));
-   Vector#(inflight, Ehr#(3, Maybe#(elem))) stQData <- replicateM (mkEhr(tagged Invalid));
-   FIFO#(StIssue#(addr, elem)) stIssueQ <- mkFIFO();
+   Vector#(inflight, Ehr#(3, Maybe#(StReq#(elem, Bit#(n))))) stQData <- replicateM (mkEhr(tagged Invalid));
+   FIFO#(StIssue#(addr, elem, Bit#(n))) stIssueQ <- mkFIFO();
    ///Load Stuff
    Reg#(MemId#(inflight)) ldHead <- mkReg(unpack(0));
    Vector#(inflight, Ehr#(2, Bool)) ldQValid <- replicateM (mkEhr(False));
@@ -396,16 +344,17 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
    
    //ldQStr[i][1] -> read & write _after_ reserves (write to [0])
    //ldQData[i][1] ->  write _after_ reserve
-   function Action write(MemId#(inflight) n, elem b);
+   function Action write(MemId#(inflight) n, elem b, Bit#(n) wmask);
       return action
-		stQData[n][1] <= tagged Valid b; //_can_ reserve and write same location in one cycle (write happens after)
+		stQData[n][1] <= tagged Valid StReq { d: b, m: wmask }; //_can_ reserve and write same location in one cycle (write happens after)
 				    //forward data to all dependent loads
 				    for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 				       if (ldQStr[i][1] matches tagged Valid.s &&& s == n)
 					  begin
-					     ldQStr[i][1] <= tagged Invalid;
+					     ldQStr[i][1] <= tagged Invalid;					     
 					     //order this after reserve (so reserve addr ;write addr forwards data appropriately)
-					     ldQData[i][1] <= tagged Valid b;
+					     if (wmask == '1) ldQData[i][1] <= tagged Valid b;
+					     //If the store doesn't actually write all of the data, we need to do a real load so don't forward
 					  end
 				    end
 	     endaction;
@@ -427,7 +376,7 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
    //when considering other memory models   
    rule issueSt;
       let st = stIssueQ.first();
-      memory.put(True, st.a, st.d);
+      memory.put(st.m, st.a, st.d);
       stIssueQ.deq();
 //      $display("Issuing Memory Store for addr %d, data %d, %t", st.a, st.d, $time());
    endrule
@@ -437,7 +386,7 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
    //run this _after_ commits so that we don't issue a load that's getting freed this cycle
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
   //    $display("Issuing Memory Load for tag %d, addr %d, %t", idx, ldQAddr[idx], $time());
-      memory.put(False, ldQAddr[idx], ?);
+      memory.put(0, ldQAddr[idx], ?);
       nextData <= tagged Valid idx;
       ldQIssued[idx][1] <= True;
    endrule
@@ -449,16 +398,18 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
       
    method ActionValue#(MemId#(inflight)) reserveRead(addr a) if (okToLd);
       Maybe#(MemId#(inflight)) matchStr = getMatchingStore(a);
+      Maybe#(StReq#(elem, Bit#(n))) rreq = tagged Invalid;
       Maybe#(elem) data = tagged Invalid;
       //if matching store, copy its data over (which may be invalid)
       if (matchStr matches tagged Valid.idx)
 	 begin
-	    data = stQData[idx][0]; //changing this index could enable combinational bypass
+	    rreq = stQData[idx][0]; //changing this index could enable combinational bypass
 	 end
-      //If data is valid, then leave matching store invalid so no dependency
-      if (data matches tagged Valid.d)
+      //If data is valid and mask is full, then leave matching store invalid so no dependency
+      if (rreq matches tagged Valid.r &&& r.m == '1)
 	 begin
 	    matchStr = tagged Invalid;
+	    data = tagged Valid r.d;
 	 end
       
       ldQValid[ldHead][0] <= True;
@@ -501,13 +452,17 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight)) memwrap,
    method Action commitWrite(MemId#(inflight) n);
       stQValid[n][1] <= False;
       elem data = unpack(0);
+      Bit#(n) wmask = '0;
       if (stQData[n][2] matches tagged Valid.dt) //if _write_ occurred this cycle we want to observe it
-	 data = dt;
-      stIssueQ.enq(StIssue { a: stQAddr[n], d: data });
+	 begin
+	    data = dt.d;
+	    wmask = dt.m;
+	 end
+      stIssueQ.enq(StIssue { a: stQAddr[n], m: wmask, d: data });
    endmethod
 
-  method ActionValue#(MemId#(inflight)) req(MemId#(inflight) a, elem b, Bool isWrite);
-    if (isWrite) write(a, b);
+  method ActionValue#(MemId#(inflight)) req(MemId#(inflight) a, elem b, Bit#(n) wmask);
+    write(a, b, wmask);
     return a;
   endmethod
 
