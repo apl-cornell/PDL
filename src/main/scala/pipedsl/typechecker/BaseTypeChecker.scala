@@ -441,10 +441,18 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val memt = tenv(mem)
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
-      val (wmt, env2) = if (wm.isDefined) checkExpression(wm.get, tenv, None) else (None, tenv)
-      //TODO check that the mask size is correct (i.e., length of elemtype / 8)
-      (memt, idxt, wmt) match {
-        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true), TSizedInt(lm, true)) if l == s => (e, env1)
+      (memt, idxt) match {
+        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s =>
+          if (wm.isDefined) {
+            val (wmt, _) = checkExpression(wm.get, tenv, None)
+            wmt match {
+              //TODO check that the mask size is correct (i.e., length of elemtype / 8)
+              case TSizedInt(lm, true) => ()
+              case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
+                " to the number of bytes in the element type", wmt)
+            }
+          }
+          (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }
