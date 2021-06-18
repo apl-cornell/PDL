@@ -73,7 +73,7 @@ class Parser extends RegexParsers with PackratParsers {
   // int<32> w;
   // m[a, 0b1100] <- w;
   lazy val memAccess: P[Expr] = positioned {
-    iden ~ brackets(expr ~ ("," ~> num).?) ^^ { case m ~ (i ~ n) => EMemAccess(m, i, n) }
+    iden ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ (i ~ n) => EMemAccess(m, i, n) }
   }
 
   lazy val bitAccess: P[Expr] = positioned {

@@ -147,9 +147,14 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       val (ne1, nc1) = extractCastVars(e1)
       val (ne2, nc2) = extractCastVars(e2)
       (EBinop(op, ne1, ne2).setPos(e.pos), CSeq(nc1, nc2).setPos(nc1.pos))
-    case EMemAccess(mem, index, wm) =>
+    case EMemAccess(mem, index, Some(mask)) =>
       val (ne, nc) = extractCastVars(index)
-      (EMemAccess(mem, ne, wm).setPos(e.pos), nc)
+      val (nm, ncm) = extractCastVars(mask)
+      (EMemAccess(mem, ne, Some(nm)).setPos(e.pos),
+        CSeq(nc, ncm).setPos(e.pos))
+    case EMemAccess(mem, index, None) =>
+      val (ne, nc) = extractCastVars(index)
+      (EMemAccess(mem, ne, None).setPos(e.pos), nc)
     case EBitExtract(num, start, end) =>
       val (ne, nc) = extractCastVars(num)
       (EBitExtract(ne, start, end).setPos(e.pos), nc)
