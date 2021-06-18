@@ -212,7 +212,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr, wmask: Option[EInt] = None) extends Expr with LockInfoAnnotation
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None) extends Expr with LockInfoAnnotation
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
@@ -254,7 +254,7 @@ object Syntax {
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   //TODO Clean up what actually needs the lock info annotation
-  case class IMemSend(handle: EVar, writeMask: Option[Int], mem: Id, data: Option[EVar], addr: EVar)
+  case class IMemSend(handle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar)
     extends InternalCommand with LockInfoAnnotation {
     def isWrite: Boolean = data.isDefined
   }

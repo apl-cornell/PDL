@@ -561,7 +561,7 @@ object LockImplementation {
   }
   private def hasAsyncMemoryRead(mem: LockArg, cs: Iterable[Command]): Boolean = {
     cs.exists {
-      case s@IMemSend(_, writeMask, mid,_, addr) if !s.isWrite && largMatches(mem, mid, addr)=> true
+      case s@IMemSend(_, _, mid,_, addr) if !s.isWrite && largMatches(mem, mid, addr)=> true
       case _ => false
     }
   }

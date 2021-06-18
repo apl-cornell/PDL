@@ -123,10 +123,11 @@ object Utilities {
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
-    case IMemSend(_, _, _, data, addr) =>
-      if (data.isDefined) {
+    case IMemSend(_, writeMask, _, data, addr) =>
+      val dataSet = if (data.isDefined) {
         Set(data.get.id, addr.id)
       } else Set(addr.id)
+      dataSet ++ (if (writeMask.isDefined) { getUsedVars(writeMask.get) } else { Set() })
     case IMemRecv(_, handle, _) => Set(handle.id)
     case IMemWrite(_, addr, data) => Set(addr.id, data.id)
     case IRecv(handle, _, _) => Set(handle.id)
@@ -168,7 +169,8 @@ object Utilities {
     case EUop(_, ex) => getUsedVars(ex)
     case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, _) => getUsedVars(rec)
-    case EMemAccess(_, index,_) => getUsedVars(index) //memories aren't variables, they're externally defined
+    case EMemAccess(_, index, mask) => (if (mask.isDefined) getUsedVars(mask.get) else Set()) ++
+      getUsedVars(index) //memories aren't variables, they're externally defined
     case EBitExtract(num, _, _) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })

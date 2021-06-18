@@ -441,9 +441,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val memt = tenv(mem)
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
-      //TODO do mask checking - right now BSV will complain if its too big etc.
-      (memt, idxt) match {
-        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s => (e, env1)
+      val (wmt, env2) = if (wm.isDefined) checkExpression(wm.get, tenv, None) else (None, tenv)
+      //TODO check that the mask size is correct (i.e., length of elemtype / 8)
+      (memt, idxt, wmt) match {
+        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true), TSizedInt(lm, true)) if l == s => (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }
