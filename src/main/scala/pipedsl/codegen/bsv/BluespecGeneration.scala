@@ -448,8 +448,9 @@ object BluespecGeneration {
       val execRule = getStageRule(stg)
       //Add a stage kill rule if it needs one
       val killRule = getStageKillRule(stg)
+      val rules = if (mod.maybeSpec && killRule.isDefined) List(execRule, killRule.get) else List(execRule)
       translator.setVariablePrefix("")
-      (sBody, List(Some(execRule), killRule).flatten)
+      (sBody, rules)
     }
 
     /**
@@ -466,11 +467,12 @@ object BluespecGeneration {
       val writeCmdStmts = getEffectCmds(stg.getCmds)
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.getCmds)
+      val recvConds = getRecvConds(stg.getCmds)
       val debugStmt = if (debug) {
         BDisplay(Some(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t"),
           List(translator.toBSVVar(threadIdVar), BTime))
       } else BEmpty
-      BRuleDef( genParamName(stg) + "_execute", blockingConds,
+      BRuleDef( genParamName(stg) + "_execute", blockingConds ++ recvConds,
         writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
     }
 
@@ -486,13 +488,14 @@ object BluespecGeneration {
       if (killConds.isEmpty) {
         None
       } else {
+        val recvConds = getRecvConds(stg.getCmds)
         val debugStmt = if (debug) {
           BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t"),
             List(getSpecIdVal, BTime))
         } else { BEmpty }
         val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
         val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
-        Some(BRuleDef( genParamName(stg) + "_kill", killConds, deqStmts :+ freeStmt :+ debugStmt))
+        Some(BRuleDef( genParamName(stg) + "_kill", killConds ++ recvConds, deqStmts :+ freeStmt :+ debugStmt))
       }
     }
 
@@ -504,10 +507,6 @@ object BluespecGeneration {
           l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
             BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))
           //also need these in case we're waiting on responses we need to dequeue
-        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
-        case IRecv(handle, sender, _) =>
-          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
           if (condconds.nonEmpty) {
@@ -559,10 +558,6 @@ object BluespecGeneration {
           } else {
             l
           }
-        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
-        case IRecv(handle, sender, _) =>
-          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case COutput(_) => if (mod.isRecursive) l :+ busyReg else l
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
@@ -580,6 +575,27 @@ object BluespecGeneration {
         )
         case ICondCommand(cond, cs) =>
           val condconds = getBlockingConds(cs)
+          if (condconds.nonEmpty) {
+            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
+              BBOp("&&", exp, n)
+            })
+            val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
+            l :+ newCond
+          } else {
+            l
+          }
+        case _ => l
+      })
+    }
+
+    private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
+      cmds.foldLeft(List[BExpr]())((l, c) => c match {
+        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
+        case IRecv(handle, sender, _) =>
+          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
+        case ICondCommand(cond, cs) =>
+          val condconds = getRecvConds(cs)
           if (condconds.nonEmpty) {
             val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
               BBOp("&&", exp, n)
