@@ -178,7 +178,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
     val default = if (isWrite) { BAllOnes } else { BZero }
     if (m.isDefined) {
-      m.get
+      BPack(m.get) //make it bits
     } else {
       default
     }
