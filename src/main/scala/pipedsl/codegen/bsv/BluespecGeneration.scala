@@ -502,7 +502,12 @@ object BluespecGeneration {
           // isValid(spec) && !fromMaybe(True, check(spec))
         case CCheckSpec(_) =>
           l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
-            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))          
+            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))
+          //also need these in case we're waiting on responses we need to dequeue
+        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
+        case IRecv(handle, sender, _) =>
+          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
           if (condconds.nonEmpty) {
@@ -558,17 +563,17 @@ object BluespecGeneration {
           l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
-        case COutput(_) => if (mod.isRecursive) List(busyReg) else List()
+        case COutput(_) => if (mod.isRecursive) l :+ busyReg else l
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
-        case CCheckSpec(isBlocking) if isBlocking => List(
+        case CCheckSpec(isBlocking) if isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
             BFromMaybe(BBoolLit(false), bsInts.getSpecCheck(specTable, getSpecIdVal))
           )
         )
           //Execute if check(specid) != Valid(False)
           //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
-        case CCheckSpec(isBlocking) if !isBlocking => List(
+        case CCheckSpec(isBlocking) if !isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
               BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))
           )
