@@ -1,0 +1,90 @@
+pipe quad_call(input: int<32>)[rf: int<32>[5]<c, s>] {
+   bool a = input{0:0};
+   bool b = input{1:1};
+   if(a && b)
+     {
+       call quad_call(input);
+     }
+   ---
+   if(a && !b)
+     {
+       call quad_call(input);
+     }
+   ---
+   if((!a) && b)
+     {
+       call quad_call(input);
+     }
+   ---
+   if((!a) && (!b))
+     {
+       call quad_call(input);
+     }
+}
+
+pipe comparison(input: int<32>, bool1: bool, bool2: bool)[rf: int<32>[5]<c, s>]
+{
+  int<16> a = input{0:15};
+  int<16> b = input{16:31};
+  bool lt = a < b;
+  bool eq = a == b;
+  split {
+    case: bool1
+      {
+        call comparison(input, bool2, bool1);
+      }
+    case: bool2
+      {
+        call comparison(input + 1<32>, bool1, bool2);
+      }
+    case: (input{0:0} == 1)
+      {
+        call comparison(input - 1<32>, bool2, bool1);
+      }
+    default:
+      {
+        call comparison(input, bool1, bool2);
+      }
+  }
+}
+
+pipe getFalse()[] :bool
+{
+  output(false);
+}
+
+//at least it is smart about else lol
+pipe test1(input: int<32>)[rf: int<32>[5]]
+  {
+    if(input{0:0} == 1)
+      {
+        call test1(input);
+      } else
+      {
+        call test1(input);
+      }
+      ---
+      
+    call getFalse();
+}
+
+pipe very_simple()[]
+  {
+    call very_simple();
+  }
+
+pipe falsification()[]
+  {
+    if(false)
+      {
+        call very_simple();
+      } else
+      {
+        call falsification();
+      }
+  }
+
+circuit
+  {
+    r = memory(int<32>, 5);
+  }

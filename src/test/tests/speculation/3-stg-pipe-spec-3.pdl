@@ -1,3 +1,4 @@
+//a bit confused about this one. Recursive call on line 40 needs output?
 pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[8]<a,a>]: bool {
      spec_check(); //nonblocking check
      start(imem);
@@ -7,7 +8,8 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[8]<a,a>]: bool 
      end(imem);
      s <- speccall cpu(pc + 1<8>);
      ---
-     if (insn{31:31} != 1<1>) {
+     bool done = insn{31:31} == 1<1>;
+     if (!done) {
      	  ---
           int<1> op = insn{0:0};
      	  int<8> brImm = 0<4> ++ insn{4:1};

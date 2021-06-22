@@ -11,6 +11,7 @@ pipe test1(tinput: int<32>)[rf: int<32>[5]] {
     release(rf[rs2]);
     end(rf);
     ---
+    call test1(tinput);
 }
 
 //Expected Success
@@ -28,6 +29,7 @@ pipe test2(tinput: int<32>)[rf: int<32>[5]] {
     end(rf);
     release(rf[rs2]);
     ---
+    call test2(tinput);
 }
 
 pipe test3(tinput: int<32>)[rf: int<32>[5]<c,s>] {
@@ -38,6 +40,7 @@ pipe test3(tinput: int<32>)[rf: int<32>[5]<c,s>] {
     end(rf);
     int<32> arg2 = rf[rs2] + 4<32>;
     release(rf[rs2]);
+    call test3(tinput);
 }
 
 circuit {

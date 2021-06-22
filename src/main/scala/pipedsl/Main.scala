@@ -84,6 +84,8 @@ object Main {
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
+      val linChecker = new LinearExecutionChecker(ctx)
+      linChecker.check(recvProg, None)
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
       if (printOutput) {

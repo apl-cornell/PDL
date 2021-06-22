@@ -17,7 +17,7 @@ pipe test3(input: int<32>)[rf: int<32>[5], m:int<32>[5]] {
 }
 
 //Tests that modules are analyzed separately
-pipe test4(input: int<32>)[rf: int<32>[5], m:int<32>[5]] :bool {
+pipe test4(input: int<32>)[rf: int<32>[5], m:int<32>[5]] {
     int<5> rs1 = input{0:4};
     int<5> rs2 = input{5:9};
     start(rf);
@@ -32,7 +32,6 @@ pipe test4(input: int<32>)[rf: int<32>[5], m:int<32>[5]] :bool {
     release(rf[rs2]);
     release(m[rs1]);
     call test3(input);
-    output(true);
 }
 
 circuit {

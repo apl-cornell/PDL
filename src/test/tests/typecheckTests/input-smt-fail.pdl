@@ -1,0 +1,17 @@
+pipe should_fail(input : int<32>)[]
+{
+  if(input{1:1} == 1)
+  {
+     call should_fail(input);
+  }
+  ---
+  if(input{2:2} == 1)
+  {
+    call should_fail(input);
+  }
+}
+
+circuit
+{
+  r = memory(int<32>, 5);
+}

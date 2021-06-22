@@ -1,4 +1,4 @@
-pipe ex2(in: bool)[rf: int<32>[5]] {
+pipe ex2(in: bool)[rf: int<32>[5]] :bool {
     start(rf);
     int<5> addr = 1<5>;
     if (in) {
@@ -21,6 +21,7 @@ pipe ex2(in: bool)[rf: int<32>[5]] {
         block(rf[addr2]);
         release(rf[addr2]);
     }
+    output(in);
 }
 
 circuit {

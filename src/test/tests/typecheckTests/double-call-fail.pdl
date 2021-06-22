@@ -1,14 +1,17 @@
-//Expected Success
-pipe test6(input: int<32>)[rf: int<32>[5]<c,s>] {
+//cannot call twice in same pipe
+pipe call2(input: int<32>)[rf: int<32>[5]<c,s>] {
     start(rf);
     reserve(rf);
     end(rf);
     ---
     block(rf);
     int<32> x = rf[0<5>] + input;
+    call call2(x);
+    ---
+    int<32> y = rf[0<5>] + input;
+    call call2(y);
     ---
     release(rf);
-    call test6(input);
 }
 
 circuit {
