@@ -71,6 +71,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val regType = "Reg"
 
   private val fifoModuleName = "mkFIFOF"
+  private val fifoNBModuleName = "mkNBFIFOF"
   private val fifoType = "FIFOF"
   private val fifoDequeuMethodName = "deq"
   private val fifoEnqueueMethodName = "enq"
@@ -217,7 +218,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
 
   def getFifo: BModule = BModule(fifoModuleName, List())
-
+  def getNBFifo: BModule = BModule(fifoNBModuleName, List())
   def getFifoDeq(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoDequeuMethodName, List())
   }
@@ -234,6 +235,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
   private val specCheckName = "check"
+  private val specNBCheckName = "nbcheck"
   private val specFreeName = "free"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
@@ -254,6 +256,9 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
   def getSpecCheck(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specCheckName, List(h))
+  }
+  def getNBSpecCheck(st: BVar, h: BExpr): BExpr = {
+    BMethodInvoke(st, specNBCheckName, List(h))
   }
   def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))

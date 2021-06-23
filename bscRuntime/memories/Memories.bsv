@@ -6,6 +6,7 @@ import FIFOF :: *;
 import SpecialFIFOs :: *;
 import BRAMCore::*;
 import DReg :: *;
+import ConfigReg :: *;
 import Vector :: *;
 import Locks :: *;
 import Ehr :: *;
@@ -111,8 +112,8 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    let outDepth = valueOf(inflight);
    
    //this must be at least size 2 to work correctly (safe bet)
-   Vector#(inflight, Reg#(elem)) outData <- replicateM( mkReg(unpack(0)) );
-   Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkReg(False) );
+   Vector#(inflight, Reg#(elem)) outData <- replicateM( mkConfigReg(unpack(0)) );
+   Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkConfigReg(False) );
    
    Reg#(MemId#(inflight)) head <- mkReg(0);
    Bool okToRequest = valid[head] == False;

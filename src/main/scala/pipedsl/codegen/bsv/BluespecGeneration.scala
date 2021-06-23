@@ -505,7 +505,7 @@ object BluespecGeneration {
           // isValid(spec) && !fromMaybe(True, check(spec))
         case CCheckSpec(_) =>
           l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
-            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))
+            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal))))
           //also need these in case we're waiting on responses we need to dequeue
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
@@ -570,7 +570,7 @@ object BluespecGeneration {
           //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
         case CCheckSpec(isBlocking) if !isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
-              BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))
+              BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal))
           )
         )
         case ICondCommand(cond, cs) =>
@@ -712,8 +712,15 @@ object BluespecGeneration {
       //Body instantiates all of the params (fifos & memories) and then all of the stages
       //One fifo per edge in the graph
 
+      //start fifo uses our 'nonblocking' queue impl
+      val startEdge = firstStage.inEdges.head
+      val startFifo = BModInst(edgeParams(startEdge), bsInts.getNBFifo)
       val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
-        m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
+        if (e != startEdge) {
+          m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
+        } else {
+          m
+        }
       })
 
       //Instantiate a lock regions for each memory:
@@ -736,7 +743,7 @@ object BluespecGeneration {
         bsInts.getReg(BZero))
       //Instantiate the speculation table if the module is speculative
       val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
-      var stmts: List[BStatement] = edgeFifos.values.toList ++ memRegions.values.toList
+      var stmts: List[BStatement] = startFifo +: (edgeFifos.values.toList ++ memRegions.values.toList)
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
