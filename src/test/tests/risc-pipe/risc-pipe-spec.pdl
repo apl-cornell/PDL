@@ -98,10 +98,10 @@ def storeMask(off: uint<2>, op: uint<3>): uint<4> {
 def maskLoad(data: int<32>, op: uint<3>, start: uint<2>): int<32> {
     //start == offset in bytes, need to multiply by 8
     uint<5> boff = start ++ u0<3>;
-    uint<4> hoff = start ++ u0<2>;
-    uint<8> bdata = cast((data >> boff), uint<8>);
-    uint<16> hdata = cast((data >> hoff), uint<16>);
-
+    int<32> tmp = data >> boff;
+    uint<8> bdata = cast(tmp, uint<8>);
+    uint<16> hdata = cast(tmp, uint<16>);
+    
     if (op == u0<3>) { //LB
        return cast(bdata, int<32>);
     } else {
