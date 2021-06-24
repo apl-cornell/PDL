@@ -259,18 +259,19 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
        bool invertRes <- false;
        uint<32> udivout <- u0<32>;
    }
-   int<16> memaddr = (alu_res >> 2){15:0};
+   uint<32> tmpaddr = cast(alu_res, uint<32>);
+   uint<16> memaddr = (tmpaddr >> 2){15:0};
    uint<2> boff = cast(alu_res{1:0}, uint<2>);   
    start(dmem);
    split {
         case: (isLoad) {
-	   uint<16> raddr = cast(memaddr, uint<16>);
+	   uint<16> raddr = memaddr;
 	   acquire(dmem[raddr], R);
 	   int<32> wdata <- dmem[raddr];
 	   release(dmem[raddr]);
 	}
 	case: (isStore) {
-	      uint<16> waddr = cast(memaddr, uint<16>);
+	      uint<16> waddr = memaddr;
 	      acquire(dmem[waddr], W);
 	      //use bottom bits of data and place in correct offset
 	      //shift by boff*8

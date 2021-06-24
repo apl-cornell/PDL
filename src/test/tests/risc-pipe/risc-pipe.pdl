@@ -250,18 +250,20 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     split {
     	  case: (isStore) {
 	  	//addresses also are word-sized
-		int<32> tmp = (immS + rf1);
-		int<16> memaddr = (tmp >> 2){15:0};
-		uint<2> boff = cast(tmp{1:0}, uint<2>);
+		int<32> tmp = immS + rf1;
+		uint<32> ctmp = cast(tmp, uint<32>);
+		uint<16> memaddr = (ctmp >> 2){15:0};
+		uint<2> boff = ctmp{1:0};
 	  }
 	  case: (isLoad) {
 	  	//addresses also are word-sized
-		int<32> tmp = (immI + rf1);
-		int<16> memaddr = (tmp >> 2){15:0};
-		uint<2> boff = cast(tmp{1:0}, uint<2>);
+		int<32> tmp = immI + rf1;
+		uint<32> ctmp = cast(tmp, uint<32>);
+		uint<16> memaddr = (ctmp >> 2){15:0};
+		uint<2> boff = ctmp{1:0};		
 	  }
 	  default: {
-  	  	int<16> memaddr = 0<16>;
+  	  	uint<16> memaddr = u0<16>;
 		uint<2> boff = u0<2>;
 	  }
     }
@@ -269,13 +271,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
     start(dmem);
     split {
         case: (isLoad) {
-	   uint<16> raddr = cast(memaddr, uint<16>);
+	   uint<16> raddr = memaddr;
 	   acquire(dmem[raddr], R);
 	   int<32> wdata <- dmem[raddr];
 	   release(dmem[raddr]);
 	}
 	case: (isStore) {
-	      uint<16> waddr = cast(memaddr, uint<16>);
+	      uint<16> waddr = memaddr;
 	      acquire(dmem[waddr], W);
 	      //use bottom bits of data and place in correct offset
 	      //shift by boff*8
