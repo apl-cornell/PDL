@@ -164,6 +164,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     int<12> immJRTmp = insn{31:20};
     int<16> immJR = cast(immJRTmp, int<16>);
     int<32> immU = insn{31:12} ++ 0<12>;
+    uint<3> doAdd = u0<3>;
     bool isOpImm = opcode == 0b0010011<7>;
     bool flip = (!isOpImm) && (flipBit == 1<1>);
     bool isLui   = opcode == 0b0110111<7>;
@@ -176,6 +177,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     bool isLoad = opcode == 0b0000011<7>;
     bool isMDiv = (funct7 == u1<7>) && isOp;
     bool isDiv = isMDiv && (funct3 >= u4<3>);
+    bool isMul = isMDiv && (funct3 < u4<3>);
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore || isJalr;
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
@@ -227,63 +229,40 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     }}}
     if (!notBranch) { call cpu(npc); }
 
-    int<32> alu_arg2 = (isOpImm) ? immI : rf2;
-    
+    int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
+    int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
+    bool    alu_flip = (isStore || isLoad || isAui) ? false : flip;
+    uint<3> alu_funct3 = (isStore || isLoad || isAui) ? doAdd : funct3;
+    int<32> alu_res = alu(alu_arg1, alu_arg2, alu_funct3, alu_flip);
+    int<16> tmppc = pc + 1<16>;
+    int<32> linkpc = 0<16> ++ (tmppc << 2);
+    int<32> mulres = mul(rf1, rf2, funct3);
+    if (writerd && (!isLoad) && (!isDiv)) {
+       block(rf[rd]);
+       int<32> rddata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
+       rf[rd] <- rddata;
+    } else {
+       int<32> rddata = 0<32>;
+    }
+    ---
     if (isDiv) {
        int<32> sdividend = sign(rf1);
        //For REM, ignore sign of divisor
        int<32> sdivisor  = (funct3 == u6<3>) ? 1<32> : sign(rf2);
        bool isSignedDiv = ((funct3 == u4<3>) || (funct3 == u6<3>));
-       bool invertRes = isSignedDiv && (sdividend != sdivisor);
        uint<32> dividend = (isSignedDiv) ? cast(mag(rf1), uint<32>) : cast(rf1, uint<32>);
        uint<32> divisor =  (isSignedDiv) ? cast(mag(rf2), uint<32>) : cast(rf2, uint<32>);
        bool retQuot = funct3 <= u5<3>;
+       bool invertRes <- isSignedDiv && (sdividend != sdivisor);       
        uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
-    } else {
+   } else {
+       bool invertRes <- false;
        uint<32> udivout <- u0<32>;
-       bool invertRes = false;
-    }
-    ---
-    split {
-    	  case: (isLui) {
-	  	int<32> alu_res = immU;
-	  }
-	  case: (isAui) {
-	  //all pc computation needs to be multiplied by 4
-	  	int<32> pc32 = (0<16> ++ pc) << 2;
-	  	int<32> alu_res = pc32 + immU;
-	  }
-	  case: (isDiv) {
-	       int<32> alu_res = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
-	  }
- 	  case: (isMDiv) {
-	  	int<32> alu_res = mul(rf1, rf2, funct3);
-	  }
-	  default: {
-	        int<32> alu_res = alu(rf1, alu_arg2, funct3, flip);
-	  }
-    }
-    split {
-    	  case: (isStore) {
-	  	//addresses also are word-sized
-		int<32> tmp = (immS + rf1);
-		int<16> memaddr = (tmp >> 2){15:0};
-		uint<2> boff = cast(tmp{1:0}, uint<2>);
-	  }
-	  case: (isLoad) {
-	  	//addresses also are word-sized
-		int<32> tmp = (immI + rf1);
-		int<16> memaddr = (tmp >> 2){15:0};
-		uint<2> boff = cast(tmp{1:0}, uint<2>);
-	  }
-	  default: {
-  	  	int<16> memaddr = 0<16>;
-		uint<2> boff = u0<2>;
-	  }
-    }
-    ---
-    start(dmem);
-    split {
+   }
+   int<16> memaddr = (alu_res >> 2){15:0};
+   uint<2> boff = cast(alu_res{1:0}, uint<2>);   
+   start(dmem);
+   split {
         case: (isLoad) {
 	   uint<16> raddr = cast(memaddr, uint<16>);
 	   acquire(dmem[raddr], R);
@@ -309,21 +288,25 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
-       block(rf[rd]);
        if (isLoad) {
+          block(rf[rd]);       
        	  int<32> insnout = maskLoad(wdata, funct3, boff);
+	  rf[rd] <- insnout;
        } else {
-       if (isJal || isJalr) {
-       	  //need to multiply by 4 b/c it is arch visible.
-	  int<16> nextpc = pc + 1<16>;
-	  int<32> insnout =  0<16> ++ (nextpc << 2); //todo make pc 32 bits
+       if (isDiv) {
+          block(rf[rd]);
+	  int<32> divout = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);  
+	  int<32> insnout = divout;
+	  rf[rd] <- insnout;	  
        } else {
-       	 int<32> insnout = alu_res;
+       	 int<32> insnout = rddata;
        }}
        print("Writing %d to r%d", insnout, rd);
-       rf[rd] <- insnout;
-       release(rf[rd]);
     }
+    ---
+    if (writerd) {
+       release(rf[rd]);
+    }  
     if (done) { output(true); }
 }
 
