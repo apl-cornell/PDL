@@ -61,11 +61,10 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
           for (caseObj <- cases) checkCommand(caseObj.body)
           checkCommand(default)
         case COutput(_) => verifyRecursive(c.predicateCtx.get)
-        case CSpecCall(_, pipe, args) =>
+        case CVerify(_, args, _) =>
           val pred = c.predicateCtx.get
           args.foreach(a => checkExpr(a, pred))
-          if(currentPipe == pipe)
-            verifyRecursive(c.predicateCtx.get)
+          verifyRecursive(c.predicateCtx.get)
         case CAssign(_, rhs) => checkExpr(rhs, c.predicateCtx.get)
         case CExpr(exp) => checkExpr(exp, c.predicateCtx.get)
         case _ =>
