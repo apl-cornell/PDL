@@ -1,3 +1,4 @@
+//not really sure how to put an output or call on every path here?
 pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
      spec_check(); //nonblocking check
      start(imem);

@@ -1,0 +1,28 @@
+pipe mistake(input: int<32>)[rf: int<32>[5]<c, s>] {
+   bool a = input{0:0};
+   bool b = input{1:1};
+   if(a && b)
+     {
+       call mistake(input);
+     }
+   ---
+   if(a && !b)
+     {
+       call mistake(input);
+     }
+   ---
+   if((!a) && b)
+     {
+       call mistake(input);
+     }
+   ---
+   if(!(a && b))
+     {
+       call mistake(input);
+     }
+}
+
+circuit
+  {
+    r = memory(int<32>, 5);
+  }

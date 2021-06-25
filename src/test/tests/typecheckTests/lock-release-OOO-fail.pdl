@@ -13,6 +13,7 @@ pipe test3(input: uint<32>)[rf: int<32>[5]] {
         release(rf[rs1]);
         release(rf[rs2]);
     }
+    call test3(input);
 }
 
 circuit {

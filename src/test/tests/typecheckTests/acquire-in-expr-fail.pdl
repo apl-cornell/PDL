@@ -8,6 +8,7 @@ pipe test6(input: int<32>)[rf: int<32>[5]<c,s>] {
     ---
     block(rf);
     release(rf);
+    call test6(input);
 }
 
 circuit {

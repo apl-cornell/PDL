@@ -14,10 +14,11 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[8]<a,a>]: bool 
      	  ---
           int<1> op = insn{0:0};
      	  int<8> brImm = 0<4> ++ insn{4:1};
-     	  uint<5> rs1 = cast(insn{9:5}, uint<5>);
-          uint<5> rs2 = cast(insn{14:10}, uint<5>);
-          uint<5> rd = cast(insn{19:15}, uint<5>);
-     	  if (op == 0<1>) {
+     	  int<5> rs1 = insn{9:5};
+     	  int<5> rs2 = insn{14:10};
+     	  int<5> rd = insn{19:15};
+	      bool op_is_nil = op == 0<1>;
+     	  if (op_is_nil) {
 	        verify(s, pc + 1<8>);
      	  } else {
 	        invalidate(s);
@@ -34,7 +35,7 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[8]<a,a>]: bool 
      	  }
      	  end(rf);
      	  ---
-     	  if (op == 1<1>) {
+     	  if (!op_is_nil) {
        	     int<8> npc = (a1 == a2) ? (pc + brImm) : (pc + 1<8>);
 	     print(npc);
        	     call cpu(npc);

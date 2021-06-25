@@ -32,7 +32,7 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool
      	  ---
      	  block(rf[rs1]);
      	  block(rf[rs2]);
-     	  if (op == 1<1>) {
+     	  if (op != 0<1>) {
        	     int<8> npc = (rf[rs1] == rf[rs2]) ? (pc + brImm) : (pc + 1<8>);
 	     print(npc);
        	     call cpu(npc);

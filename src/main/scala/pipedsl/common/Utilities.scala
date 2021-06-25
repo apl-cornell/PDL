@@ -1,6 +1,7 @@
 package pipedsl.common
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
+import com.sun.org.apache.xpath.internal.Expression
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Syntax._
@@ -307,6 +308,11 @@ object Utilities {
   /** Like [[Z3Context.mkAnd]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkAnd(ctx: Z3Context, expressions: Z3AST *): Z3BoolExpr =
     ctx.mkAnd(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
+
+  /** Like [[Z3Context.mkOr]], but automatically casts inputs to
+   * [[Z3BoolExpr]]s. */
+  def mkOr(ctx : Z3Context, expressions: Z3AST *): Z3BoolExpr =
+    ctx.mkOr(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
 
   /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =

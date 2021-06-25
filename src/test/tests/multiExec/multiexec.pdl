@@ -14,16 +14,19 @@ pipe multi_stg_div(num: int<32>, denom: int<32>, quot: int<32>, acc: int<32>, cn
     int<32> na = (tmp >= denom) ? (tmp - denom) : (tmp);
     int<32> nq = (tmp >= denom) ? ((quot << 1){31:1} ++ 1<1>) : (quot << 1);
     int<32> nnum = num << 1;
-    if (cnt == 31<5>) {
+    bool done = cnt == 31<5>;
+    if (done) {
         output(nq);
     } else {
         call multi_stg_div(nnum, denom, nq, na, cnt + 1<5>);
     }
 }
 
-pipe cpu(pc: uint<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
- if (pc < u14<16>) {
-  call cpu(pc + u1<16>);
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem:
+int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
+ bool done = pc >= 14<16>;
+ if (!done) { 
+  call cpu(pc + 1<16>);
  }
  start(imem);
  acquire(imem);
@@ -61,7 +64,8 @@ pipe cpu(pc: uint<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queu
  rf[rd] <- res;
  release(rf[rd]);
  ---
- if (pc == u14<16>) {
+
+ if (done) {
     output(true);
  }
 }

@@ -1,0 +1,22 @@
+pipe call_guard(input: int<32>)[rf: int<32>[5]<c, s>] {
+    start(rf);
+    reserve(rf);
+    end(rf);
+    ---
+    block(rf);
+    int<32> x = rf[0<5>] + input;
+    int<1> bit = input{0:0};
+    if (bit == 1) {
+        call call_guard(x);
+    }
+    ---
+    if (bit != 1) {
+        call call_guard(x);
+    }
+    ---
+    release(rf);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

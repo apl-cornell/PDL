@@ -13,6 +13,7 @@ pipe test21(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
     }
     release(rf);
     end(rf);
+    call test21(input, randomBool, randomBool2);
 }
 
 circuit {
