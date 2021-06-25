@@ -47,7 +47,7 @@ pipe hist(counter: uint<10>)[feature: uint<16>[10]<c,s>(FAQueue), weight: uint<3
    }
    
    circuit {
-       tf = regfile(uint<10>, 10);
+       tf = regfile(uint<16>, 10);
        f = FAQueue(tf);
        tw = regfile(uint<32>, 10);
        w = FAQueue(tw);
