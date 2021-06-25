@@ -48,9 +48,9 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
   private def convertRecv(c: CRecv): (Command, Command) = {
     (c.lhs, c.rhs) match {
         //Mem Read
-      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_))) =>
+      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_), _)) =>
         val handle = freshMessage(mem)
-        val send = IMemSend(handle, isWrite = false, mem, None, index)
+        val send = IMemSend(handle, writeMask = None, mem, None, index)
         val recv = IMemRecv(mem, handle, Some(lhs))
         send.memOpType = e.memOpType
         send.granularity = e.granularity
@@ -58,10 +58,10 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         recv.granularity = e.granularity
         (send, recv)
       //Mem Write
-      case (e@EMemAccess(mem, index@EVar(_)), data@EVar(_)) => mem.typ.get match {
+      case (e@EMemAccess(mem, index@EVar(_), wm), data@EVar(_)) => mem.typ.get match {
         case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous),_,_) =>
           val handle = freshMessage(mem)
-          val send = IMemSend(handle, isWrite = true, mem, Some(data), index)
+          val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
           val recv = IMemRecv(mem, handle, None)
           send.memOpType = e.memOpType
           send.granularity = e.granularity

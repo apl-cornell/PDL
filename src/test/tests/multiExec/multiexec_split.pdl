@@ -21,10 +21,11 @@ pipe multi_stg_div(num: int<32>, denom: int<32>, quot: int<32>, acc: int<32>, cn
     }
 }
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
- bool done = pc >= 14<16>;
+
+pipe cpu(pc: uint<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
+ bool done = pc >= u14<16>;
  if (!done) {
-  call cpu(pc + 1<16>);
+  call cpu(pc + u1<16>);
  }
  start(imem);
  acquire(imem);
@@ -33,9 +34,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem: int<32>[16]<a,a>(Queue
  end(imem);
  ---
  int<2> op = insn{1:0};
- int<5> rs1 = insn{6:2};
- int<5> rs2 = insn{11:7};
- int<5> rd = insn{16:12};
+ uint<5> rs1 = cast(insn{6:2}, uint<5>);
+ uint<5> rs2 = cast(insn{11:7}, uint<5>);
+ uint<5> rd = cast(insn{16:12}, uint<5>);
  start(rf);
  acquire(rf[rs1], R);
  acquire(rf[rs2], R);
@@ -79,5 +80,5 @@ circuit {
  m = new multi_stg_mul[];
  fp = new multi_stg_div[];
  c = new cpu[r, i, m, fp];
- call c(0<16>);
+ call c(u0<16>);
 }

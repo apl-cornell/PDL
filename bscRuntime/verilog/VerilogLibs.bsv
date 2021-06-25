@@ -1,9 +1,12 @@
 package VerilogLibs;
 
 import RegFile :: *;
+import FIFOF :: *;
+import RWire :: *;
 
 export RenameRF(..);
 export mkRenameRF;
+export mkNBFIFOF;
 
 interface RenameRF#(type addr, type elem, type name);
    method name readName(addr a); //get name to read data later
@@ -53,5 +56,70 @@ import "BVI" RenameRF =
        schedule (commit) C (commit);
     
  endmodule
+
+module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
+   
+   FIFOF#(dtyp) f <- mkFIFOF();
+   //allow multiple writes in the same cycle
+   RWire#(dtyp) enq_data <- mkRWireSBR();
+   
+   (*fire_when_enabled*)
+   rule doEnq (enq_data.wget() matches tagged Valid.d);
+      f.enq(d);
+   endrule
+
+   //only allow the LAST enq each cycle to work, drop the others
+   method Action enq(dtyp a) if (f.notFull());
+      enq_data.wset(a);
+   endmethod
+   
+   method Action deq();
+      f.deq();
+   endmethod
+   
+   method dtyp first();
+      return f.first();
+   endmethod
+   
+   method Bool notFull();
+      return f.notFull();
+   endmethod
+   
+   method Bool notEmpty();
+      return f.notEmpty();
+   endmethod
+   
+   method Action clear();
+      f.clear();
+   endmethod
+   
+endmodule
+
+// import "BVI" FIFO2 = module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
+
+// 	parameter width = valueOf(szdtyp);
+// 	parameter guarded = 1;
+	
+// 	default_clock clk(CLK, (*unused*) clk_gate);
+// 	default_reset rst (RST);
+
+// 	method enq(D_IN) enable(ENQ) ready(FULL_N);
+// 	method deq() enable(DEQ) ready(EMPTY_N);
+// 	method D_OUT first() ready(EMPTY_N);
+// 	method FULL_N notFull();
+// 	method EMPTY_N notEmpty();
+// 	method clear() enable(CLR);
+	   
+// 	   schedule (notFull, notEmpty, first) CF (notFull, notEmpty, first);
+// 	   schedule (notFull, notEmpty) SB (enq, deq, clear);
+// 	   schedule (first) CF (enq);
+// 	   schedule (first) SB (deq, clear);
+// 	   schedule (enq) CF (enq, deq);
+// 	   schedule (enq) SB (clear);
+// 	   schedule (deq) C (deq);
+// 	   schedule (deq) SB (clear);
+// 	   schedule (clear) SBR (clear);
+    
+// endmodule
 
 endpackage

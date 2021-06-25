@@ -1,8 +1,8 @@
-pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(RenameRF)]: bool {
-    int<5> rs1 = pc{4:0};
-    int<5> rd = rs1 - 1<5>;
-    if (pc < 100<32>) {
-        call test(pc + 1<32>);
+pipe test(pc: uint<32>)[rf: int<32>[5]<c,s>(RenameRF)]: bool {
+    uint<5> rs1 = pc{4:0};
+    uint<5> rd = rs1 - u1<5>;
+    if (pc < u100<32>) {
+        call test(pc + u1<32>);
     } else {
         output(true);
     }
@@ -27,5 +27,5 @@ circuit {
    // rename = RenameRF(rf)<128>;
    rename = rflock(int<32>, 5, 128);
    t = new test[rename];
-   call t(1<32>);
+   call t(u1<32>);
 }

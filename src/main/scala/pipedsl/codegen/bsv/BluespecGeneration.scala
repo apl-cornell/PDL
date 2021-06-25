@@ -105,16 +105,18 @@ object BluespecGeneration {
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
       case CirMem(elemTyp, addrSize) =>
-        val memtyp = bsInts.getBaseMemType(isAsync = true, BSizedInt(unsigned = true, addrSize),
-          translator.toType(elemTyp))
+        val bElemTyp = translator.toType(elemTyp)
+        val memtyp = bsInts.getBaseMemType(isAsync = true,
+          translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp)
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLockMem(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
         val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous)
         (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
       case CirRegFile(elemTyp, addrSize) =>
-        val memtyp = bsInts.getBaseMemType(isAsync = false, BSizedInt(unsigned = true, addrSize),
-          translator.toType(elemTyp))
+        val bElemTyp = translator.toType(elemTyp)
+        val memtyp = bsInts.getBaseMemType(isAsync = false,
+          translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp)
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLockRegFile(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
@@ -446,8 +448,9 @@ object BluespecGeneration {
       val execRule = getStageRule(stg)
       //Add a stage kill rule if it needs one
       val killRule = getStageKillRule(stg)
+      val rules = if (mod.maybeSpec && killRule.isDefined) List(execRule, killRule.get) else List(execRule)
       translator.setVariablePrefix("")
-      (sBody, List(Some(execRule), killRule).flatten)
+      (sBody, rules)
     }
 
     /**
@@ -464,11 +467,12 @@ object BluespecGeneration {
       val writeCmdStmts = getEffectCmds(stg.getCmds)
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.getCmds)
+      val recvConds = getRecvConds(stg.getCmds)
       val debugStmt = if (debug) {
-        BDisplay(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t",
+        BDisplay(Some(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t"),
           List(translator.toBSVVar(threadIdVar), BTime))
       } else BEmpty
-      BRuleDef( genParamName(stg) + "_execute", blockingConds,
+      BRuleDef( genParamName(stg) + "_execute", blockingConds ++ recvConds,
         writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
     }
 
@@ -484,13 +488,14 @@ object BluespecGeneration {
       if (killConds.isEmpty) {
         None
       } else {
+        val recvConds = getRecvConds(stg.getCmds)
         val debugStmt = if (debug) {
-          BDisplay(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t",
+          BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t"),
             List(getSpecIdVal, BTime))
         } else { BEmpty }
         val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
         val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
-        Some(BRuleDef( genParamName(stg) + "_kill", killConds, deqStmts :+ freeStmt :+ debugStmt))
+        Some(BRuleDef( genParamName(stg) + "_kill", killConds ++ recvConds, deqStmts :+ freeStmt :+ debugStmt))
       }
     }
 
@@ -500,7 +505,8 @@ object BluespecGeneration {
           // isValid(spec) && !fromMaybe(True, check(spec))
         case CCheckSpec(_) =>
           l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
-            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))))          
+            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal))))
+          //also need these in case we're waiting on responses we need to dequeue
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
           if (condconds.nonEmpty) {
@@ -552,27 +558,44 @@ object BluespecGeneration {
           } else {
             l
           }
-        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
-        case IRecv(handle, sender, _) =>
-          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
-        case COutput(_) => if (mod.isRecursive) List(busyReg) else List()
+        case COutput(_) => if (mod.isRecursive) l :+ busyReg else l
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
-        case CCheckSpec(isBlocking) if isBlocking => List(
+        case CCheckSpec(isBlocking) if isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
             BFromMaybe(BBoolLit(false), bsInts.getSpecCheck(specTable, getSpecIdVal))
           )
         )
           //Execute if check(specid) != Valid(False)
           //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
-        case CCheckSpec(isBlocking) if !isBlocking => List(
+        case CCheckSpec(isBlocking) if !isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
-              BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal))
+              BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal))
           )
         )
         case ICondCommand(cond, cs) =>
           val condconds = getBlockingConds(cs)
+          if (condconds.nonEmpty) {
+            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
+              BBOp("&&", exp, n)
+            })
+            val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
+            l :+ newCond
+          } else {
+            l
+          }
+        case _ => l
+      })
+    }
+
+    private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
+      cmds.foldLeft(List[BExpr]())((l, c) => c match {
+        case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle))
+        case IRecv(handle, sender, _) =>
+          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
+        case ICondCommand(cond, cs) =>
+          val condconds = getRecvConds(cs)
           if (condconds.nonEmpty) {
             val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
               BBOp("&&", exp, n)
@@ -689,8 +712,15 @@ object BluespecGeneration {
       //Body instantiates all of the params (fifos & memories) and then all of the stages
       //One fifo per edge in the graph
 
+      //start fifo uses our 'nonblocking' queue impl
+      val startEdge = firstStage.inEdges.head
+      val startFifo = BModInst(edgeParams(startEdge), bsInts.getNBFifo)
       val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
-        m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
+        if (e != startEdge) {
+          m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
+        } else {
+          m
+        }
       })
 
       //Instantiate a lock regions for each memory:
@@ -713,7 +743,7 @@ object BluespecGeneration {
         bsInts.getReg(BZero))
       //Instantiate the speculation table if the module is speculative
       val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
-      var stmts: List[BStatement] = edgeFifos.values.toList ++ memRegions.values.toList
+      var stmts: List[BStatement] = startFifo +: (edgeFifos.values.toList ++ memRegions.values.toList)
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
@@ -953,9 +983,9 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
-      case IMemSend(handle, isWrite, mem: Id, data: Option[EVar], addr: EVar) => Some(
+      case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar) => Some(
         BInvokeAssign(translator.toVar(handle),
-          bsInts.getMemReq(modParams(mem), isWrite, translator.toExpr(addr),
+          bsInts.getMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
             data.map(e => translator.toExpr(e)))
       ))
       //This is an effectful op b/c is modifies the mem queue its reading from
@@ -1025,7 +1055,7 @@ object BluespecGeneration {
         } else { None }
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
-      case CPrint(evar) => Some(BDisplayVar(translator.toVar(evar)))
+      case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))
       case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None

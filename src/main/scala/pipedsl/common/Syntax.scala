@@ -145,7 +145,10 @@ object Syntax {
   case class NumUOp(op: String) extends UOp
   case class BitUOp(op: String) extends UOp
 
+  def NegOp(): NumUOp = NumUOp("-")
   def NotOp(): BoolUOp = BoolUOp("!")
+  def MagOp(): NumUOp = NumUOp("abs")
+  def SignOp(): NumUOp = NumUOp("signum")
   def AndOp(e1: Expr,e2: Expr): EBinop = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
   def OrOp(e1: Expr, e2: Expr): EBinop = EBinop(BoolOp("||", OpConstructor.or), e1, e2)
   def EqOp(e1: Expr, e2: Expr): EBinop = EBinop(EqOp("=="), e1, e2)
@@ -209,7 +212,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr) extends Expr with LockInfoAnnotation
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None) extends Expr with LockInfoAnnotation
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
@@ -232,7 +235,7 @@ object Syntax {
   case class CCheckSpec(isBlocking: Boolean) extends Command
   case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr]) extends Command
   case class CInvalidate(handle: EVar) extends Command
-  case class CPrint(evar: EVar) extends Command
+  case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
@@ -251,7 +254,10 @@ object Syntax {
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   //TODO Clean up what actually needs the lock info annotation
-  case class IMemSend(handle: EVar, isWrite: Boolean, mem: Id, data: Option[EVar], addr: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IMemSend(handle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar)
+    extends InternalCommand with LockInfoAnnotation {
+    def isWrite: Boolean = data.isDefined
+  }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately
 

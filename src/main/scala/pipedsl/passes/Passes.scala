@@ -13,6 +13,10 @@ object Passes {
     def run(m: ModuleDef): T
   }
 
+  trait FunctionPass[T] {
+    def run(f: FuncDef): T
+  }
+
   trait CommandPass[T] {
     def run(c: Command): T
   }

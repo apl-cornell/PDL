@@ -1,0 +1,112 @@
+PC: 0000
+INSN: 05c000ef
+Writing           4 to r 1
+PC: 005c
+INSN: ff010113
+Writing        1008 to r 2
+PC: 0060
+INSN: 00112623
+PC: 0064
+INSN: 00c00593
+Writing          12 to r11
+PC: 0068
+INSN: 04200513
+Writing          66 to r10
+PC: 006c
+INSN: fa5ff0ef
+Writing         112 to r 1
+PC: 0010
+INSN: fe010113
+Writing         976 to r 2
+PC: 0014
+INSN: 00a12623
+PC: 0018
+INSN: 00b12423
+PC: 001c
+INSN: 00012e23
+PC: 0020
+INSN: 0240006f
+PC: 0044
+INSN: 00812783
+Writing          12 to r15
+PC: 0048
+INSN: fc079ee3
+PC: 0024
+INSN: 00812783
+Writing          12 to r15
+PC: 0028
+INSN: 00f12e23
+PC: 002c
+INSN: 00c12703
+Writing          66 to r14
+PC: 0030
+INSN: 00812783
+Writing          12 to r15
+PC: 0034
+INSN: 02f767b3
+Writing           6 to r15
+PC: 0038
+INSN: 00f12423
+PC: 003c
+INSN: 01c12783
+Writing          12 to r15
+PC: 0040
+INSN: 00f12623
+PC: 0044
+INSN: 00812783
+Writing           6 to r15
+PC: 0048
+INSN: fc079ee3
+PC: 0024
+INSN: 00812783
+Writing           6 to r15
+PC: 0028
+INSN: 00f12e23
+PC: 002c
+INSN: 00c12703
+Writing          12 to r14
+PC: 0030
+INSN: 00812783
+Writing           6 to r15
+PC: 0034
+INSN: 02f767b3
+Writing           0 to r15
+PC: 0038
+INSN: 00f12423
+PC: 003c
+INSN: 01c12783
+Writing           6 to r15
+PC: 0040
+INSN: 00f12623
+PC: 0044
+INSN: 00812783
+Writing           0 to r15
+PC: 0048
+INSN: fc079ee3
+PC: 004c
+INSN: 00c12783
+Writing           6 to r15
+PC: 0050
+INSN: 00078513
+Writing           6 to r10
+PC: 0054
+INSN: 02010113
+Writing        1008 to r 2
+PC: 0058
+INSN: 00008067
+PC: 0070
+INSN: 00050793
+Writing           6 to r15
+PC: 0074
+INSN: 00078513
+Writing           6 to r10
+PC: 0078
+INSN: 00c12083
+Writing           4 to r 1
+PC: 007c
+INSN: 01010113
+Writing        1024 to r 2
+PC: 0080
+INSN: 00008067
+PC: 0004
+INSN: 0000006f

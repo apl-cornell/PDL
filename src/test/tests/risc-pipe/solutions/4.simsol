@@ -1,0 +1,35 @@
+PC: 0000
+INSN: 010000ef
+Writing           4 to r 1
+PC: 0010
+INSN: ff010113
+Writing        1008 to r 2
+PC: 0014
+INSN: fb500793
+Writing         -75 to r15
+PC: 0018
+INSN: 00f12623
+PC: 001c
+INSN: 01700793
+Writing          23 to r15
+PC: 0020
+INSN: 00f12423
+PC: 0024
+INSN: 00c12703
+Writing         -75 to r14
+PC: 0028
+INSN: 00812783
+Writing          23 to r15
+PC: 002c
+INSN: 02f757b3
+Writing   186737705 to r15
+PC: 0030
+INSN: 00078513
+Writing   186737705 to r10
+PC: 0034
+INSN: 01010113
+Writing        1024 to r 2
+PC: 0038
+INSN: 00008067
+PC: 0004
+INSN: 0000006f

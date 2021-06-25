@@ -1,8 +1,8 @@
 pipe ex4(inarg: int<32>)[rf: int<32>[5]] :int<32> {
 
     start(rf);
-    int<5> a1 = 0<5>;
-    int<5> a2 = 1<5>;
+    uint<5> a1 = u0<5>;
+    uint<5> a2 = u1<5>;
     bool b1 = cast(inarg{0:0} == 1, bool);
     bool b2 = cast(inarg{1:1} == 1, bool);
     reserve(rf[a2], R);

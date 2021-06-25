@@ -60,14 +60,14 @@ dummy2]: bool {
  }
  start(imem);
  acquire(imem);
- int<32> insn <- imem[pc];
+ int<32> insn <- imem[cast(pc, uint<16>)];
  release(imem);
  end(imem);
  ---
- int<2> op = insn{1:0};
- int<5> rs1 = insn{6:2};
- int<5> rs2 = insn{11:7};
- int<5> rd = insn{16:12};
+ uint<2> op = cast(insn{1:0}, uint<2>);
+ uint<5> rs1 = cast(insn{6:2}, uint<5>);
+ uint<5> rs2 = cast(insn{11:7}, uint<5>);
+ uint<5> rd = cast(insn{16:12}, uint<5>);
  start(rf);
  acquire(rf[rs1], R);
  acquire(rf[rs2], R);
@@ -79,12 +79,12 @@ dummy2]: bool {
  end(rf);
  ---
  split {
-    case: (op == 0<2>) {
+    case: (op == u0<2>) {
         split {
-            case: (rs1 % 3<5> == 0<5>) {
+            case: (rs1 % u3<5> == u0<5>) {
                 int<32> res <- rf1 + rf2;
             }
-            case: (rs1 % 3<5> == 1<5>) {
+            case: (rs1 % u3<5> == u1<5>) {
                 int<32> res <- rf1 - rf2;
             }
             default: {
@@ -92,12 +92,12 @@ dummy2]: bool {
             }
         }
     }
-    case: (op == 1<2>) {
+    case: (op == u1<2>) {
         split {
-            case: (rs2 % 3<5> == 0<5>) {
+            case: (rs2 % u3<5> == u0<5>) {
                 int<32> res <- call f(rf1, rf2, 0<32>, 0<32>, 0<5>);
             }
-            case: (rs2 % 3<5> == 1<5>){
+            case: (rs2 % u3<5> == u1<5>){
                 int<32> res <- rf1 >> rf2;
             }
             default: {
@@ -107,7 +107,7 @@ dummy2]: bool {
         }
     }
     default: {
-        if(op % 2<2> == 0<2>) {
+        if(op % u2<2> == u0<2>) {
             int<32> res <- call d(rf1, rf2);
         } else {
             int<32> res <- call d2(rf1, rf2);
