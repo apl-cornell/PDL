@@ -8,7 +8,8 @@ module RenameRF(CLK,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //rename req
 		ADDR_1, NAME_OUT_1,         //read name 1
 		ADDR_2, NAME_OUT_2,         //read name 2
-		NAME_IN, D_IN, WE,             //write data
+		NAME_IN_1, D_IN_1, WE_1,             //write data 1
+		NAME_IN_2, D_IN_2, WE_2,             //write data 2		
 		NAME_1, D_OUT_1,            //read data 1
 		NAME_2, D_OUT_2,            //read data 2
 		VALID_NAME_1, VALID_OUT_1,    //check valid data 1
@@ -41,9 +42,12 @@ module RenameRF(CLK,
    output [name_width - 1 : 0] NAME_OUT_2;
    
    //data read/write
-   input [name_width - 1 : 0] NAME_IN;
-   input [data_width - 1 : 0] D_IN;
-   input 		      WE;
+   input [name_width - 1 : 0] NAME_IN_1;
+   input [data_width - 1 : 0] D_IN_1;
+   input 		      WE_1;
+   input [name_width - 1 : 0] NAME_IN_2;
+   input [data_width - 1 : 0] D_IN_2;
+   input 		      WE_2;   
    input [name_width - 1 : 0] NAME_1;
    input [name_width - 1 : 0] NAME_2;
 
@@ -161,11 +165,16 @@ module RenameRF(CLK,
 	       old[nextName] <= `BSV_ASSIGNMENT_DELAY names[ADDR_IN];
 	       names[ADDR_IN] <= `BSV_ASSIGNMENT_DELAY nextName;	     
 	    end
-	  if (WE)
+	  if (WE_1)
 	    begin
-	       phys[NAME_IN] <= `BSV_ASSIGNMENT_DELAY D_IN;
-	       busy[NAME_IN] <= `BSV_ASSIGNMENT_DELAY 0;	     
+	       phys[NAME_IN_1] <= `BSV_ASSIGNMENT_DELAY D_IN_1;
+	       busy[NAME_IN_1] <= `BSV_ASSIGNMENT_DELAY 0;	     
 	    end
+	  if (WE_2)
+	    begin
+	       phys[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY D_IN_2;
+	       busy[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY 0;	     
+	    end	  
 	  if (FE)
 	    begin
 	       free[oldName] <= `BSV_ASSIGNMENT_DELAY 1;	     

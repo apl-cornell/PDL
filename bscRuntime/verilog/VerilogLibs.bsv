@@ -40,7 +40,7 @@ import "BVI" RenameRF =
     method VALID_OUT isValid[2] (VALID_NAME);
     method D_OUT read[2] (NAME);
     method NAME_OUT allocName(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-    method write(NAME_IN, D_IN) enable(WE);
+    method write[2] (NAME_IN, D_IN) enable(WE);
     method commit(NAME_F) enable(FE);
     
        schedule (readName) CF (readName);
@@ -51,8 +51,7 @@ import "BVI" RenameRF =
        schedule (read) CF (allocName, write, commit);
        schedule (allocName) C (allocName);
        schedule (allocName) CF (write, commit);
-       schedule (write) C (write);
-       schedule (write) CF (commit);
+       schedule (write) CF (write, commit);
        schedule (commit) C (commit);
     
  endmodule
