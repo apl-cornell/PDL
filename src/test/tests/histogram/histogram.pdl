@@ -21,18 +21,19 @@ pipe hist(counter: uint<10>)[feature: uint<16>[10]<c,s>(FAQueue), weight: uint<3
         start(weight);
         acquire(weight[counter], R);
         end(weight);
-        uint<10> m = feature[counter];
+        uint<16> m = feature[counter];
+	uint<10> m1 = m{9:0};	
         uint<32> wt = weight[counter];
         release(feature[counter]);
         release(weight[counter]);
         ---
-        uint<10> mcp = m;
+        uint<10> mcp = m1;
         start(h);
-        acquire(h[m], R);
+        acquire(h[m1], R);
         acquire(h[mcp], W);
         end(h);
-        uint<32> nm = h[m] + wt;
-        release(h[m]);
+        uint<32> nm = h[m1] + wt;
+        release(h[m1]);
         print(nm);
         ---
         h[mcp] <- nm;
