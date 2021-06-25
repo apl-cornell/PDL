@@ -31,6 +31,10 @@ object Syntax {
     sealed trait SMTPredicate {
       var predicateCtx: Option[BoolExpr] = None
     }
+    sealed trait PortAnnotation
+    {
+      var portNum :Option[Int] = None
+    }
   }
 
   object Latency extends Enumeration {
@@ -181,7 +185,7 @@ object Syntax {
   case class NumOp(op: String, fun: (Int, Int) => Int) extends BOp
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
-  sealed trait Expr extends Positional with TypeAnnotation {
+  sealed trait Expr extends Positional with TypeAnnotation with PortAnnotation {
     def isLVal = this match {
       case _:EVar => true
       case _:EMemAccess => true
@@ -218,7 +222,7 @@ object Syntax {
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
 
-  sealed trait Command extends Positional with SMTPredicate
+  sealed trait Command extends Positional with SMTPredicate with PortAnnotation
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
