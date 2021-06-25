@@ -19,6 +19,7 @@ pipe test22(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
     int<32> x <- rf[input{4:0}];
     release(rf);
     ---
+    call test22(input, randomBool, randomBool2);
 }
 
 circuit {

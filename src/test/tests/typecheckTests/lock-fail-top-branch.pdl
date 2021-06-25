@@ -11,6 +11,7 @@ pipe test16(input: int<32>)[rf: int<32>[5]] {
     }
     release(rf);
     end(rf);
+    call test16(input);
 }
 circuit {
     r = memory(int<32>, 5);

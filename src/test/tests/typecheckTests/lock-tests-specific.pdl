@@ -10,6 +10,7 @@ pipe test1(input: int<32>)[rf: int<32>[5]] {
     release(rf[rs1]);
     release(rf[rs2]);
     end(rf);
+    call test1(input);
 } 
 
 //Expected Success
@@ -26,6 +27,7 @@ pipe test2(input: int<32>)[rf: int<32>[5]] {
     int<32> arg2 <- rf[rs2];
     end(rf);
     release(rf[rs2]);
+    call test2(input);
 }
 
 //Expected success
@@ -40,6 +42,7 @@ pipe test4(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
         release(rf[rs2]);
         end(rf);
     }
+    call test4(input);
     start(dmem);
     acquire(dmem);
     end(dmem);
@@ -66,6 +69,7 @@ pipe test5(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] 
     }
     release(rf[rs2]);
     end(rf);
+    call test5(input, randomBool2, randomBool);
 }
 circuit {
     r = memory(int<32>, 5);

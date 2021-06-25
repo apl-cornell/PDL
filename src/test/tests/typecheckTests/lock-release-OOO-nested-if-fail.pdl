@@ -19,6 +19,7 @@ pipe test3(input: int<32>)[rf: int<32>[5]] {
     if(a && !b) {
         release(rf[rs1]);
     }
+    call test3(input);
 }
 
 circuit {

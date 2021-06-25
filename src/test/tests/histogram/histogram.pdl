@@ -10,8 +10,10 @@ void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
 }
 */
 
-pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>(FAQueue), weight: int<32>[10]<c,s>(FAQueue), h: int<32>[10]<c,s>(FAQueue)]: bool {
-    if (counter < 1000<10>) {
+pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>(FAQueue), weight:
+int<32>[10]<c,s>(FAQueue), h: int<32>[10]<c,s>(FAQueue)]: bool {
+    bool done = counter >= 1000<10>;
+    if (!done) {
         call hist(counter + 1<10>);
         start(feature);
         acquire(feature[counter], R);
@@ -37,7 +39,7 @@ pipe hist(counter: int<10>)[feature: int<10>[10]<c,s>(FAQueue), weight: int<32>[
         release(h[mcp]);
         ---
      }
-     if (counter >= 1000<10>) {
+     if (done) {
      	output(true);
      }
    }
