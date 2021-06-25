@@ -1,11 +1,11 @@
 //Expected Fail
-pipe test3(input: int<32>)[rf: int<32>[5]] {
-    int<5> rs1 = input{0:4};
-    int<5> rs2 = input{5:9};
+pipe test3(input: uint<32>)[rf: int<32>[5]] {
+    uint<5> rs1 = input{0:4};
+    uint<5> rs2 = input{5:9};
     bool a = rs1 == rs2;
-    bool b = rs1 + 5<5> == rs2 + 5<5>;
-    bool c = rs1 + 6<5> == rs2 + 6<5>;
-    bool d = rs1 + 7<5> == rs2 + 7<5>;
+    bool b = rs1 + u5<5> == rs2 + u5<5>;
+    bool c = rs1 + u6<5> == rs2 + u6<5>;
+    bool d = rs1 + u7<5> == rs2 + u7<5>;
 
     start(rf);
     acquire(rf[rs1],R);
@@ -39,6 +39,7 @@ pipe test3(input: int<32>)[rf: int<32>[5]] {
         }
     }
     release(rf[rs1]);
+    call test3(input);
 }
 
 circuit {

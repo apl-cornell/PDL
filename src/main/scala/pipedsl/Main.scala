@@ -1,7 +1,5 @@
 package pipedsl
 
-import com.microsoft.z3.Context
-
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.typesafe.scalalogging.Logger
@@ -67,7 +65,7 @@ object Main {
     val pinfo = new ProgInfo(prog)
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
-      val canonProg = CanonicalizePass.run(verifProg)
+      val canonProg = new CanonicalizePass().run(verifProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
@@ -84,6 +82,8 @@ object Main {
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
+      val linChecker = new LinearExecutionChecker(ctx)
+      linChecker.check(recvProg, None)
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
       if (printOutput) {

@@ -125,7 +125,8 @@ class Interpreter(val maxIterations: Int) {
                         }
                     }
                 }
-                case EMemAccess(mem, index) => {
+                case EMemAccess(mem, index, m) => {
+                    //TODO use mask properly
                     val memArray = memoryEnv(mem)
                     val idx = interp_expr(index, env)
                     memArray(idx.asInstanceOf[Int]) = rval.asInstanceOf[Int]

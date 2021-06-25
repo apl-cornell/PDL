@@ -3,7 +3,7 @@ pipe test(inarg: int<32>)[rf: int<32>[5]] {
     acquire(rf);
     end(rf);
     if (inarg{0:0} == 1) {
-        rf[inarg{4:0}] <- inarg;
+        rf[cast(inarg{4:0},uint<5>)] <- inarg;
         ---
         int<32> y = inarg;
         ---

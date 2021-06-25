@@ -28,7 +28,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     val startedReg = startedRegInst.lhs
     val initCond = BUOp("!", startedReg)
     val setStartReg = BModAssign(startedReg, BBoolLit(true))
-    val debugStart = if (debug) { BDisplay("Starting Pipeline %t", List(BTime)) } else BEmpty
+    val debugStart = if (debug) { BDisplay(Some("Starting Pipeline %t"), List(BTime)) } else BEmpty
     val initRule = BRuleDef(
       name = "initTB",
       conds = List(initCond),
@@ -71,6 +71,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val regType = "Reg"
 
   private val fifoModuleName = "mkFIFOF"
+  private val fifoNBModuleName = "mkNBFIFOF"
   private val fifoType = "FIFOF"
   private val fifoDequeuMethodName = "deq"
   private val fifoEnqueueMethodName = "enq"
@@ -145,12 +146,15 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val combMemType = "RegFile"
   private val combMemMod = "mkRegFile"
 
+  val reqIdName = "ridtyp"
 
-  def getBaseMemType(isAsync: Boolean, addr: BSVType, data: BSVType): BInterface = {
+  def getBaseMemType(isAsync: Boolean, elemSize: Int, addr: BSVType, data: BSVType): BInterface = {
     if (isAsync) {
       //TODO make this type parameterizable
       val reqTyp = getDefaultMemHandleType
-      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data), BVar("ridtyp", reqTyp)))
+      val maskSize = elemSize / 8
+      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
+        BVar(reqIdName, reqTyp), BVar("nsz", BNumericType(maskSize))))
     } else {
       BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
     }
@@ -164,13 +168,22 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
+
   private val memCombReadName = "read"
   private val memCombWriteName = "write"
+  private val memAsyncPeekName = "mem.peekResp"
+  private val memAsyncReqName = "mem.req"
+  private val memAsyncRespName = "mem.resp"
+  private val memAsyncCheckName = "mem.checkRespId"
 
-  private val memAsyncPeekName = "peekResp"
-  private val memAsyncReqName = "req"
-  private val memAsyncRespName = "resp"
-  private val memAsyncCheckName = "checkRespId"
+  def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
+    val default = if (isWrite) { BAllOnes } else { BZero }
+    if (m.isDefined) {
+      BPack(m.get) //make it bits
+    } else {
+      default
+    }
+  }
 
   def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memAsyncPeekName, List(handle))
@@ -181,8 +194,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombWriteName, List(addr, data))
   }
-  def getMemReq(mem: BVar, isWrite: Boolean, addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, BBoolLit(isWrite)))
+  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+    val isWrite = data.isDefined
+    val mask = toMask(isWrite, writeMask)
+    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, mask))
   }
   def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memAsyncCheckName, List(handle))
@@ -203,7 +218,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
 
   def getFifo: BModule = BModule(fifoModuleName, List())
-
+  def getNBFifo: BModule = BModule(fifoNBModuleName, List())
   def getFifoDeq(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoDequeuMethodName, List())
   }
@@ -220,6 +235,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
   private val specCheckName = "check"
+  private val specNBCheckName = "nbcheck"
   private val specFreeName = "free"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
@@ -240,6 +256,9 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   }
   def getSpecCheck(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specCheckName, List(h))
+  }
+  def getNBSpecCheck(st: BVar, h: BExpr): BExpr = {
+    BMethodInvoke(st, specNBCheckName, List(h))
   }
   def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))

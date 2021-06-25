@@ -355,15 +355,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       checkExpression(exp, tenv, None)
       tenv
     }
-    case CPrint(evar) => {
-      val (t, _) = checkExpression(evar, tenv, None)
-      t match {
-        case TSizedInt(_, _) => tenv
-        case TString() => tenv
-        case TBool() => tenv
-        case _ => throw UnexpectedType(evar.pos, evar.toString, "Need a printable type", t)
-      }
-    }
+    case CPrint(args) =>
+      args.foreach(a => {
+        val (t, _) = checkExpression(a, tenv, None)
+        t match {
+          case TSizedInt(_, _) => tenv
+          case TString() => tenv
+          case TBool() => tenv
+          case _ => throw UnexpectedType(a.pos, a.toString, "Need a printable type", t)
+        }
+      })
+      tenv
     case CEmpty() => tenv
     case _ => throw UnexpectedCommand(c)
   }
@@ -379,8 +381,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def _checkE(e: Expr, tenv: Environment[Id, Type], defaultType: Option[Type]): (Type, Environment[Id, Type] ) = e match {
-    case EInt(v, base, bits) =>
-      (TSizedInt(bits, unsigned = true), tenv)
+    case e1@EInt(_, _, bits) =>
+      if (e1.typ.isDefined) { (e1.typ.get, tenv) }
+      else { (TSizedInt(bits, unsigned = false), tenv) }
     case EBool(v) => (TBool(), tenv)
     case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
@@ -434,12 +437,22 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ftyps = fields map { case (n, e) => (n, checkExpression(e, tenv, None)._1) }
       (TRecType(Id("anon"), ftyps) , tenv)//TODO these are wrong, maybe just remove these
     }
-    case EMemAccess(mem, index) => {
+    case EMemAccess(mem, index, wm) => {
       val memt = tenv(mem)
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
-        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s => (e, env1)
+        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s =>
+          if (wm.isDefined) {
+            val (wmt, _) = checkExpression(wm.get, tenv, None)
+            wmt match {
+              //TODO check that the mask size is correct (i.e., length of elemtype / 8)
+              case TSizedInt(lm, true) => ()
+              case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
+                " to the number of bytes in the element type", wmt)
+            }
+          }
+          (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     }
@@ -509,23 +522,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
       case None => id.typ = defaultType; (defaultType.get, tenv)
     }
-    //TODO some other rules for casting
-    case ECast(ctyp, exp) =>
+    case ECast(totyp, exp) =>
       val (etyp, tenv2) = checkExpression(exp, tenv, None)
-      (ctyp, etyp) match {
-        case (t1, t2) if !areEqual(t1, t2) => throw IllegalCast(e.pos, t1, t2)
-        case _ => ()
-      }
-      (ctyp, tenv2)
+       if (!canCast(etyp, totyp)) throw IllegalCast(e.pos, totyp, etyp)
+      (totyp, tenv2)
     case _ => throw UnexpectedCase(e.pos)
   }
 
-  //Returns all variables which could cause the first pipeline stage
-  //to start speculatively
-  def getSpeculativeVariables(c: Command): Set[Id] = c match {
-    case CSeq(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
-    case CTBar(c1, c2) => getSpeculativeVariables(c1) ++ getSpeculativeVariables(c2)
-    case CIf(_, cons, alt) => getSpeculativeVariables(cons) ++ getSpeculativeVariables(alt)
-    case _ => Set()
-  }
 }

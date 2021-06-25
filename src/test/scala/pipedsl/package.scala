@@ -66,20 +66,24 @@ package object pipedsl {
     assert(exit == 0)
   }
 
-  def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
+  def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String], simFile: Option[String] = None): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
     Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit)
     val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath + " " + FilenameUtils.getBaseName(inputFile.getName) + ".sim").!
-    val success = exit == 0 && compareFiles(testDir, inputFile, "sim")
+    val success = exit == 0 && compareFiles(testDir, inputFile, "sim", simFile)
     deleteGeneratedFiles(testDir)
     deleteBSVFiles(testDir, memInit)
     assert(success)
   }
 
-  def compareFiles(testDir: File, inputFile: File, fileExtension: String): Boolean = {
+  def compareFiles(testDir: File, inputFile: File, fileExtension: String, solName: Option[String] = None): Boolean = {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + "." + fileExtension
     val outputFile = new File(Paths.get(testDir.getAbsolutePath, outputName).toString)
-    val expected = new File(Paths.get(testDir.getAbsolutePath, "solutions", outputName + "sol").toString)
+    val expected = if (solName.isDefined) {
+      new File(Paths.get(testDir.getAbsolutePath, "solutions", solName.get).toString)
+    } else {
+      new File(Paths.get(testDir.getAbsolutePath, "solutions", outputName + "sol").toString)
+    }
     return FileUtils.contentEqualsIgnoreEOL(outputFile, expected, null);
   }
 

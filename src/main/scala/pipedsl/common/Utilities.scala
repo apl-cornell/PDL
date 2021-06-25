@@ -1,6 +1,7 @@
 package pipedsl.common
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
+import com.sun.org.apache.xpath.internal.Expression
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Syntax._
@@ -63,7 +64,7 @@ object Utilities {
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
-    case CPrint(evar) => Set(evar.id)
+    case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
     case IUpdate(specId,value,originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty() => Set()
@@ -109,7 +110,7 @@ object Utilities {
       cases.foldLeft(getUsedVars(default))((v, c) => {
         v ++ getUsedVars(c.cond) ++ getUsedVars(c.body)
       })
-    case CPrint(evar) => Set(evar.id)
+    case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
     case CAssign(_, rhs) => getUsedVars(rhs)
     case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
@@ -123,10 +124,11 @@ object Utilities {
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
-    case IMemSend(_, _, _, data, addr) =>
-      if (data.isDefined) {
+    case IMemSend(_, writeMask, _, data, addr) =>
+      val dataSet = if (data.isDefined) {
         Set(data.get.id, addr.id)
       } else Set(addr.id)
+      dataSet ++ (if (writeMask.isDefined) { getUsedVars(writeMask.get) } else { Set() })
     case IMemRecv(_, handle, _) => Set(handle.id)
     case IMemWrite(_, addr, data) => Set(addr.id, data.id)
     case IRecv(handle, _, _) => Set(handle.id)
@@ -168,7 +170,8 @@ object Utilities {
     case EUop(_, ex) => getUsedVars(ex)
     case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, _) => getUsedVars(rec)
-    case EMemAccess(_, index) => getUsedVars(index) //memories aren't variables, they're externally defined
+    case EMemAccess(_, index, mask) => (if (mask.isDefined) getUsedVars(mask.get) else Set()) ++
+      getUsedVars(index) //memories aren't variables, they're externally defined
     case EBitExtract(num, _, _) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
@@ -305,6 +308,11 @@ object Utilities {
   /** Like [[Z3Context.mkAnd]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkAnd(ctx: Z3Context, expressions: Z3AST *): Z3BoolExpr =
     ctx.mkAnd(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
+
+  /** Like [[Z3Context.mkOr]], but automatically casts inputs to
+   * [[Z3BoolExpr]]s. */
+  def mkOr(ctx : Z3Context, expressions: Z3AST *): Z3BoolExpr =
+    ctx.mkOr(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
 
   /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =

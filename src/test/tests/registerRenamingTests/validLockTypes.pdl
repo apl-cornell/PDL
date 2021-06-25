@@ -1,7 +1,7 @@
 //Expected Success
-pipe test1(tinput: int<32>)[rf: int<32>[5]] {
-    int<5> rs1 = tinput{4:0};
-    int<5> rs2 = tinput{9:5};
+pipe test1(tinput: uint<32>)[rf: int<32>[5]] {
+    uint<5> rs1 = tinput{4:0};
+    uint<5> rs2 = tinput{9:5};
     start(rf);
     acquire(rf[rs1], R);
     int<32> arg1 <- rf[rs1];
@@ -11,14 +11,15 @@ pipe test1(tinput: int<32>)[rf: int<32>[5]] {
     release(rf[rs2]);
     end(rf);
     ---
+    call test1(tinput);
 }
 
 //Expected Success
-pipe test2(tinput: int<32>)[rf: int<32>[5]] {
-    int<5> rs1 = tinput{4:0};
-    int<5> rs2 = tinput{9:5};
+pipe test2(tinput: uint<32>)[rf: int<32>[5]] {
+    uint<5> rs1 = tinput{4:0};
+    uint<5> rs2 = tinput{9:5};
     start(rf);
-    if (tinput{0:0} == 1) {
+    if (tinput{0:0} == u1) {
         acquire(rf[rs1], R);
         int<32> x <- rf[rs1];
         release(rf[rs1]);
@@ -28,16 +29,18 @@ pipe test2(tinput: int<32>)[rf: int<32>[5]] {
     end(rf);
     release(rf[rs2]);
     ---
+    call test2(tinput);
 }
 
-pipe test3(tinput: int<32>)[rf: int<32>[5]<c,s>] {
-    int<5> rs1 = tinput{4:0};
-    int<5> rs2 = tinput{9:5};
+pipe test3(tinput: uint<32>)[rf: int<32>[5]<c,s>] {
+    uint<5> rs1 = tinput{4:0};
+    uint<5> rs2 = tinput{9:5};
     start(rf);
     acquire(rf[rs2], R);
     end(rf);
     int<32> arg2 = rf[rs2] + 4<32>;
     release(rf[rs2]);
+    call test3(tinput);
 }
 
 circuit {

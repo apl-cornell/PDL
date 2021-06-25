@@ -80,10 +80,11 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       val lhsLat = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
         //TODO rewrite to reduce code maybe?
-        case (EVar(id), EMemAccess(_, _)) => (vars, nextVars + id)
+        case (EVar(id), EMemAccess(_, _, _)) => (vars, nextVars + id)
         case (EVar(id), ECall(_,_)) => (vars, nextVars + id)
         case (EVar(id), _) => (vars, nextVars + id)
-        case (EMemAccess(_,_), EMemAccess(_,_)) => throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
+        case (EMemAccess(_,_, _), EMemAccess(_,_, _)) =>
+          throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
         case _ => (vars, nextVars)
       }
     case CLockStart(_) => (vars, nextVars)
@@ -131,8 +132,10 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       checkExpr(exp, vars)
       (vars, nextVars)
     case Syntax.CEmpty() => (vars, nextVars)
-    case CPrint(evar) => 
-      checkExpr(evar, vars)
+    case CPrint(args) =>
+      args.foreach(a => {
+        checkExpr(a, vars)
+      })
       (vars, nextVars)
     case _ => throw UnexpectedCommand(c)
   }
@@ -152,14 +155,21 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case Combinational => Combinational
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
-    case EMemAccess(m, index) => m.typ.get match {
+    case EMemAccess(m, index, wm) => m.typ.get match {
       case TLockedMemType(TMemType(_, _, rLat, wLat),_,_) =>
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)
+        if (wm.isDefined) {
+          checkExpr(wm.get, vars, isRhs) match {
+            case Combinational => ()
+            case _ => throw UnexpectedAsyncReference(wm.get.pos, wm.get.toString)
+          }
+        }
         indexExpr match {
           case Combinational => memLat
           case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
         }
+
       case _ => throw UnexpectedType(m.pos, m.v, "Mem Type", m.typ.get)
     }
     case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs) match {

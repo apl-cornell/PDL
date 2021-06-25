@@ -1,0 +1,20 @@
+//Expected Success
+pipe signtest(input: int<8>)[]: bool {
+    int<8> x = input + 1<8>;
+    bool a = x > -1<8>;
+    print(a);
+    bool b = cast(x, uint<8>) > cast(-1<8>, uint<8>);
+    print(b);
+    int<16> y = cast(x, int<16>);
+    print(y);
+    uint<8> z = cast(x, uint<8>);
+    print(z);
+    uint<16> zz = cast(z, uint<16>);
+    print(zz);
+    output(true);
+}
+
+circuit {
+    s = new signtest[];
+    call s(0<8>);
+}

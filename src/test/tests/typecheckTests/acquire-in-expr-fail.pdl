@@ -4,10 +4,11 @@ pipe test6(input: int<32>)[rf: int<32>[5]<c,s>] {
     reserve(rf);
     end(rf);
     ---
-    int<32> x = rf[0<5>] + input;
+    int<32> x = rf[u0<5>] + input;
     ---
     block(rf);
     release(rf);
+    call test6(input);
 }
 
 circuit {

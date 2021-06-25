@@ -90,11 +90,13 @@ object BSVPrettyPrinter {
       mkExprString(typ.name, "{", fieldStr, "}")
     case BPack(e) => mkExprString("pack(", toBSVExprStr(e), ")")
     case BUnpack(e) => mkExprString("unpack(", toBSVExprStr(e), ")")
+    case BExtend(e, useSign) => mkExprString(
+      if (useSign) "signExtend(" else "zeroExtend(", toBSVExprStr(e), ")")
+    case BTruncate(e) => mkExprString("truncate(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
-    case BBOp(op, lhs, rhs) if op == "*" => mkExprString(
-      "unsignedMul(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs),")")
-    case BBOp(op, lhs, rhs) => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix) if isInfix => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix) if !isInfix => mkExprString( op + "(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
     //TODO incorporate bit types into the typesystem properly
     //and then remove the custom pack/unpack operations
@@ -118,6 +120,7 @@ object BSVPrettyPrinter {
     case BDontCare => "?"
     case BZero => "0"
     case BOne => "1"
+    case BAllOnes => "'1"
     case BTime => "$time()"
   }
 
@@ -208,7 +211,9 @@ object BSVPrettyPrinter {
           decIndent()
           w.write(mkIndentedExpr("end\n"))
         }
-      case BDisplay(fmt, args) => w.write(mkStatementString("$display(\"" + fmt + "\",",
+      case BDisplay(fmt, args) if fmt.isDefined => w.write(mkStatementString("$display(\"" + fmt.get + "\",",
+        args.map(a => toBSVExprStr(a)).mkString(","), ")"))
+      case BDisplay(fmt, args) if fmt.isEmpty => w.write(mkStatementString("$display(",
         args.map(a => toBSVExprStr(a)).mkString(","), ")"))
       case BFinish => w.write(mkStatementString("$finish()"))
       case BDisplayVar(bvar) => w.write(mkStatementString("$display(" + toBSVExprStr(bvar) + ")"))

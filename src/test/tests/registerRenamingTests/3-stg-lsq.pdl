@@ -1,8 +1,9 @@
-pipe test(pc: int<32>)[rf: int<32>[5]<a,a>(LSQ)]: bool {
-    int<5> rs1 = pc{4:0};
-    int<5> rd = rs1 - 1<5>;
-    if (pc < 100<32>) {
-        call test(pc + 1<32>);
+pipe test(pc: uint<32>)[rf: int<32>[5]<a,a>(LSQ)]: bool {
+    uint<5> rs1 = pc{4:0};
+    uint<5> rd = rs1 - u1<5>;
+    bool done = pc >= u100<32>;
+    if (!done) {
+        call test(pc + u1<32>);
 	start(rf);
 	reserve(rf[rs1], R);
         reserve(rf[rd], W);
@@ -20,7 +21,7 @@ pipe test(pc: int<32>)[rf: int<32>[5]<a,a>(LSQ)]: bool {
         release(rf[rd]);
     }
     ---
-    if (pc >= 100<32>) {
+    if (done) {
        output(true);
     }
 }
@@ -29,5 +30,5 @@ circuit {
    m = memory(int<32>, 5);
    lq = LSQ(m);
    t = new test[lq];
-   call t(1<32>);
+   call t(u1<32>);
 }

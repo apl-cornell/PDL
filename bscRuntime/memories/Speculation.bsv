@@ -1,10 +1,14 @@
 package Speculation;
 
 import Vector :: *;
+import ConfigReg :: *;
+import Ehr :: *;
+
 typedef UInt#(TLog#(n)) SpecId#(numeric type n);
 
 interface SpecTable#(type sid);
     method ActionValue#(sid) alloc();
+    method Maybe#(Bool) nbcheck(sid s);   
     method Maybe#(Bool) check(sid s);
     method Action free(sid s);
     method Action validate(sid s);
@@ -13,8 +17,12 @@ endinterface
 
 module mkSpecTable(SpecTable#(SpecId#(entries)));
 
-    Vector#(entries, Reg#(Bool)) inUse <- replicateM(mkReg(False));
-    Vector#(entries, Reg#(Maybe#(Bool))) specStatus <- replicateM(mkReg(tagged Invalid));
+   //Schedule -> INVALIDATE must happen BEFORE NBCheck
+   // but not before BlockingCheck (this prevents combinational loops)
+   //Nothing needs to observe alloc
+
+    Vector#(entries, Reg#(Bool)) inUse <- replicateM(mkConfigReg(False));
+    Vector#(entries, Ehr#(2, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
 
     Reg#(SpecId#(entries)) head <- mkReg(0);
     Bool full = inUse[head];
@@ -41,16 +49,23 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    method ActionValue#(SpecId#(entries)) alloc() if (!full);
         head <= head + 1;
         inUse[head] <= True;
-        specStatus[head] <= tagged Invalid;
+        specStatus[head][1] <= tagged Invalid;
         return head;
     endmethod
 
     //lookup a given entry
-    method Maybe#(Bool) check(SpecId#(entries) s);
+    method Maybe#(Bool) nbcheck(SpecId#(entries) s);
        if (!inUse[s])
 	  return tagged Invalid;
        else
-	  return specStatus[s];
+	  return specStatus[s][1];
+    endmethod
+   
+   method Maybe#(Bool) check(SpecId#(entries) s);
+       if (!inUse[s])
+	  return tagged Invalid;
+       else
+	  return specStatus[s][0];
     endmethod
 
     method Action free(SpecId#(entries) s);
@@ -59,14 +74,14 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
 
     //mark s as valid (correctly speculated)
     method Action validate(SpecId#(entries) s);
-        specStatus[s] <= tagged Valid True;
+        specStatus[s][0] <= tagged Valid True;
     endmethod
 
     //mark s and all newer entries as invalid (misspeculated)
     method Action invalidate(SpecId#(entries) s);
        for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
 	  SpecId#(entries) lv = fromInteger(i);
-	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv] <= tagged Valid False;
+	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv][0] <= tagged Valid False;
        end
     endmethod
 

@@ -73,7 +73,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       sdef
     case CRecv(lhs, _) => lhs match {
         //just match on mem writes
-      case EMemAccess(_, _) => if (s != NonSpeculative)
+      case EMemAccess(_, _, _) => if (s != NonSpeculative)
         throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
       case _ => ()
     }; s

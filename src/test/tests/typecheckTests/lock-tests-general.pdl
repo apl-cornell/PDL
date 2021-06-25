@@ -6,13 +6,14 @@ pipe test2(input: int<32>)[rf: int<32>[5]] {
         release(rf);
     }
     end(rf);
+    call test2(input);
 }
 //Expected Success
 pipe test4(input: int<32>)[rf: int<32>[5]] {
     start(rf);
     if (input{0:0} == 1) {
         acquire(rf);
-        int<32> arg <- rf[input{4:0}];
+        int<32> arg <- rf[cast(input{4:0}, uint<5>)];
         release(rf);
     } else {
         ---
@@ -21,6 +22,7 @@ pipe test4(input: int<32>)[rf: int<32>[5]] {
         release(rf);
     }
     end(rf);
+    call test4(input);
 }
 //Expected Success
 pipe test5(input: int<32>)[rf: int<32>[5]] {
@@ -31,10 +33,11 @@ pipe test5(input: int<32>)[rf: int<32>[5]] {
     if (input{0:0} == 1) {
         release(rf);
     } else {
-        int<32> arg <- rf[input{31:27}];
+        int<32> arg <- rf[cast(input{31:27}, uint<5>)];
         release(rf);
     }
     end(rf);
+    call test5(input);
 }
 //Expected success since reserve is before branch
 pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
@@ -42,14 +45,15 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
     if (input{0:0} == 1) {
         ---
         acquire(rf);
-        int<32> out <- rf[0<5>];
+        int<32> out <- rf[u0<5>];
     } else {
         ---
         acquire(rf);
-        int<32> out <- rf[1<5>];
+        int<32> out <- rf[u1<5>];
     }
+    call test8(input);
     ---
-    rf[2<5>] <- out;
+    rf[u2<5>] <- out;
     release(rf);
     end(rf);
 }
@@ -65,6 +69,7 @@ pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     acquire(dmem);
     release(dmem);
     end(dmem);
+    call test9(input);
 }
 //Expected Success
 pipe test15(input: int<32>)[rf: int<32>[5]] {
@@ -77,6 +82,7 @@ pipe test15(input: int<32>)[rf: int<32>[5]] {
         release(rf);
     }
     end(rf);
+    call test15(input);
 }
 
 //Expected Success
@@ -95,6 +101,7 @@ pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
         }
     }
     end(rf);
+    call test17(input, randomBool2, randomBool);
 }
 
 
@@ -118,6 +125,7 @@ pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
     }
     release(rf);
     end(rf);
+    call test19(input, randomBool2, randomBool);
 }
 
 //ExpectedSuccess
@@ -143,6 +151,7 @@ pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
         }
     }
     end(rf);
+    call test20(input, randomBool2, randomBool);
 }
 
 circuit {

@@ -47,4 +47,9 @@ object Subtypes {
             areEqual(m1, m2) && id1 == id2 && l1 == l2
         case _ => t1 == t2
     }
+
+    def canCast(from: Type, to: Type): Boolean = (from, to) match {
+        case (TSizedInt(_, _), TSizedInt(_, _)) => true
+        case _ => areEqual(from, to)
+    }
 }

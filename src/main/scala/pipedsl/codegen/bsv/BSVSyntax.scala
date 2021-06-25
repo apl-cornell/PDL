@@ -1,7 +1,7 @@
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
-import pipedsl.common.Errors.{UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.Combinational
 import pipedsl.common.Syntax._
@@ -43,16 +43,23 @@ object BSVSyntax {
     def toTypeForMod(t: Type, n: Id): BSVType = t match {
       case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
+        val elemTyp = toType(mem.elem)
         val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
-          BSizedInt(unsigned = true, mem.addrSize), toType(mem.elem))
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp)
         getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
+    def getTypeSize(b: BSVType): Int = b match {
+      case BSizedInt(_, size) => size
+      case _ => throw UnexpectedBSVType("The size of the given BSV Type cannot be determined")
+    }
+
     def toType(t: Type): BSVType = t match {
       case TMemType(elem, addrSize, rlat, _) =>
+        val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
-          BSizedInt(unsigned = true, addrSize), toType(elem))
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
         val lidtyp =  if (limpl.useUniqueLockId()) {
@@ -60,8 +67,8 @@ object BSVSyntax {
             bsints.getLockHandleType(idsz.get)
           } else bsints.getDefaultLockHandleType
         } else {
-          //re-use the id from the memory
-          mtyp.tparams.last.typ
+          //re-use the rid from the memory
+          mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
         getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
@@ -114,7 +121,7 @@ object BSVSyntax {
       case EInt(v, base, bits) => BIntLit(v, base, bits)
       case EBool(v) => BBoolLit(v)
       case EString(v) => BStringLit(v)
-      case EUop(op, ex) => BUOp(op.op, toExpr(ex))
+      case eu@EUop(_, _) => translateUOp(eu)
       case eb@EBinop(_, _, _) => toBSVBop(eb)
       case EBitExtract(num, start, end) =>
           val bnum = toExpr(num)
@@ -128,7 +135,7 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index) =>
+      case EMemAccess(mem, index, _) =>
         bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index))
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toExpr(ex))
@@ -138,15 +145,51 @@ object BSVSyntax {
       case _ => throw UnexpectedExpr(e)
     }
 
+    private def translateUOp(e: EUop): BExpr = e.op match {
+      case NumUOp(op) if (op == "abs" || op == "signum") => BFuncCall(op, List(toExpr(e.ex)))
+      case _ => BUOp(e.op.op, toExpr(e.ex))
+    }
     //TODO handle casts better
     private def translateCast(e: ECast): BExpr = {
       e.ctyp match {
+        case to@TSizedInt(_, _) => e.exp.typ match {
+          case Some(from@TSizedInt(_, _)) => translateIntCast(from, to, e.exp)
+          case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
+          "TSizedInt", e.ctyp)
+        }
         case TBool() => toExpr(e.exp)
         case _ => throw UnexpectedType(e.pos, "Couldn't translate BSV cast",
           "TBool", e.ctyp)
       }
     }
 
+    //This appropriately extends, truncates and packs/unpacks the
+    //expression as appropriate to convert from one type to the other.
+    //Extension must be made explicit since the pack/unpack operations will not
+    //automatically determine an output type
+    private def translateIntCast(from: TSizedInt, to:TSizedInt, e: Expr): BExpr = {
+      val baseExpr = toExpr(e)
+      val needsExtend = from.len < to.len
+      val needsTruncate = to.len < from.len
+      val needsPack = from.unsigned != to.unsigned
+      val extended = if (needsExtend) {
+        //If making a signed number, sign extend
+        BExtend(baseExpr, useSign = !to.unsigned)
+      } else if (needsTruncate) {
+        BTruncate(baseExpr)
+      } else {
+        baseExpr
+      }
+      if (needsPack) {
+        extended match {
+            //don't nest unpacks
+          case BUnpack(_) => extended
+          case ex => BUnpack(BPack(ex))
+        }
+      } else {
+        extended
+      }
+    }
     //TODO a better way to translate operators
     private def toBSVBop(b: EBinop): BExpr = b.op match {
       case BitOp("++", _) =>
@@ -159,6 +202,15 @@ object BSVSyntax {
           case e => BPack(e)
         }
         BUnpack(BConcat(left, List(right)))
+      case NumOp("$*",_) =>
+        BBOp("*",toExpr(b.e1), toExpr(b.e2))
+      case NumOp("*",_) => b.typ match {
+        case Some(TSizedInt(_, unsigned)) =>
+          val op = if (unsigned) { "unsignedMul" } else { "signedMul" }
+          BBOp(op, toExpr(b.e1), toExpr(b.e2), isInfix = false)
+        case None => throw MissingType(b.pos, "Missing Type on Multiply BinOp")
+        case _ => throw UnexpectedType(b.pos, "Mul Op", "Sized Integers", b.typ.get)
+      }
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
 
@@ -174,9 +226,16 @@ object BSVSyntax {
         } else {
           BVar("_unused_", BNumericType(sz))
        }})
-      //replace last tparam w/ lockidtyp if not using a unique id
-      val tmpparams = if (limpl.useUniqueLockId()) { mtyp.tparams } else { mtyp.tparams.init }
-      val params = (tmpparams :+ BVar("lidtyp", lockIdTyp)) ++ lparams
+      //replace tparam named 'ridtyp' w/ lockidtyp if not using a unique id
+      val newLid = BVar("lidtyp", lockIdTyp)
+      val tmpparams = if (limpl.useUniqueLockId()) {
+        mtyp.tparams :+ newLid
+      } else {
+        mtyp.tparams.map(bv => {
+          if (bv.name == bsints.reqIdName) { newLid } else { bv }
+        })
+      }
+      val params = tmpparams ++ lparams
       BInterface(intName, params)
     }
 
@@ -246,12 +305,15 @@ object BSVSyntax {
 
   case object BDontCare extends BExpr
   case object BZero extends BExpr
+  case object BAllOnes extends BExpr
   case object BOne extends BExpr
   case object BTime extends BExpr
   case object BInvalid extends BExpr
   case class BTaggedValid(exp: BExpr) extends BExpr
   case class BFromMaybe(default: BExpr, exp: BExpr) extends BExpr
   case class BIsValid(exp: BExpr) extends BExpr
+  case class BExtend(e: BExpr, useSign: Boolean) extends BExpr
+  case class BTruncate(e: BExpr) extends BExpr
   case class BPack(e: BExpr) extends BExpr
   case class BUnpack(e: BExpr) extends BExpr
   case class BTernaryExpr(cond: BExpr, trueExpr: BExpr, falseExpr: BExpr) extends BExpr
@@ -262,7 +324,7 @@ object BSVSyntax {
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
   case class BVar(name: String, typ: BSVType) extends BExpr
-  case class BBOp(op: String, lhs: BExpr, rhs: BExpr) extends BExpr
+  case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
   case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
@@ -295,7 +357,7 @@ object BSVSyntax {
 
   case class BIf(cond: BExpr, trueBranch: List[BStatement], falseBranch: List[BStatement]) extends BStatement
 
-  case class BDisplay(fmt: String, args: List[BExpr]) extends BStatement
+  case class BDisplay(fmt: Option[String], args: List[BExpr]) extends BStatement
 
   case object BFinish extends BStatement
   
