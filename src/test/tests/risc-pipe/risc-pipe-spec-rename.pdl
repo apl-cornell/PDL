@@ -128,7 +128,8 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
     uint<32> na = (tmp >= denom) ? (tmp - denom) : (tmp);
     uint<32> nq = (tmp >= denom) ? ((quot << 1){31:1} ++ u1<1>) : (quot << 1);
     uint<32> nnum = num << 1;
-    if (cnt == u31<5>) {
+    bool done = (cnt == u31<5>);
+    if (done) {
         output( (retQuot) ? nq : na );
     } else {
         call multi_stg_div(nnum, denom, nq, na, cnt + u1<5>, retQuot);
@@ -182,8 +183,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     bool needrs2 = isOp || isBranch || isStore || isJalr;
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
     spec_barrier();
-    bool notBranch = (!done) && (!isBranch) && (!isJal) && (!isJalr);
-    if (notBranch) {
+    bool notBranch = (!isBranch) && (!isJal) && (!isJalr);
+    if ((!done) && notBranch) {
        verify(s, pc + 1<16>);
     } else {
       invalidate(s);
@@ -227,7 +228,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     } else {
        int<16> npc = pc + 1<16>;
     }}}
-    if (!notBranch) { call cpu(npc); }
+    if ((!done) && (!notBranch)) { call cpu(npc); }
 
     int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
     int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
