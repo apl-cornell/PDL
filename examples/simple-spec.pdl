@@ -1,0 +1,26 @@
+pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(FAQueue), bht:BHT<int<32>>]: bool {
+     start(rf);
+     int<5> a = pc{4:0};
+     acquire(rf[a], R);
+     end(rf);
+     spec_check();
+     int<32> ra = rf[a];
+     s <- speccall test(bht.req(pc, ra));
+     release(rf[a]);
+     ---
+     spec_barrier();
+     bool isBr = ra{31:31} == 0<1>;
+     int<32> npc = (isBr) ? pc + ra : pc + 1<32>;
+     verify(npc : bht.upd(pc, npc == isBr));
+}
+
+circuit {
+	rf = regfile(int<32>, 5);
+	b = new bht(4);
+	t = new test[rf, b];
+	call t(0<32>);
+}
+
+
+// BHT:  pred(pc, skip, take) -> pc
+//    :  update(pc, taken) -> ()

@@ -5,8 +5,10 @@ import FIFOF :: *;
 import RWire :: *;
 
 export RenameRF(..);
+export BHT(..);
 export mkRenameRF;
 export mkNBFIFOF;
+export mkBHT;
 
 interface RenameRF#(type addr, type elem, type name);
    method name readName(addr a); //get name to read data later
@@ -92,6 +94,25 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
       f.clear();
    endmethod
    
+endmodule
+
+interface BHT#(type addr);
+   method addr req(addr pc, addr skip, addr take);
+   method Action upd(addr pc, Bool take);
+endinterface
+
+import "BVI" BHT = module mkBHT#(Integer entries)(BHT#(addr)) provisos (Bits#(addr,szAddr));
+		      parameter num_entries = entries;
+		      parameter addr_width = valueOf(szAddr);
+		      
+		      default_clock clk(CLK, (*unused*) clk_gate);
+		      default_reset rst (RST);
+		      
+		      method TAKE_OUT req (PC_IN_PRED, SKIP_OFF_IN, TAKE_OFF_IN);
+		      method upd (PC_IN_RES, TAKE_IN) enable (WE);
+		      
+			 schedule (req) CF (req, upd);
+			 schedule (upd) C (upd);
 endmodule
 
 // import "BVI" FIFO2 = module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
