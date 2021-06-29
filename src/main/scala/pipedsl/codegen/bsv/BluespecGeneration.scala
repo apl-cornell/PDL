@@ -884,7 +884,7 @@ object BluespecGeneration {
       case CLockEnd(_) => None
       case CLockOp(_, _, _) => None
       case CSpecCall(_, _, _) => None
-      case CVerify(_, _, _) => None
+      case CVerify(_, _, _, _) => None
       case CInvalidate(_) => None
       case CCheckSpec(_) => None
       case CEmpty() => None
@@ -1066,7 +1066,7 @@ object BluespecGeneration {
         val allocExpr = bsInts.getSpecAlloc(specTable)
         val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
         Some(BStmtSeq(allocAssign +: sendStmts))
-      case CVerify(handle, args, preds) =>
+      case CVerify(handle, args, preds, upd) =>
         val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
           val a = l._1
           val p = l._2

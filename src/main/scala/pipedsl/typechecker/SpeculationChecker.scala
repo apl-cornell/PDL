@@ -82,7 +82,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CCheckSpec(isBlocking) => if (s != Unknown)  throw IllegalSpeculativeOperation(c.pos, Unknown.toString)
       if (isBlocking) { NonSpeculative }
       else { Speculative }
-    case CVerify(_, _, _) if s != NonSpeculative =>
+    case CVerify(_, _, _,_) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
     case CInvalidate(_) => s // can always invalidate speculation
     case COutput(_) if s != NonSpeculative =>
@@ -120,7 +120,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       })
     case CSpecCall(handle, _, _) => env.add(handle.id,
       mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, isResolved = false)))
-    case CVerify(handle, _, _) =>
+    case CVerify(handle, _, _, _) =>
       checkResolved(handle.id, env, c.predicateCtx.get, expected = false)
       env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, isResolved = true)))
     case CInvalidate(handle) =>

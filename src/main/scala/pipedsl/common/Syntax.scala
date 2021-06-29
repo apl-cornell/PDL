@@ -216,9 +216,10 @@ object Syntax {
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
-  case class ECall(mod: Id, args: List[Expr]) extends Expr
+  case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
+
 
 
   sealed trait Command extends Positional with SMTPredicate
@@ -233,7 +234,7 @@ object Syntax {
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
   case class CCheckSpec(isBlocking: Boolean) extends Command
-  case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr]) extends Command
+  case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr], update: Option[ECall]) extends Command
   case class CInvalidate(handle: EVar) extends Command
   case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command

@@ -306,7 +306,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
       }
     }
-    case CVerify(handle, args, preds) =>
+    case CVerify(handle, args, preds, upd) =>
+      //if there's an update clause check that stuff:
+      if (upd.isDefined) {
+        checkExpression(upd.get, tenv, None)
+      }
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -491,7 +495,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }
     }
-    case ECall(mod, args) => {
+    case ECall(mod, name, args) => {
       val mtyp = tenv(mod)
       mod.typ = Some(mtyp)
       mtyp match {

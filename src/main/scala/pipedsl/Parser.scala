@@ -101,8 +101,13 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val neg: P[Expr] = positioned {
     "-" ~> parens(expr) ^^ (e => EUop(NegOp(), e))
   }
+
+  lazy val methodCall: P[ECall] = positioned {
+    iden ~ "." ~ iden ~ parens(repsep(expr, ",")) ^^ { case i ~ _  ~ n ~ args => ECall(i, Some(n), args) }
+  }
+
   lazy val simpleAtom: P[Expr] = positioned {
-    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |
+    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, None, args) } |
       not ~ expr ^^ { case n ~ e => EUop(n, e) } |
       neg |
       cast |
@@ -215,7 +220,7 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val speccall: P[Command] = positioned {
-    iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(expr, ",")) ^^ {
+    iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(methodCall | expr, ",")) ^^ {
       case h ~ _ ~ _ ~ i ~ args =>
         val sv = EVar(h)
         sv.typ = Some(TRequestHandle(i, RequestType.Speculation))
@@ -225,7 +230,8 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val resolveSpec: P[Command] = positioned {
-    "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ^^ { case i ~ _ ~ e => CVerify(i, e, List()) } |
+    "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
+      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
     "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 

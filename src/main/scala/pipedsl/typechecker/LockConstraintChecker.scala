@@ -126,7 +126,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           checkAcquired(mem, expr, env, c.predicateCtx.get)
         case (_, EMemAccess(mem, expr, _)) =>
           checkAcquired(mem, expr, env, c.predicateCtx.get)
-        case (_, ECall(mod, args)) =>
+        case (_, ECall(mod, name, args)) =>
           args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
         case _ => throw UnexpectedCase(c.pos)
       }
@@ -161,7 +161,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       val env2 = checkExpr(tval, env1, predicates)
       checkExpr(fval, env2, predicates)
     case EApp(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
-    case ECall(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
+    case ECall(_, name, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
     case ECast(_, exp) => checkExpr(exp, env, predicates)
     case _ => env
   }

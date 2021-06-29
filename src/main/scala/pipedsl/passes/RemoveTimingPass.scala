@@ -34,7 +34,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           newCases :+ cases(index).copy(body = newBody)
         }
         CSplit(newCases, newDefault)
-      case CExpr(ECall(id, args)) =>
+      case CExpr(ECall(id, _, args)) =>
         val assigns: ListBuffer[Command] = new ListBuffer[Command]()
         val newArgs: ListBuffer[Expr] = new ListBuffer[Expr]()
         for (index <- args.indices) {
@@ -42,7 +42,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           assigns.addOne(CAssign(arg, args(index)))
           newArgs.addOne(arg)
         }
-        calls.addOne(CExpr(ECall(id, newArgs.toList)))
+        calls.addOne(CExpr(ECall(id, None, newArgs.toList)))
         convertCListToCSeq(assigns, 0)
       case _ => c
     }

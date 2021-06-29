@@ -57,7 +57,8 @@ object Utilities {
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
     case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
-    case CVerify(handle, args, preds) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+    case CVerify(handle, args, preds, upd) => if (upd.isDefined) getUsedVars(upd.get) else Set() ++
+      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
         preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
     case CInvalidate(handle) => Set(handle.id)
     case CCheckSpec(_) => Set()
@@ -152,7 +153,8 @@ object Utilities {
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
-    case CVerify(handle, args, preds) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+    case CVerify(handle, args, preds, upd) => if (upd.isDefined) getUsedVars(upd.get) else Set() ++
+      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
       preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
     case CInvalidate(handle) => Set(handle.id)
     case CCheckSpec(_) => Set()
@@ -176,7 +178,7 @@ object Utilities {
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => { s ++ getUsedVars(a) })
       //functions are also externally defined
-    case ECall(id, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
+    case ECall(id, _, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => { s ++ getUsedVars(a) })
     case EVar(id) => id.typ = e.typ; Set(id)
     case ECast(_, exp) => getUsedVars(exp)
     case EFromMaybe(ex) => getUsedVars(ex)
