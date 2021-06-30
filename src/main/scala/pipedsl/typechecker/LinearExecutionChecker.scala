@@ -24,6 +24,9 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
 
   override def emptyEnv(): Environments.Environment[Id, Z3AST] = null
 
+  override def checkExt(e: ExternDef,
+    env: Environments.Environment[Id, Z3AST]): Environments.Environment[Id, Z3AST] = env
+
   /* functions do not have any out of order properties, so we don't need to */
   /* check them */
   override def checkFunc(f: FuncDef,

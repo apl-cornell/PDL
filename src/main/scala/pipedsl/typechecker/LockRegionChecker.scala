@@ -18,6 +18,8 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
 
   override def emptyEnv(): Environment[Id, LockState] = Environments.EmptyLockEnv
 
+  override def checkExt(e: ExternDef,
+    env: Environments.Environment[Id, LockState]): Environments.Environment[Id, LockState] = env
   //Functions can't interact with locks or memories right now.
   //Could add that to the function types explicitly to be able to check applications
   override def checkFunc(f: FuncDef, env: Environment[Id, LockState]): Environment[Id, LockState] = env
@@ -25,7 +27,9 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
   override def checkModule(m: ModuleDef, env: Environment[Id, LockState]): Environment[Id, LockState] = {
     val nenv = m.modules.foldLeft[Environment[Id, LockState]](env)( (e, m) => m.typ match {
       case TLockedMemType(_, _, _) => e.add(m.name, Free)
-      case TModType(_, _, _, _) => e  //no locks for modules, but they're an expected type
+        //TODO eventually do need locks here
+      case TModType(_, _, _, _) => e  //no locks for modules , but they're an expected type
+      case TObject(_, _, _) => e //no locks here either
       case _ => throw UnexpectedCase(m.pos)
     })
     val finalStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)

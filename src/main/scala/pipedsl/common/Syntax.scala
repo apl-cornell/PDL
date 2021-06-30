@@ -95,6 +95,7 @@ object Syntax {
       case TRequestHandle(m, _) => s"${m}_Request"
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
+      case TObject(name, tparams, methods) => "TODO"
     }
   }
   // Types that can be upcast to Ints
@@ -114,6 +115,7 @@ object Syntax {
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
   case class TMaybe(btyp: Type) extends Type
+  case class TObject(name: Id, typParams: List[Type], methods: Map[Id,TFun]) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -290,10 +292,10 @@ object Syntax {
 
   case class Param(name: Id, typ: Type) extends Positional
 
-  case class Prog(
-          fdefs: List[FuncDef],
-          moddefs: List[ModuleDef],
-          circ: Circuit) extends Positional
+  case class ExternDef(name: Id, typParams: List[Type], methods: List[FuncDef]) extends Definition with TypeAnnotation
+
+  case class Prog(exts: List[ExternDef],
+    fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional
 
   sealed trait Circuit extends Positional
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
@@ -309,6 +311,6 @@ object Syntax {
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
   case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
-  case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
+  case class CirNew(mod: Id, mods: List[Id], params: List[EInt]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }

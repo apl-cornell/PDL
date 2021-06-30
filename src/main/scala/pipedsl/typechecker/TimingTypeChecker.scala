@@ -22,6 +22,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
 
   override def emptyEnv(): Environment[Id, Type] = Environments.EmptyTypeEnv
 
+  override def checkExt(e: ExternDef, env: Environment[Id, Type]): Environment[Id, Type] = env
+
   //Functions are combinational, this is checked in their well-formedness check
   override def checkFunc(f: FuncDef, env: Environment[Id, Type]): Environment[Id, Type] = env
 
@@ -193,11 +195,12 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Combinational
-    case ECall(_, _, args) =>
+    case ECall(_, name, args) =>
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
-      Asynchronous
+      //TODO methods are hacked
+      if (name.isDefined) { Combinational } else { Asynchronous }
     case EVar(id) => if(!vars(id) && isRhs) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)
     case _ => Combinational

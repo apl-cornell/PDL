@@ -21,6 +21,8 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
 
   override def emptyEnv(): Environment[Id, Z3AST] = ConditionalEnv(ctx = ctx)
 
+  override def checkExt(e: ExternDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+
   //No Speculation in Functions
   override def checkFunc(f: FuncDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
 

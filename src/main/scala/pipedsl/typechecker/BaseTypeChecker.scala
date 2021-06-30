@@ -16,6 +16,18 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   
   override def emptyEnv(): Environment[Id,Type] = Environments.EmptyTypeEnv
 
+  //Add these named types to the env
+  override def checkExt(e: ExternDef, env: Environment[Id, Type]): Environment[Id, Type] = {
+    val ftyps = e.methods.foldLeft(Map[Id, TFun]())((ms, m) => {
+      val typList = m.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
+      val ftyp = TFun(typList, m.ret)
+      ms + (m.name -> ftyp)
+    })
+    val typ = TObject(e.name, e.typParams, ftyps)
+    e.typ = Some(typ)
+    env.add(e.name, typ)
+  }
+
   /**
    * This does the base type checking and well-fomedness checking for a given function with
    * an environment (that may have other function types defined already).
@@ -175,7 +187,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(ltyp)
       (ltyp, tenv)
     }
-    case CirNew(mod, mods) => {
+    case CirNew(mod, mods, _) => {
       val mtyp = tenv(mod)
       mtyp match {
         case TModType(_, refs, _, _) => {
@@ -191,6 +203,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           (mtyp, tenv)
         }
+        case TObject(_, _, _) => (mtyp, tenv)
         case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
       }
     }
@@ -511,6 +524,23 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               }
           }
           (if (retType.isDefined) retType.get else TVoid(), tenv)
+        }
+        case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) => {
+          val mtyp = methods(name.get)
+          val inputs = mtyp.args
+          val retType = mtyp.ret
+          //TODO refactor and pull into function since it is same as above
+          if (inputs.length != args.length) {
+            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+          }
+          inputs.zip(args).foreach {
+            case (expectedT, a) =>
+              val (atyp, aenv) = checkExpression(a, tenv, None)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+              }
+          }
+          (retType, tenv)
         }
         case _ => throw UnexpectedType(mod.pos, "module name", "module type", mtyp)
       }

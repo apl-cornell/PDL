@@ -34,7 +34,7 @@ class LockWellformedChecker() {
    * @return A map containing the set of lock arguments used in each module.
    */
   def check(p:Prog) : Map[Id, Set[LockArg]] = {
-    val Prog(_, moddefs, _) = p
+    val Prog(_, _, moddefs, _) = p
     moddefs.foldLeft[Map[Id, Set[LockArg]]](Map())((map, mod) => map + (mod.name -> checkModule(mod, Set())))
   }
   

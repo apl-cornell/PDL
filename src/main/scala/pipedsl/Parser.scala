@@ -291,9 +291,10 @@ class Parser extends RegexParsers with PackratParsers {
       }
   }
 
+  lazy val void: P[Type] = "()" ^^ { _ => TVoid() }
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
   lazy val string: P[Type] = "String".r ^^ {_ => TString() }
-  lazy val baseTyp: P[Type] = lockedMemory | sizedInt | bool | string
+  lazy val baseTyp: P[Type] = lockedMemory | sizedInt | bool | string | void
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp
@@ -303,6 +304,12 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val param: P[Param] = iden ~ ":" ~ (typ | typeName) ^^ { case i ~ _ ~ t =>
     i.typ = Some(t)
     Param(i, t)
+  }
+
+  lazy val methodDef: P[FuncDef] = positioned {
+    "method" ~> iden ~ parens(repsep(param, ",")) ~ ":" ~ typ <~ ";" ^^ {
+      case i ~ ps ~ _ ~ t => FuncDef(i, ps, t, CEmpty())
+    }
   }
 
   lazy val fdef: P[FuncDef] = positioned {
@@ -324,8 +331,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val cnew: P[CirExpr] = positioned {
-    "new" ~ iden ~ brackets(repsep(iden,",")).? ^^ {
-      case _ ~ i ~ mods => CirNew(i, if (mods.isDefined) mods.get else List[Id]())
+    "new" ~ iden ~ brackets(repsep(iden,",")).? ~ parens(repsep(num,",")).? ^^ {
+      case _ ~ i ~ mods ~ params => CirNew(i, if (mods.isDefined) mods.get else List(),
+        if (params.isDefined) params.get else List())
     }
   }
   lazy val cmem: P[CirExpr] = positioned {
@@ -366,9 +374,14 @@ class Parser extends RegexParsers with PackratParsers {
     "circuit" ~> braces(cseq)
   }
 
+  lazy val extern: P[ExternDef] = positioned {
+    "extern" ~> iden ~ angular(repsep(typ, ",")).? ~ braces(methodDef.*) ^^ {
+      case i ~ t ~ f => ExternDef(i, if (t.isDefined) t.get else List(), f) }
+  }
+
   lazy val prog: P[Prog] = positioned {
-    fdef.* ~ moddef.* ~ circuit ^^ {
-      case f ~ p ~ c => Prog(f, p, c)
+    extern.* ~ fdef.* ~ moddef.* ~ circuit ^^ {
+      case e ~ f ~ p ~ c => Prog(e, f, p, c)
     }
   }
 }

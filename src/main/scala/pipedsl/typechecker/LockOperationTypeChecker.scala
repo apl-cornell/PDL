@@ -37,7 +37,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
    * @throws IllegalMemoryAccessOperation error if access memory without correct READ or WRITE capability
    */
   def check(p:Prog) : Unit = {
-    val Prog(_, moddefs, _) = p
+    val Prog(_, _, moddefs, _) = p
     moddefs.foreach(m => checkModule(m))
   }
 

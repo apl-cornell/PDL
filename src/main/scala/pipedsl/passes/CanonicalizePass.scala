@@ -39,9 +39,8 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
 
   override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
 
-  override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m)),
-    fdefs = p.fdefs.map(f => run(f))).setPos(p.pos)
-
+  override def run(p: Prog): Prog = p.copy(exts = p.exts,
+    fdefs = p.fdefs.map(f => run(f)), moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
 
   /**

@@ -43,6 +43,9 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
 
   override def emptyEnv(): Environment[LockArg, Z3AST] = ConditionalLockEnv(ctx = ctx)
 
+  override def checkExt(e: ExternDef,
+    env: Environments.Environment[LockArg, Z3AST]): Environments.Environment[LockArg, Z3AST] = env
+
   //Functions can't interact with locks or memories right now.
   //Could add that to the function types explicitly to be able to check applications
   override def checkFunc(f: FuncDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env

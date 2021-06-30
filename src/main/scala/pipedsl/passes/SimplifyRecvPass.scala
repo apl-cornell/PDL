@@ -19,7 +19,7 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
 
   override def run(p: Prog): Prog = {
     usedVars = p.fdefs.foldLeft[Set[Id]](usedVars)((s,f) => s + f.name)
-    p.copy(moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
+    p.copy(exts = p.exts, moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
   }
 
   override def run(m: ModuleDef): ModuleDef = {

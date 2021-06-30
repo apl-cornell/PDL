@@ -57,6 +57,10 @@ object BluespecGeneration {
     private val translator = new BSVTranslator(bsInts,
       modMap map { case (i, p) => (i, p.topModule.typ.get) }, modToHandle)
 
+    private val extMap: Map[Id, BSVType] = prog.exts.foldLeft(Map[Id, BSVType]())((m, e) => {
+      m + (e.name -> translator.toType(e.typ.get))
+    })
+
     private val funcMap: Map[Id, BFuncDef] = prog.fdefs.foldLeft(Map[Id, BFuncDef]())((fmap, fdef) => {
       fmap + (fdef.name -> translator.toFunc(fdef))
     })
@@ -131,9 +135,12 @@ object BluespecGeneration {
           mem.typ.get.matchOrError(mem.pos, "LockInstantiation", "MemTyp") { case m:TMemType => m },
           impl, idsz) :+ env(mem)
         (lockedMemType, BModule(modInstName, modargs))
-      case CirNew(mod, mods) =>
-        (bsInts.getInterface(modMap(mod)),
-          BModule(name = bsInts.getModuleName(modMap(mod)), args = mods.map(m => env(m))))
+      case CirNew(mod, mods, params) =>
+        //TODO better for externs
+        val interface = if (modMap.contains(mod)) bsInts.getInterface(modMap(mod)) else extMap(mod)
+        val modName =   if (modMap.contains(mod)) bsInts.getModuleName(modMap(mod)) else "mk" + mod.v
+        val szParams = params.map(p => BUnsizedInt(p.v))
+        (interface, BModule(name = modName, args = mods.map(m => env(m)) ++ szParams))
       case CirCall(_, _) => throw UnexpectedExpr(c)
     }
 

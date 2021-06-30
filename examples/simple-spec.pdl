@@ -1,9 +1,14 @@
+extern BHT<int<32>> {
+    method req(pc: int<32>, off: int<32>): int<32>;
+    method upd(pc: int<32>, taken: bool): ();
+}
+
 pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(FAQueue), bht: BHT]: bool {
+     spec_check();
      start(rf);
-     int<5> a = pc{4:0};
+     uint<5> a = cast(pc{4:0}, uint<5>);
      acquire(rf[a], R);
      end(rf);
-     spec_check();
      int<32> ra = rf[a];
      release(rf[a]);
      s <- speccall test(bht.req(pc, ra));
@@ -16,7 +21,8 @@ pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(FAQueue), bht: BHT]: bool {
 
 circuit {
     rf = regfile(int<32>, 5);
-    b = new BHT[];
-    t = new test[rf, b];
+    rfl = FAQueue(rf);
+    b = new BHT[](4);
+    t = new test[rfl, b];
     call t(0<32>);
 }

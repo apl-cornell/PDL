@@ -18,9 +18,12 @@ object TypeChecker {
      * @return The new type environment
      */
     def check(p: Prog, env: Option[Environment[U, T]]): Environment[U, T] = {
-      val Prog(fdefs, mdefs, cir) = p
+      val Prog(edefs, fdefs, mdefs, cir) = p
       val senv = env match { case Some(e) => e; case None => emptyEnv() }
-      val fenv = fdefs.foldLeft[Environment[U, T]](senv)((tenv, fdef) => {
+      val eenv = edefs.foldLeft[Environment[U, T]](senv)((tenv, edef) => {
+        checkExt(edef, tenv)
+      })
+      val fenv = fdefs.foldLeft[Environment[U, T]](eenv)((tenv, fdef) => {
         checkFunc(fdef, tenv)
       })
       val menv = mdefs.foldLeft[Environment[U, T]](fenv)((tenv, mdef) => {
@@ -28,6 +31,8 @@ object TypeChecker {
       })
       checkCircuit(cir, menv)
     }
+
+    def checkExt(e: ExternDef, env:Environment[U, T]): Environment[U, T]
 
     def checkFunc(f: FuncDef, env:Environment[U, T]): Environment[U, T]
 
