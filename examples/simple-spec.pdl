@@ -17,6 +17,8 @@ pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(FAQueue), bht: BHT]: bool {
      bool isBr = ra{31:31} == 0<1>;
      int<32> npc = (isBr) ? (pc + ra) : (pc + 1<32>);
      verify(s, npc) { bht.upd(pc, isBr) };
+     print("PC: %d", pc);
+     print("Took BR: %b", isBr);
 }
 
 circuit {

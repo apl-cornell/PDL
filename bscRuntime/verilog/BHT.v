@@ -38,7 +38,7 @@ module BHT(CLK,
 
    
    //history file
-   reg [1:0]  hist[0:entry_width-1];
+   reg [1:0]  hist[0:num_entries-1];
 
    //Comb logic
    reg [1:0]  NEXT_PRED;
@@ -104,14 +104,14 @@ module BHT(CLK,
 	  begin
 	     for (initi = 0; initi <= num_entries - 1; initi = initi + 1)
 	       begin
-		  hist[initi] <= SKIP_S; //init to weak pred npc + 1
+		  hist[initi] <= SKIP_W; //init to weak pred npc + 1
 	       end
 	  end
 	else
 	  begin
 	     if (WE)
 	       begin
-		  hist[UPD_ENT] <= NEXT_PRED;
+		  hist[UPD_ENT] <= `BSV_ASSIGNMENT_DELAY NEXT_PRED;
 	       end
 	  end
      end // always@ (posedge CLK)

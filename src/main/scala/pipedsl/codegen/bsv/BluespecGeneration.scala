@@ -1079,12 +1079,18 @@ object BluespecGeneration {
           val p = l._2
           BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
         })
-        Some(BIf(correct,
+        val updCmd = translator.toExpr(upd)
+        val specCmd = BIf(correct,
           //true branch, just update spec table
           List(BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle)))),
           //false branch, update spec table _and_ resend call with correct arguments
           BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))) +: sendToModuleInput(args)
-        ))
+        )
+        Some(if (updCmd.isDefined) {
+          BStmtSeq(List(BExprStmt(updCmd.get), specCmd))
+        } else {
+          specCmd
+        })
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
       case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
         //only free speculation entries for the blocking call

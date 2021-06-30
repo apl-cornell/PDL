@@ -31,7 +31,7 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
       val (lc, lenv) = addVerifyValues(cons, env)
       val (rc, renv) = addVerifyValues(alt, env)
       ( CIf(cond, lc, rc).setPos(c.pos), intersectEnv(lenv, renv) )
-    case CSpecCall(handle, _, args) =>
+    case CSpecCall(handle, p, args) =>
       //For each arg, extract it into a variable (_handle_idx = args[idx])
       //Then add the mapping from the speculation handle to the list of args
       val assgnCmds = args.zipWithIndex.foldLeft[(Command, List[EVar])](CEmpty(), List[EVar]())((cm, a) => {
@@ -42,7 +42,8 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
         val args = cm._2
         ( CSeq(priorCmds, assgn).setPos(c.pos), args :+ assgn.lhs )
       })
-      (CSeq(assgnCmds._1, c), env + (handle.id -> assgnCmds._2))
+      val newSpec = CSpecCall(handle, p, assgnCmds._2).setPos(c.pos)
+      (CSeq(assgnCmds._1, newSpec), env + (handle.id -> assgnCmds._2))
     case CVerify(handle, args, _, upd) =>
       if (!env.contains(handle.id)) {
         throw MissingPredictionValues(c.pos, handle.id.v)
