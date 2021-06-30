@@ -9,7 +9,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   var calls: ListBuffer[Command] = new ListBuffer[Command]()
   
   override def run(p: Prog): Prog = {
-    p.copy(List(), moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
+    p.copy(exts = p.exts, fdefs = p.fdefs, moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
   }
 
   override def run(m: ModuleDef): ModuleDef = {

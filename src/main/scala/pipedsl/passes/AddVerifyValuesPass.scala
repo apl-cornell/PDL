@@ -15,7 +15,8 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
 
   override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).setPos(m.pos)
 
-  override def run(p: Prog): Prog =  p.copy(exts = p.exts, moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
+  override def run(p: Prog): Prog =  p.copy(exts = p.exts, fdefs = p.fdefs,
+    moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
   private def addVerifyValues(c: Command, env: VEnv): (Command, VEnv) = c match {
     case CSeq(c1, c2) =>
