@@ -111,7 +111,8 @@ object BluespecGeneration {
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLockMem(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
-        val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous)
+        val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
+          Latency.Asynchronous, 1, 1)
         (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
       case CirRegFile(elemTyp, addrSize) =>
         val bElemTyp = translator.toType(elemTyp)
@@ -120,7 +121,8 @@ object BluespecGeneration {
         (memtyp, bsInts.getMem(memtyp, initFile))
       case CirLockRegFile(elemTyp, addrSize, impl, szParams) =>
         val lockMemTyp = translator.toType(c.typ.get)
-        val mtyp = TMemType(elemTyp, addrSize, Latency.Combinational, Latency.Sequential)
+        val mtyp = TMemType(elemTyp, addrSize, Latency.Combinational,
+          Latency.Sequential, 5, 1)
         (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
       case CirLock(mem, impl, idsz) =>
         val lockedMemType = translator.toType(c.typ.get)

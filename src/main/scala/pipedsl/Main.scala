@@ -77,6 +77,10 @@ object Main {
       pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
       val lockOperationTypeChecker = new LockOperationTypeChecker(lockWellformedChecker.getModLockGranularityMap)
       lockOperationTypeChecker.check(recvProg)
+
+      val portChecker = new PortChecker(printOutput)
+      portChecker.check(recvProg, None)
+
       val predicateGenerator = new PredicateGenerator()
       val ctx = predicateGenerator.run(recvProg)
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)

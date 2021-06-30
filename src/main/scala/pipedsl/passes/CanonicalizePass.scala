@@ -222,7 +222,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
   case Syntax.CRecv(lhs@EVar(id), EMemAccess(mem, EVar(idx), _)) =>
   mem.typ.get match
   {
-  case TLockedMemType(TMemType(_, _, readLatency, _), _, _) =>
+  case TLockedMemType(TMemType(_, _, readLatency, _, _, _), _, _) =>
   readLatency match
   {
   case pipedsl.common.Syntax.Latency.Combinational =>

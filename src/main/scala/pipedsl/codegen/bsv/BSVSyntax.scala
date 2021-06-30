@@ -56,7 +56,7 @@ object BSVSyntax {
     }
 
     def toType(t: Type): BSVType = t match {
-      case TMemType(elem, addrSize, rlat, _) =>
+      case TMemType(elem, addrSize, rlat, _, _, _) =>
         val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)

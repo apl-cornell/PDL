@@ -59,7 +59,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         (send, recv)
       //Mem Write
       case (e@EMemAccess(mem, index@EVar(_), wm), data@EVar(_)) => mem.typ.get match {
-        case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous),_,_) =>
+        case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous, _, _),_, _) =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
           val recv = IMemRecv(mem, handle, None)

@@ -92,7 +92,8 @@ object Syntax {
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
-      case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
+      case TMemType(elem, size, rLat, wLat, rPorts, wPorts) =>
+        s"${elem.toString}[${size}]<$rLat$rPorts, $wLat$wPorts>"
       case TLockedMemType(m, sz, impl) => s"${m.toString}(${impl.toString})".concat(
         if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
@@ -110,8 +111,12 @@ object Syntax {
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TMemType(elem: Type, addrSize: Int,
-    readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
+  case class TMemType(elem: Type,
+                      addrSize: Int,
+                      readLatency: Latency = Latency.Asynchronous,
+                      writeLatency: Latency = Latency.Asynchronous,
+                      readPorts: Int,
+                      writePorts: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
   case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
