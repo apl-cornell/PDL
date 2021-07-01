@@ -354,7 +354,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           tenv
       }
-    case CUpdate(handle, args, preds) =>
+    case CUpdate(newHandle, handle, args, preds) =>
       //TODO solve the fact that this is just verify copypasta-ed
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
@@ -384,7 +384,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                   }
               }
           }
-          tenv
+          newHandle.typ = Some(htyp)
+          newHandle.id.typ = Some(htyp)
+          tenv.add(newHandle.id, htyp)
       }
     case CInvalidate(handle) =>
       val (htyp, _) = checkExpression(handle, tenv, None)

@@ -226,14 +226,14 @@ class Parser extends RegexParsers with PackratParsers {
         sv.typ = Some(TRequestHandle(i, RequestType.Speculation))
         h.typ = sv.typ
         CSpecCall(sv, i, args)
-    }
+    } |
+    iden ~ "<-" ~ "update" ~ parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
+      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List()) }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
     "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
       case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
-    "update" ~> parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
-      case i ~ _ ~ e => CUpdate(i, e, List()) } |
     "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 

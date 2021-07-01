@@ -894,7 +894,7 @@ object BluespecGeneration {
         BAssign(translator.toVar(outvar), bsInts.getModPeek(modParams(sender)))
       )
       //if preds != args, update preds definition
-      case CUpdate(_, _, _) => None
+      case CUpdate(_, _, _, _) => None
       case CLockStart(_) => None
       case CLockEnd(_) => None
       case CLockOp(_, _, _) => None
@@ -968,6 +968,8 @@ object BluespecGeneration {
         Some(BDecl(translator.toVar(handle), None))
       case CSpecCall(handle, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
+      case CUpdate(newHandle, _, _, _) =>
+        Some(BDecl(translator.toVar(newHandle), None))
       case _ => None
     }
 
@@ -1100,11 +1102,11 @@ object BluespecGeneration {
           specCmd
         })
         //if args != preds -> do spec invalidate and speccall, reassign handle and predictions
-      case CUpdate(handle, args, preds) =>
-        val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
+      case CUpdate(nh, handle, args, preds) =>
+        val incorrect = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
           val a = l._1
           val p = l._2
-          BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
+          BBOp("||", b, BBOp("!=", translator.toExpr(a), translator.toExpr(p)))
         })
         //order update invalidate AFTER a CInvalidate or CVerify command
         val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = true))
@@ -1112,13 +1114,8 @@ object BluespecGeneration {
         val sendStmts = sendToModuleInput(args, Some(handle))
         //write to handle (make allocCall)
         val allocExpr = bsInts.getSpecAlloc(specTable)
-        val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
-        val updatePreds = args.zip(preds).foldLeft(List[BStatement]())((l, s) => {
-          val a = s._1
-          val p = s._2
-          l :+ BAssign(translator.toVar(p), translator.toExpr(a))
-        })
-        Some(BIf(correct, List(), List(invalidate, allocAssign) ++ sendStmts ++ updatePreds))
+        val allocAssign = BInvokeAssign(translator.toVar(nh), allocExpr)
+        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts, List()))
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
       case CInvalidate(handle) => Some(BExprStmt(
         bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = false)))
@@ -1181,7 +1178,7 @@ object BluespecGeneration {
       cs.foreach {
         case ICondCommand(_, ics) =>
           if (hasUpdate(ics)) result = true
-        case CUpdate(_, _, _) => result = true
+        case CUpdate(_, _, _, _) => result = true
         case _ => ()
       }
       result

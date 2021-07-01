@@ -237,7 +237,7 @@ object Syntax {
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
   case class CCheckSpec(isBlocking: Boolean) extends Command
   case class CVerify(handle: EVar, args: List[Expr], preds: List[EVar], update: Option[ECall]) extends Command
-  case class CUpdate(handle: EVar, args: List[Expr], preds: List[EVar]) extends Command
+  case class CUpdate(newHandle: EVar, handle: EVar, args: List[Expr], preds: List[EVar]) extends Command
   case class CInvalidate(handle: EVar) extends Command
   case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
