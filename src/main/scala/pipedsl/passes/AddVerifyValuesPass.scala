@@ -57,7 +57,7 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
       val assgnCmds = args.zipWithIndex.foldLeft[(Command, List[EVar])](CEmpty(), List[EVar]())((cm, a) => {
         val arg = a._1
         val idx = a._2
-        val assgn = makeArgVariable(handle.id, idx, arg)
+        val assgn = makeArgVariable(nh.id, idx, arg)
         val priorCmds = cm._1
         val args = cm._2
         ( CSeq(priorCmds, assgn).setPos(c.pos), args :+ assgn.lhs )

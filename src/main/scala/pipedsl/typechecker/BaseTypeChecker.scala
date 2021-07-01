@@ -269,7 +269,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     }
     case CRecv(lhs, rhs) => {
       val (rTyp, renv) = checkExpression(rhs, tenv, None)
-      val (lTyp, lenv) = checkExpression(lhs, renv, None)
+      val (lTyp, lenv) = checkExpression(lhs, renv, Some(rTyp))
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
@@ -588,7 +588,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedType(id.pos, "variable", "variable type set to new conflicting type", t)
       }
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
-      case None => id.typ = defaultType; (defaultType.get, tenv)
+      case None => id.typ = defaultType; (defaultType.get, tenv.add(id, defaultType.get))
     }
     case ECast(totyp, exp) =>
       val (etyp, tenv2) = checkExpression(exp, tenv, None)
