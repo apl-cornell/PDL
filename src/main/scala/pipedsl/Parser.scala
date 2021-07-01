@@ -232,6 +232,8 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val resolveSpec: P[Command] = positioned {
     "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
       case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
+    "update" ~> parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
+      case i ~ _ ~ e => CUpdate(i, e, List()) } |
     "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 

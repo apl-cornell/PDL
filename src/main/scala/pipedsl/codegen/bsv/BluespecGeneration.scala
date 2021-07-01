@@ -887,6 +887,8 @@ object BluespecGeneration {
       case IRecv(_, sender, outvar) => Some(
         BAssign(translator.toVar(outvar), bsInts.getModPeek(modParams(sender)))
       )
+      //if preds != args, update preds definition
+      case CUpdate(_, _, _) => None
       case CLockStart(_) => None
       case CLockEnd(_) => None
       case CLockOp(_, _, _) => None
@@ -1091,6 +1093,25 @@ object BluespecGeneration {
         } else {
           specCmd
         })
+        //if args != preds -> do spec invalidate and speccall, reassign handle and predictions
+      case CUpdate(handle, args, preds) =>
+        val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
+          val a = l._1
+          val p = l._2
+          BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
+        })
+        val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle)))
+        //send to input
+        val sendStmts = sendToModuleInput(args, Some(handle))
+        //write to handle (make allocCall)
+        val allocExpr = bsInts.getSpecAlloc(specTable)
+        val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
+        val updatePreds = args.zip(preds).foldLeft(List[BStatement]())((l, s) => {
+          val a = s._1
+          val p = s._2
+          l :+ BAssign(translator.toVar(p), translator.toExpr(a))
+        })
+        Some(BIf(correct, List(), List(invalidate, allocAssign) ++ sendStmts ++ updatePreds))
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
       case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
         //only free speculation entries for the blocking call

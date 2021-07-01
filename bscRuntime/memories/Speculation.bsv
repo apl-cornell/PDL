@@ -9,10 +9,12 @@ typedef UInt#(TLog#(n)) SpecId#(numeric type n);
 interface SpecTable#(type sid);
     method ActionValue#(sid) alloc();
     method Maybe#(Bool) nbcheck(sid s);   
+    method Maybe#(Bool) nbcheck1(sid s);      
     method Maybe#(Bool) check(sid s);
     method Action free(sid s);
     method Action validate(sid s);
     method Action invalidate(sid s);
+    method Action invalidate1(sid s);   
 endinterface
 
 module mkSpecTable(SpecTable#(SpecId#(entries)));
@@ -22,7 +24,7 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    //Nothing needs to observe alloc
 
     Vector#(entries, Reg#(Bool)) inUse <- replicateM(mkConfigReg(False));
-    Vector#(entries, Ehr#(2, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
+    Vector#(entries, Ehr#(3, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
 
     Reg#(SpecId#(entries)) head <- mkReg(0);
     Bool full = inUse[head];
@@ -49,7 +51,7 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    method ActionValue#(SpecId#(entries)) alloc() if (!full);
         head <= head + 1;
         inUse[head] <= True;
-        specStatus[head][1] <= tagged Invalid;
+        specStatus[head][2] <= tagged Invalid;
         return head;
     endmethod
 
@@ -59,6 +61,14 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
 	  return tagged Invalid;
        else
 	  return specStatus[s][1];
+    endmethod
+
+    //lookup a given entry (sees both invalidates)
+    method Maybe#(Bool) nbcheck1(SpecId#(entries) s);
+       if (!inUse[s])
+	  return tagged Invalid;
+       else
+	  return specStatus[s][2];
     endmethod
    
    method Maybe#(Bool) check(SpecId#(entries) s);
@@ -85,6 +95,14 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
        end
     endmethod
 
+   //same as invalidate but happens AFTER nbcheck
+   method Action invalidate1(SpecId#(entries) s);
+       for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
+	  SpecId#(entries) lv = fromInteger(i);
+	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv][1] <= tagged Valid False;
+       end
+    endmethod
+   
 endmodule
 
 

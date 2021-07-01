@@ -354,6 +354,38 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           tenv
       }
+    case CUpdate(handle, args, preds) =>
+      //TODO solve the fact that this is just verify copypasta-ed
+      //check that handle has been created via speccall and that arg types line up
+      val (htyp, _) = checkExpression(handle, tenv, None)
+      htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
+        case TRequestHandle(mod, RequestType.Speculation) =>
+          val mtyp = tenv(mod)
+          mtyp match {
+            case TModType(inputs, _, _, _) =>
+              if (inputs.length != args.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, args.length)
+              }
+              if (inputs.length != preds.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, preds.length)
+              }
+              inputs.zip(args).foreach {
+                case (expectedT, a) =>
+                  val (atyp, _) = checkExpression(a, tenv, None)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, a.toString, expectedT, atyp)
+                  }
+              }
+              inputs.zip(preds).foreach {
+                case (expectedT, p) =>
+                  val (atyp, _) = checkExpression(p, tenv, None)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
+                  }
+              }
+          }
+          tenv
+      }
     case CInvalidate(handle) =>
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {

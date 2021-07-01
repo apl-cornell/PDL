@@ -60,6 +60,9 @@ object Utilities {
     case CVerify(handle, args, preds, upd) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
         preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
+    case CUpdate(handle, args, preds) =>
+      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
     case CInvalidate(handle) => Set(handle.id)
     case CCheckSpec(_) => Set()
     case COutput(exp) => getUsedVars(exp)
@@ -156,6 +159,9 @@ object Utilities {
     case CVerify(handle, args, preds, upd) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
       preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
+    case CUpdate(handle, args, preds) =>
+      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
     case CInvalidate(handle) => Set(handle.id)
     case CCheckSpec(_) => Set()
     case CEmpty() => Set()

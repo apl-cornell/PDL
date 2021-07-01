@@ -50,6 +50,12 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
       }
       val nc = CVerify(handle, args, env(handle.id), upd).setPos(c.pos)
       (nc, env)
+    case CUpdate(handle, args, _) =>
+      if (!env.contains(handle.id)) {
+        throw MissingPredictionValues(c.pos, handle.id.v)
+      }
+      val nc = CUpdate(handle, args, env(handle.id)).setPos(c.pos)
+      (nc, env)
     case CSplit(cases, default) =>
       val venvs = cases.foldLeft(List[(CaseObj, VEnv)]())((l, b) => {
         val (nc, nenv) = addVerifyValues(b.body, env)
