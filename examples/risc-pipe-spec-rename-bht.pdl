@@ -190,14 +190,14 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     if (!done) {
        if (notBranch) {
        	  verify(s, pc + 1<16>);
-	  s2 <- s;
+	      s2 <- s;
        } else {
        	 if (isBranch) {
-	   s2 <- update(s, bht.req(pc, immB, 1<16>));
+	       s2 <- update(s, bht.req(pc, immB, 1<16>));
 	 } else {
-	 s2 <- s;
-	 invalidate(s);
-    }}} else { s2 <- s; }
+	   s2 <- s;
+	   invalidate(s);
+    }}} else { s2 <- s; invalidate(s); }
     start(rf);
     if (needrs1) {
        reserve(rf[rs1], R);
@@ -242,12 +242,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     }}}
 
     if (!done) {
-       if (notBranch) {
+       if (!notBranch) {
        	  if (isBranch) {
-	     verify(s2, npc) { bht.upd(pc, take) };
-	  } else {
-	    call cpu(npc);
-	  }
+	        verify(s2, npc) { bht.upd(pc, take) };
+	      } else {
+	        call cpu(npc);
+	      }
        }
     }
 
