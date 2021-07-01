@@ -439,6 +439,7 @@ object BluespecGeneration {
       mem.v + "_lock_region"
     }
 
+    private var stgHasUpdate: Boolean = false
     /**
      * Given a pipeline stage and the necessary edge info,
      * generate a BSV module definition.
@@ -450,12 +451,14 @@ object BluespecGeneration {
       //Generate set of definitions needed by rule conditions
       //(declaring variables read from unconditional inputs)
       translator.setVariablePrefix(getStagePrefix(stg))
+      stgHasUpdate = hasUpdate(stg.getCmds)
       val sBody = getStageBody(stg)
       //Generate the set of execution rules for reading args and writing outputs
       val execRule = getStageRule(stg)
       //Add a stage kill rule if it needs one
       val killRule = getStageKillRule(stg)
       val rules = if (mod.maybeSpec && killRule.isDefined) List(execRule, killRule.get) else List(execRule)
+      stgHasUpdate = false
       translator.setVariablePrefix("")
       (sBody, rules)
     }
@@ -512,7 +515,9 @@ object BluespecGeneration {
           // isValid(spec) && !fromMaybe(True, check(spec))
         case CCheckSpec(_) =>
           l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
-            BUOp("!", BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal))))
+            //order is LATE if stage has no update
+            BUOp("!", BFromMaybe(BBoolLit(true),
+              bsInts.getNBSpecCheck(specTable, getSpecIdVal, late = !stgHasUpdate))))
           //also need these in case we're waiting on responses we need to dequeue
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
@@ -577,7 +582,8 @@ object BluespecGeneration {
           //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
         case CCheckSpec(isBlocking) if !isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
-              BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal))
+            //order is LATE if stage has no update
+              BFromMaybe(BBoolLit(true), bsInts.getNBSpecCheck(specTable, getSpecIdVal, late = !stgHasUpdate))
           )
         )
         case ICondCommand(cond, cs) =>
@@ -1086,7 +1092,7 @@ object BluespecGeneration {
           //true branch, just update spec table
           List(BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle)))),
           //false branch, update spec table _and_ resend call with correct arguments
-          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))) +: sendToModuleInput(args)
+          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = false)) +: sendToModuleInput(args)
         )
         Some(if (updCmd.isDefined) {
           BStmtSeq(List(BExprStmt(updCmd.get), specCmd))
@@ -1100,7 +1106,8 @@ object BluespecGeneration {
           val p = l._2
           BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
         })
-        val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle)))
+        //order update invalidate AFTER a CInvalidate or CVerify command
+        val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = true))
         //send to input
         val sendStmts = sendToModuleInput(args, Some(handle))
         //write to handle (make allocCall)
@@ -1113,7 +1120,8 @@ object BluespecGeneration {
         })
         Some(BIf(correct, List(), List(invalidate, allocAssign) ++ sendStmts ++ updatePreds))
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
-      case CInvalidate(handle) => Some(BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle))))
+      case CInvalidate(handle) => Some(BExprStmt(
+        bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = false)))
         //only free speculation entries for the blocking call
         //but do so conditionally based on being Speculative at all
       case CCheckSpec(isBlocking) if isBlocking =>
@@ -1165,6 +1173,18 @@ object BluespecGeneration {
         argmap = argmap :+ (if (specHandle.isDefined) { BTaggedValid(translator.toVar(specHandle.get)) } else { BInvalid })
       }
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
+    }
+
+    //TODO replace this analysis with a TRUE scheduling pass
+    private def hasUpdate(cs: Iterable[Command]): Boolean = {
+      var result = false
+      cs.foreach {
+        case ICondCommand(_, ics) =>
+          if (hasUpdate(ics)) result = true
+        case CUpdate(_, _, _) => result = true
+        case _ => ()
+      }
+      result
     }
   }
 
