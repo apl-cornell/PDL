@@ -1103,7 +1103,7 @@ object BluespecGeneration {
         })
         //if args != preds -> do spec invalidate and speccall, reassign handle and predictions
       case CUpdate(nh, handle, args, preds) =>
-        val incorrect = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
+        val incorrect = args.zip(preds).foldLeft[BExpr](BBoolLit(false))((b, l) => {
           val a = l._1
           val p = l._2
           BBOp("||", b, BBOp("!=", translator.toExpr(a), translator.toExpr(p)))
@@ -1115,7 +1115,9 @@ object BluespecGeneration {
         //write to handle (make allocCall)
         val allocExpr = bsInts.getSpecAlloc(specTable)
         val allocAssign = BInvokeAssign(translator.toVar(nh), allocExpr)
-        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts, List()))
+        //if correct then copy handle over
+        val copyHandle = BAssign(translator.toVar(nh), translator.toExpr(handle))
+        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts, List(copyHandle)))
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
       case CInvalidate(handle) => Some(BExprStmt(
         bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = false)))
