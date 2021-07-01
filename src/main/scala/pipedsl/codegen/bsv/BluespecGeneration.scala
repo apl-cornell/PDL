@@ -1111,7 +1111,7 @@ object BluespecGeneration {
         //order update invalidate AFTER a CInvalidate or CVerify command
         val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), late = true))
         //send to input
-        val sendStmts = sendToModuleInput(args, Some(handle))
+        val sendStmts = sendToModuleInput(args, Some(nh))
         //write to handle (make allocCall)
         val allocExpr = bsInts.getSpecAlloc(specTable)
         val allocAssign = BInvokeAssign(translator.toVar(nh), allocExpr)
