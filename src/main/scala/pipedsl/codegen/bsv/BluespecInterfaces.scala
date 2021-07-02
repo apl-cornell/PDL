@@ -234,13 +234,10 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val specModuleName = "mkSpecTable"
   private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
-  private val specCheckName = "check"
-  private val specNBCheckName = "nbcheck"
-  private val specNBCheckNameLate = "nbcheck1"
   private val specFreeName = "free"
+  private val specCheckName = "check"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
-  private val specInvalideNameLate = "invalidate1"
 
   def getDefaultSpecHandleType: BSizedType = getSpecHandleType(defaultSpecHandleSize)
   def getSpecHandleType(i: Integer): BSizedType = {
@@ -256,20 +253,20 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getSpecAlloc(st: BExpr): BExpr = {
     BMethodInvoke(st, specAllocName, List())
   }
-  def getSpecCheck(st: BVar, h: BExpr): BExpr = {
-    BMethodInvoke(st, specCheckName, List(h))
-  }
-  def getNBSpecCheck(st: BVar, h: BExpr, late: Boolean): BExpr = {
-    BMethodInvoke(st, if (late) specNBCheckNameLate else specNBCheckName, List(h))
-  }
+
   def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))
   }
-  def getSpecValidate(st: BVar, h: BExpr): BExpr = {
-    BMethodInvoke(st, specValidateName, List(h))
+
+  def getSpecCheck(st: BVar, h: BExpr, order: Int): BExpr = {
+    BMethodInvoke(st, specCheckName, List(h, BUnsizedInt(order)))
   }
-  def getSpecInvalidate(st: BVar, h: BExpr, late: Boolean): BExpr = {
-    BMethodInvoke(st, if (late) specInvalideNameLate else specInvalidateName, List(h))
+
+  def getSpecValidate(st: BVar, h: BExpr, order: Int): BExpr = {
+    BMethodInvoke(st, specValidateName, List(h, BUnsizedInt(order)))
+  }
+  def getSpecInvalidate(st: BVar, h: BExpr, order: Int): BExpr = {
+    BMethodInvoke(st, specInvalidateName, List(h, BUnsizedInt(order)))
   }
 
   /**
