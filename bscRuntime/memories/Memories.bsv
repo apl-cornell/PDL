@@ -112,16 +112,16 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    let outDepth = valueOf(inflight);
    
    //this must be at least size 2 to work correctly (safe bet)
-   Vector#(inflight, Reg#(elem)) outData <- replicateM( mkConfigReg(unpack(0)) );
-   Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkConfigReg(False) );
+   Vector#(inflight, Ehr#(2, elem)) outData <- replicateM( mkEhr(unpack(0)) );
+   Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
    
    Reg#(MemId#(inflight)) head <- mkReg(0);
-   Bool okToRequest = valid[head] == False;
+   Bool okToRequest = valid[head][1] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
    rule moveToOutFifo (nextData matches tagged Valid.idx);
-      outData[idx] <= memory.read;
-      valid[idx] <= True;
+      outData[idx][0] <= memory.read;
+      valid[idx][0] <= True;
    endrule
    
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest);
@@ -132,15 +132,15 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    endmethod
       
    method elem peekResp(MemId#(inflight) a);
-      return outData[a];
+      return outData[a][1];
    endmethod
       
    method Bool checkRespId(MemId#(inflight) a);
-      return valid[a] == True;
+      return valid[a][1] == True;
    endmethod
       
    method Action resp(MemId#(inflight) a);
-      valid[a] <= False;
+      valid[a][1] <= False;
    endmethod
    
 endmodule
