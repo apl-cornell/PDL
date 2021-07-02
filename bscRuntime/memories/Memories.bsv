@@ -1,5 +1,8 @@
+
 package Memories;
 
+import GetPut :: *;
+import ClientServer :: *;
 import RegFile :: *;
 import FIFO :: *;
 import FIFOF :: *;
@@ -37,7 +40,7 @@ typedef UInt#(TLog#(n)) MemId#(numeric type n);
 //For the built-in types of locks & mems:
 
 interface BramPort#(type addr, type elem, type mid, numeric type nsz);
-   interface BRAM_PORT_BE#(addr, elem, nsz) port;
+   interface Server#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_server;
 endinterface
 
 
@@ -46,6 +49,7 @@ interface AsyncMem#(type addr, type elem, type mid, numeric type nsz);
    method elem peekResp(mid a);
    method Bool checkRespId(mid a);
    method Action resp(mid a);
+   interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client;
 endinterface
 
 // (General vs. Addr Specific) X (Combinational vs. Async)
@@ -72,14 +76,17 @@ interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, ty
    interface AddrLock#(lid, addr, size) lock;
 endinterface
 
+
 interface LSQ#(type addr, type elem, type name, numeric type nsz);
    interface AsyncMem#(name, elem, name, nsz) mem;
+   interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client;
    method ActionValue#(name) reserveRead(addr a);
    method ActionValue#(name) reserveWrite(addr a);
    method Bool isValid(name n);
    method Action commitRead(name n);
    method Action commitWrite(name n);
 endinterface
+
 
 module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr, elem))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Bounded#(addr));
@@ -101,15 +108,41 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
    else
       p <- mkBRAMCore1BE(memSize, hasOutputReg);
    
-   interface port = p;
+   Reg#(Bool) doRead <- mkDReg(False);
+   Wire#(elem) nextData <- mkWire();
 
+   (* fire_when_enabled *)
+   rule moveToOutFifo (doRead);
+      nextData <= p.read;
+   endrule
+   
+   interface Server bram_server;
+      interface Put request;
+	 method Action put (Tuple3#(Bit#(nsz), addr, elem) req);
+	    $display("Sending request %t", $time());
+	    p.put(tpl_1(req), tpl_2(req), tpl_3(req));
+	    doRead <= True;
+	 endmethod
+      endinterface
+
+      interface Get response;
+	 method ActionValue#(elem) get();
+	    return nextData;
+	 endmethod
+      endinterface
+   endinterface
+   
+   
 endmodule
+	    
 
-module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
+module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   let memory = memwrap.port;
    let outDepth = valueOf(inflight);
+   
+   Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
+   Wire#(elem) fromMem <- mkWire();
    
    //this must be at least size 2 to work correctly (safe bet)
    Vector#(inflight, Reg#(elem)) outData <- replicateM( mkConfigReg(unpack(0)) );
@@ -119,13 +152,15 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    Bool okToRequest = valid[head] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
+   
+   (* fire_when_enabled *)
    rule moveToOutFifo (nextData matches tagged Valid.idx);
-      outData[idx] <= memory.read;
+      outData[idx] <= fromMem;
       valid[idx] <= True;
    endrule
    
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest);
-      memory.put(wmask, a, b);
+      toMem <= tuple3(wmask, a, b);
       head <= head + 1;
       nextData <= tagged Valid head;
       return head;
@@ -142,6 +177,22 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    method Action resp(MemId#(inflight) a);
       valid[a] <= False;
    endmethod
+   
+   interface Client bram_client;
+      interface Get request;
+	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
+	    return toMem;
+	 endmethod
+      endinterface
+   
+      interface Put response;
+	 method Action put(elem);
+	    fromMem <= elem;
+	 endmethod
+      endinterface
+   
+   endinterface
+
    
 endmodule
 
@@ -191,21 +242,21 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    interface lock = l;
 endmodule
    
-module mkQueueLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
+module mkQueueLockAsyncMem(QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem(memory);
+   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem();
    QueueLock#(LockId#(d)) l <- mkQueueLock();
       
-   interface mem = amem;
    interface lock = l;
+   interface mem = amem;
    
 endmodule
 
-module mkFAAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
+module mkFAAddrLockAsyncMem(AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
    
-   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem(memory);
+   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem();
    AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
    
    interface mem = amem;
@@ -213,10 +264,10 @@ module mkFAAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, A
    
 endmodule
 
-module mkDMAddrLockAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memory, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
+module mkDMAddrLockAsyncMem(AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem(memory);
+   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem();
    AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
    
    interface mem = amem;
@@ -243,8 +294,8 @@ typedef struct {
    Bool isValid;
 } LdQEntry#(type addr, type data, type entId) deriving(Bits, Eq);
 
-module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
- LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
+
+module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
    (Bits#(elem, szElem), Bits#(addr, szAddr), Eq#(addr));
 
    /*
@@ -263,9 +314,10 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
     * everything < commitWrite -> can commit write in the same cycle as writing the data (gets pushed to store issue queue)
     */
 
-   let memory = memwrap.port;
 
-
+   Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
+   Wire#(elem) fromMem <- mkWire();
+   
    ///Store Stuff
    Reg#(MemId#(inflight)) stHead <- mkReg(unpack(0));
    Vector#(inflight, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
@@ -375,7 +427,7 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
    //when considering other memory models   
    rule issueSt;
       let st = stIssueQ.first();
-      memory.put(st.m, st.a, st.d);
+      toMem <= tuple3(st.m, st.a, st.d);
       stIssueQ.deq();
 //      $display("Issuing Memory Store for addr %d, data %d, %t", st.a, st.d, $time());
    endrule
@@ -385,14 +437,14 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
    //run this _after_ commits so that we don't issue a load that's getting freed this cycle
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
   //    $display("Issuing Memory Load for tag %d, addr %d, %t", idx, ldQAddr[idx], $time());
-      memory.put(0, ldQAddr[idx], ?);
+      toMem <= tuple3(0, ldQAddr[idx], ?);
       nextData <= tagged Valid idx;
       ldQIssued[idx][1] <= True;
    endrule
    
    rule moveLdData (nextData matches tagged Valid.idx);
       //schedule this last for simplicity (can change later)
-      ldQData[idx][2] <= tagged Valid memory.read;
+      ldQData[idx][2] <= tagged Valid fromMem;
    endrule
       
    method ActionValue#(MemId#(inflight)) reserveRead(addr a) if (okToLd);
@@ -480,7 +532,18 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
 
    endinterface
    
+   interface Client bram_client;
+      interface Get request;
+	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
+	    return toMem;
+	 endmethod
+      endinterface
+      interface Put response;
+	 method Action put(elem);
+	    fromMem <= elem;
+	 endmethod
+      endinterface
+   endinterface
 endmodule
-
 
 endpackage
