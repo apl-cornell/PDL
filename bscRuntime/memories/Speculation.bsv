@@ -46,13 +46,19 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    endrule
     */
    
-    //allocate a new entry in the table to track speculation	       
+   RWire#(Bool) doAlloc <- mkRWireSBR();
+   (*fire_when_enabled*)
+   rule doAllocRule (doAlloc.wget() matches tagged Valid.d);
+      head <= head + 1;
+      inUse[head] <= True;
+      specStatus[head][2] <= tagged Invalid;
+   endrule
+    //allocate a new entry in the table to track speculation. do this in a nonblocking way
+    //and just assume that only 1 client calls per cycle
    method ActionValue#(SpecId#(entries)) alloc() if (!full);
-        head <= head + 1;
-        inUse[head] <= True;
-        specStatus[head][2] <= tagged Invalid;
-        return head;
-    endmethod
+      doAlloc.wset(True);
+      return head;
+   endmethod
 
     method Action free(SpecId#(entries) s);
         inUse[s] <= False;

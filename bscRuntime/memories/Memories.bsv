@@ -105,6 +105,8 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
 
 endmodule
 
+//data read from memory made available IMMEDIATELY
+//rep & resp can go in any order
 module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
@@ -116,12 +118,20 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
    
    Reg#(MemId#(inflight)) head <- mkReg(0);
+   Wire#(MemId#(inflight)) freeEntry <- mkWire();
+      
    Bool okToRequest = valid[head][1] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
+   (*fire_when_enabled*)
    rule moveToOutFifo (nextData matches tagged Valid.idx);
       outData[idx][0] <= memory.read;
       valid[idx][0] <= True;
+   endrule
+
+   (*fire_when_enabled*)
+   rule freeResp;
+      valid[freeEntry][1] <= False;
    endrule
    
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest);
@@ -139,8 +149,9 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
       return valid[a][1] == True;
    endmethod
       
+   //Make this invisible to other ops this cycle but happen at any time
    method Action resp(MemId#(inflight) a);
-      valid[a][1] <= False;
+      freeEntry <= a;
    endmethod
    
 endmodule
