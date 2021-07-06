@@ -26,8 +26,10 @@ import scala.collection.mutable
  */
 class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
 {
+
   private val optimalPorts = mutable.HashMap.empty[Id, (Int, Int)]
   private val modLims = mutable.HashMap.empty[Id, (Int, Int)]
+  private val report_optimal = prnt
   
   override def
   emptyEnv(): Environment[Id, (Int, Int)] =
@@ -55,7 +57,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
         case _ =>
       })
       val port_map = checkPipe(m.body, emptyEnv())
-      if(prnt)
+      if(prnt && false)
         port_map.getMappedKeys().foreach(mem =>
           {
             /*sadly we are reusing the int pair to mean sth dif on mem/locks*/
@@ -66,14 +68,23 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       m.modules.foreach(mod =>
         {
           val (r, w) = port_map.get(mod.name).getOrElse((0, 0))
+          val (ro, wo) = optimalPorts.getOrElse(mod.name, (0, 0))
           val ass_ports = (rp :Int, wp :Int) =>
             {
               if(r > rp)
                 throw new RuntimeException(s"Not enough read ports on " +
                   s"${mod.name}. Requires at least $r but found $rp")
+              else if (r > ro && report_optimal)
+                throw new RuntimeException("Better throughput could be " +
+                  s"obtained by having $ro read ports on ${mod.name} instead " +
+                  s"of $r")
               if(w > wp)
                 throw new RuntimeException(s"Not enough write ports on ${mod
                   .name}. Requires at least $w but found $wp")
+              else if (w > wo && report_optimal)
+                throw new RuntimeException("Better throughput could be " +
+                  s"obtained by having $wo write ports on ${mod.name} instead" +
+                  s" of $w")
             }
           mod.typ match
           {
@@ -91,21 +102,24 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
   def
   /*this function lets us use recursion to split across the time barriers*/
   checkPipe(c: Command,
-            start_env :Environment[Id, (Int, Int)])
+            strt_env :Environment[Id, (Int, Int)])
   :Environment[Id, (Int, Int)] =
-    c match
     {
-      case CTBar(c1@CTBar(_, _), c2@CTBar(_, _)) =>
-        checkPipe(c2, checkPipe(c1, start_env))
-      case CTBar(c1@CTBar(_, _), c2) =>
-        val env1 = checkPipe(c1, start_env)
-        checkCommand(c2, env1, env1)
-      case CTBar(c1, c2@CTBar(_, _)) =>
-        checkPipe(c2, checkCommand(c1, start_env, start_env))
-      case CTBar(c1, c2) =>
-        val env1 = checkCommand(c1, start_env, start_env)
-        checkCommand(c2, env1, env1)
-      case _ => checkCommand(c, start_env, start_env)
+      val start_env = strt_env//callees.foldLeft(strt_env)((nv, id) => nv.remove(id))
+       c match
+      {
+        case CTBar(c1@CTBar(_, _), c2@CTBar(_, _)) => checkPipe(c2, checkPipe(c1, start_env))
+
+        case CTBar(c1@CTBar(_, _), c2) =>
+          val env1 = checkPipe(c1, start_env)
+          checkCommand(c2, emptyEnv(), env1)
+        case CTBar(c1, c2@CTBar(_, _)) =>
+          checkPipe(c2, checkCommand(c1, emptyEnv(), start_env))
+        case CTBar(c1, c2) =>
+          val env1 = checkCommand(c1, emptyEnv(), start_env)
+          checkCommand(c2, emptyEnv(), env1)
+        case _ => checkCommand(c, emptyEnv(), start_env)
+      }
     }
 
 
@@ -125,48 +139,53 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       checkCommand(c2, checkCommand(c1, env, start_env), start_env)
     case CTBar(_, _) => checkPipe(c, start_env)
     case CIf(_, cons, alt) =>
-      checkCommand(cons, checkCommand(alt, env, start_env), 
-        start_env)
+      checkCommand(cons, env, start_env).union(checkCommand(alt, env, start_env))
     case CAssign(_, data) =>
-      checkExpr(data, env)
+      checkExpr(data, env, start_env)
     case CRecv(EVar(_), EMemAccess(mem, EVar(_), _)) =>
       /*asynch read*/
-      val start_read = start_env(mem)._1
-      val ret = env.add(mem,  (1, 0))
+      val ret = env.add(mem, (1, 0))
+      var port = (ret(mem)._1  + start_env(mem)._1) % modLims(mem)._1
+      if (port == 0) port = modLims(mem)._1
+      c.portNum = Some(port)
+      if (ret(mem)._1 > modLims(mem)._1)
+        throw new RuntimeException(s"$mem does not have enough read ports!")
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
       optimalPorts.update(mem, (cur_opt._1 + 1, cur_opt._2))
-      if(ret(mem)._1 == start_read + 1)
-        throw new RuntimeException(s"$mem does not have enough read ports!")
       ret
     case CRecv(EMemAccess(mem, _, _), _) =>
       /*any write, asynch or sequential*/
-      val start_write = start_env(mem)._2
       val ret = env.add(mem, (0, 1))
+      var port = (ret(mem)._2 + start_env(mem)._2) % modLims(mem)._2
+      if (port == 0) port = modLims(mem)._2
+      c.portNum = Some(port)
+      println(s"write port: $port")
+      println(s"limit: ${modLims(mem)._2}")
+      if (ret(mem)._2 > modLims(mem)._2)
+        throw new RuntimeException(s"$mem does not have enough write ports!")
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
       optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
-      c.portNum = Some(ret(mem)._2)
-      if(ret(mem)._2 == start_write + 1)
-        throw new RuntimeException(s"$mem does not have enough write ports!")
       ret
     case CRecv(EVar(_), data) =>
-      checkExpr(data, env)
+      checkExpr(data, env, start_env)
     case CSpecCall(_, pipe, args) =>
-      val nenv = args.foldLeft(env)((acc,e) => checkExpr(e, acc))
+      //callees += pipe
+      val nenv = args.foldLeft(env)((acc,e) => checkExpr(e, acc, start_env))
       nenv.get(pipe) match
       {
-        case Some(_) =>
+        case Some((1, 0)) =>
           throw new RuntimeException(s"tried to call $pipe multiple " +
             s"times in the same cycle")
-        case None =>
+        case _ =>
           val ret = nenv.add(pipe, (1, 0))
           c.portNum = Some(ret(pipe)._1)
           ret
       }
     case CVerify(_, args, _) =>
-      args.foldLeft(env)((acc, e) => checkExpr(e, acc))
-     case COutput(exp) => checkExpr(exp, env)
-    case CReturn(exp) => checkExpr(exp, env)
-    case CExpr(exp) => checkExpr(exp, env)
+      args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
+     case COutput(exp) => checkExpr(exp, env, start_env)
+    case CReturn(exp) => checkExpr(exp, env, start_env)
+    case CExpr(exp) => checkExpr(exp, env, start_env)
      case CLockOp(mem, op, lockType) =>
       val mangled = lockType match
       {
@@ -183,9 +202,9 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
           val cur_opt = optimalPorts.getOrElse(mangled, (0, 0))
           optimalPorts.update(mangled, (cur_opt._1 + 1, cur_opt._2))
           c.portNum = Some(ret(mangled)._1)
-          if(ret(mangled)._1 == start_res + 1)
-            throw new RuntimeException(s"${mem.id} does not support enough " +
-              s"reserves per cycle!")
+//          if(ret(mangled)._1 == start_res)
+//            throw new RuntimeException(s"${mem.id} does not support enough " +
+//              s"reserves per cycle!")
           println(c.portNum.get)
           ret
         case Locks.Released =>
@@ -195,9 +214,9 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
           val cur_opt = optimalPorts.getOrElse(mangled, (0, 0))
           optimalPorts.update(mangled, (cur_opt._1, cur_opt._2 + 1))
           c.portNum = Some(ret(mangled)._2)
-          if(ret(mangled)._2 == start_rel + 1)
-            throw new RuntimeException(s"${mem.id} does not support enough " +
-              s"releases per cycle!")
+//          if(ret(mangled)._2 == start_rel)
+//            throw new RuntimeException(s"${mem.id} does not support enough " +
+//              s"releases per cycle!")
           println(c.portNum.get)
           ret
         case Locks.Acquired =>
@@ -206,7 +225,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       }
     case CSplit(cases, default) =>
       cases.foldLeft(checkCommand(default, env, start_env))((enviro, comm) =>
-        checkCommand(comm.body, enviro, start_env))
+        checkCommand(comm.body, env, start_env).union(enviro))
    case _: InternalCommand => env
     case _ => env
   }
@@ -218,37 +237,48 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
    * @return the new environment with the results of e taken into account
    */
   def
-  checkExpr(e: Expr, env: Environment[Id, (Int, Int)])
+  checkExpr(e: Expr,
+            env: Environment[Id, (Int, Int)],
+            start_env: Environment[Id, (Int, Int)])
   : Environment[Id, (Int, Int)] = e match
   {
-    case EIsValid(ex) => checkExpr(ex, env)
-    case EFromMaybe(ex) => checkExpr(ex, env)
-    case EToMaybe(ex) => checkExpr(ex, env)
-    case EUop(_, ex) => checkExpr(ex, env)
-    case EBinop(_, e1, e2) => checkExpr(e2, checkExpr(e1, env))
-    case ERecAccess(rec, _) => checkExpr(rec, env)
+    case EIsValid(ex) => checkExpr(ex, env, start_env)
+    case EFromMaybe(ex) => checkExpr(ex, env, start_env)
+    case EToMaybe(ex) => checkExpr(ex, env, start_env)
+    case EUop(_, ex) => checkExpr(ex, env, start_env)
+    case EBinop(_, e1, e2) =>
+      checkExpr(e2, checkExpr(e1, env, start_env), start_env)
+    case ERecAccess(rec, _) => checkExpr(rec, env, start_env)
     case ERecLiteral(fields) =>
-      fields.foldLeft(env)((en, p) => checkExpr(p._2, en))
+      fields.foldLeft(env)((en, p) => checkExpr(p._2, en, start_env))
     case EMemAccess(mem, _, _) =>
       /*combinational read*/
       val ret = env.add(mem, (1, 0))
-      e.portNum = Some(ret(mem)._1)
+      var port = (ret(mem)._1  + start_env(mem)._1) % modLims(mem)._1
+      if (port == 0) port = modLims(mem)._1
+      e.portNum = Some(port)
+      if (ret(mem)._1 > modLims(mem)._1)
+        throw new RuntimeException(s"$mem does not have enough read ports!")
+      val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
+      optimalPorts.update(mem, (cur_opt._1 + 1, cur_opt._2))
       ret
-    case EBitExtract(num, _, _) => checkExpr(num, env)
+    case EBitExtract(num, _, _) => checkExpr(num, env, start_env)
     case ETernary(cond, tval, fval) =>
-      val cond_env = checkExpr(cond, env)
-      checkExpr(tval, cond_env).union(checkExpr(fval, cond_env))
+      val cond_env = checkExpr(cond, env, start_env)
+      checkExpr(tval, cond_env, start_env)
+        .union(checkExpr(fval, cond_env, start_env))
     case EApp(_, args) =>
-      args.foldLeft(env)((acc, e) => checkExpr(e, acc))
+      args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
     case ECall(mod, args) =>
       /*perhaps we should have some restrictions on calling the same module*/
       /*twice in a single cycle. I think I said that should be a nono*/
-      val nenv = args.foldLeft(env)((acc, e) => checkExpr(e, acc))
+      //callees += mod
+      val nenv = args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
       nenv.get(mod) match
     {
-      case Some(_) =>
+      case Some((1, 0)) =>
         throw new RuntimeException(s"${mod.v} is already called in this cycle")
-      case None =>
+      case _ =>
         /*we can annotate this so that if potentially we support superscalar*/
         /*pipes at some point this would be relevant*/
         val ret = nenv.add(mod, (1, 0))
@@ -256,7 +286,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
         ret
     }
     case EVar(_) => env
-    case ECast(_, exp) => checkExpr(exp, env)
+    case ECast(_, exp) => checkExpr(exp, env, start_env)
     case _: CirExpr => env /*not sure about this part?*/
     case _ => env
   }
