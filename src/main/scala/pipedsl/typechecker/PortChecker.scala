@@ -144,6 +144,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       checkExpr(data, env, start_env)
     case CRecv(EVar(_), EMemAccess(mem, EVar(_), _)) =>
       /*asynch read*/
+//      println("asynch read")
       val ret = env.add(mem, (1, 0))
       var port = (ret(mem)._1  + start_env(mem)._1) % modLims(mem)._1
       if (port == 0) port = modLims(mem)._1
@@ -155,12 +156,13 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       ret
     case CRecv(EMemAccess(mem, _, _), _) =>
       /*any write, asynch or sequential*/
+//      println("any write")
       val ret = env.add(mem, (0, 1))
       var port = (ret(mem)._2 + start_env(mem)._2) % modLims(mem)._2
       if (port == 0) port = modLims(mem)._2
       c.portNum = Some(port)
-      println(s"write port: $port")
-      println(s"limit: ${modLims(mem)._2}")
+//      println(s"write port: $port")
+//      println(s"limit: ${modLims(mem)._2}")
       if (ret(mem)._2 > modLims(mem)._2)
         throw new RuntimeException(s"$mem does not have enough write ports!")
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
@@ -196,7 +198,6 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       op match
       {
         case Locks.Reserved =>
-          println("reserve " + mangled)
           val start_res = start_env(mangled)._1
           val ret = env.add(mangled, (1, 0))
           val cur_opt = optimalPorts.getOrElse(mangled, (0, 0))
@@ -205,10 +206,9 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
 //          if(ret(mangled)._1 == start_res)
 //            throw new RuntimeException(s"${mem.id} does not support enough " +
 //              s"reserves per cycle!")
-          println(c.portNum.get)
+//          println(c.portNum.get)
           ret
         case Locks.Released =>
-          println("release " + mangled)
           val start_rel = start_env(mangled)._2
           val ret = env.add(mangled, (0, 1))
           val cur_opt = optimalPorts.getOrElse(mangled, (0, 0))
@@ -217,10 +217,8 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
 //          if(ret(mangled)._2 == start_rel)
 //            throw new RuntimeException(s"${mem.id} does not support enough " +
 //              s"releases per cycle!")
-          println(c.portNum.get)
+//          println(c.portNum.get)
           ret
-        case Locks.Acquired =>
-        println("acquire " + mangled); env
         case _ => env
       }
     case CSplit(cases, default) =>
@@ -253,6 +251,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       fields.foldLeft(env)((en, p) => checkExpr(p._2, en, start_env))
     case EMemAccess(mem, _, _) =>
       /*combinational read*/
+//      println("combinational read")
       val ret = env.add(mem, (1, 0))
       var port = (ret(mem)._1  + start_env(mem)._1) % modLims(mem)._1
       if (port == 0) port = modLims(mem)._1

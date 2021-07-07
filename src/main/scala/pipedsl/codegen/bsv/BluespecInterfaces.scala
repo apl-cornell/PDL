@@ -175,6 +175,17 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val memAsyncReqName = "mem.req"
   private val memAsyncRespName = "mem.resp"
   private val memAsyncCheckName = "mem.checkRespId"
+  
+  private val memAsync2PeekName1 = "mem.peekResp"
+  private val memAsync2ReqName1 = "mem.req"
+  private val memAsync2RespName1 = "mem.resp"
+  private val memAsync2CheckName1 = "mem.checkRespId"
+
+  private val memAsync2PeekName2 = "mem.peekResp2"
+  private val memAsync2ReqName2 = "mem.req2"
+  private val memAsync2RespName2 = "mem.resp2"
+  private val memAsync2CheckName2 = "mem.checkRespId2"
+
 
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
     val default = if (isWrite) { BAllOnes } else { BZero }
@@ -185,8 +196,14 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
-  def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncPeekName, List(handle))
+//  def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
+//    BMethodInvoke(mem, memAsyncPeekName, List(handle))
+//  }
+  def getMemPeek(mem: BVar, handle: BExpr, port: Int): BMethodInvoke = {
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2PeekName1, List(handle))
+      case 2 => BMethodInvoke(mem, memAsync2PeekName2, List(handle))
+    }
   }
   def getCombRead(mem: BVar, addr: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombReadName, List(addr))
@@ -194,16 +211,39 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombWriteName, List(addr, data))
   }
-  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+//  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+//    val isWrite = data.isDefined
+//    val mask = toMask(isWrite, writeMask)
+//    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, mask))
+//  }
+  def getMemReq(mem: BVar, writeMask: Option[BExpr],
+                 addr: BExpr, data: Option[BExpr], port: Int): BMethodInvoke = {
     val isWrite = data.isDefined
     val mask = toMask(isWrite, writeMask)
-    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, mask))
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2ReqName1, List(addr, data
+        .getOrElse(BDontCare), mask))
+      case 2 => BMethodInvoke(mem, memAsync2ReqName2, List(addr, data
+        .getOrElse(BDontCare), mask))
+    }
   }
-  def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncCheckName, List(handle))
+//  def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
+//    BMethodInvoke(mem, memAsyncCheckName, List(handle))
+//  }
+  def getCheckMemResp(mem: BVar, handle: BExpr, port: Int): BMethodInvoke = {
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2CheckName1, List(handle))
+      case 2 => BMethodInvoke(mem, memAsync2CheckName2, List(handle))
+    }
   }
-  def getMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncRespName, List(handle))
+//  def getMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
+//    BMethodInvoke(mem, memAsyncRespName, List(handle))
+//  }
+  def getMemResp(mem: BVar, handle: BExpr, port: Int): BMethodInvoke = {
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2RespName1, List(handle))
+      case 2 => BMethodInvoke(mem, memAsync2RespName2, List(handle))
+    }
   }
 
   /**
