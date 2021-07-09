@@ -131,9 +131,9 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EVar(id) => id.v
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
-      case CirMem(elemTyp, addrSize) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
-      case CirLockMem(elemTyp, addrSize, _, sz) => "memlock(" +
-        printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
+      case CirMem(elemTyp, addrSize, numPorts) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + "," + numPorts.toString + ")"
+      case CirLockMem(elemTyp, addrSize, _, sz, numPorts) => "memlock(" +
+        printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + "," + numPorts.toString + ")"
       case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirLockRegFile(elemTyp, addrSize, _, sz) => "rflock(" +
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"

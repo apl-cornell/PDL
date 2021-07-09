@@ -144,13 +144,14 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
-    case CirMem(elemTyp, addrSize) => {
-      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, 1, 1)
+    case CirMem(elemTyp, addrSize, numPorts) => {
+      if(numPorts > 2) throw new RuntimeException("Cannot have more than 2 ports on asynch memory")
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
-    case CirLockMem(elemTyp, addrSize, limpl, _) => {
-      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, 1, 1)
+    case CirLockMem(elemTyp, addrSize, limpl, _, numPorts) => {
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       val ltyp = TLockedMemType(mtyp, None, limpl)
       c.typ = Some(ltyp)
       (ltyp, tenv)

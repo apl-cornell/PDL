@@ -315,7 +315,7 @@ object Syntax {
   //this allows us to build a "locked" version of a memory
   case class CirLock(mem: Id, impl: LockInterface, szParams: List[Int]) extends CirExpr
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
-  case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
+  case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int], numPorts: Int) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
   case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr

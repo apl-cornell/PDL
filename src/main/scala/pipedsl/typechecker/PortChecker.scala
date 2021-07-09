@@ -74,17 +74,17 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
               if(r > rp)
                 throw new RuntimeException(s"Not enough read ports on " +
                   s"${mod.name}. Requires at least $r but found $rp")
-              else if (r > ro && report_optimal)
+              else if (ro > rp && report_optimal)
                 throw new RuntimeException("Better throughput could be " +
                   s"obtained by having $ro read ports on ${mod.name} instead " +
-                  s"of $r")
+                  s"of $rp")
               if(w > wp)
                 throw new RuntimeException(s"Not enough write ports on ${mod
                   .name}. Requires at least $w but found $wp")
-              else if (w > wo && report_optimal)
+              else if (wo > wp && report_optimal)
                 throw new RuntimeException("Better throughput could be " +
                   s"obtained by having $wo write ports on ${mod.name} instead" +
-                  s" of $w")
+                  s" of $wp")
             }
           mod.typ match
           {
@@ -144,22 +144,46 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       checkExpr(data, env, start_env)
     case CRecv(EVar(_), EMemAccess(mem, EVar(_), _)) =>
       /*asynch read*/
-//      println("asynch read")
-      val ret = env.add(mem, (1, 0))
-      var port = (ret(mem)._1  + start_env(mem)._1) % modLims(mem)._1
-      if (port == 0) port = modLims(mem)._1
-      c.portNum = Some(port)
-      if (ret(mem)._1 > modLims(mem)._1)
-        throw new RuntimeException(s"$mem does not have enough read ports!")
-      val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
-      optimalPorts.update(mem, (cur_opt._1 + 1, cur_opt._2))
-      ret
+      /*println("asynch read: " + mem + " : " + env(mem) + " : " + start_env(mem));*/
+      {mem.typ.get match {
+        case TMemType(_, _, rlat, _, _, _) =>
+          rlat
+        case TLockedMemType(TMemType(_, _, rlat, _, _, _), _, _) =>
+          rlat
+        case _ => throw new RuntimeException("no")
+      }} match {
+        case Latency.Asynchronous =>
+          val ret = env.add(mem, (0, 1))
+          var port = (ret(mem)._2 + start_env(mem)._2) % modLims(mem)._2
+          if (port == 0) port = modLims(mem)._2
+          /*println("port: " + port)*/
+          c.portNum = Some(port)
+          //      println(s"write port: $port")
+          //      println(s"limit: ${modLims(mem)._2}")
+          if (ret(mem)._2 > modLims(mem)._2)
+            throw new RuntimeException(s"$mem does not have enough read/write ports!")
+          val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
+          optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
+          ret
+        case _ =>
+          val ret = env.add(mem, (1, 0))
+          var port = (ret(mem)._1 + start_env(mem)._1) % modLims(mem)._1
+          if (port == 0) port = modLims(mem)._1
+          c.portNum = Some(port)
+          if (ret(mem)._1 > modLims(mem)._1)
+            throw new RuntimeException(s"$mem does not have enough read ports!")
+          val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
+          optimalPorts.update(mem, (cur_opt._1 + 1, cur_opt._2))
+          ret
+      }
+
     case CRecv(EMemAccess(mem, _, _), _) =>
       /*any write, asynch or sequential*/
-//      println("any write")
+      /*println("any write: " + mem + " : " + env(mem) + " : " + start_env(mem))*/
       val ret = env.add(mem, (0, 1))
       var port = (ret(mem)._2 + start_env(mem)._2) % modLims(mem)._2
       if (port == 0) port = modLims(mem)._2
+      /*println("port: " + port)*/
       c.portNum = Some(port)
 //      println(s"write port: $port")
 //      println(s"limit: ${modLims(mem)._2}")
@@ -167,6 +191,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
         throw new RuntimeException(s"$mem does not have enough write ports!")
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
       optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
+      /*println(optimalPorts(mem))*/
       ret
     case CRecv(EVar(_), data) =>
       checkExpr(data, env, start_env)

@@ -150,12 +150,20 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   val reqIdName = "ridtyp"
 
-  def getBaseMemType(isAsync: Boolean, elemSize: Int, addr: BSVType, data: BSVType): BInterface = {
+  def getBaseMemType(isAsync: Boolean,
+                     elemSize: Int,
+                     addr: BSVType,
+                     data: BSVType,
+                     portNum: Int): BInterface = {
     if (isAsync) {
       //TODO make this type parameterizable
       val reqTyp = getDefaultMemHandleType
       val maskSize = elemSize / 8
-      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
+      val memType = portNum match {
+        case 1 => asyncMemType
+        case 2 => asyncMemType2
+      }
+      BInterface(memType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
         BVar(reqIdName, reqTyp), BVar("nsz", BNumericType(maskSize))))
     } else {
       BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
@@ -165,6 +173,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
       case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
+      case `asyncMemType2` => BModule(asyncMemMod2, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case `combMemType` => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case _ => throw UnexpectedBSVType(s"${memtyp.name} is not a supported memory interface")
     }

@@ -67,7 +67,13 @@ object LockImplementation {
     //Convenience method to generate module names
     protected val combSuffix = "CombMem"
     protected val asyncSuffix = "AsyncMem"
-    protected def getSuffix(m: TMemType): String = if (m.readLatency == Combinational) combSuffix else asyncSuffix
+    protected def getSuffix(m: TMemType): String =
+      if (m.readLatency == Combinational) combSuffix
+      else
+        {
+          if(Math.max(m.readPorts, m.writePorts) < 2) asyncSuffix
+          else asyncSuffix + "2"
+        }
 
     /**
      * Determines whether or not this lock type can support the given list of

@@ -289,11 +289,23 @@ class Parser extends RegexParsers with PackratParsers {
       "s" ~> posint ^^ {n => (Latency.Sequential, n)} |
       "a" ~> posint ^^ {n => (Latency.Asynchronous, n)}
 
+  lazy val latsnports: P[((Latency.Latency, Int), (Latency.Latency, Int))] =
+    (latency ~ intopt) ~ ("," ~> (latency ~ intopt)) ^^
+      {
+        case (l1 ~ i1) ~ (l2 ~ i2) =>
+          ((l1, i1), (l2, i2))
+      } |
+      "a" ~> intopt ^^
+      {
+        case n =>
+          val v :(Latency.Latency, Int) = (Latency.Asynchronous, n)
+          (v, v)
+      }
 
   lazy val lockedMemory: P[Type] =
     sizedInt ~ brackets(posint) ~
-      (angular
-      ((latency ~ intopt) ~ ("," ~> (latency ~ intopt))) ~ parens(iden).?).? ^^
+      (angular(latsnports)
+      /*((latency ~ intopt) ~ ("," ~> (latency ~ intopt)))*/ ~ parens(iden).?).? ^^
       {
         case elem ~ size ~ lats =>
           if (lats.isDefined) {
@@ -312,6 +324,20 @@ class Parser extends RegexParsers with PackratParsers {
               Latency.Asynchronous, 1, 1)
             TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
           }
+      } |
+      sizedInt ~ brackets(posint) ~ angular("a:" ~> posint) ~ parens(iden) ^^
+      {
+        case elem ~ size ~ ports ~ lock =>
+          val mtyp = TMemType(elem, size, Latency.Asynchronous, Latency.Asynchronous, ports, ports)
+          lock match
+        {
+            case lk =>
+          //case Some(lk) =>
+            TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lk))
+//          case None =>
+//            TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+        }
+
       }
 
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
@@ -351,9 +377,22 @@ class Parser extends RegexParsers with PackratParsers {
       case _ ~ i ~ mods => CirNew(i, if (mods.isDefined) mods.get else List[Id]())
     }
   }
+
+  lazy val memargs: P[(Type, Int, Int)] = {
+    sizedInt ~ "," ~ posint ~ "," ~ posint ^^
+      {
+        case elem ~ _ ~ addr ~ _ ~ ports => (elem, addr, ports)
+      } |
+      sizedInt ~ "," ~ posint ^^
+    {
+      case elem ~ _ ~ addr => (elem, addr, 1)
+    }
+  }
+
   lazy val cmem: P[CirExpr] = positioned {
-    "memory" ~> parens(sizedInt ~ "," ~ posint ~ posint) ^^ { case elem ~ _ ~
-      addr ~ ports => CirMem(elem, addr, ports) }
+    "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^
+      { case elem ~ _ ~
+      addr ~ ports => CirMem(elem, addr, ports.getOrElse(1)); }
   }
 
   lazy val crf: P[CirExpr] = positioned {
