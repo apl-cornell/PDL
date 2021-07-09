@@ -25,7 +25,7 @@ object Main {
           case ("parse") => parse(debug = true, printOutput = true, config.file, config.out)
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit, config.addSubInts)
+            config.debug, config.defaultAddrLock, config.memInit)
           case ("typecheck") => runPasses(printOutput = true, config.file, config.out)
           case _ =>
         }
@@ -130,7 +130,7 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None, memInit: Map[String, String], addSubInts: Boolean = false): Unit = {
+    addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
@@ -145,7 +145,7 @@ object Main {
 
     val bsints = new BluespecInterfaces(addrLockMod)
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info,
-      debug, bsints, memInit = memInitFileNames, addSubInts = addSubInts)
+      debug, bsints, memInit = memInitFileNames)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close
