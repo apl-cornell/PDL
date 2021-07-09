@@ -25,8 +25,8 @@ object Main {
           case ("parse") => parse(debug = true, printOutput = true, config.file, config.out)
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit)
-          case ("typecheck") => runPasses(printOutput = true, config.file, config.out)
+            config.debug, config.defaultAddrLock, config.memInit, config.port_warn)
+          case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn)
           case _ =>
         }
       }
@@ -54,7 +54,7 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File): (Prog, ProgInfo) = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean): (Prog, ProgInfo) = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
@@ -78,7 +78,7 @@ object Main {
       val lockOperationTypeChecker = new LockOperationTypeChecker(lockWellformedChecker.getModLockGranularityMap)
       lockOperationTypeChecker.check(recvProg)
 
-      val portChecker = new PortChecker(printOutput)
+      val portChecker = new PortChecker(port_warn)
       portChecker.check(recvProg, None)
 
       val predicateGenerator = new PredicateGenerator()
@@ -134,8 +134,8 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
-    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir)
+    addrLockMod: Option[String] = None, memInit: Map[String, String], port_warn :Boolean): Unit = {
+    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, port_warn)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
     //copies mem initialization to output directory

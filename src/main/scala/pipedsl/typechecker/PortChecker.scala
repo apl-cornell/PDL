@@ -24,12 +24,11 @@ import scala.collection.mutable
  * will assign x to read port 1, y to read port 2, and z to read port 1. z
  * will then be assigned to read port 3
  */
-class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
+class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
 {
 
   private val optimalPorts = mutable.HashMap.empty[Id, (Int, Int)]
   private val modLims = mutable.HashMap.empty[Id, (Int, Int)]
-  private val report_optimal = prnt
   
   override def
   emptyEnv(): Environment[Id, (Int, Int)] =
@@ -57,7 +56,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
         case _ =>
       })
       val port_map = checkPipe(m.body, emptyEnv())
-      if(prnt && false)
+      if(port_warn && false)
         port_map.getMappedKeys().foreach(mem =>
           {
             /*sadly we are reusing the int pair to mean sth dif on mem/locks*/
@@ -74,14 +73,14 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
               if(r > rp)
                 throw new RuntimeException(s"Not enough read ports on " +
                   s"${mod.name}. Requires at least $r but found $rp")
-              else if (ro > rp && report_optimal)
+              else if (ro > rp && port_warn)
                 throw new RuntimeException("Better throughput could be " +
                   s"obtained by having $ro read ports on ${mod.name} instead " +
                   s"of $rp")
               if(w > wp)
                 throw new RuntimeException(s"Not enough write ports on ${mod
                   .name}. Requires at least $w but found $wp")
-              else if (wo > wp && report_optimal)
+              else if (wo > wp && port_warn)
                 throw new RuntimeException("Better throughput could be " +
                   s"obtained by having $wo write ports on ${mod.name} instead" +
                   s" of $wp")
@@ -144,7 +143,6 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
       checkExpr(data, env, start_env)
     case CRecv(EVar(_), EMemAccess(mem, EVar(_), _)) =>
       /*asynch read*/
-      /*println("asynch read: " + mem + " : " + env(mem) + " : " + start_env(mem));*/
       {mem.typ.get match {
         case TMemType(_, _, rlat, _, _, _) =>
           rlat
@@ -153,6 +151,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
         case _ => throw new RuntimeException("no")
       }} match {
         case Latency.Asynchronous =>
+         /* println("asynch read")*/
           val ret = env.add(mem, (0, 1))
           var port = (ret(mem)._2 + start_env(mem)._2) % modLims(mem)._2
           if (port == 0) port = modLims(mem)._2
@@ -166,6 +165,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
           optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
           ret
         case _ =>
+        /*  println("synch read")*/
           val ret = env.add(mem, (1, 0))
           var port = (ret(mem)._1 + start_env(mem)._1) % modLims(mem)._1
           if (port == 0) port = modLims(mem)._1
@@ -188,7 +188,7 @@ class PortChecker(prnt :Boolean) extends TypeChecks[Id, (Int, Int)]
 //      println(s"write port: $port")
 //      println(s"limit: ${modLims(mem)._2}")
       if (ret(mem)._2 > modLims(mem)._2)
-        throw new RuntimeException(s"$mem does not have enough write ports!")
+        throw new RuntimeException(s"$mem does not have enough write ports!\nFound ${modLims(mem)._2}")
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
       optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
       /*println(optimalPorts(mem))*/

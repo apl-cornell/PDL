@@ -65,12 +65,12 @@ object BluespecGeneration {
 
     //utility to check if this instantiates an async memory
     private def isAsyncMem(c:CirExpr): Boolean = c match {
-      case CirMem(_, _) => true
+      case CirMem(_, _, _) => true
       case _ => false
     }
     //utility to check if this instantiates a (non-async memory) module
     private def isModule(c:CirExpr): Boolean = c match {
-      case CirMem(_, _) => false
+      case CirMem(_, _, _) => false
       case _ => true
     }
 

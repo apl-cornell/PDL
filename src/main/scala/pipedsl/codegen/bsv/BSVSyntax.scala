@@ -58,7 +58,7 @@ object BSVSyntax {
     }
 
     def toClientType(t: Type): BSVType = t match {
-      case TMemType(elem, addrSize, rlat, wlat) if rlat == wlat && rlat == Asynchronous =>
+      case TMemType(elem, addrSize, rlat, wlat, _, _) if rlat == wlat && rlat == Asynchronous =>
         val elemTyp = toType(elem)
         bsints.getClientType(getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
       case _ => throw new RuntimeException
