@@ -143,6 +143,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   private val asyncMemType = "BramPort"
   private val asyncMemMod = "mkBramPort"
+  private val asyncMemType2 = "BramPort2"
+  private val asyncMemMod2 = "mkBramPort2"
   private val combMemType = "RegFile"
   private val combMemMod = "mkRegFile"
 

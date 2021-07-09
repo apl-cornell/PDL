@@ -309,7 +309,7 @@ object Syntax {
   case class CirExprStmt(ce: CirExpr) extends Circuit
 
   sealed trait CirExpr extends Expr
-  case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
+  case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
   //TODO do these ever need other kinds of parameters besides ints?
   //this allows us to build a "locked" version of a memory

@@ -104,7 +104,7 @@ object BluespecGeneration {
     }
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
-      case CirMem(elemTyp, addrSize) =>
+      case CirMem(elemTyp, addrSize, numPorts) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = true,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp)
