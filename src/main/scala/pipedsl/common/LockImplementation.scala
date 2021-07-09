@@ -167,6 +167,8 @@ object LockImplementation {
 
     def getModuleInstName(m: TMemType): String =  "mk" + getModuleName(m)
 
+    def getClientName: String = ".mem.bram_client"
+
     //TODO put this somewhere like Syntax
     protected def extractHandle(h: EVar): Expr = {
       val e = EFromMaybe(h).setPos(h.pos)
@@ -522,6 +524,8 @@ object LockImplementation {
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
     override def useUniqueLockId(): Boolean = false
+
+    override def getClientName: String = ".bram_client"
 }
 
   //The following are internal helper functions

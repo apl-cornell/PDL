@@ -3,7 +3,7 @@ package pipedsl.codegen.bsv
 import pipedsl.codegen.Translations.Translator
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.LockImplementation.LockInterface
-import pipedsl.common.Syntax.Latency.Combinational
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
 
 object BSVSyntax {
@@ -55,6 +55,13 @@ object BSVSyntax {
     def getTypeSize(b: BSVType): Int = b match {
       case BSizedInt(_, size) => size
       case _ => throw UnexpectedBSVType("The size of the given BSV Type cannot be determined")
+    }
+
+    def toClientType(t: Type): BSVType = t match {
+      case TMemType(elem, addrSize, rlat, wlat) if rlat == wlat && rlat == Asynchronous =>
+        val elemTyp = toType(elem)
+        bsints.getClientType(getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
+      case _ => throw new RuntimeException
     }
 
     def toType(t: Type): BSVType = t match {

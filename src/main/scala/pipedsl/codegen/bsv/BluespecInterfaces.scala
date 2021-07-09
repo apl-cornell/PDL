@@ -8,8 +8,11 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   val topModTyp: BInterface = BInterface("TopMod")
 
   def toIntVar(v: BVar): BVar = {
-    BVar("_int" + v.name, v.typ)
+    val dotIndex = v.name.indexOf('.')
+    val vname = if (dotIndex == -1) v.name else v.name.substring(0, dotIndex)
+    BVar("_int" + vname, v.typ)
   }
+
   def topModInterface(submods: Iterable[BVar]): BInterfaceDef = BInterfaceDef(
     typ = topModTyp,
     methods = List(),
@@ -21,8 +24,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     typ = Action,
     params = List())
 
-  def tbModule(modName: String, testMod: BModule, initStmts: List[BStatement], modDone: List[BExpr], doneRegs: List[BStatement],
-    bsInts: BluespecInterfaces, debug: Boolean): BModuleDef = {
+  def tbModule(modName: String, testMod: BModule, initStmts: List[BStatement], modDone: List[BExpr], modInsts: List[BStatement],
+               bsInts: BluespecInterfaces, debug: Boolean): BModuleDef = {
     val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
       bsInts.getReg(BBoolLit(false)))
     val startedReg = startedRegInst.lhs
@@ -43,7 +46,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       name = "mkTB",
       typ = None,
       params = List(),
-      body = doneRegs ++ List(startedRegInst, BModInst(BVar(modName, topModTyp), testMod)),
+      body = List(startedRegInst, BModInst(BVar(modName, topModTyp), testMod)) ++ modInsts,
       rules = List(initRule, doneRule),
       methods = List()
     )
@@ -150,6 +153,7 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   val reqIdName = "ridtyp"
 
+  private def getMaskSize(elemSize: Int): Int = elemSize / 8
   def getBaseMemType(isAsync: Boolean,
                      elemSize: Int,
                      addr: BSVType,
@@ -179,6 +183,14 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
     }
   }
 
+  def getClientType(elemSize: Int, addr: BSVType, data: BSVType): BSVType = {
+    val mask = BVar("nsz", BSizedType("Bit", List(getMaskSize(elemSize))))
+    val addrt = BVar("addr", addr)
+    val datat = BVar("data", data)
+    val reqType = BVar("req", BInterface("Tuple3", List(mask, addrt, datat)))
+    val respType = BVar("resp", data)
+    BInterface("Client", List(reqType, respType))
+  }
 
   private val memCombReadName = "read"
   private val memCombWriteName = "write"
@@ -377,5 +389,16 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
         //others should be unreachable
       case _ => throw UnexpectedBSVType(s"Handle Method should be Value type! but was ${handlemethod.typ}")
     }
+  }
+
+  //Client Server Constants
+
+  private val bramServer = "bram_server"
+  private val mkConnName = "mkConnection"
+
+  def getBramServerName = bramServer
+
+  def makeConnection(client: BVar, server: BVar): BFuncCall = {
+    BFuncCall(mkConnName, List(client, BMethodInvoke(server, getBramServerName, List())))
   }
 }

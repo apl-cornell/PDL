@@ -13,6 +13,8 @@ import scala.collection.immutable.ListMap
 
 object BluespecGeneration {
 
+  private val clientLib = "ClientServer"
+  private val connLib = "Connectable"
   private val lockLib = "Locks"
   private val memLib = "Memories"
   private val specLib = "Speculation"
@@ -23,7 +25,7 @@ object BluespecGeneration {
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
     debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
-    memInit:Map[String, String] = Map(), addSubInts: Boolean = false) {
+    memInit:Map[String, String] = Map()) {
 
 
     val funcModule: String = funcmodname
@@ -61,32 +63,57 @@ object BluespecGeneration {
       fmap + (fdef.name -> translator.toFunc(fdef))
     })
 
+    //utility to check if this instantiates an async memory
+    private def isAsyncMem(c:CirExpr): Boolean = c match {
+      case CirMem(_, _) => true
+      case _ => false
+    }
+    //utility to check if this instantiates a (non-async memory) module
+    private def isModule(c:CirExpr): Boolean = c match {
+      case CirMem(_, _) => false
+      case _ => true
+    }
 
-    //Given the circuit specification and module types:
-    //generate the set of statements that instantiate the top level modules and add any new type bindings to the
-    //environment by instantiating the modules
+    // Given the circuit specification and module types:
+    // generate the set of statements that instantiate the top level modules,
+    // and add any new type bindings to the environment by instantiating the modules
     private def instantiateModules(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
       case CirSeq(c1, c2) =>
         val (stmts1, env1) = instantiateModules(c1, env)
         val (stmts2, env2) = instantiateModules(c2, env1)
         (stmts1 ++ stmts2, env2)
-      case CirConnect(name, c) =>
+      case CirConnect(name, c) if isModule(c) =>
         val initFile = memInit.get(name.v)
         val (modtyp, mod) = cirExprToModule(c, env, initFile)
         val modvar = BVar(name.v, modtyp)
         (List(BModInst(modvar, mod)), env + (name -> modvar))
-        //These don't instantiate modules
-      case CirExprStmt(_) => (List(), env)
+      case _ => (List(), env)
     }
-
+    private def instantiateMems(c: Circuit, env: Map[Id, BVar]): (List[BStatement], Map[Id, BVar]) = c match {
+      case CirSeq(c1, c2) =>
+        val (stmts1, env1) = instantiateMems(c1, env)
+        val (stmts2, env2) = instantiateMems(c2, env1)
+        (stmts1 ++ stmts2, env2)
+      case CirConnect(name, c) if isAsyncMem(c) =>
+        val initFile = memInit.get(name.v)
+        val (modtyp, mod) = cirExprToModule(c, env, initFile)
+        val modvar = BVar(name.v, modtyp)
+        (List(BModInst(modvar, mod)), env + (name -> modvar))
+      case _ => (List(), env)
+    }
     //returns a map from variable names to bsv vars that represent all modules which
     // _need_ to be exposed at the top level (this correlates to those that are Called w/ some initial value
-    private def getTopLevelModules(c: Circuit, env: Map[Id, BVar]): Map[Id, BVar] = c match {
+    private def getTopLevelModules(c: Circuit, memMap: Map[Id, BVar], env: Map[Id, BVar]): Map[Id, BVar] = c match {
       case CirSeq(c1, c2) =>
-        val t1 = getTopLevelModules(c1, env)
-        val t2 = getTopLevelModules(c2, env)
+        val t1 = getTopLevelModules(c1, memMap, env)
+        val t2 = getTopLevelModules(c2, memMap, env)
         t1 ++ t2
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
+      case CirConnect(name, c) => c match {
+        case CirLock(mem, impl, _) if memMap.contains(mem) =>
+          Map(name -> BVar(name.v + impl.getClientName, translator.toClientType(mem.typ.get)))
+        case _ => Map()
+      }
       case _ => Map()
     }
 
@@ -128,10 +155,11 @@ object BluespecGeneration {
         val lockedMemType = translator.toType(c.typ.get)
         val modInstName = impl.getModuleInstName(
           mem.typ.get.matchOrError(mem.pos, "locked mem", "mem typ") { case c:TMemType => c})
-        //pass the memory itself in addition to the args the lock asks for
-        val modargs = getLockModArgs(
+        //pass the memory itself in addition to the args the lock asks for, if the memory is in the environment
+        val largs = getLockModArgs(
           mem.typ.get.matchOrError(mem.pos, "LockInstantiation", "MemTyp") { case m:TMemType => m },
-          impl, idsz) :+ env(mem)
+          impl, idsz)
+        val modargs = if (env.contains(mem)) { largs :+ env(mem) } else { largs }
         (lockedMemType, BModule(modInstName, modargs))
       case CirNew(mod, mods) =>
         (bsInts.getInterface(modMap(mod)),
@@ -145,6 +173,15 @@ object BluespecGeneration {
     }
 
     //TODO put in a good comment here that describes the return values
+
+    /**
+     * Given a circuit, generate the statements that are used in the TestBench
+     * code to execute Call Statements and start execution
+     * @param c The circuit
+     * @param env The mapping from program identifiers to the appropriate BSV variables made available by the top level
+     *            circiut
+     * @return (Rule statements, Blocking expressions, Initialization statements)
+     */
     private def initCircuit(c: Circuit, env: Map[Id, BVar]): (List[BStatement], List[BExpr], List[BStatement]) = c match {
       case CirSeq(c1, c2) =>
         val left = initCircuit(c1, env)
@@ -163,42 +200,56 @@ object BluespecGeneration {
           List(bsInts.getModCheckHandle(env(m), varReg)),
           List(BModInst(varReg, bsInts.getReg(BZero)))
         )
-      case _ => (List(), List(), List()) //TODO if/when memories can be initialized it goes here
+      case _ => (List(), List(), List())
     }
 
+    private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] = c match {
+      case CirSeq(c1, c2) =>
+        makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
+      case CirConnect(name, CirLock(mem, _, _)) if memMap.contains(mem) =>
+        val leftArg = intMap(name)
+        val rightArg = memMap(mem)
+        List(BExprStmt(bsInts.makeConnection(leftArg, rightArg)))
+      case _ => List()
+    }
     //Get the body of the top level circuit and the list of modules it instantiates
+    private val (mstmts, memMap) = instantiateMems(prog.circ, Map())
     private val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
-    private val finalArgMap = if (addSubInts) argmap else getTopLevelModules(prog.circ, argmap)
-
+    private val finalArgMap = getTopLevelModules(prog.circ, memMap, argmap)
     private val topInterface: BInterfaceDef = bsInts.topModInterface(finalArgMap.values)
 
     //Create a top level module that is synthesizable, takes no parameters
     //and instantiates all of the required memories and pipeline modules
-    //TODO generate other debugging/testing rules
     private val topLevelModule: BModuleDef = {
 
 
-      val assignInts = finalArgMap.values.foldLeft(List[BStatement]())((l, a) => {
-        l :+ BIntAssign(bsInts.toIntVar(a), a)
+      //Assigns the internal modules to their external facing interfaces, exposing only clients as necessary
+      val assignInts = finalArgMap.values.foldLeft(List[BStatement]())((l, a) => a.typ match {
+       // case BInterface(name, _) if name == "Client" =>
+       //   val clientName = ".mem.bram_client"
+        //  l :+ BIntAssign(bsInts.toIntVar(a), BVar(a.name + clientName, a.typ))
+        case _ => l :+ BIntAssign(bsInts.toIntVar(a), a)
       })
+
       BModuleDef(name = "mkCircuit", typ = Some(bsInts.topModTyp), params = List(),
         body = cirstmts ++ assignInts, rules = List(), methods = List())
     }
 
-    private val modarg = "m"
+    private val modarg = "_topMod"
     private val intargs = finalArgMap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     private val circuitstart = initCircuit(prog.circ, intargs)
-    val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = List(BImport(lockLib), BImport(memLib), BImport(verilogLib), BImport(combLib), BImport(asyncLib)) ++
+    private val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
+      imports = List(BImport(clientLib), BImport(connLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), BImport(combLib), BImport(asyncLib)) ++
         modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
       modules = List(bsInts.tbModule(
-        modarg, BModule(topLevelModule.name),
-        circuitstart._1,
-        circuitstart._2,
-        circuitstart._3,
-        bsInts,
-        debug
+        modName = modarg,
+        testMod = BModule(topLevelModule.name),
+        initStmts = circuitstart._1,
+        modDone = circuitstart._2,
+        modInsts = mstmts ++ circuitstart._3 ++ makeConnections(prog.circ, memMap, intargs),
+        bsInts = bsInts,
+        debug = debug
       )))
 
     def getBSVPrograms: List[BProgram] = {

@@ -111,6 +111,8 @@ interface AddrLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, t
    interface AddrLock#(lid, addr, size) lock;
 endinterface
 
+//TODO fix this "mem" interface part since they client type doesn't quite match up.
+//(e.g., by spliting the AsyncMem interface into the 'client' and memaccess ops)
 interface LSQ#(type addr, type elem, type name, numeric type nsz);
    interface AsyncMem#(name, elem, name, nsz) mem;
    interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client;
