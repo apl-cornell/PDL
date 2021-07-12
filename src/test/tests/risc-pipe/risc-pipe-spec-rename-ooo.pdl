@@ -140,7 +140,7 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div, bht: BHT]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div, bht: BHT]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
@@ -268,16 +268,15 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
 		int<32> wdata = 0<32>;
 		uint<2> boff = u0<2>;
 	  }
-	  case: (isMul) {
+/*	  case: (isMul) {
 	  	---
 		int<32> mulres = mul(rf1, rf2, funct3);
 		---
 		int<32> rddata = mulres;
 		int<32> wdata = 0<32>;
 		uint<2> boff = u0<2>;		
-	  }
+	  } */
 	  default: {
-	  	---
 		int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
 		int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
 		bool    alu_flip = (isStore || isLoad || isAui) ? false : flip;
@@ -288,7 +287,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
 		int<32> mulres = mul(rf1, rf2, funct3);
 		if (writerd && (!isLoad)) {
 		   block(rf[rd]);
-		   int<32> rddata = (isLui) ? immU : ((isJal || isJalr) ? linkpc : alu_res);
+		   int<32> rddata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
 		   rf[rd] <- rddata;
 		} else {
 		   int<32> rddata = 0<32>;
@@ -326,7 +325,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queu
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
-       if (isLoad || (isMul || isDiv)) {
+       if (isLoad || isDiv) {
           block(rf[rd]);
 	  int<32> maskedLoad = maskLoad(wdata, funct3, boff);
        	  int<32> insnout = (isLoad) ? maskedLoad : rddata;
@@ -348,7 +347,7 @@ circuit {
     i = Queue(ti);
     td = memory(int<32>, 16);
     d = FAQueue(td);
-    rf = rflock(int<32>, 5, 64);
+    rf = rflock ForwardRenameRF(int<32>, 5, 64);
     div = new multi_stg_div[];
     b = new BHT[](4);
     c = new cpu[rf, i, d, div, b];

@@ -7,7 +7,7 @@ import pipedsl.common.LockImplementation
 
 import scala.util.matching.Regex
 
-class Parser extends RegexParsers with PackratParsers {
+class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   type P[T] = PackratParser[T]
 
   // General parser combinators
@@ -347,9 +347,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val clockrf: P[CirExpr] = positioned {
-    "rflock" ~> parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
-      case elem ~ _ ~ addr ~ szs =>
-        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(Id("RenameRF")), szs.getOrElse(List()))
+    ("rflock" ~> iden.?) ~ parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
+      case i ~ (elem ~ _ ~ addr ~ szs) =>
+        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(i.getOrElse(Id(rflockImpl))), szs.getOrElse(List()))
     }
   }
 
