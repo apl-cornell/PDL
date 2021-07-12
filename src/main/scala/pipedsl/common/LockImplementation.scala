@@ -13,6 +13,7 @@ object LockImplementation {
   private val lqueue = new LockQueue()
   private val falqueue = new FALockQueue()
   private val rename = new RenameRegfile()
+  private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
 
   /**
@@ -26,6 +27,7 @@ object LockImplementation {
     lqueue.shortName -> lqueue,
     falqueue.shortName -> falqueue,
     rename.shortName -> rename,
+    forwardRename.shortName -> forwardRename,
     lsq.shortName -> lsq
   )
   /**
@@ -406,7 +408,12 @@ object LockImplementation {
       val pregs = if (szParams.isEmpty) aregs * 2 else szParams.head
       List(Utilities.exp2(m.addrSize), pregs)
     }
-}
+  }
+
+  private class ForwardingRegfile extends RenameRegfile {
+    override def shortName: String = "ForwardRenameRF"
+    override def getModuleInstName(m: TMemType): String =  "mk" + shortName
+  }
 
   /**
    * This represents a front to asynchronously responding memories,

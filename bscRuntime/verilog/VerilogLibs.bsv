@@ -7,6 +7,7 @@ import RWire :: *;
 export RenameRF(..);
 export BHT(..);
 export mkRenameRF;
+export mkForwardRenameRF;
 export mkNBFIFOF;
 export mkBHT;
 

@@ -109,9 +109,9 @@ module ForwardRenameRF(CLK,
    assign NAME_OUT_2 = names[ADDR_2];
 
    //Forward from either write port to read port
+   wire FWD11, FWD12, FWD21, FWD22;   
    assign FWD11 = WE_1 & (NAME_IN_1 == NAME_1);
    assign FWD21 = WE_2 & (NAME_IN_2 == NAME_1);
-
    assign FWD12 = WE_1 & (NAME_IN_1 == NAME_2);
    assign FWD22 = WE_2 & (NAME_IN_2 == NAME_2);
    
