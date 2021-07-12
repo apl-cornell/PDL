@@ -1,7 +1,7 @@
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
-import pipedsl.common.Errors.UnexpectedCase
+import pipedsl.common.Errors.{UnexpectedCase, UnprovenLockState}
 import pipedsl.common.Locks
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
@@ -147,7 +147,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           case Z3Status.UNKNOWN =>
             throw new RuntimeException("An error occurred while attempting to solve the constraints")
           case Z3Status.SATISFIABLE =>
-            throw new RuntimeException(s"A possible thread of execution can cause this to fail: memories needs to be $expectedLockState before $op")
+            throw UnprovenLockState(c.pos, mem.id.v, expectedLockState)
         }
       case _ => env
     }
@@ -255,7 +255,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       Acquired.order)
     match {
       case Z3Status.SATISFIABLE =>
-        throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
+        throw UnprovenLockState(expr.pos, mem.v, Locks.Acquired)
       case Z3Status.UNKNOWN =>
         throw new RuntimeException("An error occurred while attempting to solve the constraints")
       case Z3Status.UNSATISFIABLE =>

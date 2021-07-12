@@ -81,6 +81,9 @@ object Errors {
   case class InvalidLockState(pos: Position, name: String, l: LockState, exp: LockState) extends TypeError(
     s"Invalid lock state for $name, was $l, expected $exp", pos)
 
+  case class UnprovenLockState(pos: Position, name: String, exp: LockState) extends TypeError(
+    s"Could not prove that lock state for $name was $exp", pos)
+
   case class IllegalLockAcquisition(pos: Position) extends TypeError(
     s"Cannot acquire or reserve locks inside multiple branches", pos)
 
