@@ -8,8 +8,9 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   val topModTyp: BInterface = BInterface("TopMod")
 
   def toIntVar(v: BVar): BVar = {
+    val sfx = if(v.name.last.isDigit) v.name.last else ""
     val dotIndex = v.name.indexOf('.')
-    val vname = if (dotIndex == -1) v.name else v.name.substring(0, dotIndex)
+    val vname = if (dotIndex == -1) v.name else v.name.substring(0, dotIndex) + sfx
     BVar("_int" + vname, v.typ)
   }
 
@@ -398,7 +399,15 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   def getBramServerName = bramServer
 
-  def makeConnection(client: BVar, server: BVar): BFuncCall = {
-    BFuncCall(mkConnName, List(client, BMethodInvoke(server, getBramServerName, List())))
+  def makeConnection(client: BVar, server: BVar, port_num :Int): BStatement = {
+    /*if (dual_ported)
+      BStmtSeq(List(
+        BExprStmt(BFuncCall(mkConnName, List(BVar(client.name + "1", client.typ),
+          BMethodInvoke(server, getBramServerName + "1", List())))),
+        BExprStmt(BFuncCall(mkConnName, List(BVar(client.name + "2", client.typ),
+          BMethodInvoke(server, getBramServerName + "2", List()))))))
+    else
+    */
+    BExprStmt(BFuncCall(mkConnName, List(client, BMethodInvoke(server, getBramServerName + (if(port_num > 0) port_num else ""), List()))))
   }
 }

@@ -111,7 +111,12 @@ object BluespecGeneration {
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
       case CirConnect(name, c) => c match {
         case CirLock(mem, impl, _) if memMap.contains(mem) =>
-          Map(name -> BVar(name.v + impl.getClientName, translator.toClientType(mem.typ.get)))
+          if(is_dp(mem.typ.get))
+            {Map(
+                name.copy(name.v + "1") -> BVar(name.v + impl.getClientName + "1", translator.toClientType(mem.typ.get)),
+                name.copy(name.v + "2") -> BVar(name.v + impl.getClientName + "2", translator.toClientType(mem.typ.get)))}
+          else
+            Map(name -> BVar(name.v + impl.getClientName, translator.toClientType(mem.typ.get)))
         case _ => Map()
       }
       case _ => Map()
@@ -203,15 +208,34 @@ object BluespecGeneration {
       case _ => (List(), List(), List())
     }
 
-    private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] = c match {
+    private val is_dp :Type => Boolean = {
+      case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
+      case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
+    }
+
+    private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] =
+      {
+      c match {
       case CirSeq(c1, c2) =>
         makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
       case CirConnect(name, CirLock(mem, _, _)) if memMap.contains(mem) =>
-        val leftArg = intMap(name)
+        val leftArg = intMap.get(name)
         val rightArg = memMap(mem)
-        List(BExprStmt(bsInts.makeConnection(leftArg, rightArg)))
+        leftArg match
+        {
+          case Some(value) =>
+            List(bsInts.makeConnection(value, rightArg, 0))
+          case None =>
+            val left1 = intMap(name.copy(name.v + "1"))
+            val left2 = intMap(name.copy(name.v + "2"))
+          List(
+            bsInts.makeConnection(left1, rightArg, 1),
+            bsInts.makeConnection(left2, rightArg, 2))
+        }
       case _ => List()
     }
+      }
+
     //Get the body of the top level circuit and the list of modules it instantiates
     private val (mstmts, memMap) = instantiateMems(prog.circ, Map())
     private val (cirstmts, argmap) = instantiateModules(prog.circ, Map())
@@ -236,8 +260,9 @@ object BluespecGeneration {
     }
 
     private val modarg = "_topMod"
-    private val intargs = finalArgMap map { case (k, v) => (k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
+    private val intargs = finalArgMap map { case (k, v) =>(k, BVar(modarg + "." + bsInts.toIntVar(v).name, v.typ)) }
     private val circuitstart = initCircuit(prog.circ, intargs)
+
     private val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
       imports = List(BImport(clientLib), BImport(connLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), BImport(combLib), BImport(asyncLib)) ++
         modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),

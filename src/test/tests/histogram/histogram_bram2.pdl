@@ -10,7 +10,7 @@ void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
 }
 */
 
-pipe hist(counter: uint<10>)[feature: uint<16>[10]<a,a>(FAQueue), weight: uint<32>[10]<a,a>(FAQueue), h: uint<32>[10]<a,a>(FAQueue)]: bool {
+pipe hist(counter: uint<10>)[feature: uint<16>[10]<a,a>(FAQueue), weight: uint<32>[10]<a,a>(FAQueue), h: uint<32>[10]<a2>(FAQueue)]: bool {
     bool done = counter >= u1000<10>;
     if (!done) {
         call hist(counter + u1<10>);
@@ -52,7 +52,7 @@ circuit {
        f = FAQueue(tf);
        tw = memory(uint<32>, 10);
        w = FAQueue(tw);
-       th = memory(uint<32>, 10);
+       th = memory(uint<32>, 10, 2);
        h = FAQueue(th);
        hg = new hist[f, w, h];
        call hg(u0<10>);

@@ -194,7 +194,7 @@ module mkBramPort2#(parameter Bool init, parameter String file)
    
    (* fire_when_enabled *)
    rule moveToOutFifo2 (doRead2);
-      nextData1 <= dp.b.read;
+      nextData2 <= dp.b.read;
    endrule
    
       interface Server bram_server1;

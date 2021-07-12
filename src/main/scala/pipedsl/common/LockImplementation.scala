@@ -75,6 +75,7 @@ object LockImplementation {
           else asyncSuffix + "2"
         }
 
+
     /**
      * Determines whether or not this lock type can support the given list of
      * commands in a given stage
