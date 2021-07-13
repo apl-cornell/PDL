@@ -265,7 +265,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
 		---
 		int<32> rddata = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
-		int<32> wdata = 0<32>;
+		int<32> wdata <- 0<32>;
 		uint<2> boff = u0<2>;
 	  }
 /*	  case: (isMul) {
@@ -294,8 +294,8 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		}
 		---
     		uint<32> tmpaddr = cast(alu_res, uint<32>);
-		uint<16> memaddr = (tmpaddr >> 2){15:0};
-		uint<2> boff = cast(alu_res{1:0}, uint<2>);   
+		uint<16> memaddr = (tmpaddr >> 2){15:0};		
+		uint<2> boff = cast(alu_res{1:0}, uint<2>);
 		start(dmem);
 		split {
 		      case: (isLoad) {
@@ -319,9 +319,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		      }
 	        }
 		end(dmem);
-		---
 	  }
     }
+    ---		    
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
