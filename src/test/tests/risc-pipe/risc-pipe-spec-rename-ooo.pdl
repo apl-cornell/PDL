@@ -250,21 +250,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 	      }
        }
     }
-    int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
-    int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
-    bool    alu_flip = (isStore || isLoad || isAui) ? false : flip;
-    uint<3> alu_funct3 = (isStore || isLoad || isAui) ? doAdd : funct3;
-    int<32> alu_res = alu(alu_arg1, alu_arg2, alu_funct3, alu_flip);
-    int<16> tmppc = pc + 1<16>;
-    int<32> linkpc = 0<16> ++ (tmppc << 2);
-    int<32> mulres = mul(rf1, rf2, funct3);
-    if (writerd && (!isDiv) && (!isLoad)) {
-       block(rf[rd]);
-       int<32> aludata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
-       rf[rd] <- aludata;
-    } else {
-      int<32> aludata = 0<32>;
-    }
     split {
     	  case: (isDiv) {
 	  	---
@@ -279,23 +264,30 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
 		---
 		int<32> rddata = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
-		int<32> wdata <- 0<32>;
+		int<32> wdata = 0<32>;
 		uint<2> boff = u0<2>;
 	  }
-/*	  case: (isMul) {
-	  	---
-		int<32> mulres = mul(rf1, rf2, funct3);
-		---
-		int<32> rddata = mulres;
-		int<32> wdata = 0<32>;
-		uint<2> boff = u0<2>;		
-	  } */
-	  case: (isLoad || isStore) {
-		---
-    		uint<32> tmpaddr = cast(alu_res, uint<32>);
-		uint<16> memaddr = (tmpaddr >> 2){15:0};		
-		uint<2> boff = cast(alu_res{1:0}, uint<2>);
-		start(dmem);
+	 default: {
+	     int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
+	     int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
+	     bool    alu_flip = (isStore || isLoad || isAui) ? false : flip;
+	     uint<3> alu_funct3 = (isStore || isLoad || isAui) ? doAdd : funct3;
+	     int<32> alu_res = alu(alu_arg1, alu_arg2, alu_funct3, alu_flip);
+	     int<16> tmppc = pc + 1<16>;
+	     int<32> linkpc = 0<16> ++ (tmppc << 2);
+	     int<32> mulres = mul(rf1, rf2, funct3);
+	     if (writerd && (!isLoad)) {
+	     	block(rf[rd]);
+		int<32> rddata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
+		rf[rd] <- rddata;
+	     } else {
+	        int<32> rddata = 0<32>;
+	     }
+	     ---
+	     uint<32> tmpaddr = cast(alu_res, uint<32>);
+	     uint<16> memaddr = (tmpaddr >> 2){15:0};		
+	     uint<2> boff = cast(alu_res{1:0}, uint<2>);
+	     start(dmem);
 		split {
 		      case: (isLoad) {
 		      	    uint<16> raddr = memaddr;
@@ -317,16 +309,10 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		       	   int<32> wdata <- 0<32>;
 		      }
 	        }
-		int<32> rddata = 0<32>;
 		end(dmem);
-	  }
-	  default: {
-	  	   int<32> rddata = aludata;
-		   int<32> wdata <- 0<32>;
-		   uint<2> boff = u0<2>;
+		---
 	  }
     }
-    ---		    
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
