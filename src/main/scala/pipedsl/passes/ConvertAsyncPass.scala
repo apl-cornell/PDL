@@ -46,6 +46,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
   }
 
   private def convertRecv(c: CRecv): (Command, Command) = {
+
     (c.lhs, c.rhs) match {
         //Mem Read
       case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_), _)) =>
@@ -54,19 +55,23 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         val recv = IMemRecv(mem, handle, Some(lhs))
         send.memOpType = e.memOpType
         send.granularity = e.granularity
+        send.portNum = c.portNum
         recv.memOpType = e.memOpType
         recv.granularity = e.granularity
+        recv.portNum = c.portNum
         (send, recv)
       //Mem Write
       case (e@EMemAccess(mem, index@EVar(_), wm), data@EVar(_)) => mem.typ.get match {
-        case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous),_,_) =>
+        case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous, _, _),_, _) =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
           val recv = IMemRecv(mem, handle, None)
           send.memOpType = e.memOpType
           send.granularity = e.granularity
+          send.portNum = c.portNum
           recv.memOpType = e.memOpType
           recv.granularity = e.granularity
+          recv.portNum = c.portNum
           (send, recv)
           //if the memory is sequential we don't use handle since it
           //is assumed to complete at the end of the cycle
@@ -74,6 +79,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           val write = IMemWrite(mem, index, data).setPos(e.pos)
           write.memOpType = e.memOpType
           write.granularity = e.granularity
+          write.portNum = c.portNum
           (write, CEmpty())
         case _ => throw UnexpectedType(mem.pos, "Memory Write Statement", "Memory Type", mem.typ.get)
       }

@@ -46,7 +46,7 @@ package object pipedsl {
   def testTypecheck(testDir: File, inputFile: File): Boolean = {
     var doesTypecheck: Boolean = false
     try {
-      Main.runPasses(printOutput = true, inputFile, testDir)
+      Main.runPasses(printOutput = true, inputFile, testDir, port_warn = false)
       doesTypecheck = true
     } catch {
       case _: Throwable => ()
@@ -59,7 +59,7 @@ package object pipedsl {
 
   def testBlueSpecCompile(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
-    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit)
+    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit, port_warn = false)
     val exit = (pathToBluespecScript + " v " + testDir.getAbsolutePath).!
     deleteGeneratedFiles(testDir)
     deleteBSVFiles(testDir, memInit)
@@ -68,7 +68,7 @@ package object pipedsl {
 
   def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String], simFile: Option[String] = None): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
-    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit)
+    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit, port_warn = false)
     val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath + " " + FilenameUtils.getBaseName(inputFile.getName) + ".sim").!
     val success = exit == 0 && compareFiles(testDir, inputFile, "sim", simFile)
     deleteGeneratedFiles(testDir)

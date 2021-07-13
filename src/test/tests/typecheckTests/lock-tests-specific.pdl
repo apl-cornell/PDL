@@ -1,5 +1,5 @@
 //Expected Success
-pipe test1(input: uint<32>)[rf: int<32>[5]] {
+pipe test1(input: uint<32>)[rf: int<32>[5]<c2, s>] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
@@ -14,7 +14,7 @@ pipe test1(input: uint<32>)[rf: int<32>[5]] {
 } 
 
 //Expected Success
-pipe test2(input: uint<32>)[rf: int<32>[5]] {
+pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
@@ -31,7 +31,7 @@ pipe test2(input: uint<32>)[rf: int<32>[5]] {
 }
 
 //Expected success
-pipe test4(input: uint<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+pipe test4(input: uint<32>)[rf: int<32>[5]<c2, s>, dmem: int<32>[32]<a, a>] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     if (input{0:0} == u1) {
@@ -50,7 +50,7 @@ pipe test4(input: uint<32>)[rf: int<32>[5], dmem: int<32>[32]] {
 }
 
 //Expected Success
-pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c2, s>] {
     bool a = true;
     bool b = false;
     uint<5> rs1 = input{0:4};

@@ -29,7 +29,6 @@ pipe test4(input: uint<32>)[rf: int<32>[5], m:int<32>[5]] :bool {
     end(m);
     end(rf);
     ---
-    rf[rs2] <- 15<32>;
     release(rf[rs1]);
     release(rf[rs2]);
     release(m[rs1]);

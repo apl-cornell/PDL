@@ -51,7 +51,7 @@ pipe dummy2(a1: int<32>, a2: int<32>)[]: int<32> {
     output(res);
 }
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(FAQueue), imem:
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem:
 int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div, d: dummy, d2:
 dummy2]: bool {
  bool done = pc >= 14<16>;

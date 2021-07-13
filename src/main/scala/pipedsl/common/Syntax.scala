@@ -31,6 +31,10 @@ object Syntax {
     sealed trait SMTPredicate {
       var predicateCtx: Option[BoolExpr] = None
     }
+    sealed trait PortAnnotation
+    {
+      var portNum :Option[Int] = None
+    }
   }
 
   object Latency extends Enumeration {
@@ -88,7 +92,8 @@ object Syntax {
       case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
-      case TMemType(elem, size, rLat, wLat) => s"${elem.toString}[${size}]<$rLat, $wLat>"
+      case TMemType(elem, size, rLat, wLat, rPorts, wPorts) =>
+        s"${elem.toString}[${size}]<$rLat$rPorts, $wLat$wPorts>"
       case TLockedMemType(m, sz, impl) => s"${m.toString}(${impl.toString})".concat(
         if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
@@ -106,8 +111,12 @@ object Syntax {
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
-  case class TMemType(elem: Type, addrSize: Int,
-    readLatency: Latency = Latency.Asynchronous, writeLatency: Latency = Latency.Asynchronous) extends Type
+  case class TMemType(elem: Type,
+                      addrSize: Int,
+                      readLatency: Latency = Latency.Asynchronous,
+                      writeLatency: Latency = Latency.Asynchronous,
+                      readPorts: Int,
+                      writePorts: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
   case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
@@ -184,7 +193,7 @@ object Syntax {
   case class NumOp(op: String, fun: (Int, Int) => Int) extends BOp
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
-  sealed trait Expr extends Positional with TypeAnnotation {
+  sealed trait Expr extends Positional with TypeAnnotation with PortAnnotation {
     def isLVal = this match {
       case _:EVar => true
       case _:EMemAccess => true
@@ -221,7 +230,7 @@ object Syntax {
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
 
-  sealed trait Command extends Positional with SMTPredicate
+  sealed trait Command extends Positional with SMTPredicate with PortAnnotation
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
@@ -300,13 +309,13 @@ object Syntax {
   case class CirExprStmt(ce: CirExpr) extends Circuit
 
   sealed trait CirExpr extends Expr
-  case class CirMem(elemTyp: Type, addrSize: Int) extends CirExpr
+  case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
   //TODO do these ever need other kinds of parameters besides ints?
   //this allows us to build a "locked" version of a memory
   case class CirLock(mem: Id, impl: LockInterface, szParams: List[Int]) extends CirExpr
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
-  case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
+  case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int], numPorts: Int) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
   case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr

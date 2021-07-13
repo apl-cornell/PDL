@@ -16,7 +16,7 @@ object CommandLineParser {
     printStageGraph: Boolean = false,
     defaultAddrLock: Option[String] = None,
     memInit: Map[String, String] = Map(),
-    addSubInts: Boolean = false
+    port_warn: Boolean = false,
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -37,6 +37,9 @@ object CommandLineParser {
         opt[Unit]("debug")
           .action((_, c) => c.copy(debug = true))
           .text("Add debug commands to the generated circuit"),
+        opt[Unit]('p', "portwarn")
+          .action((_, c) => c.copy(port_warn = true))
+          .text("Throw errors for port conflicts between stages"),
         arg[File]("<file>...")
           .action((x, c) => c.copy(file = x))
           .text("pdl files to parse"),
@@ -68,9 +71,6 @@ object CommandLineParser {
             opt[Map[String, String]]("memInit")
               .valueName("<memName1>=<fileName1>,<memName2>=<fileName2>...")
               .action((x, c) => c.copy(memInit = x)),
-            opt[Unit]("addMemInts")
-              .action((_, c) => c.copy(addSubInts = true))
-              .text("add submodule interfaces to generated top level module")
           ),
         cmd("typecheck") 
           .text("parses and type checks the resulting AST")

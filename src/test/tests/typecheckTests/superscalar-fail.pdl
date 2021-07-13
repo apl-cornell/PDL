@@ -1,0 +1,31 @@
+pipe pp(val: int<8>)[]:int<8>
+  {
+    int<8> a = val + 1<8>;
+    ---
+    output(val - 1<8>);
+  }
+
+pipe main(idx: uint<5>)[rf: int<8>[5]<c, s>(RenameRF)] :bool
+  {
+    start(rf);
+    reserve(rf[idx], R);
+    block(rf[idx]);
+    int<8> num = rf[idx];
+    release(rf[idx]);
+    end(rf);
+    if(idx{2:2} == u1<1>)
+    {
+	int<8> v1 <- call pp(num);
+    } else {
+    int<8> v2 <- call pp(num);}
+    call pp(num);
+    ---
+    output(true);
+  }
+
+circuit
+  {
+    rename = rflock(int<8>, 5, 128);
+    m = new main[rename];
+    call m(u0<5>);
+  }
