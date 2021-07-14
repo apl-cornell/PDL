@@ -10,13 +10,14 @@ import ConfigReg :: *;
 import Vector :: *;
 import Locks :: *;
 import Ehr :: *;
-
+import RevertingVirtualReg :: *;
 
 export MemId(..);
 export BramPort(..);
 export AsyncMem(..);
 export QueueLockCombMem(..);
 export QueueLockAsyncMem(..);
+export BypassLockCombMem(..);
 export AddrLockCombMem(..);
 export AddrLockAsyncMem(..);
 export LSQ(..);
@@ -30,8 +31,20 @@ export mkFAAddrLockAsyncMem;
 export mkDMAddrLockCombMem;
 export mkDMAddrLockAsyncMem;
 export mkLSQ;
+export mkBypassLockCombMem;
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
+
+//return true if a is older than b, given a queue head (oldest entry) h
+function Bool isOlder(UInt#(sz) a, UInt#(sz) b, UInt#(sz) h);
+   let nohmid = a < b && !(a < h && b >= h);
+   let hmid = b < h && a >= h;
+   return nohmid || hmid;
+endfunction
+
+function Bool isNewer(UInt#(sz) a, UInt#(sz) b, UInt#(sz) h);
+   return !isOlder(a, b, h);
+endfunction
 
 //Types of memories X Locks:
 //For the built-in types of locks & mems:
@@ -65,6 +78,17 @@ interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
    method elem read (addr a);
    method Action write(addr a, elem b);
    interface AddrLock#(id, addr, size) lock;
+endinterface
+
+interface BypassLockCombMem#(type addr, type elem, type id, numeric type size);  
+   method Bool canRead(addr a);
+   method Bool canWrite(addr a);
+   method Bool canRes(addr a);
+   method ActionValue#(id) reserve(addr a);
+   method Bool owns(id i);
+   method Action commit(id i);
+   method elem read(addr a);
+   method Action write(id a, elem b);
 endinterface
 
 interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid, numeric type size);
@@ -294,18 +318,6 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
    //check with beginning of cycle values
    Bool okToSt = !stQValid[stHead][0];
    Bool okToLd = !ldQValid[ldHead][0];
-
-   //return true if a is older than b, given a queue head (oldest entry) h
-   function Bool isOlder(MemId#(inflight) a, MemId#(inflight) b, MemId#(inflight) h);
-      let nohmid = a < b && !(a < h && b >= h);
-      let hmid = b < h && a >= h;
-      return nohmid || hmid;
-   endfunction
-   
-   function Bool isNewer(MemId#(inflight) a, MemId#(inflight) b, MemId#(inflight) h);
-      return !isOlder(a, b, h);
-   endfunction
-
    function Bool isNewerStore(MemId#(inflight) a, MemId#(inflight) b);
       return isNewer(a, b, stHead);
    endfunction
@@ -490,6 +502,110 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
       endmethod
 
    endinterface
+   
+endmodule
+
+typedef struct {
+   addr a;
+   data d;
+   } WriteReq#(type addr, type data) deriving (Bits, Eq);
+
+module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, elem, LockId#(n), n) _unused_)
+   provisos (Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
+
+   Vector#(n, Reg#(Maybe#(addr))) resVec <- replicateM(mkConfigReg(tagged Invalid));
+   Vector#(n, Reg#(Maybe#(elem))) dataVec <- replicateM(mkConfigReg(tagged Invalid));   
+   Vector#(n, RWire#(elem)) bypassWire <- replicateM(mkRWireSBR());
+
+   Reg#(LockId#(n)) head <- mkReg(0);
+   Reg#(LockId#(n)) owner <- mkConfigReg(0);
+
+   Wire#(LockId#(n)) toCommit <- mkWire();
+   
+   function Maybe#(LockId#(n)) getMatchingEntry(addr a);
+      Maybe#(LockId#(n)) result = tagged Invalid;
+      for (Integer i = 0; i < valueOf(n); i = i + 1) begin
+	 if (resVec[i] matches tagged Valid.raddr &&& raddr == a)
+	    begin
+	       if (result matches tagged Valid.idx)
+		  begin
+		     if (isNewer(fromInteger(i), idx, head)) result = tagged Valid fromInteger(i);
+		  end
+	       else result = tagged Valid fromInteger(i);
+	    end
+	 end
+      return result;
+   endfunction
+   
+   
+   Bool headFree = !isValid(resVec[head]);
+   Bool unowned = !isValid(resVec[owner]);
+   
+   function Maybe#(elem) readBypassData(LockId#(n) ent);
+      let vecData = dataVec[ent];
+      let wData   = bypassWire[ent];
+      Maybe#(elem) result = tagged Invalid;
+      if (vecData matches tagged Valid.vdata) result = tagged Valid vdata;
+      else if (wData.wget matches tagged Valid.bdata) result = tagged Valid bdata;   
+      return result;
+   endfunction
+
+   
+   (*fire_when_enabled*)
+   rule doCommit;
+      let rfdata = fromMaybe(?, readBypassData(toCommit));
+      let rfaddr = fromMaybe(?, resVec[toCommit]);
+      rf.upd(rfaddr, rfdata);
+   endrule
+   
+   //can read THIS CycLe
+   method Bool canRead(addr a);
+      Bool canGo = False;
+      let wdataEnt = getMatchingEntry(a);
+      if (wdataEnt matches tagged Valid.id)
+	 begin
+	    canGo = isValid(readBypassData(id));
+	 end
+      else canGo = True;
+      return canGo;
+   endmethod
+   
+   //can write This Cycle
+   method Bool canWrite(addr a);
+      return unowned;
+   endmethod
+   
+   method Bool canRes(addr a);
+      return headFree;
+   endmethod
+   
+   method ActionValue#(LockId#(n)) reserve(addr a) if (headFree);
+      head <= head + 1;
+      resVec[head] <= tagged Valid a;
+      return head;
+   endmethod   
+   
+   method Bool owns(LockId#(n) id);
+      return True;
+   endmethod
+   
+   method Action commit(LockId#(n) id);
+      resVec[id] <= tagged Invalid;
+      owner <= owner + 1;
+      toCommit <= id;
+   endmethod
+   
+   method elem read(addr a);
+      elem outdata = rf.sub(a);
+      let wdataEnt = getMatchingEntry(a);
+      if (wdataEnt matches tagged Valid.id) outdata = fromMaybe(?, readBypassData(id));
+      return outdata;
+   endmethod
+   
+   method Action write(LockId#(n) id, elem b);
+      dataVec[id] <= tagged Valid b;
+      bypassWire[id].wset(b);
+   endmethod
    
 endmodule
 
