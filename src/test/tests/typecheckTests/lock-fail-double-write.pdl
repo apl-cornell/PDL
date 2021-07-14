@@ -1,0 +1,24 @@
+pipe test3(input: uint<32>)[rf: int<32>[5], m:int<32>[5]] {
+    uint<5> rs1 = input{0:4};
+    uint<5> rs2 = input{5:9};
+    start(rf);
+    start(m);
+    acquire(rf[rs1],R);
+    acquire(rf[rs2],W);
+    acquire(m[rs1], R);
+    rf[rs2] <- 1<32>;
+    end(m);
+    end(rf);
+    rf[rs2] <- 2<32>;
+    ---
+    release(rf[rs1]);
+    release(rf[rs2]);
+    release(m[rs1]);
+    call test3(input);
+}
+
+
+circuit {
+    r = memory(int<32>, 5);
+    m = memory(int<32>, 5);
+} 
