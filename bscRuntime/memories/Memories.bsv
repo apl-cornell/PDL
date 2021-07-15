@@ -545,11 +545,20 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
       let vecData = dataVec[ent];
       let wData   = bypassWire[ent];
       Maybe#(elem) result = tagged Invalid;
-      if (vecData matches tagged Valid.vdata) result = tagged Valid vdata;
-      else if (wData.wget matches tagged Valid.bdata) result = tagged Valid bdata;   
+      if (wData.wget matches tagged Valid.bdata) result = tagged Valid bdata;      
+      else if (vecData matches tagged Valid.vdata) result = tagged Valid vdata;   
+
       return result;
    endfunction
-
+/**
+   rule debug(True);
+      for (Integer j = 0; j < valueOf(n); j = j + 1) begin
+	 $display("AddrValid %b Addr %d, Data Valid %b Data %d %t",
+	    isValid(resVec[j]), fromMaybe(?, resVec[j]),
+	    isValid(readBypassData(fromInteger(j))),
+	    fromMaybe(?, readBypassData(fromInteger(j))), $time());
+      end
+   endrule **/
    
    (*fire_when_enabled*)
    rule doCommit;
@@ -582,6 +591,7 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
    method ActionValue#(LockId#(n)) reserve(addr a) if (headFree);
       head <= head + 1;
       resVec[head] <= tagged Valid a;
+      dataVec[head] <= tagged Invalid;
       return head;
    endmethod   
    
