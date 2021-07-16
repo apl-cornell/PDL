@@ -7,7 +7,7 @@ import pipedsl.common.LockImplementation
 
 import scala.util.matching.Regex
 
-class Parser extends RegexParsers with PackratParsers {
+class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   type P[T] = PackratParser[T]
 
   // General parser combinators
@@ -101,8 +101,13 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val neg: P[Expr] = positioned {
     "-" ~> parens(expr) ^^ (e => EUop(NegOp(), e))
   }
+
+  lazy val methodCall: P[ECall] = positioned {
+    iden ~ "." ~ iden ~ parens(repsep(expr, ",")) ^^ { case i ~ _  ~ n ~ args => ECall(i, Some(n), args) }
+  }
+
   lazy val simpleAtom: P[Expr] = positioned {
-    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, args) } |
+    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, None, args) } |
       not ~ expr ^^ { case n ~ e => EUop(n, e) } |
       neg |
       cast |
@@ -215,17 +220,20 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val speccall: P[Command] = positioned {
-    iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(expr, ",")) ^^ {
+    iden ~ "<-" ~ "speccall" ~ iden ~ parens(repsep(methodCall | expr, ",")) ^^ {
       case h ~ _ ~ _ ~ i ~ args =>
         val sv = EVar(h)
         sv.typ = Some(TRequestHandle(i, RequestType.Speculation))
         h.typ = sv.typ
         CSpecCall(sv, i, args)
-    }
+    } |
+    iden ~ "<-" ~ "update" ~ parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
+      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List()) }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
-    "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ^^ { case i ~ _ ~ e => CVerify(i, e, List()) } |
+    "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
+      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
     "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
   }
 
@@ -285,9 +293,10 @@ class Parser extends RegexParsers with PackratParsers {
       }
   }
 
+  lazy val void: P[Type] = "()" ^^ { _ => TVoid() }
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
   lazy val string: P[Type] = "String".r ^^ {_ => TString() }
-  lazy val baseTyp: P[Type] = lockedMemory | sizedInt | bool | string
+  lazy val baseTyp: P[Type] = lockedMemory | sizedInt | bool | string | void
 
   lazy val typ: P[Type] = "spec" ~> angular(baseTyp) ^^ { t => t.maybeSpec = true; t } |
     baseTyp
@@ -297,6 +306,12 @@ class Parser extends RegexParsers with PackratParsers {
   lazy val param: P[Param] = iden ~ ":" ~ (typ | typeName) ^^ { case i ~ _ ~ t =>
     i.typ = Some(t)
     Param(i, t)
+  }
+
+  lazy val methodDef: P[FuncDef] = positioned {
+    "method" ~> iden ~ parens(repsep(param, ",")) ~ ":" ~ typ <~ ";" ^^ {
+      case i ~ ps ~ _ ~ t => FuncDef(i, ps, t, CEmpty())
+    }
   }
 
   lazy val fdef: P[FuncDef] = positioned {
@@ -318,8 +333,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val cnew: P[CirExpr] = positioned {
-    "new" ~ iden ~ brackets(repsep(iden,",")).? ^^ {
-      case _ ~ i ~ mods => CirNew(i, if (mods.isDefined) mods.get else List[Id]())
+    "new" ~ iden ~ brackets(repsep(iden,",")).? ~ parens(repsep(num,",")).? ^^ {
+      case _ ~ i ~ mods ~ params => CirNew(i, if (mods.isDefined) mods.get else List(),
+        if (params.isDefined) params.get else List())
     }
   }
   lazy val cmem: P[CirExpr] = positioned {
@@ -331,9 +347,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val clockrf: P[CirExpr] = positioned {
-    "rflock" ~> parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
-      case elem ~ _ ~ addr ~ szs =>
-        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(Id("RenameRF")), szs.getOrElse(List()))
+    ("rflock" ~> iden.?) ~ parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
+      case i ~ (elem ~ _ ~ addr ~ szs) =>
+        CirLockRegFile(elem, addr, LockImplementation.getLockImpl(i.getOrElse(Id(rflockImpl))), szs.getOrElse(List()))
     }
   }
 
@@ -360,9 +376,14 @@ class Parser extends RegexParsers with PackratParsers {
     "circuit" ~> braces(cseq)
   }
 
+  lazy val extern: P[ExternDef] = positioned {
+    "extern" ~> iden ~ angular(repsep(typ, ",")).? ~ braces(methodDef.*) ^^ {
+      case i ~ t ~ f => ExternDef(i, if (t.isDefined) t.get else List(), f) }
+  }
+
   lazy val prog: P[Prog] = positioned {
-    fdef.* ~ moddef.* ~ circuit ^^ {
-      case f ~ p ~ c => Prog(f, p, c)
+    extern.* ~ fdef.* ~ moddef.* ~ circuit ^^ {
+      case e ~ f ~ p ~ c => Prog(e, f, p, c)
     }
   }
 }

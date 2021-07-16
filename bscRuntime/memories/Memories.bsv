@@ -10,13 +10,14 @@ import ConfigReg :: *;
 import Vector :: *;
 import Locks :: *;
 import Ehr :: *;
-
+import RevertingVirtualReg :: *;
 
 export MemId(..);
 export BramPort(..);
 export AsyncMem(..);
 export QueueLockCombMem(..);
 export QueueLockAsyncMem(..);
+export BypassLockCombMem(..);
 export AddrLockCombMem(..);
 export AddrLockAsyncMem(..);
 export LSQ(..);
@@ -30,8 +31,20 @@ export mkFAAddrLockAsyncMem;
 export mkDMAddrLockCombMem;
 export mkDMAddrLockAsyncMem;
 export mkLSQ;
+export mkBypassLockCombMem;
 
 typedef UInt#(TLog#(n)) MemId#(numeric type n);
+
+//return true if a is older than b, given a queue head (oldest entry) h
+function Bool isOlder(UInt#(sz) a, UInt#(sz) b, UInt#(sz) h);
+   let nohmid = a < b && !(a < h && b >= h);
+   let hmid = b < h && a >= h;
+   return nohmid || hmid;
+endfunction
+
+function Bool isNewer(UInt#(sz) a, UInt#(sz) b, UInt#(sz) h);
+   return !isOlder(a, b, h);
+endfunction
 
 //Types of memories X Locks:
 //For the built-in types of locks & mems:
@@ -65,6 +78,17 @@ interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
    method elem read (addr a);
    method Action write(addr a, elem b);
    interface AddrLock#(id, addr, size) lock;
+endinterface
+
+interface BypassLockCombMem#(type addr, type elem, type id, numeric type size);  
+   method Bool canRead(addr a);
+   method Bool canWrite(addr a);
+   method Bool canRes(addr a);
+   method ActionValue#(id) reserve(addr a);
+   method Bool owns(id i);
+   method Action commit(id i);
+   method elem read(addr a);
+   method Action write(id a, elem b);
 endinterface
 
 interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid, numeric type size);
@@ -105,6 +129,8 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
 
 endmodule
 
+//data read from memory made available IMMEDIATELY
+//rep & resp can go in any order
 module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
@@ -112,16 +138,24 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    let outDepth = valueOf(inflight);
    
    //this must be at least size 2 to work correctly (safe bet)
-   Vector#(inflight, Reg#(elem)) outData <- replicateM( mkConfigReg(unpack(0)) );
-   Vector#(inflight, Reg#(Bool)) valid <- replicateM( mkConfigReg(False) );
+   Vector#(inflight, Ehr#(2, elem)) outData <- replicateM( mkEhr(unpack(0)) );
+   Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
    
    Reg#(MemId#(inflight)) head <- mkReg(0);
-   Bool okToRequest = valid[head] == False;
+   Wire#(MemId#(inflight)) freeEntry <- mkWire();
+      
+   Bool okToRequest = valid[head][1] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
+   (*fire_when_enabled*)
    rule moveToOutFifo (nextData matches tagged Valid.idx);
-      outData[idx] <= memory.read;
-      valid[idx] <= True;
+      outData[idx][0] <= memory.read;
+      valid[idx][0] <= True;
+   endrule
+
+   (*fire_when_enabled*)
+   rule freeResp;
+      valid[freeEntry][1] <= False;
    endrule
    
    method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest);
@@ -132,15 +166,16 @@ module mkAsyncMem(BramPort#(addr, elem, MemId#(inflight), n) memwrap, AsyncMem#(
    endmethod
       
    method elem peekResp(MemId#(inflight) a);
-      return outData[a];
+      return outData[a][1];
    endmethod
       
    method Bool checkRespId(MemId#(inflight) a);
-      return valid[a] == True;
+      return valid[a][1] == True;
    endmethod
       
+   //Make this invisible to other ops this cycle but happen at any time
    method Action resp(MemId#(inflight) a);
-      valid[a] <= False;
+      freeEntry <= a;
    endmethod
    
 endmodule
@@ -283,18 +318,6 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
    //check with beginning of cycle values
    Bool okToSt = !stQValid[stHead][0];
    Bool okToLd = !ldQValid[ldHead][0];
-
-   //return true if a is older than b, given a queue head (oldest entry) h
-   function Bool isOlder(MemId#(inflight) a, MemId#(inflight) b, MemId#(inflight) h);
-      let nohmid = a < b && !(a < h && b >= h);
-      let hmid = b < h && a >= h;
-      return nohmid || hmid;
-   endfunction
-   
-   function Bool isNewer(MemId#(inflight) a, MemId#(inflight) b, MemId#(inflight) h);
-      return !isOlder(a, b, h);
-   endfunction
-
    function Bool isNewerStore(MemId#(inflight) a, MemId#(inflight) b);
       return isNewer(a, b, stHead);
    endfunction
@@ -479,6 +502,120 @@ module mkLSQ(BramPort#(addr, elem, MemId#(inflight), n) memwrap,
       endmethod
 
    endinterface
+   
+endmodule
+
+typedef struct {
+   addr a;
+   data d;
+   } WriteReq#(type addr, type data) deriving (Bits, Eq);
+
+module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, elem, LockId#(n), n) _unused_)
+   provisos (Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
+
+   Vector#(n, Reg#(Maybe#(addr))) resVec <- replicateM(mkConfigReg(tagged Invalid));
+   Vector#(n, Reg#(Maybe#(elem))) dataVec <- replicateM(mkConfigReg(tagged Invalid));   
+   Vector#(n, RWire#(elem)) bypassWire <- replicateM(mkRWireSBR());
+
+   Reg#(LockId#(n)) head <- mkReg(0);
+   Reg#(LockId#(n)) owner <- mkConfigReg(0);
+
+   Wire#(LockId#(n)) toCommit <- mkWire();
+   
+   function Maybe#(LockId#(n)) getMatchingEntry(addr a);
+      Maybe#(LockId#(n)) result = tagged Invalid;
+      for (Integer i = 0; i < valueOf(n); i = i + 1) begin
+	 if (resVec[i] matches tagged Valid.raddr &&& raddr == a)
+	    begin
+	       if (result matches tagged Valid.idx)
+		  begin
+		     if (isNewer(fromInteger(i), idx, head)) result = tagged Valid fromInteger(i);
+		  end
+	       else result = tagged Valid fromInteger(i);
+	    end
+	 end
+      return result;
+   endfunction
+   
+   
+   Bool headFree = !isValid(resVec[head]);
+   Bool unowned = !isValid(resVec[owner]);
+   
+   function Maybe#(elem) readBypassData(LockId#(n) ent);
+      let vecData = dataVec[ent];
+      let wData   = bypassWire[ent];
+      Maybe#(elem) result = tagged Invalid;
+      if (wData.wget matches tagged Valid.bdata) result = tagged Valid bdata;      
+      else if (vecData matches tagged Valid.vdata) result = tagged Valid vdata;   
+
+      return result;
+   endfunction
+/**
+   rule debug(True);
+      for (Integer j = 0; j < valueOf(n); j = j + 1) begin
+	 $display("AddrValid %b Addr %d, Data Valid %b Data %d %t",
+	    isValid(resVec[j]), fromMaybe(?, resVec[j]),
+	    isValid(readBypassData(fromInteger(j))),
+	    fromMaybe(?, readBypassData(fromInteger(j))), $time());
+      end
+   endrule **/
+   
+   (*fire_when_enabled*)
+   rule doCommit;
+      let rfdata = fromMaybe(?, readBypassData(toCommit));
+      let rfaddr = fromMaybe(?, resVec[toCommit]);
+      rf.upd(rfaddr, rfdata);
+   endrule
+   
+   //can read THIS CycLe
+   method Bool canRead(addr a);
+      Bool canGo = False;
+      let wdataEnt = getMatchingEntry(a);
+      if (wdataEnt matches tagged Valid.id)
+	 begin
+	    canGo = isValid(readBypassData(id));
+	 end
+      else canGo = True;
+      return canGo;
+   endmethod
+   
+   //can write This Cycle
+   method Bool canWrite(addr a);
+      return unowned;
+   endmethod
+   
+   method Bool canRes(addr a);
+      return headFree;
+   endmethod
+   
+   method ActionValue#(LockId#(n)) reserve(addr a) if (headFree);
+      head <= head + 1;
+      resVec[head] <= tagged Valid a;
+      dataVec[head] <= tagged Invalid;
+      return head;
+   endmethod   
+   
+   method Bool owns(LockId#(n) id);
+      return True;
+   endmethod
+   
+   method Action commit(LockId#(n) id);
+      resVec[id] <= tagged Invalid;
+      owner <= owner + 1;
+      toCommit <= id;
+   endmethod
+   
+   method elem read(addr a);
+      elem outdata = rf.sub(a);
+      let wdataEnt = getMatchingEntry(a);
+      if (wdataEnt matches tagged Valid.id) outdata = fromMaybe(?, readBypassData(id));
+      return outdata;
+   endmethod
+   
+   method Action write(LockId#(n) id, elem b);
+      dataVec[id] <= tagged Valid b;
+      bypassWire[id].wset(b);
+   endmethod
    
 endmodule
 

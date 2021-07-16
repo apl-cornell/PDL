@@ -95,6 +95,7 @@ object Syntax {
       case TRequestHandle(m, _) => s"${m}_Request"
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
+      case TObject(name, tparams, methods) => "TODO"
     }
   }
   // Types that can be upcast to Ints
@@ -114,6 +115,7 @@ object Syntax {
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
   case class TMaybe(btyp: Type) extends Type
+  case class TObject(name: Id, typParams: List[Type], methods: Map[Id,TFun]) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -216,9 +218,10 @@ object Syntax {
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
-  case class ECall(mod: Id, args: List[Expr]) extends Expr
+  case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
+
 
 
   sealed trait Command extends Positional with SMTPredicate
@@ -233,7 +236,8 @@ object Syntax {
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
   case class CCheckSpec(isBlocking: Boolean) extends Command
-  case class CVerify(handle: EVar, args: List[Expr], preds: List[Expr]) extends Command
+  case class CVerify(handle: EVar, args: List[Expr], preds: List[EVar], update: Option[ECall]) extends Command
+  case class CUpdate(newHandle: EVar, handle: EVar, args: List[Expr], preds: List[EVar]) extends Command
   case class CInvalidate(handle: EVar) extends Command
   case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
@@ -289,10 +293,10 @@ object Syntax {
 
   case class Param(name: Id, typ: Type) extends Positional
 
-  case class Prog(
-          fdefs: List[FuncDef],
-          moddefs: List[ModuleDef],
-          circ: Circuit) extends Positional
+  case class ExternDef(name: Id, typParams: List[Type], methods: List[FuncDef]) extends Definition with TypeAnnotation
+
+  case class Prog(exts: List[ExternDef],
+    fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional
 
   sealed trait Circuit extends Positional
   case class CirSeq(c1: Circuit, c2: Circuit) extends Circuit
@@ -308,6 +312,6 @@ object Syntax {
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
   case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
-  case class CirNew(mod: Id, mods: List[Id]) extends CirExpr
+  case class CirNew(mod: Id, mods: List[Id], params: List[EInt]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }

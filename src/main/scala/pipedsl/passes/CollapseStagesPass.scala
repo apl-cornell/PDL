@@ -165,7 +165,8 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         }
         e.to.addCmds(nstmts)
         //also add necessary values to this edge
-        val newedge = PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values ++ getUsedVars(nstmts))
+        //(don't use nstmts since this adds the vars used in the condRecv, which should already be available via another edge
+        val newedge = PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values ++ getUsedVars(receivingStmts))
         target.addEdge(newedge)
       })
     })

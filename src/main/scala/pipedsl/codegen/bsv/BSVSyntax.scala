@@ -56,6 +56,8 @@ object BSVSyntax {
     }
 
     def toType(t: Type): BSVType = t match {
+      case TObject(name, tparams, _) =>
+        BInterface(name.toString, tparams.map(t => BVar( "nocare", toType(t))))
       case TMemType(elem, addrSize, rlat, _) =>
         val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
@@ -142,6 +144,9 @@ object BSVSyntax {
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
       case EToMaybe(ex) => BTaggedValid(toExpr(ex))
+      case ECall(mod, method, args) if method.isDefined =>
+        //type doesn't matter on the var
+        BMethodInvoke(BVar(mod.v, BVoid), method.get.v, args.map(a => toExpr(a)))
       case _ => throw UnexpectedExpr(e)
     }
 

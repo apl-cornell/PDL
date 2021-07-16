@@ -163,15 +163,17 @@ object Environments {
 
         override def intersect(other: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
             var newMap: Map[Id, Z3AST] = Map()
-            for (key <- other.getMappedKeys()) {
-                this.get(key) match {
-                    case Some(value) => {
+            for (key <- (this.getMappedKeys() ++ other.getMappedKeys())) {
+                (this.get(key), other.get(key)) match {
+                    case (Some(v1), Some(v2)) => {
                         //Just takes the and of both states to merge. This works because if state
                         // is unchanged from a branch, it will be "cond implies a and (not cond) implies a"
-                        val and = ctx.mkAnd(value.asInstanceOf[Z3BoolExpr] , other(key).asInstanceOf[Z3BoolExpr])
+                        val and = ctx.mkAnd(v1.asInstanceOf[Z3BoolExpr] , v2.asInstanceOf[Z3BoolExpr])
                         newMap = newMap + (key -> and)
                     }
-                    case None => newMap = newMap + (key -> other(key))
+                    case (Some(v1), None) => newMap = newMap + (key -> v1)
+                    case (None, Some(v2)) => newMap = newMap + (key -> v2)
+                    case _ => ()
                 }
             }
             this.copy(m = newMap)
