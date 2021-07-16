@@ -27,7 +27,7 @@ object Main {
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit, rfLockImpl = config.defaultRegLock)
+            config.debug, config.memInit, rfLockImpl = config.defaultRegLock)
           case ("typecheck") => runPasses(printOutput = true, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case _ =>
@@ -136,7 +136,7 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None, memInit: Map[String, String],  rfLockImpl: Option[String] = None): Unit = {
+          memInit: Map[String, String],  rfLockImpl: Option[String] = None): Unit = {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
