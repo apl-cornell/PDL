@@ -1,0 +1,33 @@
+extern BHT<int<32>> {
+    method req(pc: int<32>, skip: int<32>, take: int<32>): int<32>;
+    method upd(pc: int<32>, taken: bool): ();
+}
+
+pipe test(pc: int<32>)[rf: int<32>[5]<c,s>(FAQueue), bht: BHT]: bool {
+     spec_check();
+     start(rf);
+     uint<5> a = cast(pc{4:0}, uint<5>);
+     acquire(rf[a], R);
+     end(rf);
+     int<32> ra = rf[a];
+     release(rf[a]);
+     s <- speccall test(pc + 1<32>);
+     ---
+     spec_check();
+     s2 <- update(s, bht.req(pc, ra, 1<32>));
+     ---
+     spec_barrier();
+     bool isBr = ra{31:31} == 0<1>;
+     int<32> npc = (isBr) ? (pc + ra) : (pc + 1<32>);
+     verify(s2, npc) { bht.upd(pc, isBr) };
+     print("PC: %d", pc);
+     print("Took BR: %b", isBr);
+}
+
+circuit {
+    rf = regfile(int<32>, 5);
+    rfl = FAQueue(rf);
+    b = new BHT[](4);
+    t = new test[rfl, b];
+    call t(0<32>);
+}

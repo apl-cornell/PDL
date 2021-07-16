@@ -11,7 +11,7 @@ import pipedsl.typechecker.Environments.Environment
  */
 class BindModuleTypes(val tenv: Environment[Id, Type]) extends ProgPass[Prog] {
   override def run(p: Prog): Prog = {
-    p.copy(moddefs = p.moddefs.map(run))
+    p.copy(exts = p.exts, fdefs = p.fdefs, moddefs = p.moddefs.map(run))
   }
 
   def run(m: ModuleDef): ModuleDef = {

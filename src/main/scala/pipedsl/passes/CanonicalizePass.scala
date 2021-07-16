@@ -40,9 +40,8 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
 
   override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
 
-  override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m)),
-    fdefs = p.fdefs.map(f => run(f))).setPos(p.pos)
-
+  override def run(p: Prog): Prog = p.copy(exts = p.exts,
+    fdefs = p.fdefs.map(f => run(f)), moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
   /**
    * Removes all of the unnecessary CSeq commands that connect empty statements.
@@ -91,10 +90,13 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       val (nargs, nc) = extractCastVars(args)
       CSeq(nc, CSpecCall(handle, pipe, nargs).setPos(c.pos)).setPos(c.pos)
     case CCheckSpec(_) => c
-    case CVerify(handle, args, preds) =>
+    case CVerify(handle, args, preds, upd) =>
       val (nargs, nc) = extractCastVars(args)
-      val (npreds, nc2) = extractCastVars(preds)
-      CSeq(nc, CSeq(nc2, CVerify(handle, nargs, npreds)
+      CSeq(nc, CSeq(nc, CVerify(handle, nargs, preds, upd)
+        .setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
+    case CUpdate(nh, handle, args, preds) =>
+      val (nargs, nc) = extractCastVars(args)
+      CSeq(nc, CSeq(nc, CUpdate(nh, handle, nargs, preds)
         .setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
     case CInvalidate(_) => c
     case CPrint(_) => c
@@ -167,9 +169,9 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
     case EApp(func, args) =>
       val (nargs, nc) = extractCastVars(args)
       (EApp(func, nargs).setPos(e.pos), nc)
-    case ECall(mod, args) =>
+    case ECall(mod, name, args) =>
       val (nargs, nc) = extractCastVars(args)
-      (ECall(mod, nargs).setPos(e.pos), nc)
+      (ECall(mod, name, nargs).setPos(e.pos), nc)
     case ECast(ctyp, e) =>
       val (ne, nc) = extractCastVars(e)
       val ncast = ECast(ctyp, ne)

@@ -37,7 +37,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
    * @throws IllegalMemoryAccessOperation error if access memory without correct READ or WRITE capability
    */
   def check(p:Prog) : Unit = {
-    val Prog(_, moddefs, _) = p
+    val Prog(_, _, moddefs, _) = p
     moddefs.foreach(m => checkModule(m))
   }
 
@@ -88,7 +88,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
             e.memOpType = Some(LockRead)
             e.granularity = getLockGranularityMap(mem)
         }
-      case (_, ECall(_, _)) =>
+      case (_, ECall(_, _, _)) =>
       case _ => throw UnexpectedCase(c.pos)
     }
     case CAssign(_, rhs) => checkExpr(rhs)
@@ -119,7 +119,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
       checkExpr(tval)
       checkExpr(fval)
     case EApp(_, args) => args.foreach(a => checkExpr(a))
-    case ECall(_, args) => args.foreach(a => checkExpr(a))
+    case ECall(_, _, args) => args.foreach(a => checkExpr(a))
     case ECast(_, exp) => checkExpr(exp)
     case _ =>
   }
