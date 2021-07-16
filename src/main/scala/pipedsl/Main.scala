@@ -27,7 +27,7 @@ object Main {
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit, rfLockImpl = config.defaultRegLoc)
+            config.debug, config.defaultAddrLock, config.memInit, rfLockImpl = config.defaultRegLock)
           case ("typecheck") => runPasses(printOutput = true, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case _ =>
