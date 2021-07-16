@@ -847,6 +847,17 @@ object BluespecGeneration {
 
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
+      case cl@IReserveLock(handle, mem) =>
+        val methodInfo = LockImplementation.getLockImpl(mem).getReserveInfo(cl)
+        if (methodInfo.isDefined) {
+          if (!methodInfo.get.doesModify) {
+            Some( BDecl(translator.toVar(handle), Some(BInvalid)) )
+          } else None
+        } else {
+          throw new RuntimeException(
+            s"Lock Library: ${LockImplementation.getLockImpl(mem).toString} has bad Reserve Method"
+          )
+        }
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
@@ -875,6 +886,18 @@ object BluespecGeneration {
     private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
       case CAssign(lhs, rhs) =>
         Some(BAssign(translator.toVar(lhs), translator.toExpr(rhs)))
+      case cl@IReserveLock(handle, mem) =>
+        val methodInfo = LockImplementation.getLockImpl(mem).getReserveInfo(cl)
+        if (methodInfo.isDefined) {
+          val resMethod = translateMethod(modParams(mem.id), methodInfo.get)
+          if (!methodInfo.get.doesModify) {
+            Some(BAssign(translator.toVar(handle), BTaggedValid(resMethod)))
+          } else None
+        } else {
+          throw new RuntimeException(
+            s"Lock Library: ${LockImplementation.getLockImpl(mem).toString} has bad Reserve Method"
+          )
+        }
       case ICondCommand(cond: Expr, cs) =>
         val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
           getCombinationalCommand(c) match {
@@ -956,9 +979,17 @@ object BluespecGeneration {
       case ISend(handle, rec, _) => if (rec != mod.name) {
         Some(BDecl(translator.toVar(handle), None))
       } else { None }
-      case IReserveLock(handle, _) => Some(
-        BDecl(translator.toVar(handle), Some(BInvalid))
-      )
+      case cl@IReserveLock(handle, mem) =>
+        val methodInfo = LockImplementation.getLockImpl(mem).getReserveInfo(cl)
+        if (methodInfo.isDefined) {
+          if (methodInfo.get.doesModify) {
+            Some( BDecl(translator.toVar(handle), Some(BInvalid)) )
+          } else None
+        } else {
+          throw new RuntimeException(
+            s"Lock Library: ${LockImplementation.getLockImpl(mem).toString} has bad Reserve Method"
+          )
+        }
       case IAssignLock(handle, _, default) => Some(
         BDecl(translator.toVar(handle), default match {
           case Some(value) =>Some(translator.toExpr(value))
@@ -1041,20 +1072,17 @@ object BluespecGeneration {
         val methodInfo = LockImplementation.getLockImpl(mem).getReserveInfo(cl)
         if (methodInfo.isDefined) {
           val resMethod = translateMethod(modParams(mem.id), methodInfo.get)
-          Some(
             if (methodInfo.get.doesModify) {
               //can't just apply TaggedValid( resMethod) if it is an Action method (i.e., uses <-).
               //Need to assign to a fresh variable and then tag that.
               val handletyp = handle.typ.get.matchOrError(
                 handle.pos, "Extract Lock Handle", "Maybe(Handle)") { case TMaybe(t) => t }
               val fresh = freshTmp(translator.toType(handletyp))
-              BStmtSeq(List(
+              Some(BStmtSeq(List(
                 BInvokeAssign(fresh, resMethod).setUseLet(true),
                 BAssign(translator.toVar(handle), BTaggedValid(fresh))
-              ))
-            } else {
-              BAssign(translator.toVar(handle), BTaggedValid(resMethod))
-          })
+              )))
+            } else { None }
         } else {
           throw new RuntimeException(
             s"Lock Library: ${LockImplementation.getLockImpl(mem).toString} has bad Reserve Method"
