@@ -20,6 +20,7 @@ export BramPort2(..);
 export AsyncMem(..);
 export AsyncMem2(..);
 export QueueLockCombMem(..);
+export QueueLockAsyncMem(..);
 export QueueLockAsyncMem2(..);
 export BypassLockCombMem(..);
 export AddrLockCombMem(..);
@@ -281,7 +282,8 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    rule moveToOutFifo (nextData matches tagged Valid.idx);
       outData[idx][0] <= fromMem;
       valid[idx][0] <= True;
-
+   endrule
+   
    (*fire_when_enabled*)
    rule freeResp;
       valid[freeEntry][1] <= False;
