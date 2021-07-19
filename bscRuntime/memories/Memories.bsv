@@ -161,7 +161,8 @@ endmodule
 module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, elem, MemId#(inflight), nsz))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Mul#(TDiv#(szElem, nsz), nsz, szElem));
    BRAM_PORT_BE#(addr, elem, nsz) p;
-   let memSize = 2 ** valueOf(szAddr);
+   Integer maxMemSize = 2 ** 20; //1M mem words, or 4 MB for int32;
+   let memSize = min(maxMemSize, 2 ** valueOf(szAddr));
    let hasOutputReg = False;
    if (init)
       p <- mkBRAMCore1BELoad(memSize, hasOutputReg, file, False);
@@ -199,7 +200,8 @@ module mkBramPort2#(parameter Bool init, parameter String file)
    (BramPort2#(addr, elem, MemId#(inflight), nsz))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Mul#(TDiv#(szElem, nsz), nsz, szElem));
    BRAM_DUAL_PORT_BE#(addr, elem, nsz) dp;
-   let memSize = 2 ** valueOf(szAddr);
+   Integer maxMemSize = 2 ** 20; //1M mem words, or 4 MB for int32;
+   let memSize = min(maxMemSize, 2 ** valueOf(szAddr));   
    let hasOutputReg = False;
    if (init)
       dp <- mkBRAMCore2BELoad(memSize, hasOutputReg, file, False);
