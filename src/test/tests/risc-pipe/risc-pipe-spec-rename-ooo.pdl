@@ -262,10 +262,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		bool retQuot = funct3 <= u5<3>;
 		bool invertRes = isSignedDiv && (sdividend != sdivisor);       
 		uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
-		---
-		int<32> rddata = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
-		int<32> wdata = 0<32>;
 		uint<2> boff = u0<2>;
+		int<32> rddata = 0<32>;		
+		int<32> wdata <- 0<32>;
 	  }
 	 default: {
 	     int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
@@ -310,8 +309,15 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
 		      }
 	        }
 		end(dmem);
-		---
+		uint<32> udivout <- u0<32>;
+		bool invertRes = false;
 	  }
+    }
+    ---
+    if (isDiv) {
+       int<32> divdata = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
+    } else {
+      int<32> divdata = 0<32>;
     }
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
@@ -319,7 +325,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(ForwardRenameRF), imem: int<32>[16]<a,
        if (isLoad || isDiv) {
           block(rf[rd]);
 	  int<32> maskedLoad = maskLoad(wdata, funct3, boff);
-       	  int<32> insnout = (isLoad) ? maskedLoad : rddata;
+       	  int<32> insnout = (isLoad) ? maskedLoad : divdata;
 	  rf[rd] <- insnout;
        } else {
        	 int<32> insnout = rddata;
