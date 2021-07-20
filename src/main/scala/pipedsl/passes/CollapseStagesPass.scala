@@ -29,12 +29,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     case s: IfStage =>
       s.condStages.foreach(stg => stg.foreach(t => simplifyIfs(t)))
       s.defaultStages.foreach(f => simplifyIfs(f))
-      //Check if the branches are combinational and save the Last stage in each one
-      val branchCombMap = s.condStages.foldLeft(Map[PStage, Boolean]())(
-        (m, stg) => m + (stg.last -> stg.head.outEdges.exists(e => e.to == s.joinStage))
-      )
-      val isBranchesComb = branchCombMap.values.forall(isComb => isComb)
-      //  val isBranchesComb = s.condStages.forall(stg => stg.head.outEdges.exists(e => e.to == s.joinStage))
+      val isBranchesComb = s.condStages.forall(stg => stg.head.outEdges.exists(e => e.to == s.joinStage))
       val isDefaultComb = s.defaultStages.head.outEdges.exists(e => e.to == s.joinStage)
       //Merge in the first true and false stages since that delay is artificial
       mergeStages(s, s.condStages.map(stg => stg.head) :+ s.defaultStages.head, false)
@@ -51,14 +46,13 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         s.addEdge(newOutEdge)
         mergeStages(s, List(s.joinStage), false)
       } else {
-        //in this case, just merge the last stage in each branch forwards into the join stage
-        branchCombMap.foreach(entry => {
-          val stg = entry._1
-          val isComb = entry._2
-          if (!isComb) mergeStages(s.joinStage, List(stg), isForward = true)
-        })
-        if (!isDefaultComb) {
-          mergeStages(s.joinStage, List(s.defaultStages.last), isForward = true)
+        //merge join stage into its successor, as long as its successor isn't another If stage
+        //and that stage ALSO only has one predecessor
+        if (s.joinStage.succs.size == 1 && s.joinStage.succs.exists(p => p match {
+          case _: IfStage => false
+          case nstg => nstg.preds.size == 1
+        })) {
+          mergeStages(s.joinStage, List(s.joinStage.succs.head), false);
         }
       }
       //there must only be one by construction
