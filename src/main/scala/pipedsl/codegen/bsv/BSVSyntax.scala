@@ -46,7 +46,7 @@ object BSVSyntax {
         val elemTyp = toType(mem.elem)
         val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp)
-        getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = true, Some(n))
+        getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
@@ -71,15 +71,15 @@ object BSVSyntax {
           getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
-        val lidtyp =  if (limpl.useUniqueLockId()) {
+        val (lidSz: Int, lidtyp: BSizedType) =  if (limpl.useUniqueLockId()) {
           if (idsz.isDefined) {
-            bsints.getLockHandleType(idsz.get)
-          } else bsints.getDefaultLockHandleType
+            (idsz.get, bsints.getLockHandleType(idsz.get))
+          } else (bsints.defaultLockHandleSize, bsints.getDefaultLockHandleType)
         } else {
           //re-use the rid from the memory
           mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
-        getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
+        getLockedMemType(mem, mtyp, Some(lidSz), lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString
@@ -226,10 +226,12 @@ object BSVSyntax {
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
 
-    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType,
+    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdSz: Option[Int], lockIdTyp: BSVType,
       limpl: LockInterface, useTypeVars:Boolean = false, paramId: Option[Id]): BInterface = {
       val intName = limpl.getModuleName(m)
-      val lparams = limpl.getTypeArgs(List()).zipWithIndex.map(a => {
+      //TODO pass params better - requires passing ID first, if passing any
+      val szParams = if (lockIdSz.isDefined) List(lockIdSz.get) else List()
+      val lparams = limpl.getTypeArgs(szParams).zipWithIndex.map(a => {
         val sz = a._1
         val idx = a._2
         if (useTypeVars) {
