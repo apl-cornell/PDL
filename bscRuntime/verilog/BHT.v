@@ -104,7 +104,7 @@ module BHT(CLK,
 	  begin
 	     for (initi = 0; initi <= num_entries - 1; initi = initi + 1)
 	       begin
-		  hist[initi] <= SKIP_W; //init to weak pred npc + 1
+		  hist[initi] <= TAKE_W; //init to weak pred taken
 	       end
 	  end
 	else
