@@ -1,7 +1,8 @@
 package pipedsl.typechecker
 
-import pipedsl.common.{Locks, Syntax}
+import pipedsl.common.{Locks, Syntax, Errors}
 import pipedsl.common.Syntax._
+import pipedsl.common.Errors._
 import pipedsl.typechecker.TypeChecker.TypeChecks
 import pipedsl.typechecker.Environments._
 
@@ -29,7 +30,8 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
 
   private val optimalPorts = mutable.HashMap.empty[Id, (Int, Int)]
   private val modLims = mutable.HashMap.empty[Id, (Int, Int)]
-  
+  private val reserveMap = mutable.HashMap.empty[LockArg, Int]
+
   override def
   emptyEnv(): Environment[Id, (Int, Int)] =
     EmptyIntEnv
@@ -71,19 +73,13 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           val ass_ports = (rp :Int, wp :Int) =>
             {
               if(r > rp)
-                throw new RuntimeException(s"Not enough read ports on " +
-                  s"${mod.name}. Requires at least $r but found $rp")
+                throw InsufficientPorts(mod.pos, "read", mod.name, rp, r)
               else if (ro > rp && port_warn)
-                throw new RuntimeException("Better throughput could be " +
-                  s"obtained by having $ro read ports on ${mod.name} instead " +
-                  s"of $rp")
+                throw SuboptimalPorts(mod.pos, "read", mod.name, rp, r)
               if(w > wp)
-                throw new RuntimeException(s"Not enough write ports on ${mod
-                  .name}. Requires at least $w but found $wp")
+                throw InsufficientPorts(mod.pos, "write", mod.name, wp, w)
               else if (wo > wp && port_warn)
-                throw new RuntimeException("Better throughput could be " +
-                  s"obtained by having $wo write ports on ${mod.name} instead" +
-                  s" of $wp")
+                throw SuboptimalPorts(mod.pos, "write", mod.name, wp, w)
             }
           mod.typ match
           {
@@ -160,7 +156,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           //      println(s"write port: $port")
           //      println(s"limit: ${modLims(mem)._2}")
           if (ret(mem)._2 > modLims(mem)._2)
-            throw new RuntimeException(s"$mem does not have enough read/write ports!")
+            throw InsufficientPorts(mem.pos, "read/write", mem, modLims(mem)._2, ret(mem)._2)
           val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
           optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
           ret
@@ -171,7 +167,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           if (port == 0) port = modLims(mem)._1
           c.portNum = Some(port)
           if (ret(mem)._1 > modLims(mem)._1)
-            throw new RuntimeException(s"$mem does not have enough read ports!")
+            throw InsufficientPorts(mem.pos, "read", mem, modLims(mem)._1, ret(mem)._1)
           val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
           optimalPorts.update(mem, (cur_opt._1 + 1, cur_opt._2))
           ret
@@ -188,7 +184,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
 //      println(s"write port: $port")
 //      println(s"limit: ${modLims(mem)._2}")
       if (ret(mem)._2 > modLims(mem)._2)
-        throw new RuntimeException(s"$mem does not have enough write ports!\nFound ${modLims(mem)._2}")
+        throw InsufficientPorts(mem.pos, "write", mem, modLims(mem)._2, ret(mem)._2)
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
       optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
       /*println(optimalPorts(mem))*/
@@ -201,8 +197,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       nenv.get(pipe) match
       {
         case Some((1, 0)) =>
-          throw new RuntimeException(s"tried to call $pipe multiple " +
-            s"times in the same cycle")
+          throw NoSuperScalar(pipe)
         case _ =>
           val ret = nenv.add(pipe, (1, 0))
           c.portNum = Some(ret(pipe)._1)
@@ -223,27 +218,32 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       op match
       {
         case Locks.Reserved =>
-          val start_res = start_env(mangled)._1
           val ret = env.add(mangled, (1, 0))
-          val cur_opt = optimalPorts.getOrElse(mangled, (0, 0))
-          optimalPorts.update(mangled, (cur_opt._1 + 1, cur_opt._2))
-          c.portNum = Some(ret(mangled)._1)
-//          if(ret(mangled)._1 == start_res)
-//            throw new RuntimeException(s"${mem.id} does not support enough " +
-//              s"reserves per cycle!")
-//          println(c.portNum.get)
+          val limit =
+            if (lockType.contains(Syntax.LockWrite))
+            modLims(mem.id)._2
+          else
+            modLims(mem.id)._1
+          
+          val port = (ret(mangled)._1 + start_env(mangled)._1) % limit
+          reserveMap.update (mem, port)
+          c.portNum = Some(port)
+          if (ret(mangled)._1 > limit)
+            throw InsufficientPorts(c.pos, lockType match
+            {
+              case Some(Syntax.LockRead) => "read"
+              case Some(Syntax.LockWrite) => "write"
+              case None => "general"
+            }, mem.id, limit, ret(mangled)._1)
           ret
+        case Locks.Acquired =>
+          val port = reserveMap(mem)
+          c.portNum = Some(port)
+          env
         case Locks.Released =>
-          val start_rel = start_env(mangled)._2
-          val ret = env.add(mangled, (0, 1))
-          val cur_opt = optimalPorts.getOrElse(mangled, (0, 0))
-          optimalPorts.update(mangled, (cur_opt._1, cur_opt._2 + 1))
-          c.portNum = Some(ret(mangled)._2)
-//          if(ret(mangled)._2 == start_rel)
-//            throw new RuntimeException(s"${mem.id} does not support enough " +
-//              s"releases per cycle!")
-//          println(c.portNum.get)
-          ret
+          val port = reserveMap(mem)
+          c.portNum = Some(port)
+          env
         case _ => env
       }
     case CSplit(cases, default) =>
@@ -282,7 +282,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       if (port == 0) port = modLims(mem)._1
       e.portNum = Some(port)
       if (ret(mem)._1 > modLims(mem)._1)
-        throw new RuntimeException(s"$mem does not have enough read ports!")
+        throw InsufficientPorts(e.pos, "read", mem, modLims(mem)._1, ret(mem)._1)
       val cur_opt = optimalPorts.getOrElse(mem, (0, 0))
       optimalPorts.update(mem, (cur_opt._1 + 1, cur_opt._2))
       ret
@@ -301,7 +301,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       nenv.get(mod) match
     {
       case Some((1, 0)) =>
-        throw new RuntimeException(s"${mod.v} is already called in this cycle")
+        throw NoSuperScalar(mod)
       case _ =>
         /*we can annotate this so that if potentially we support superscalar*/
         /*pipes at some point this would be relevant*/
