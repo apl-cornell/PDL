@@ -5,9 +5,11 @@ import FIFOF :: *;
 import RWire :: *;
 
 export RenameRF(..);
+export BypassRF(..);
 export BHT(..);
 export mkRenameRF;
 export mkForwardRenameRF;
+export mkBypassRF;
 export mkNBFIFOF;
 export mkBHT;
 
@@ -19,6 +21,16 @@ interface RenameRF#(type addr, type elem, type name);
    method Action write(name a, elem b); //write data given allocated name
    method Action commit(name a); //indicate old name for a can be "freed"
    // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
+endinterface
+
+interface BypassRF#(type addr, type elem, type id);
+   method ActionValue#(id) reserveWrite(addr a);
+   method Action reserveRead(addr a);   
+   method Bool owns(id i);
+   method Action freeWrite(id i);
+   method Action freeRead(id i);   
+   method elem read(id a);
+   method Action write(id i, elem b);
 endinterface
 
 import "BVI" RenameRF =
@@ -97,6 +109,38 @@ import "BVI" ForwardRenameRF =
     
  endmodule
 
+import "BVI" BypassRF =
+module mkBypassRF#(Integer regnum, Bool init, String fileInit)(BypassRF#(addr, elem, name)) provisos
+   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
+    PrimIndex#(addr, an), PrimIndex#(name, nn));
+   
+   parameter addr_width = valueOf(szAddr);
+   parameter data_width = valueOf(szElem);
+   parameter name_width = valueOf(szName);
+   parameter lo_arch = 0;
+   parameter hi_arch = regnum - 1;
+   parameter binaryInit = init;
+   parameter file = fileInit;
+        
+   default_clock clk(CLK, (*unused*) clk_gate);
+   default_reset rst (RST);
+   
+   method NAME_OUT reserveWrite(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+   method RNAME_OUT reserveRead[2](ADDR) enable(RRESE) ready (RRES_READY);
+   method VALID_OUT owns[2] (VALID_NAME);
+   method write[2](NAME_IN, D_IN) enable (WE);   
+   method D_OUT read[2](NAME);
+   method freeWrite(W_F) enable (W_FE) ready (W_FREADY);
+   method freeRead[2](RD_F) enable (FE);
+   
+      schedule (reserveWrite) C (reserveWrite);      
+      schedule (freeWrite) C (freeWrite);
+      schedule (reserveWrite) CF (freeWrite);
+      schedule (reserveRead, owns, freeRead, read, write) CF (reserveWrite, reserveRead, owns, freeWrite, freeRead, read, write);
+
+endmodule
+   
+   
 module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    
    FIFOF#(dtyp) f <- mkFIFOF();

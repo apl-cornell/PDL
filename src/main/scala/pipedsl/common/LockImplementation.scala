@@ -13,6 +13,7 @@ object LockImplementation {
   private val lqueue = new LockQueue()
   private val falqueue = new FALockQueue()
   private val bypassQueue = new BypassQueue()
+  private val bypassRF = new BypassRF()
   private val rename = new RenameRegfile()
   private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
@@ -28,6 +29,7 @@ object LockImplementation {
     lqueue.shortName -> lqueue,
     falqueue.shortName -> falqueue,
     bypassQueue.shortName -> bypassQueue,
+    bypassRF.shortName -> bypassRF,
     rename.shortName -> rename,
     forwardRename.shortName -> forwardRename,
     lsq.shortName -> lsq
@@ -390,6 +392,79 @@ object LockImplementation {
 
     override def getModuleName(m: TMemType): String = "BypassLockCombMem"
 }
+
+  /**
+   * This implementation is a bypassing register file with separate cycle reserves and reads
+   * (unlike the Bypass Queue which requires them to be concurrent)
+   */
+  private class BypassRF extends LockInterface {
+
+    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
+      val rescmd = getReserveWrite(mem, lops)
+      val resRd  = getReserveRead(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      if ((resRd.isDefined || rescmd.isDefined) && relcmd.isDefined) {
+        return false //cannot RES(R/W) & REL in same cycle. must ACTUALLY do the reserve
+      } else {
+        return true
+      }
+    }
+
+    /**
+     * Merges the given set of commands which are meant to occur in
+     * a single stage. This is only intended to accept LOCK modifying commands
+     * (nothing else). If other commands are included in the list, they may not be returned in the result.
+     *
+     * @param mem  The memory (or memory location) whose ops we are merging
+     * @param lops The operations to merge
+     * @return The list of merged operations
+     */
+    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
+      lops
+    }
+
+    override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
+      mtyp.writeLatency != Asynchronous
+
+    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
+
+    override def granularity: LockGranularity = Specific
+
+    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
+
+    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
+
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("owns", doesModify = false, List(extractHandle(l.handle))))
+      case Some(LockWrite) => None
+      case None => None //TODO throw error
+    }
+
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) =>  Some(MethodInfo("reserveRead", doesModify = true, List(l.mem.evar.get)))
+      case Some(LockWrite) =>  Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
+      case None => None //TODO throw error
+    }
+
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
+
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) =>  Some(MethodInfo("freeRead", doesModify = true, List(extractHandle(l.handle))))
+      case Some(LockWrite) =>  Some(MethodInfo("freeWrite", doesModify = true, List(extractHandle(l.handle))))
+      case None => None //TODO throw error
+    }
+
+    override def getTypeArgs(szParams: List[Int]): List[Int] = List()
+    override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] =
+      List(Utilities.exp2(m.addrSize))
+
+    override def shortName: String = "BypassRF"
+
+    override def getModuleName(m: TMemType): String = "BypassRF"
+  }
+
   /**
    * This represents a renaming register file.
    * Reserve statements either translate to _reading a name_ (R) or _allocating a new name_ (W).
