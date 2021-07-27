@@ -403,8 +403,6 @@ object LockImplementation {
     override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
       mtyp.writeLatency != Asynchronous
 
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-
     override def granularity: LockGranularity = Specific
 
     override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
@@ -420,7 +418,9 @@ object LockImplementation {
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) =>  Some(MethodInfo("reserveRead", doesModify = true, List(l.mem.evar.get)))
+      case Some(LockRead) =>
+        val methodNum = if (l.portNum.isDefined) l.portNum.get.toString else ""
+        Some(MethodInfo("reserveRead" + methodNum, doesModify = true, List(l.mem.evar.get)))
       case Some(LockWrite) =>  Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
       case None => None //TODO throw error
     }
