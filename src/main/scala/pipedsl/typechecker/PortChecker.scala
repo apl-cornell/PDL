@@ -37,6 +37,9 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
     EmptyIntEnv
 
   override def
+  checkExt(e: ExternDef, env:Environment[Id, (Int, Int)]): Environment[Id, (Int, Int)] = env
+
+  override def
   /*functions are combinational and cannot do anything with mem/locks*/
   checkFunc(f: FuncDef, env: Environment[Id, (Int, Int)])
   : Environment[Id, (Int, Int)] = env
@@ -203,7 +206,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           c.portNum = Some(ret(pipe)._1)
           ret
       }
-    case CVerify(_, args, _) =>
+    case CVerify(_, args,_, _) =>
       args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
      case COutput(exp) => checkExpr(exp, env, start_env)
     case CReturn(exp) => checkExpr(exp, env, start_env)
@@ -293,7 +296,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         .union(checkExpr(fval, cond_env, start_env))
     case EApp(_, args) =>
       args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
-    case ECall(mod, args) =>
+    case ECall(mod, _, args) =>
       /*perhaps we should have some restrictions on calling the same module*/
       /*twice in a single cycle. I think I said that should be a nono*/
       //callees += mod

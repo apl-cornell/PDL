@@ -59,7 +59,7 @@ package object pipedsl {
 
   def testBlueSpecCompile(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
-    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit, port_warn = false)
+    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, memInit, portWarn = false, addrLockMod)
     val exit = (pathToBluespecScript + " v " + testDir.getAbsolutePath).!
     deleteGeneratedFiles(testDir)
     deleteBSVFiles(testDir, memInit)
@@ -68,7 +68,7 @@ package object pipedsl {
 
   def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String], simFile: Option[String] = None): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
-    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, addrLockMod, memInit, port_warn = false)
+    Main.gen(testDir, inputFile, printStgInfo = false, debug = false, memInit, portWarn = false, addrLockMod)
     val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath + " " + FilenameUtils.getBaseName(inputFile.getName) + ".sim").!
     val success = exit == 0 && compareFiles(testDir, inputFile, "sim", simFile)
     deleteGeneratedFiles(testDir)

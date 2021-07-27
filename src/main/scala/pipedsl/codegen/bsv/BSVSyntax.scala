@@ -49,9 +49,6 @@ object BSVSyntax {
           getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp,
           if (isAsync) Math.max(mem.readPorts, mem.writePorts) else 0)
         getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
-        val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
-          getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp)
-        getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
