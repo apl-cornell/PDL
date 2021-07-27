@@ -16,9 +16,9 @@ module BypassRF(CLK,
 		NAME_IN_2, D_IN_2, WE_2,     //write data 2		
 		NAME_1, D_OUT_1,            //read data 1
 		NAME_2, D_OUT_2,            //read data 2
-		VALID_NAME_1, VALID_OUT_1,    //check valid data 1
+		VALID_NAME_1, VALID_OUT_1,    //check valid data 1		
 		VALID_NAME_2, VALID_OUT_2,    //check valid data 2
-		W_F, W_FE, W_FREADY,          //free write port
+		W_F, WFE, F_READY,                     //free write port
 		RD_F_1, FE_1,                 //free rd port 1
 		RD_F_2, FE_2                  //free rd port 2
 		);
@@ -26,13 +26,16 @@ module BypassRF(CLK,
    parameter addr_width = 1;
    parameter data_width = 1;
    parameter name_width = 1;
+   localparam numNames = 2 ** name_width;   
    parameter lo_arch = 0;
    parameter hi_arch = 1;   
    parameter binaryInit = 0;
    parameter file = "";   
 
-   localparam RS1 = 1'd0,
-     RS2 = 1'd1;
+   
+   wire [name_width-1 : 0] RS1,RS2;
+   assign RS1 = 0;
+   assign RS2 = 1;
    
    input CLK;
    input RST;
@@ -53,11 +56,9 @@ module BypassRF(CLK,
    output 		       RRES_READY_2;   
    
    //data read/write
-   input [addr_width - 1 : 0]  WADDR_IN_1;   
    input [name_width - 1 : 0] NAME_IN_1;
    input [data_width - 1 : 0] D_IN_1;
    input 		      WE_1;
-   input [addr_width - 1 : 0]  WADDR_IN_2;      
    input [name_width - 1 : 0] NAME_IN_2;
    input [data_width - 1 : 0] D_IN_2;
    input 		      WE_2;   
@@ -72,13 +73,12 @@ module BypassRF(CLK,
    input [name_width - 1 : 0]  VALID_NAME_2;
    output 		       VALID_OUT_1;   
    output 		       VALID_OUT_2;
-   
 
-   //free write port
+   //free w port
    input [name_width - 1 : 0]  W_F;
-   input 		       W_FE;
-   output 		       W_FREADY;
-   
+   input 		       WFE;   
+   output                      F_READY;
+ 		       
    //free rd ports
    input [name_width - 1 : 0]  RD_F_1;   
    input 		       FE_1;
@@ -102,87 +102,87 @@ module BypassRF(CLK,
    reg 			       rf2_inUse;
    
    //write queue
-   reg [name_width - 1 : 0]    wQueueOwner;   
    reg [name_width - 1 : 0]    wQueueHead;
-   reg [addr_width - 1 : 0]    wQueueAddr[ 0 : name_width - 1];   
-   reg 			       wQueueValid[ 0 : name_width - 1];
-
+   reg [addr_width - 1 : 0]    wQueueAddr[ 0 : numNames - 1];   
+   reg 			       wQueueValid[ 0 : numNames - 1];
+   reg 			       wQueueWritten[ 0 : numNames - 1];      
+   reg [name_width - 1 : 0]    wQueueOwner;
+   
    //conflicting pending writes
    reg [name_width - 1 : 0]    rf1_conflict, rf2_conflict;
    reg 			       rf1_hasc, rf2_hasc;
- 			       
-   integer 		       ii = 0;
-   integer 		       jj = 0;   
-   always@(*)
+   
+   integer 		       ii,jj;   
+   reg [name_width - 1 : 0] 		       idxi,idxj;
+
+   always@(ADDR_1, ADDR_2)
      begin
 	rf1_hasc = 0;
-	rf2_hasc = 0;	
-	for (ii = 0; ii < name_width & !rf1_hasc; ii = ii + 1)
+	rf2_hasc = 0;
+	rf1_conflict = 0;
+	rf2_conflict = 0;	
+	for (ii = 0; ii < numNames && !rf1_hasc; ii = ii + 1)
 	  begin
-	     if (wQueueValid[wQueueHead - ii] &&
-		 wQueueAddr[wQueueHead - ii] == ADDR_1)
+	     idxi = wQueueHead - ii - 1;
+	     if (		 
+		 wQueueValid[idxi] &&
+		 (wQueueAddr[idxi] == ADDR_1) &&
+		 !wQueueWritten[idxi])
 	       begin
 		  rf1_hasc = 1;
-		  rf1_conflict = wQueueHead - ii;		  
+		  rf1_conflict = idxi;		  
 	       end	     	     	     
 	  end
-	for (jj = 0; jj < name_width & !rf2_hasc; jj = jj + 1)
-	  begin
-	     if (wQueueValid[wQueueHead - jj] &&
-		 wQueueAddr[wQueueHead - jj] == ADDR_2)
+	for (jj = 0; jj < numNames && !rf2_hasc; jj = jj + 1)
+	  begin	
+	     idxj = wQueueHead - jj - 1;	     
+	     if (
+		 wQueueValid[idxj] &&
+		 (wQueueAddr[idxj] == ADDR_2) &&
+		  !wQueueWritten[idxj])
 	       begin
 		  rf2_hasc = 1;
-		  rf2_conflict = wQueueHead - jj;		  
+		  rf2_conflict = idxj;		  
 	       end	     	     
 	  end	
-     end // always@ begin
-   
+     end // always@ begin 
+
    //data from actual regfile + forwarding
    wire [ data_width - 1 : 0 ] RF_DATA_1, RF_DATA_2;
-   wire 		       RF_FWD11, RF_FWD12, RF_FWD21, RF_RFW22;
-   wire 		       stillConflict1,stillConflict2;
+   wire 		       RF_FWD11, RF_FWD12, RF_FWD21, RF_FWD22;   
+   wire 		       stillConflict1, stillConflict2;
    
-   assign RF_FWD11 = rf1_hasc && NAME_IN_1 == rf1_conflict && WE_1;
-   assign RF_FWD12 = rf2_hasc && NAME_IN_1 == rf2_conflict && WE_1;
-   assign RF_FWD21 = rf1_hasc && NAME_IN_2 == rf1_conflict && WE_2;
-   assign RF_FWD22 = rf2_hasc && NAME_IN_2 == rf2_conflict && WE_2;   
-
-   assign RF_DATA_1 = (RF_FWD11) ? D_IN_1 : ((RF_FWD21) ? D_IN_2 : rf[ADDR_1]);
-   assign RF_DATA_1 = (RF_FWD12) ? D_IN_1 : ((RF_FWD22) ? D_IN_2 : rf[ADDR_2]);   
-
-   assign stillConflict1 = rf1_hasc && !RF_FWD11 && !RF_FWD21;
-   assign stillConflict2 = rf2_hasc && !RF_FWD12 && !RF_FWD22;   
+   assign RF_FWD11 = WE_1 && NAME_IN_1 == rf1_conflict && rf1_hasc;   
+   assign RF_FWD12 = WE_1 && NAME_IN_1 == rf2_conflict && rf2_hasc;   
+   assign RF_FWD21 = WE_2 && NAME_IN_2 == rf1_conflict && rf1_hasc;   
+   assign RF_FWD22 = WE_2 && NAME_IN_2 == rf2_conflict && rf2_hasc;
    
-/*   
-   always@(*)
-     begin
-	for(ii = lo_phys; ii<= hi_phys && !nextNameValid; ii = ii+1)
-	  begin
-	     if (free[ii])
-	       begin
-		  nextName = ii;
-		  nextNameValid = 1;		  
-	       end
-	  end
-     end */ // UNMATCHED !!
+   assign RF_DATA_1 = (RF_FWD11) ? D_IN_1 : ((RF_FWD21) ? D_IN_2 : rf[ADDR_1]);   
+   assign RF_DATA_2 = (RF_FWD12) ? D_IN_1 : ((RF_FWD22) ? D_IN_2 : rf[ADDR_2]);  
+   
+   assign stillConflict1 = rf1_hasc && (!RF_FWD11) & (!RF_FWD21);
+   assign stillConflict2 = rf2_hasc && (!RF_FWD12) & (!RF_FWD22);   
    
    //write res req
    assign ALLOC_READY = !wQueueValid[wQueueHead];   
    assign NAME_OUT = wQueueHead;
+
+   //write free rdy
+   assign F_READY = wQueueOwner == W_F;
+   
    
    //read res req
-   assign NAME_OUT_1 = RS1;   
-   assign NAME_OUT_2 = RS2;
+   assign RNAME_OUT_1 = RS1;   
+   assign RNAME_OUT_2 = RS2;
    assign RRES_READY_1 = !rf1_inUse | (FE_1 && RD_F_1 == RS1) | (FE_2 && RD_F_2 == RS1);   
    assign RRES_READY_2 = !rf2_inUse | (FE_1 && RD_F_1 == RS2) | (FE_2 && RD_F_2 == RS2);
    
-
    //Forward from either write port to rfx_data;
    wire FWD11, FWD12, FWD21, FWD22;
-   assign FWD11 = WE_1 & (NAME_IN_1 == rf1_write);
-   assign FWD21 = WE_2 & (NAME_IN_2 == rf2_write);
-   assign FWD12 = WE_1 & (NAME_IN_1 == rf1_write);
-   assign FWD22 = WE_2 & (NAME_IN_2 == rf2_write);
+   assign FWD11 = WE_1 & (NAME_IN_1 == rf1_write) & rf1_inUse & !rf1_valid;
+   assign FWD21 = WE_2 & (NAME_IN_2 == rf1_write) & rf1_inUse & !rf1_valid;
+   assign FWD12 = WE_1 & (NAME_IN_1 == rf2_write) & rf2_inUse & !rf2_valid;
+   assign FWD22 = WE_2 & (NAME_IN_2 == rf2_write) & rf2_inUse & !rf2_valid;
    
    //Read data from saved reg unless forwarding
    wire [data_width - 1 : 0 ] RF1_OUT, RF2_OUT;
@@ -199,11 +199,8 @@ module BypassRF(CLK,
    assign RF2_VALID = rf2_valid | FWD12 | FWD22;
 
    assign VALID_OUT_1 = (VALID_NAME_1 == RS1) ? RF1_VALID : RF2_VALID;
-   assign VALID_OUT_2 = (VALID_NAME_2 == RS1) ? RF1_VALID : RF2_VALID;   
-
-   //free write
-   assign W_FREADY = W_F == wQueueOwner;
-   
+   assign VALID_OUT_2 = (VALID_NAME_2 == RS1) ? RF1_VALID : RF2_VALID;
+    
    integer 		       initq;
    integer 		       siminit;  
    //simulation initialization
@@ -217,8 +214,8 @@ module BypassRF(CLK,
 	       rf[siminit] = 0;	     
 	  end
      end
-   
    //update my stateful elements
+   
    always@(posedge CLK)
      begin
      if (RST == `BSV_RESET_VALUE)
@@ -226,15 +223,16 @@ module BypassRF(CLK,
 	  `ifdef DEBUG
 	  $display("Reseting");
 	  `endif
-	  rf1_valid <= 0;
-	  rf2_valid <= 0;
-	  rf1_inUse <= 0;
-	  rf2_inUse <= 0;	  
-	  wQueueOwner <= 0;
-	  wQueueHead <= 0;
-	  for (initq = 0; initq < name_width ; initq = initq + 1)
+	  rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;
+	  rf2_valid <= `BSV_ASSIGNMENT_DELAY 0;
+	  rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
+	  rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;	  
+	  wQueueHead <= `BSV_ASSIGNMENT_DELAY 0;
+	  wQueueOwner <= `BSV_ASSIGNMENT_DELAY 0;	  
+	  for (initq = 0; initq < numNames ; initq = initq + 1)
 	    begin
-	       wQueueValid[initq] <= 0;
+	       wQueueValid[initq] <= `BSV_ASSIGNMENT_DELAY 0;
+	       wQueueWritten[initq] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	    end	  
        end
      else
@@ -250,57 +248,60 @@ module BypassRF(CLK,
 	  if (WE_1)
 	    begin
 	       rf[wQueueAddr[NAME_IN_1]] <=  `BSV_ASSIGNMENT_DELAY D_IN_1;	       
+	       wQueueWritten[NAME_IN_1] <= `BSV_ASSIGNMENT_DELAY 1;
 	    end
 	  //write 2
 	  if (WE_2)
 	    begin
 	       rf[wQueueAddr[NAME_IN_2]] <=  `BSV_ASSIGNMENT_DELAY D_IN_2;
+	       wQueueWritten[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY 1;
 	    end
-	  //free write queue
-	  if (W_FE && W_FREADY)
+	  //free writes
+	  if (WFE & F_READY)
 	    begin
+	       wQueueValid[W_F] <= `BSV_ASSIGNMENT_DELAY 0;
+	       wQueueWritten[W_F] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	       wQueueOwner <= `BSV_ASSIGNMENT_DELAY wQueueOwner + 1;
-	       wQueueValid[wQueueOwner] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	    end
 	  //rf1 res regs
-	  if (RRES_READY_1)
+	  if (RRES_READY_1 & RRESE_1)
 	    begin
 	       rf1_inUse <= `BSV_ASSIGNMENT_DELAY 1;
-	       rf1_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict1;	       
-	       rf1_write <= `BSV_ASSIGNMENT_DELAY rf1_conflict;
-	       rf1 <= `BSV_ASSIGNMENT_DELAY RF_DATA_1;	       
+	       rf1_write <= `BSV_ASSIGNMENT_DELAY rf1_conflict;	       
+	       rf1 <= `BSV_ASSIGNMENT_DELAY RF_DATA_1;
+	       rf1_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict1;
 	    end
 	  //freeing
 	  else if ((FE_1 && RD_F_1 == RS1) || (FE_2 && RD_F_2 == RS1))
 	    begin
 	       rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
-	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;	       
+	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;
 	    end
 	  //forwarding from writes
 	  else if (FWD11 || FWD21)
 	    begin
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 1;
-	       rf1 <= `BSV_ASSIGNMENT_DELAY (FWD11) ? D_IN_1 : D_IN_2;	       
+	       rf1 <= `BSV_ASSIGNMENT_DELAY (FWD11) ? D_IN_1 : D_IN_2;
 	    end
 	  //rf2 res regs
-	  if (RRES_READY_2)
+	  if (RRES_READY_2 & RRESE_2)
 	    begin
 	       rf2_inUse <= `BSV_ASSIGNMENT_DELAY 1;
-	       rf2_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict2;	       
 	       rf2_write <= `BSV_ASSIGNMENT_DELAY rf2_conflict;
-	       rf2 <= `BSV_ASSIGNMENT_DELAY RF_DATA_2;	       
+	       rf2_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict2;	       
+	       rf2 <= `BSV_ASSIGNMENT_DELAY RF_DATA_2;
 	    end
 	  //freeing
 	  else if ((FE_1 && RD_F_1 == RS2) || (FE_2 && RD_F_2 == RS2))
 	    begin
 	       rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;
-	       rf2_valid <= `BSV_ASSIGNMENT_DELAY 0;	       
+	       rf2_valid <= `BSV_ASSIGNMENT_DELAY 0;
 	    end
 	  //forwarding from writes
 	  else if (FWD12 || FWD22)
 	    begin
 	       rf2_valid <= `BSV_ASSIGNMENT_DELAY 1;
-	       rf2 <= `BSV_ASSIGNMENT_DELAY (FWD12) ? D_IN_1 : D_IN_2;	       
+	       rf2 <= `BSV_ASSIGNMENT_DELAY (FWD12) ? D_IN_1 : D_IN_2;
 	    end	  
        end // else: !if(RST)
      end // always@ (posedge CLK)

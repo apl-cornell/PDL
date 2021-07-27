@@ -25,10 +25,11 @@ endinterface
 
 interface BypassRF#(type addr, type elem, type id);
    method ActionValue#(id) reserveWrite(addr a);
-   method Action reserveRead(addr a);   
+   method ActionValue#(id) reserveRead1(addr a);   
+   method ActionValue#(id) reserveRead2(addr a);      
    method Bool owns(id i);
-   method Action freeWrite(id i);
    method Action freeRead(id i);   
+   method Action freeWrite(id i);      
    method elem read(id a);
    method Action write(id i, elem b);
 endinterface
@@ -126,17 +127,28 @@ module mkBypassRF#(Integer regnum, Bool init, String fileInit)(BypassRF#(addr, e
    default_reset rst (RST);
    
    method NAME_OUT reserveWrite(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-   method RNAME_OUT reserveRead[2](ADDR) enable(RRESE) ready (RRES_READY);
+   method RNAME_OUT_1 reserveRead1(ADDR_1) enable(RRESE_1) ready (RRES_READY_1);
+   method RNAME_OUT_2 reserveRead2(ADDR_2) enable(RRESE_2) ready (RRES_READY_2);   
    method VALID_OUT owns[2] (VALID_NAME);
    method write[2](NAME_IN, D_IN) enable (WE);   
    method D_OUT read[2](NAME);
-   method freeWrite(W_F) enable (W_FE) ready (W_FREADY);
    method freeRead[2](RD_F) enable (FE);
+   method freeWrite(W_F) enable (WFE) ready (F_READY);
    
-      schedule (reserveWrite) C (reserveWrite);      
+      schedule (reserveWrite) C (reserveWrite);
+      schedule (reserveWrite) CF (reserveRead1, reserveRead2, owns, freeRead, read, write, freeWrite);
+      schedule (reserveRead1) C (reserveRead1);
+      schedule (reserveRead2) C (reserveRead2);
+      schedule (reserveRead1) CF (reserveRead2);
+      schedule (owns, read, freeRead) SBR (reserveRead1, reserveRead2);
+      schedule (read) CF (owns, read, freeRead, freeWrite);
+      schedule (owns) CF (owns, freeRead, freeWrite);
+      schedule (write) SBR (reserveRead1, reserveRead2, read, owns);
+      schedule (write) CF (freeRead, write);
+      schedule (freeWrite) SBR (write);
       schedule (freeWrite) C (freeWrite);
-      schedule (reserveWrite) CF (freeWrite);
-      schedule (reserveRead, owns, freeRead, read, write) CF (reserveWrite, reserveRead, owns, freeWrite, freeRead, read, write);
+      schedule (freeWrite) CF (reserveRead1, reserveRead2, freeRead);
+      schedule (freeRead) CF (freeRead);
 
 endmodule
    
