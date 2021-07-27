@@ -5,9 +5,11 @@ import com.microsoft.z3.{
   Z3Solver, Status => Z3Status
 }
 import pipedsl.common.Syntax._
+import pipedsl.common.Errors._
 import pipedsl.common.Utilities.{mkAnd, mkOr}
 import pipedsl.typechecker.TypeChecker.TypeChecks
 
+import scala.util.parsing.input.Position
 import scala.collection.mutable
 
 /**
@@ -42,9 +44,8 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
       checkCommand(m.body)
       checkAllRecurse() match
       {
-        case Z3Status.SATISFIABLE | Z3Status.UNKNOWN => throw new
-            RuntimeException("There are program paths that do not have " +
-              "output nor call")
+        case Z3Status.SATISFIABLE | Z3Status.UNKNOWN =>
+          throw LonelyPaths(m.name)
         case _ =>
       }
       env
@@ -63,11 +64,11 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
         case CSplit(cases, default) =>
           for (caseObj <- cases) checkCommand(caseObj.body)
           checkCommand(default)
-        case COutput(_) => verifyRecursive(c.predicateCtx.get)
+        case COutput(_) => verifyRecursive(c.predicateCtx.get, c.pos)
         case CVerify(_, args, _, _) =>
           val pred = c.predicateCtx.get
           args.foreach(a => checkExpr(a, pred))
-          verifyRecursive(c.predicateCtx.get)
+          verifyRecursive(c.predicateCtx.get, c.pos)
         case CAssign(_, rhs) => checkExpr(rhs, c.predicateCtx.get)
         case CExpr(exp) => checkExpr(exp, c.predicateCtx.get)
         case _ =>
@@ -89,7 +90,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
     case ECall(mod, name, args) =>
       args.foreach(a => checkExpr(a, predicate))
       if(mod == currentPipe)
-        verifyRecursive(predicate)
+        verifyRecursive(predicate, e.pos)
     case _ =>
   }
 
@@ -111,13 +112,11 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
   /**
    * call checkRecursive and throws the appropriate errors on output
    */
-  def verifyRecursive(predicate: Z3BoolExpr) :Unit =
+  def verifyRecursive(predicate: Z3BoolExpr, pos :Position) :Unit =
     checkRecursive(predicate) match
     {
-      case Z3Status.SATISFIABLE => throw new RuntimeException("A thread "
-        + "potentially has more than one output xor call")
-      case Z3Status.UNKNOWN => throw new RuntimeException("The solver is "
-        + "confused. A thread might have more than one output xor call.")
+      case Z3Status.SATISFIABLE => throw MultipleCall(pos, true)
+      case Z3Status.UNKNOWN => throw MultipleCall(pos, false)
       case Z3Status.UNSATISFIABLE => predicates.push(predicate)
     }
 

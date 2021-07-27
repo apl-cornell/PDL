@@ -156,13 +156,14 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
-    case CirMem(elemTyp, addrSize) => {
-      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
+    case CirMem(elemTyp, addrSize, numPorts) => {
+      if(numPorts > 2) throw new RuntimeException("Cannot have more than 2 ports on asynch memory")
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
-    case CirLockMem(elemTyp, addrSize, limpl, _) => {
-      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous)
+    case CirLockMem(elemTyp, addrSize, limpl, _, numPorts) => {
+      val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       val ltyp = TLockedMemType(mtyp, None, limpl)
       c.typ = Some(ltyp)
       (ltyp, tenv)
@@ -176,12 +177,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       (newtyp, tenv)
     }
     case CirRegFile(elemTyp, addrSize) => {
-      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, 5, 1)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
     case CirLockRegFile(elemTyp, addrSize, lockimpl, params) => {
-      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential)
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, 5, 1)
       val idsz = params.headOption
       val ltyp = TLockedMemType(mtyp, idsz, lockimpl)
       c.typ = Some(ltyp)
@@ -493,7 +494,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
-        case (TLockedMemType(TMemType(e, s, _, _),_,_), TSizedInt(l, true)) if l == s =>
+        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, true)) if l == s =>
           if (wm.isDefined) {
             val (wmt, _) = checkExpression(wm.get, tenv, None)
             wmt match {

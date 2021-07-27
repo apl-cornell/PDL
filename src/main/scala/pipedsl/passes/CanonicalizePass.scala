@@ -180,4 +180,5 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       (nassgn.lhs, CSeq(nc, nassgn).setPos(e.pos))
     case _ => (e, CEmpty())
   }
+
 }

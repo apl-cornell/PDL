@@ -17,6 +17,7 @@ object CommandLineParser {
     defaultAddrLock: Option[String] = None,
     defaultRegLock: Option[String] = None,
     memInit: Map[String, String] = Map(),
+    port_warn: Boolean = false,
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -37,6 +38,9 @@ object CommandLineParser {
         opt[Unit]("debug")
           .action((_, c) => c.copy(debug = true))
           .text("Add debug commands to the generated circuit"),
+        opt[Unit]('p', "portwarn")
+          .action((_, c) => c.copy(port_warn = true))
+          .text("Throw errors for port conflicts between stages"),
         opt[String]("addrLockModule")
           .text("The BSV Module to use for address locks")
           .action((s, c) => c.copy(defaultAddrLock = Some(s))),

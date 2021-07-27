@@ -12,6 +12,7 @@ class MainSuite extends AnyFunSuite {
   private val histFolder = "src/test/tests/histogram"
   private val histFile = histFolder + "/histogram.pdl"
   private val histBram = histFolder + "/histogram_bram.pdl"
+  private val histBram2 = histFolder + "/histogram_bram2.pdl"
   private val histShort = histFolder + "/histogram_short.pdl"
   private val histInputs = histFolder + "/memInputs"
   private val inputH = histInputs + "/h"
@@ -68,6 +69,27 @@ class MainSuite extends AnyFunSuite {
   test("Histogram BRAM Simulation Test") {
     testBlueSpecSim(new File(histFolder),
       new File(histBram),
+      None,
+      inputMap
+    )
+  }
+
+  test("Histogram BRAM 2 Typecheck Test") {
+    testTypecheck(new File(histFolder),
+      new File(histBram2))
+  }
+
+  test("Histogram BRAM 2 Compilation Test") {
+    testBlueSpecCompile(new File(histFolder),
+      new File(histBram2),
+      None,
+      inputMap
+    )
+  }
+
+  test("Histogram BRAM 2 Simulation Test") {
+    testBlueSpecSim(new File(histFolder),
+      new File(histBram2),
       None,
       inputMap
     )

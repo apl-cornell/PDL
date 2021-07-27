@@ -8,7 +8,13 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{mkAnd, mkImplies, updateSetMap}
 import pipedsl.typechecker.Environments._
 import pipedsl.typechecker.TypeChecker.TypeChecks
-
+/*want to also check that writes are done precisely once*/
+/*maybe keep a map from mems to Z3AST that keeps track of on what conditions there is a write?*/
+/*need to cross check this with the conditions under which the lock is reserved*/
+/*reserve a write lock on mem => we know under what conditions*/
+/*write to mem. These conditions should not overlap with anything else which*/
+/*writes to mem, and at the end we can check that all conditions under which*/
+/*the lock is reserved are written in*/
 import scala.collection.mutable
 
 /**
@@ -38,6 +44,9 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
   private val READ = 0
   private val WRITE = 1
 
+  private val writeReserveMap :mutable.HashMap[Id, Z3BoolExpr] = mutable.HashMap()
+  private val writeDoMap :mutable.HashMap[Id, Z3BoolExpr] = mutable.HashMap()
+
 
   private var currentMod = Id("-invalid-")
 
@@ -62,6 +71,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
         SMTReleaseModeListMap += (l -> Set())
       })
     currentMod = m.name
+    writeDoMap.clear(); writeReserveMap.clear()
     val nenv = lockMap(m.name).foldLeft[Environment[LockArg, Z3AST]](emptyEnv())((e, mem) => e.add(mem, makeEquals(mem, Free)))
     val finalenv = checkCommand(m.body, nenv)
     //At end of execution all locks must be free or released
@@ -72,6 +82,19 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
         case _ =>
       }
     })
+    writeReserveMap.foreachEntry((mem, when_reserved) =>
+      {
+        solver.add(ctx.mkXor(when_reserved, writeDoMap.getOrElse(mem,
+        throw new RuntimeException("Some write locks are reserved without being used"))))
+        solver.check() match
+        {
+          case Z3Status.UNSATISFIABLE =>
+          case Z3Status.UNKNOWN =>
+            throw new RuntimeException("Some write locks may be reserved without being used")
+          case Z3Status.SATISFIABLE =>
+            throw new RuntimeException("Some write locks are reserved without being used")
+        }})
+
     env //no change to lock map after checking module
   }
 
@@ -126,6 +149,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       case CAssign(_, rhs) => checkExpr(rhs, env, c.predicateCtx.get)
       case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem, expr, _), _) =>
+          /*this is a write*/
+          checkDisjoint(mem, c.predicateCtx.get)
           checkAcquired(mem, expr, env, c.predicateCtx.get)
         case (_, EMemAccess(mem, expr, _)) =>
           checkAcquired(mem, expr, env, c.predicateCtx.get)
@@ -137,7 +162,14 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
         checkReadWriteOrder(c)
         val expectedLockState = op match {
           case Locks.Free => throw new IllegalStateException() // TODO: is this right?
-          case Locks.Reserved => Free
+          case Locks.Reserved =>
+            if(mem.memOpType.contains(LockWrite))
+              {
+                writeReserveMap.update(mem.id,
+                  ctx.mkOr(writeReserveMap.getOrElse(mem.id, ctx.mkFalse()),
+                    c.predicateCtx.get))
+              }
+            Free
           case Locks.Acquired => Reserved
           case Locks.Released => Acquired
         }
@@ -262,4 +294,21 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
         env
     }
   }
+
+  private def checkDisjoint(mem: Id, cond: Z3BoolExpr) :Unit =
+    {
+      /*called when we do a write. Check that no other writes are done in this case*/
+      val old_expr = writeDoMap.getOrElse(mem, ctx.mkFalse())
+      solver.add(ctx.mkAnd(old_expr, cond))
+      solver.check() match
+      {
+        case Z3Status.UNSATISFIABLE =>
+        case Z3Status.UNKNOWN =>
+          throw new RuntimeException("It is possible that there are two write ops under the same lock")
+        case Z3Status.SATISFIABLE =>
+          throw new RuntimeException("There are two write ops under the same lock")
+      }
+      solver.reset()
+      writeDoMap.update(mem, ctx.mkOr(old_expr, cond))
+    }
 }

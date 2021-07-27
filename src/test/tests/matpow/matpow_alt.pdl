@@ -9,7 +9,7 @@ void matrix_power( inout_int_t x[20][20], in_int_t row[20], in_int_t col[20], in
 }
 */
 
-pipe matpow(k: uint<5>, p: uint<5>)[x: uint<32>[9]<c,s>(FAQueue), row: uint<5>[5]<c,s>(Queue), col: uint<5>[5]<c,s>(Queue), a: uint<32>[5]<c,s>(Queue)]: bool {
+pipe matpow(k: uint<5>, p: uint<5>)[x: uint<32>[9]<c2,s>(FAQueue), row: uint<5>[5]<c,s>(Queue), col: uint<5>[5]<c,s>(Queue), a: uint<32>[5]<c,s>(Queue)]: bool {
      if (p == u19<5>) {
      	if (k != u19<5>) {
 	   call matpow(k + u1<5>, u0<5>);

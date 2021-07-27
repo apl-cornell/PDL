@@ -27,8 +27,8 @@ object Main {
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.memInit, rfLockImpl = config.defaultRegLock)
-          case ("typecheck") => runPasses(printOutput = true, config.file, config.out,
+            config.debug, config.memInit, config.port_warn, rfLockImpl = config.defaultRegLock)
+          case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn,
             rfLockImpl = config.defaultRegLock)
           case _ =>
         }
@@ -59,8 +59,7 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File,
-                rfLockImpl: Option[String] = None): (Prog, ProgInfo) = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean, rfLockImpl: Option[String] = None): (Prog, ProgInfo) = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
@@ -83,6 +82,10 @@ object Main {
       pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
       val lockOperationTypeChecker = new LockOperationTypeChecker(lockWellformedChecker.getModLockGranularityMap)
       lockOperationTypeChecker.check(recvProg)
+
+      val portChecker = new PortChecker(port_warn)
+      portChecker.check(recvProg, None)
+
       val predicateGenerator = new PredicateGenerator()
       val ctx = predicateGenerator.run(recvProg)
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
@@ -136,8 +139,8 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-          memInit: Map[String, String],  rfLockImpl: Option[String] = None): Unit = {
-    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
+          memInit: Map[String, String],  portWarn: Boolean = false, rfLockImpl: Option[String] = None): Unit = {
+    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, portWarn, rfLockImpl = rfLockImpl)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
     //copies mem initialization to output directory
