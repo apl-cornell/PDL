@@ -61,7 +61,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         case _ =>
       })
       val port_map = checkPipe(m.body, emptyEnv())
-      if(port_warn && false)
+      if(port_warn)
         port_map.getMappedKeys().foreach(mem =>
           {
             /*sadly we are reusing the int pair to mean sth dif on mem/locks*/

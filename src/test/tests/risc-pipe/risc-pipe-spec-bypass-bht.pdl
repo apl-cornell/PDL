@@ -1,3 +1,8 @@
+extern BHT<int<16>> {
+       method req(pc: int<16>, skip: int<16>, take: int<16>): int<16>;
+       method upd(pc: int<16>, taken: bool): ();
+}
+
 def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
     uint<32> mag1 = cast(mag(arg1), uint<32>);
     uint<32> mag2 = cast(mag(arg2), uint<32>);
@@ -52,33 +57,31 @@ def alu(arg1: int<32>, arg2: int<32>, op: uint<3>, flip: bool): int<32> {
     
 }
 
-def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16> {
-    //divide by 4 b/c we count instructions not bytes
-    int<16> offpc = pc + (off >> 2);
-    int<16> npc = pc + 1<16>;
+//true if taking branch
+def br(op:uint<3>, arg1:int<32>, arg2:int<32>): bool {
     if (op == u0<3>) { //BEQ
-        if (arg1 == arg2) { return offpc; } else { return npc; }
+        return (arg1 == arg2);
     } else {
     if (op == u1<3>) { //BNE
-       if (arg1 != arg2)  { return offpc; } else { return npc; }
+       return (arg1 != arg2);
     } else {
     if (op == u4<3>) { //BLT
-       if (arg1 < arg2)  { return offpc; } else { return npc; }
+       return (arg1 < arg2);
     } else {
     if (op == u5<3>) { //BGE
-       if (arg1 >= arg2)  { return offpc; } else { return npc; }
+       return (arg1 >= arg2);
     } else {
     if (op == u6<3>) { //BLTU
         uint<32> un1 = cast(arg1, uint<32>);
         uint<32> un2 = cast(arg2, uint<32>);
-        if (un1 < un2)  { return offpc; } else { return npc; }
+        return (un1 < un2);
     } else {
     if (op == u7<3>) { //BGEU
         uint<32> un1 = cast(arg1, uint<32>);
         uint<32> un2 = cast(arg2, uint<32>);
-        if (un1 >= un2) { return offpc; } else { return npc; }
+        return(un1 >= un2);
     } else {
-      return npc;
+      return false;
     }}}}}}
 }
 
@@ -137,7 +140,7 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(BypassRF), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(Queue), div: multi_stg_div, bht: BHT]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
@@ -184,11 +187,17 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Que
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
     spec_barrier();
     bool notBranch = (!isBranch) && (!isJal) && (!isJalr);
-    if ((!done) && notBranch) {
-       verify(s, pc + 1<16>);
-    } else {
-      invalidate(s);
-    }
+    if (!done) {
+       if (notBranch) {
+       	  verify(s, pc + 1<16>);
+	      s2 <- s;
+       } else {
+       	 if (isBranch) {
+	       s2 <- update(s, bht.req(pc, immB, 1<16>));
+	 } else {
+	   s2 <- s;
+	   invalidate(s);
+    }}} else { s2 <- s; invalidate(s); }
     start(rf);
     if (needrs1) {
        reserve(rf[rs1], R);
@@ -214,11 +223,14 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Que
        release(rf[rs2]);
     } else {
        int<32> rf2 = 0<32>;
-    }    
+    }
+    bool take = br(funct3, rf1, rf2);    
     if (isBranch) {
-       int<16> npc = br(pc, immB, funct3, rf1, rf2);
+       //divide by 4 b/c we count instructions not bytes
+       int<16> offpc = pc + (immB >> 2);
+       int<16> npc = (take) ? (offpc) : (pc + 1<16>);       
     } else {
-    if (isJal) {
+    if (isJal) {       
        //divide by 4 since it counts bytes instead of insns
        int<32> npc32 = cast(pc, int<32>) + (immJ >> 2);
        int<16> npc = npc32{15:0};
@@ -228,7 +240,16 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Que
     } else {
        int<16> npc = pc + 1<16>;
     }}}
-    if ((!done) && (!notBranch)) { call cpu(npc); }
+
+    if (!done) {
+       if (!notBranch) {
+       	  if (isBranch) {
+	        verify(s2, npc) { bht.upd(pc, take) };
+	      } else {
+	        call cpu(npc);
+	      }
+       }
+    }
 
     int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
     int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
@@ -238,6 +259,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Que
     int<16> tmppc = pc + 1<16>;
     int<32> linkpc = 0<16> ++ (tmppc << 2);
     int<32> mulres = mul(rf1, rf2, funct3);
+    ---
     if (writerd && (!isLoad) && (!isDiv)) {
        block(rf[rd]);
        int<32> rddata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
@@ -245,7 +267,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Que
     } else {
        int<32> rddata = 0<32>;
     }
-    ---
     if (isDiv) {
        int<32> sdividend = sign(rf1);
        //For REM, ignore sign of divisor
@@ -316,9 +337,10 @@ circuit {
     ti = memory(int<32>, 16);
     i = Queue(ti);
     td = memory(int<32>, 16);
-    d = FAQueue(td);
-    rf = rflock(int<32>, 5, 64);
+    d = Queue(td);
+    rf = rflock BypassRF(int<32>, 5, 4);
     div = new multi_stg_div[];
-    c = new cpu[rf, i, d, div];
+    b = new BHT[](4);
+    c = new cpu[rf, i, d, div, b];
     call c(0<16>);
 }

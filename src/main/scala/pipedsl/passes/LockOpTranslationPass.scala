@@ -163,21 +163,25 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         val i = ICheckLockFree(c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
       case Reserved =>
         val i = IReserveLock(lockVar(c.mem), c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
       case Acquired =>
         val i = ICheckLockOwned(c.mem, lockVar(c.mem)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
       case Released =>
         val i = IReleaseLock(c.mem, lockVar(c.mem)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
     }
 
