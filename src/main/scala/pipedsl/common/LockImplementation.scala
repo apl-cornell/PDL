@@ -108,19 +108,6 @@ object LockImplementation {
     def isCompatible(mtyp: TMemType): Boolean
 
     /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     * @param mem The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
-
-    /**
      * Returns the lock granularity supported by this implementation
      * (which indicates whether or not
      * addreses are specified in its operations).
@@ -215,21 +202,6 @@ object LockImplementation {
     //no possible conflicts since all ops are mergeable if conflicting
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
     override def isCompatible(mtyp: TMemType): Boolean = true
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
 
     override def granularity: LockGranularity = General
     //TODO placing the interface name (lock.) here is weird but OK i guess
@@ -359,8 +331,6 @@ object LockImplementation {
     override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
       mtyp.writeLatency != Asynchronous
 
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-
     override def granularity: LockGranularity = Specific
 
     override def getReadArgs(addr: Expr, lock: Expr): Expr = addr
@@ -434,21 +404,6 @@ object LockImplementation {
       //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
       mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
     }
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
 
     override def granularity:LockGranularity = Specific
 
@@ -552,21 +507,6 @@ object LockImplementation {
       mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
     }
     override def toString: String = "LSQ"
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
 
     override def granularity: LockGranularity = Specific
 
