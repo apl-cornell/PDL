@@ -11,6 +11,7 @@ object Environments {
     val EmptyTypeEnv: Environment[Id, Type] = TypeEnv()
     val EmptyLockEnv: Environment[Id, LockState] = LockEnv()
     val EmptyBoolEnv: Environment[Id, Boolean] = BoolEnv()
+    val EmptyIntEnv : Environment[Id, (Int, Int)] = IntEnv()
 
     sealed trait Environment[U, T] {
         /**
@@ -82,6 +83,71 @@ object Environments {
         }
     }
 
+    /*this is used for the port checker so that we can properly merge number*/
+    /*of ports on different if branches*/
+    case class IntEnv(portMap : Map[Id, (Int, Int)] = Map())
+      extends Environment[Id, (Int, Int)]
+        {
+            override def apply(key: Id): (Int, Int) = this.get(key)
+              .getOrElse((0, 0))
+
+            /*actually ignores the number you pass it so that the counting is*/
+            /*maintained*/
+            override def add(name: Id, typ: (Int, Int))
+            : Environment[Id, (Int, Int)] = portMap.get(name) match
+            {
+                case Some((read, write)) =>
+                    typ match
+                    {
+                        case (1, 0) =>
+                            IntEnv(portMap = portMap - name + (name -> (read+1, write)))
+                        case (0, 1) =>
+                            IntEnv(portMap = portMap - name + (name -> (read, write+1)))
+                        case _ =>
+                            throw new RuntimeException("Only add (1, 0) or (0, 1)")
+                    }
+                case None =>
+                    typ match
+                    {
+                        case (1, 0) | (0, 1) =>
+                            IntEnv(portMap = portMap + (name -> typ))
+                        case _ =>
+                            throw new RuntimeException("Only add (1, 0) or (0, 1)")
+                    }
+            }
+            override def get(name: Id): Option[(Int, Int)] = portMap.get(name)
+
+        override def getMappedKeys(): Set[Id] = portMap.keySet
+        override def remove(key: Id): Environment[Id, (Int, Int)] =
+            IntEnv(portMap = portMap - key)
+
+        override def intersect(other: Environment[Id, (Int, Int)])
+        : Environment[Id, (Int, Int)] = IntEnv(
+            getMappedKeys().intersect(other.getMappedKeys())
+              .filter( id => {this(id) == other(id) })
+              .map(k => { k -> this(k) } )
+              .toMap
+        )
+
+        override def union(other: Environment[Id, (Int, Int)])
+        : Environment[Id, (Int, Int)]
+        =
+            {
+                def pair_max(a:(Int, Int), b:(Int, Int)) =
+                    (Math.max(a._1, b._1), Math.max(a._2, b._2))
+                IntEnv(getMappedKeys().union(other.getMappedKeys()).foldLeft
+                (Map(): Map[Id, (Int, Int)])
+                ((acc, id) => acc + (id -> ((this.get(id), other.get(id)) match
+
+                {
+                    case (Some(x), Some(y)) => pair_max(x, y)
+                    case (Some(x), None) => x
+                    case (None, Some(y)) => y
+                    case (None, None) => throw new RuntimeException("never happens")
+                }))))
+            }
+    }
+
     case class LockEnv(lockMap: Map[Id, LockState] = Map()) extends Environment[Id, LockState] {
         override def apply(id: Id) = this.get(id).getOrThrow(MissingType(id.pos, id.v))
 
@@ -145,9 +211,11 @@ object Environments {
             BoolEnv(boolSet.union(other.getMappedKeys()))
     }
 
+
     case class ConditionalEnv(m: Map[Id, Z3AST] = Map(), ctx: Z3Context)
      extends Environment[Id, Z3AST] {
-        override def apply(key: Id) = this.get(key).getOrThrow(MissingType(key.pos, key.v))
+        override def apply(key: Id) = this.get(key).getOrThrow(MissingType
+        (key.pos, key.v))
         private def updateMapping(n: Id, ns: Z3AST): Environment[Id, Z3AST] = {
             this.copy(m = m + (n -> ns))
         }

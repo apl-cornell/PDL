@@ -1,5 +1,4 @@
-//Expected Fail
-pipe test3(input: uint<32>)[rf: int<32>[5]] {
+pipe test3(input: uint<32>)[rf: int<32>[5]<a2>] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     bool a = rs1 == rs2;
@@ -43,5 +42,5 @@ pipe test3(input: uint<32>)[rf: int<32>[5]] {
 }
 
 circuit {
-    r = memory(int<32>, 5);
+    r = memory(int<32>, 5, 2);
 }

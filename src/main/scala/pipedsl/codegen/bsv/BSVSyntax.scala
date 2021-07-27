@@ -44,8 +44,10 @@ object BSVSyntax {
       case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
         val elemTyp = toType(mem.elem)
-        val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
-          getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp)
+        val isAsync = mem.readLatency != Combinational
+        val mtyp = bsints.getBaseMemType(isAsync,
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp,
+          if (isAsync) Math.max(mem.readPorts, mem.writePorts) else 0)
         getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
@@ -56,7 +58,7 @@ object BSVSyntax {
     }
 
     def toClientType(t: Type): BSVType = t match {
-      case TMemType(elem, addrSize, rlat, wlat) if rlat == wlat && rlat == Asynchronous =>
+      case TMemType(elem, addrSize, rlat, wlat, _, _) if rlat == wlat && rlat == Asynchronous =>
         val elemTyp = toType(elem)
         bsints.getClientType(getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
       case _ => throw new RuntimeException
@@ -65,10 +67,10 @@ object BSVSyntax {
     def toType(t: Type): BSVType = t match {
       case TObject(name, tparams, _) =>
         BInterface(name.toString, tparams.map(t => BVar( "nocare", toType(t))))
-      case TMemType(elem, addrSize, rlat, _) =>
+      case TMemType(elem, addrSize, rlat, _, readPorts, writePorts) =>
         val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
-          getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp)
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp, readPorts)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
         val (lidSz, lidtyp) =  if (limpl.useUniqueLockId()) {

@@ -150,4 +150,31 @@ object Errors {
   case class MissingPredictionValues(pos: Position, handle: String) extends TypeError(
     s"Cannot find the predicted values for speculation ${handle}", pos
   )
+
+  case class InsufficientPorts(
+    pos :Position,
+    portType :String,
+    memory :Syntax.Id,
+    found :Int,
+    required :Int) extends RuntimeException(
+    withPos(s"Not enough ${portType} ports on $memory. Required $required but found $found.", pos))
+
+  case class SuboptimalPorts(
+    pos :Position,
+    portType :String,
+    memory :Syntax.Id,
+    found :Int,
+    required :Int) extends RuntimeException(
+    withPos(s"Better throughput could be obtained by having " +
+      s"$required $portType ports on $memory instead of $found.", pos))
+
+  case class NoSuperScalar(pipe :Syntax.Id) extends RuntimeException(
+    withPos(s"Tried to call $pipe multiple times in the same cycle!", pipe.pos))
+
+  case class LonelyPaths(pipe :Syntax.Id) extends RuntimeException(
+    withPos(s"There are program paths that do not have output nor call in $pipe!", pipe.pos))
+
+  case class MultipleCall(pos :Position, sure :Boolean) extends RuntimeException(
+    withPos(if (sure) "A thread potentially has more than one output xor call!"
+    else "The solver is confused. A thread may have more than one output xor call", pos))
 }

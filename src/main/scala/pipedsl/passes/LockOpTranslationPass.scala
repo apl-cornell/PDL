@@ -138,6 +138,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
         val newSend = IMemSend(h, writeMask, mem, d, newVar).setPos(im.pos)
+        newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         List(newAssn, newSend)
       case im@IMemWrite(_, _, _) if im.granularity == General => List(im)

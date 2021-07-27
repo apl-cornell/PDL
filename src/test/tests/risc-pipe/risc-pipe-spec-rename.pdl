@@ -137,7 +137,7 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);

@@ -8,8 +8,9 @@ class BluespecInterfaces() {
   val topModTyp: BInterface = BInterface("TopMod")
 
   def toIntVar(v: BVar): BVar = {
+    val sfx = if(v.name.last.isDigit) v.name.last else ""
     val dotIndex = v.name.indexOf('.')
-    val vname = if (dotIndex == -1) v.name else v.name.substring(0, dotIndex)
+    val vname = if (dotIndex == -1) v.name else v.name.substring(0, dotIndex) + sfx
     BVar("_int" + vname, v.typ)
   }
 
@@ -121,18 +122,28 @@ class BluespecInterfaces() {
 
   private val asyncMemType = "BramPort"
   private val asyncMemMod = "mkBramPort"
+  private val asyncMemType2 = "BramPort2"
+  private val asyncMemMod2 = "mkBramPort2"
   private val combMemType = "RegFile"
   private val combMemMod = "mkRegFile"
 
   val reqIdName = "ridtyp"
 
   private def getMaskSize(elemSize: Int): Int = elemSize / 8
-  def getBaseMemType(isAsync: Boolean, elemSize: Int, addr: BSVType, data: BSVType): BInterface = {
+  def getBaseMemType(isAsync: Boolean,
+                     elemSize: Int,
+                     addr: BSVType,
+                     data: BSVType,
+                     portNum: Int): BInterface = {
     if (isAsync) {
       //TODO make this type parameterizable
       val reqTyp = getDefaultMemHandleType
-      val maskSize = getMaskSize(elemSize)
-      BInterface(asyncMemType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
+      val maskSize = elemSize / 8
+      val memType = portNum match {
+        case 1 => asyncMemType
+        case 2 => asyncMemType2
+      }
+      BInterface(memType, List(BVar("addrtyp", addr), BVar("elemtyp", data),
         BVar(reqIdName, reqTyp), BVar("nsz", BNumericType(maskSize))))
     } else {
       BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
@@ -142,6 +153,7 @@ class BluespecInterfaces() {
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
       case `asyncMemType` => BModule(asyncMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
+      case `asyncMemType2` => BModule(asyncMemMod2, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case `combMemType` => BModule(combMemMod, List(BBoolLit(initFile.isDefined), BStringLit(initFile.getOrElse(""))))
       case _ => throw UnexpectedBSVType(s"${memtyp.name} is not a supported memory interface")
     }
@@ -162,6 +174,17 @@ class BluespecInterfaces() {
   private val memAsyncReqName = "mem.req"
   private val memAsyncRespName = "mem.resp"
   private val memAsyncCheckName = "mem.checkRespId"
+  
+  private val memAsync2PeekName1 = "mem.peekResp"
+  private val memAsync2ReqName1 = "mem.req"
+  private val memAsync2RespName1 = "mem.resp"
+  private val memAsync2CheckName1 = "mem.checkRespId"
+
+  private val memAsync2PeekName2 = "mem.peekResp2"
+  private val memAsync2ReqName2 = "mem.req2"
+  private val memAsync2RespName2 = "mem.resp2"
+  private val memAsync2CheckName2 = "mem.checkRespId2"
+
 
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
     val default = if (isWrite) { BAllOnes } else { BZero }
@@ -172,8 +195,14 @@ class BluespecInterfaces() {
     }
   }
 
-  def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncPeekName, List(handle))
+//  def getMemPeek(mem: BVar, handle: BExpr): BMethodInvoke = {
+//    BMethodInvoke(mem, memAsyncPeekName, List(handle))
+//  }
+  def getMemPeek(mem: BVar, handle: BExpr, port: Int): BMethodInvoke = {
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2PeekName1, List(handle))
+      case 2 => BMethodInvoke(mem, memAsync2PeekName2, List(handle))
+    }
   }
   def getCombRead(mem: BVar, addr: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombReadName, List(addr))
@@ -181,16 +210,39 @@ class BluespecInterfaces() {
   def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
     BMethodInvoke(mem, memCombWriteName, List(addr, data))
   }
-  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+//  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
+//    val isWrite = data.isDefined
+//    val mask = toMask(isWrite, writeMask)
+//    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, mask))
+//  }
+  def getMemReq(mem: BVar, writeMask: Option[BExpr],
+                 addr: BExpr, data: Option[BExpr], port: Int): BMethodInvoke = {
     val isWrite = data.isDefined
     val mask = toMask(isWrite, writeMask)
-    BMethodInvoke(mem, memAsyncReqName, List(addr, if (data.isDefined) data.get else BDontCare, mask))
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2ReqName1, List(addr, data
+        .getOrElse(BDontCare), mask))
+      case 2 => BMethodInvoke(mem, memAsync2ReqName2, List(addr, data
+        .getOrElse(BDontCare), mask))
+    }
   }
-  def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncCheckName, List(handle))
+//  def getCheckMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
+//    BMethodInvoke(mem, memAsyncCheckName, List(handle))
+//  }
+  def getCheckMemResp(mem: BVar, handle: BExpr, port: Int): BMethodInvoke = {
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2CheckName1, List(handle))
+      case 2 => BMethodInvoke(mem, memAsync2CheckName2, List(handle))
+    }
   }
-  def getMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memAsyncRespName, List(handle))
+//  def getMemResp(mem: BVar, handle: BExpr): BMethodInvoke = {
+//    BMethodInvoke(mem, memAsyncRespName, List(handle))
+//  }
+  def getMemResp(mem: BVar, handle: BExpr, port: Int): BMethodInvoke = {
+    port match {
+      case 1 => BMethodInvoke(mem, memAsync2RespName1, List(handle))
+      case 2 => BMethodInvoke(mem, memAsync2RespName2, List(handle))
+    }
   }
 
   /**
@@ -321,7 +373,15 @@ class BluespecInterfaces() {
 
   def getBramServerName = bramServer
 
-  def makeConnection(client: BVar, server: BVar): BFuncCall = {
-    BFuncCall(mkConnName, List(client, BMethodInvoke(server, getBramServerName, List())))
+  def makeConnection(client: BVar, server: BVar, port_num :Int): BStatement = {
+    /*if (dual_ported)
+      BStmtSeq(List(
+        BExprStmt(BFuncCall(mkConnName, List(BVar(client.name + "1", client.typ),
+          BMethodInvoke(server, getBramServerName + "1", List())))),
+        BExprStmt(BFuncCall(mkConnName, List(BVar(client.name + "2", client.typ),
+          BMethodInvoke(server, getBramServerName + "2", List()))))))
+    else
+    */
+    BExprStmt(BFuncCall(mkConnName, List(client, BMethodInvoke(server, getBramServerName + (if(port_num > 0) port_num else ""), List()))))
   }
 }

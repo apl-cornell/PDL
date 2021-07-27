@@ -23,7 +23,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
 
   // General syntax components
   lazy val iden: P[Id] = positioned {
-    "" ~> "[a-zA-Z_][a-zA-Z0-9_]*".r ^^ { v => Id(v) }
+    "" ~> "[a-zA-Z][a-zA-Z0-9_]*".r ^^ { v => Id(v) }
   }
 
   lazy val posint: Parser[Int] = "[0-9]+".r ^^ { n => n.toInt } | err("Expected positive number")
@@ -276,22 +276,77 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     "s" ^^ { _ => Latency.Sequential }    |
     "a" ^^ { _ => Latency.Asynchronous }
 
-  lazy val lockedMemory: P[Type] = sizedInt ~ brackets(posint) ~ (angular(latency ~ ("," ~> latency)) ~ parens(iden).?).?  ^^ {
-    case elem ~ size ~ lats =>
-      if (lats.isDefined) {
-        val rlat = lats.get._1._1
-        val wlat = lats.get._1._2
-        val lock = lats.get._2
-        val mtyp = TMemType(elem, size, rlat, wlat)
-        if (lock.isDefined)
-          TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock.get))
-        else
-          TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
-      } else {
-        val mtyp = TMemType(elem, size,  Latency.Asynchronous, Latency.Asynchronous)
-        TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+  lazy val lat_and_ports: P[(Latency.Latency, Int)] =
+    latency ~ ((posint).?) ^^
+    {
+      case lat ~ int => int match
+      {
+        case Some(value) => (lat, value)
+        case None => (lat, 1)
       }
-  }
+    }
+
+  lazy val intopt: P[Int] = "[0-9]*".r ^^ { n => if(n == "") 1 else n.toInt } |
+    err("Expected positive number")
+
+  lazy val latports: P[(Latency.Latency, Int)] =
+    "c" ^^ { _ => (Latency.Combinational, 1) } |
+      "s" ^^ { _ => (Latency.Sequential, 1) }    |
+      "a" ^^ { _ => (Latency.Asynchronous, 1) } |
+      "c" ~> posint ^^ {n => (Latency.Combinational, n)} |
+      "s" ~> posint ^^ {n => (Latency.Sequential, n)} |
+      "a" ~> posint ^^ {n => (Latency.Asynchronous, n)}
+
+  lazy val latsnports: P[((Latency.Latency, Int), (Latency.Latency, Int))] =
+    (latency ~ intopt) ~ ("," ~> (latency ~ intopt)) ^^
+      {
+        case (l1 ~ i1) ~ (l2 ~ i2) =>
+          ((l1, i1), (l2, i2))
+      } |
+      "a" ~> intopt ^^
+      {
+        case n =>
+          val v :(Latency.Latency, Int) = (Latency.Asynchronous, n)
+          (v, v)
+      }
+
+  lazy val lockedMemory: P[Type] =
+    sizedInt ~ brackets(posint) ~
+      (angular(latsnports)
+      /*((latency ~ intopt) ~ ("," ~> (latency ~ intopt)))*/ ~ parens(iden).?).? ^^
+      {
+        case elem ~ size ~ lats =>
+          if (lats.isDefined) {
+            val rlat = lats.get._1._1._1
+            val rPorts = lats.get._1._1._2
+            val wlat = lats.get._1._2._1
+            val wPorts = lats.get._1._2._2
+            val lock = lats.get._2
+            val mtyp = TMemType(elem, size, rlat, wlat, rPorts, wPorts)
+            if (lock.isDefined)
+              TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock.get))
+            else
+              TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+          } else {
+            val mtyp = TMemType(elem, size,  Latency.Asynchronous,
+              Latency.Asynchronous, 1, 1)
+            TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+          }
+      } |
+      sizedInt ~ brackets(posint) ~ angular("a:" ~> posint) ~ parens(iden) ^^
+      {
+        case elem ~ size ~ ports ~ lock =>
+          val mtyp = TMemType(elem, size, Latency.Asynchronous, Latency.Asynchronous, ports, ports)
+          lock match
+        {
+            case lk =>
+          //case Some(lk) =>
+            TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lk))
+//          case None =>
+//            TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+        }
+
+      }
 
   lazy val void: P[Type] = "()" ^^ { _ => TVoid() }
   lazy val bool: P[Type] = "bool".r ^^ { _ => TBool() }
@@ -338,8 +393,22 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
         if (params.isDefined) params.get else List())
     }
   }
+
+  lazy val memargs: P[(Type, Int, Int)] = {
+    sizedInt ~ "," ~ posint ~ "," ~ posint ^^
+      {
+        case elem ~ _ ~ addr ~ _ ~ ports => (elem, addr, ports)
+      } |
+      sizedInt ~ "," ~ posint ^^
+    {
+      case elem ~ _ ~ addr => (elem, addr, 1)
+    }
+  }
+
   lazy val cmem: P[CirExpr] = positioned {
-    "memory" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirMem(elem, addr) }
+    "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^
+      { case elem ~ _ ~
+      addr ~ ports => CirMem(elem, addr, ports.getOrElse(1)); }
   }
 
   lazy val crf: P[CirExpr] = positioned {

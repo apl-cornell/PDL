@@ -1,4 +1,4 @@
-pipe cpu(pc: int<8>)[rf: int<32>[5]<c,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
+pipe cpu(pc: int<8>)[rf: int<32>[5]<c4,s>(RenameRF), imem: int<32>[8]<a,a>]: bool {
      spec_check(); //nonblocking check
      start(imem);
      uint<8> pcaddr = cast(pc, uint<8>);

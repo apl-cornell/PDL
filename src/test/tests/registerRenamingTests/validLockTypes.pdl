@@ -1,5 +1,5 @@
 //Expected Success
-pipe test1(tinput: uint<32>)[rf: int<32>[5]] {
+pipe test1(tinput: uint<32>)[rf: int<32>[5]<a2>] {
     uint<5> rs1 = tinput{4:0};
     uint<5> rs2 = tinput{9:5};
     start(rf);
@@ -15,7 +15,7 @@ pipe test1(tinput: uint<32>)[rf: int<32>[5]] {
 }
 
 //Expected Success
-pipe test2(tinput: uint<32>)[rf: int<32>[5]] {
+pipe test2(tinput: uint<32>)[rf: int<32>[5]<a2>] {
     uint<5> rs1 = tinput{4:0};
     uint<5> rs2 = tinput{9:5};
     start(rf);
@@ -44,7 +44,7 @@ pipe test3(tinput: uint<32>)[rf: int<32>[5]<c,s>] {
 }
 
 circuit {
-    r = memory(int<32>, 5);
+    r = memory(int<32>, 5, 2);
     rf = regfile(int<32>, 5);
 
 }
