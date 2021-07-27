@@ -15,6 +15,7 @@ object CommandLineParser {
     maxIterations: Int = 0,
     printStageGraph: Boolean = false,
     defaultAddrLock: Option[String] = None,
+    defaultRegLock: Option[String] = None,
     memInit: Map[String, String] = Map(),
     port_warn: Boolean = false,
   )
@@ -40,6 +41,12 @@ object CommandLineParser {
         opt[Unit]('p', "portwarn")
           .action((_, c) => c.copy(port_warn = true))
           .text("Throw errors for port conflicts between stages"),
+        opt[String]("addrLockModule")
+          .text("The BSV Module to use for address locks")
+          .action((s, c) => c.copy(defaultAddrLock = Some(s))),
+        opt[String]("reglockModule")
+          .text("The BSV Module to use for an integrated regfile lock")
+          .action((s, c) => c.copy(defaultRegLock = Some(s))),
         arg[File]("<file>...")
           .action((x, c) => c.copy(file = x))
           .text("pdl files to parse"),
@@ -65,9 +72,6 @@ object CommandLineParser {
           .text("generates code for the provided pdl file and writes the generated bluespec in the 'out' directory\n")
           .action((_, c) => c.copy(mode = "gen"))
           .children(
-            opt[String]("addrLockModule")
-              .text("The BSV Module to use for address locks")
-              .action((s, c) => c.copy(defaultAddrLock = Some(s))),
             opt[Map[String, String]]("memInit")
               .valueName("<memName1>=<fileName1>,<memName2>=<fileName2>...")
               .action((x, c) => c.copy(memInit = x)),

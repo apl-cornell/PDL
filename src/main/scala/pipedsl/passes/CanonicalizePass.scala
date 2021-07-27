@@ -1,6 +1,5 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.getAllVarNames
 import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
@@ -40,8 +39,8 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
 
   override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
 
-  override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m)),
-    fdefs = p.fdefs.map(f => run(f))).setPos(p.pos)
+  override def run(p: Prog): Prog = p.copy(exts = p.exts,
+    fdefs = p.fdefs.map(f => run(f)), moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
 
   /**
@@ -91,10 +90,13 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       val (nargs, nc) = extractCastVars(args)
       CSeq(nc, CSpecCall(handle, pipe, nargs).setPos(c.pos)).setPos(c.pos)
     case CCheckSpec(_) => c
-    case CVerify(handle, args, preds) =>
+    case CVerify(handle, args, preds, upd) =>
       val (nargs, nc) = extractCastVars(args)
-      val (npreds, nc2) = extractCastVars(preds)
-      CSeq(nc, CSeq(nc2, CVerify(handle, nargs, npreds)
+      CSeq(nc, CSeq(nc, CVerify(handle, nargs, preds, upd)
+        .setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
+    case CUpdate(nh, handle, args, preds) =>
+      val (nargs, nc) = extractCastVars(args)
+      CSeq(nc, CSeq(nc, CUpdate(nh, handle, nargs, preds)
         .setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
     case CInvalidate(_) => c
     case CPrint(_) => c
@@ -167,9 +169,9 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
     case EApp(func, args) =>
       val (nargs, nc) = extractCastVars(args)
       (EApp(func, nargs).setPos(e.pos), nc)
-    case ECall(mod, args) =>
+    case ECall(mod, name, args) =>
       val (nargs, nc) = extractCastVars(args)
-      (ECall(mod, nargs).setPos(e.pos), nc)
+      (ECall(mod, name, nargs).setPos(e.pos), nc)
     case ECast(ctyp, e) =>
       val (ne, nc) = extractCastVars(e)
       val ncast = ECast(ctyp, ne)
@@ -178,157 +180,5 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       (nassgn.lhs, CSeq(nc, nassgn).setPos(e.pos))
     case _ => (e, CEmpty())
   }
-  /*this code was intended to do a limited CSE on combinational reads*/
-  /*it turns out this is hard because of the way conditional expressions work*/
-  /*so it is turned off for now. This would be better implemented later*/
-  /*when we have the pipeline stages separated*/
 
-  def csemem_mod(moduleDef: ModuleDef): ModuleDef =
-  moduleDef.copy(body =
-  {val (bodp, _) = csemem_cmd(moduleDef.body, Map()); bodp})
-  .setPos(moduleDef.pos)
-
-  /**
-   *
-   * @param c
-   * @param env is a mapping from memories and their indices to IDs
-   * @return
-   */
-  def csemem_cmd(c: Command, env: Map[(Id, Id), Id])
-: (Command, Map[(Id, Id), Id]) = c match
-  {
-  case CSeq(c1, c2) =>
-  val (c1p, nenv) = csemem_cmd(c1, env)
-  val (c2p, fenv) = csemem_cmd(c2, nenv)
-  (CSeq(c1p, c2p), fenv)
-  case CTBar(c1, c2) =>
-  val (c1p, nenv) = csemem_cmd(c1, env)
-  val (c2p, fenv) = csemem_cmd(c2, nenv)
-  (CTBar(c1p, c2p), fenv)
-  case CIf(cond, cons, alt) =>
-  val (defs, condp, nenv) = csemem_expr(cond, env)
-  val (consp, _) = csemem_cmd(cons, env)
-  val (altp, _) = csemem_cmd(alt, env)
-  (CSeq(defs, CIf(condp, consp, altp)), nenv)
-  case Syntax.CAssign(lhs@EVar(id), EMemAccess(mem, EVar(idx), _)) =>
-  env.get((mem, idx)) match
-  {
-  case Some(mapped) => (CAssign(lhs, EVar(mapped)), env)
-  case None => (c, env + ((mem, idx) -> id))
-  }
-  case Syntax.CAssign(lhs, rhs) =>
-  val (defs, rhsp, nenv) = csemem_expr(rhs, env)
-  (CSeq(defs, CAssign(lhs, rhsp)), nenv)
-  case Syntax.CRecv(lhs@EVar(id), EMemAccess(mem, EVar(idx), _)) =>
-  mem.typ.get match
-  {
-  case TLockedMemType(TMemType(_, _, readLatency, _, _, _), _, _) =>
-  readLatency match
-  {
-  case pipedsl.common.Syntax.Latency.Combinational =>
-  env.get((mem, idx)) match
-  {
-  case Some(mapped) => (CRecv(lhs, EVar(mapped)), env)
-  case None => (c, env + ((mem, idx) -> id))
-  }
-  case _ => (c, env)
-  }
-  }
-  case Syntax.CSpecCall(handle, pipe, args) =>
-  val (fenv, defs, argsp) =
-  args.foldLeft((env, CEmpty():Command, List.empty[Expr]))(
-  (acc, arg) =>
-  {
-  val (cmd, argp, nenv) = csemem_expr(arg, acc._1)
-  (nenv, CSeq(cmd, acc._2), argp::acc._3)
-  })
-  (CSeq(defs, CSpecCall(handle, pipe, argsp.reverse)), fenv)
-  case Syntax.CVerify(handle, args, preds) =>
-  val (fenv, defs, argsp) =
-  args.foldLeft((env, CEmpty():Command, List.empty[Expr]))(
-  (acc, arg) =>
-  {
-  val (cmd, argp, nenv) = csemem_expr(arg, acc._1)
-  (nenv, CSeq(cmd, acc._2), argp::acc._3)
-  })
-  (CSeq(defs, CVerify(handle, argsp.reverse, preds)), fenv)
-  case Syntax.COutput(exp) =>
-  val (defs, expp, nenv) = csemem_expr(exp, env)
-  (CSeq(defs, COutput(expp)), nenv)
-  case Syntax.CReturn(exp) =>
-  val (defs, expp, nenv) = csemem_expr(exp, env)
-  (CSeq(defs, CReturn(expp)), nenv)
-  case Syntax.CExpr(exp) =>
-  val (defs, expp, nenv) = csemem_expr(exp, env)
-  (CSeq(defs, CExpr(expp)), nenv)
-  case Syntax.CSplit(cases, default) =>
-  (CSplit(cases.map(cs =>
-  {
-  val (bodp, _) = csemem_cmd(cs.body, env)
-  CaseObj(cs.cond, bodp)
-  }), {val (defp, _) = csemem_cmd(default, env); defp}), env)
-  case command: Syntax.InternalCommand => (c, env)
-  case _ => (c, env)
-  }
-
-  def csemem_expr(e: Syntax.Expr, env: Map[(Id, Id), Id])
-: (Command, Syntax.Expr, Map[(Id, Id), Id]) = e match
-  {
-  case EIsValid(ex) =>
-  val (defs, nexp, nenv) = csemem_expr(ex, env)
-  (defs, EIsValid(nexp), nenv)
-  case EFromMaybe(ex) =>
-  val (defs, nexp, nenv) = csemem_expr(ex, env)
-  (defs, EFromMaybe(nexp), nenv)
-  case EToMaybe(ex) =>
-  val (defs, nexp, nenv) = csemem_expr(ex, env)
-  (defs, EToMaybe(nexp), nenv)
-  case EUop(op, ex) =>
-  val (defs, nexp, nenv) = csemem_expr(ex, env)
-  (defs, EUop(op, nexp), nenv)
-  case EBinop(op, e1, e2) =>
-  val (defs1, ne1, nenv) = csemem_expr(e1, env)
-  val (defs2, ne2, fenv) = csemem_expr(e2, nenv)
-  (CSeq(defs1, defs2), EBinop(op, ne1, ne2), fenv)
-  case ERecAccess(rec, fieldName) =>
-  val (defs, nrec, nenv) = csemem_expr(rec, env)
-  (defs, ERecAccess(nrec, fieldName), nenv)
-  case EMemAccess(mem, EVar(idx), _) => env.get((mem, idx)) match
-  {
-    case Some(id) => (CEmpty(), EVar(id), env)
-    case None =>
-      val defs = freshTmp(e)
-      val frsh = defs match {case CAssign(lhs, _) => lhs}
-      (defs, frsh, env + ((mem, idx) -> frsh.id))
-  }
-  case EBitExtract(num, start, end) =>
-  val (defs, nump, nenv) = csemem_expr(num, env)
-  (defs, EBitExtract(nump, start, end), nenv)
-  case ETernary(cond, tval, fval) =>
-  val (defs, condp, nenv) = csemem_expr(cond, env)
-  (defs, ETernary(condp, tval, fval), nenv)
-  case EApp(func, args) =>
-  val (fenv, defs, argsp) =
-  args.foldLeft((env, CEmpty():Command, List.empty[Expr]))(
-  (acc, arg) =>
-  {
-  val (cmd, argp, nenv) = csemem_expr(arg, acc._1)
-  (nenv, CSeq(cmd, acc._2), argp::acc._3)
-  })
-  (defs, EApp(func, argsp.reverse), fenv)
-  case ECall(mod, args) =>
-  val (fenv, defs, argsp) =
-  args.foldLeft((env, CEmpty():Command, List.empty[Expr]))(
-  (acc, arg) =>
-  {
-  val (cmd, argp, nenv) = csemem_expr(arg, acc._1)
-  (nenv, CSeq(cmd, acc._2), argp::acc._3)
-  })
-  (defs, ECall(mod, argsp.reverse), fenv)
-  case ECast(ctyp, exp) =>
-  val (defs, nexp, nenv) = csemem_expr(exp, env)
-  (defs, ECast(ctyp, nexp), nenv)
-  case expr: CirExpr =>(CEmpty(), e, env)
-  case _ => (CEmpty(), e, env)
-  }
-  }
+}

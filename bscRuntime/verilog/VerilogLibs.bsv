@@ -5,8 +5,11 @@ import FIFOF :: *;
 import RWire :: *;
 
 export RenameRF(..);
+export BHT(..);
 export mkRenameRF;
+export mkForwardRenameRF;
 export mkNBFIFOF;
+export mkBHT;
 
 interface RenameRF#(type addr, type elem, type name);
    method name readName(addr a); //get name to read data later
@@ -40,7 +43,7 @@ import "BVI" RenameRF =
     method VALID_OUT isValid[2] (VALID_NAME);
     method D_OUT read[2] (NAME);
     method NAME_OUT allocName(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-    method write(NAME_IN, D_IN) enable(WE);
+    method write[2] (NAME_IN, D_IN) enable(WE);
     method commit(NAME_F) enable(FE);
     
        schedule (readName) CF (readName);
@@ -51,8 +54,45 @@ import "BVI" RenameRF =
        schedule (read) CF (allocName, write, commit);
        schedule (allocName) C (allocName);
        schedule (allocName) CF (write, commit);
-       schedule (write) C (write);
-       schedule (write) CF (commit);
+       schedule (write) CF (write, commit);
+       schedule (commit) C (commit);
+    
+ endmodule
+
+import "BVI" ForwardRenameRF =
+ module mkForwardRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)(RenameRF#(addr, elem, name)) provisos
+    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
+     PrimIndex#(addr, an), PrimIndex#(name, nn));
+
+    parameter addr_width = valueOf(szAddr);
+    parameter data_width = valueOf(szElem);
+    parameter name_width = valueOf(szName);
+    parameter lo_arch = 0;
+    parameter hi_arch = aregs - 1;
+    parameter lo_phys = 0;
+    parameter hi_phys = pregs - 1;
+    parameter binaryInit = init;
+    parameter file = fileInit;
+    
+    default_clock clk(CLK, (*unused*) clk_gate);
+    default_reset rst (RST);
+    
+    method NAME_OUT readName[2] (ADDR);
+    method VALID_OUT isValid[2] (VALID_NAME);
+    method D_OUT read[2] (NAME);
+    method NAME_OUT allocName(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+    method write[2] (NAME_IN, D_IN) enable(WE);
+    method commit(NAME_F) enable(FE);
+    
+       schedule (readName) CF (readName);
+       schedule (readName) CF (isValid, read, allocName, write, commit);
+       schedule (isValid) CF (isValid);
+       schedule (isValid) CF (read, allocName, write, commit);
+       schedule (read) CF (read);
+       schedule (read) CF (allocName, write, commit);
+       schedule (allocName) C (allocName);
+       schedule (allocName) CF (write, commit);
+       schedule (write) CF (write, commit);
        schedule (commit) C (commit);
     
  endmodule
@@ -93,6 +133,25 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
       f.clear();
    endmethod
    
+endmodule
+
+interface BHT#(type addr);
+   method addr req(addr pc, addr skip, addr take);
+   method Action upd(addr pc, Bool take);
+endinterface
+
+import "BVI" BHT = module mkBHT#(Integer entries)(BHT#(addr)) provisos (Bits#(addr,szAddr));
+		      parameter num_entries = entries;
+		      parameter addr_width = valueOf(szAddr);
+		      
+		      default_clock clk(CLK, (*unused*) clk_gate);
+		      default_reset rst (RST);
+		      
+		      method TAKE_OUT req (PC_IN_PRED, SKIP_OFF_IN, TAKE_OFF_IN);
+		      method upd (PC_IN_RES, TAKE_IN) enable (WE);
+		      
+			 schedule (req) CF (req, upd);
+			 schedule (upd) C (upd);
 endmodule
 
 // import "BVI" FIFO2 = module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));

@@ -87,9 +87,9 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
       val newapp = EApp(f, newargs).setPos(ea.pos)
       newapp.typ = ea.typ
       newapp
-    case ec@ECall(p, args) =>
+    case ec@ECall(p, name, args) =>
       val newargs = args.foldLeft(List[Expr]())((args, a) => args :+ modifyMemArg(a, isLhs))
-      val newcall = ECall(p, newargs).setPos(ec.pos)
+      val newcall = ECall(p, name, newargs).setPos(ec.pos)
       newcall.typ = ec.typ
       newcall
     case eb@EBinop(o, e1, e2) =>

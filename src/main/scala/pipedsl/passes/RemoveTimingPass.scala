@@ -9,7 +9,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   var calls: ListBuffer[Command] = new ListBuffer[Command]()
   
   override def run(p: Prog): Prog = {
-    p.copy(moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
+    p.copy(exts = p.exts, fdefs = p.fdefs, moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
   }
 
   override def run(m: ModuleDef): ModuleDef = {
@@ -34,7 +34,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           newCases :+ cases(index).copy(body = newBody)
         }
         CSplit(newCases, newDefault)
-      case CExpr(ECall(id, args)) =>
+      case CExpr(ECall(id, _, args)) =>
         val assigns: ListBuffer[Command] = new ListBuffer[Command]()
         val newArgs: ListBuffer[Expr] = new ListBuffer[Expr]()
         for (index <- args.indices) {
@@ -42,7 +42,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
           assigns.addOne(CAssign(arg, args(index)))
           newArgs.addOne(arg)
         }
-        calls.addOne(CExpr(ECall(id, newArgs.toList)))
+        calls.addOne(CExpr(ECall(id, None, newArgs.toList)))
         convertCListToCSeq(assigns, 0)
       case _ => c
     }

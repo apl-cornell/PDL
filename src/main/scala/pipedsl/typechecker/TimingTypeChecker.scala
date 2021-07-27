@@ -22,6 +22,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
 
   override def emptyEnv(): Environment[Id, Type] = Environments.EmptyTypeEnv
 
+  override def checkExt(e: ExternDef, env: Environment[Id, Type]): Environment[Id, Type] = env
+
   //Functions are combinational, this is checked in their well-formedness check
   override def checkFunc(f: FuncDef, env: Environment[Id, Type]): Environment[Id, Type] = env
 
@@ -81,7 +83,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         (lhs, rhs) match {
         //TODO rewrite to reduce code maybe?
         case (EVar(id), EMemAccess(_, _, _)) => (vars, nextVars + id)
-        case (EVar(id), ECall(_,_)) => (vars, nextVars + id)
+        case (EVar(id), ECall(_,_,_)) => (vars, nextVars + id)
         case (EVar(id), _) => (vars, nextVars + id)
         case (EMemAccess(_,_, _), EMemAccess(_,_, _)) =>
           throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
@@ -100,7 +102,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       (vars, nextVars + handle.id)
-    case CVerify(handle, args, preds) =>
+    case CVerify(handle, args, preds, upd) =>
       //handle and args must be available this cycle
       if(checkExpr(handle, vars) != Combinational) {
         throw UnexpectedAsyncReference(handle.pos, handle.toString)
@@ -108,10 +110,22 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
-      preds.foreach(p => if(checkExpr(p, vars) != Combinational) {
-        throw UnexpectedAsyncReference(p.pos, p.toString)
-      })
+      //just don't check preds they get inserted by the compiler automatically
+      if (upd.isDefined) {
+        if (checkExpr(upd.get, vars) != Combinational) {
+          throw UnexpectedAsyncReference(handle.pos, handle.toString)
+        }
+      }
       (vars, nextVars)
+    case CUpdate(nh, handle, args, preds) =>
+      if(checkExpr(handle, vars) != Combinational) {
+        throw UnexpectedAsyncReference(handle.pos, handle.toString)
+      }
+      args.foreach(a => if(checkExpr(a, vars) != Combinational) {
+        throw UnexpectedAsyncReference(a.pos, a.toString)
+      })
+      //just don't check preds they get inserted by the compiler automatically
+      (vars, nextVars + nh.id)
     case CInvalidate(handle) =>
       if(checkExpr(handle, vars) != Combinational) {
         throw UnexpectedAsyncReference(handle.pos, handle.toString)
@@ -188,11 +202,12 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Combinational
-    case ECall(_, args) =>
+    case ECall(_, name, args) =>
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
-      Asynchronous
+      //TODO methods are hacked
+      if (name.isDefined) { Combinational } else { Asynchronous }
     case EVar(id) => if(!vars(id) && isRhs) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)
     case _ => Combinational

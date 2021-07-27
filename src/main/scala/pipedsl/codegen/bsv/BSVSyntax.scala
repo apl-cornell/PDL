@@ -48,7 +48,10 @@ object BSVSyntax {
         val mtyp = bsints.getBaseMemType(isAsync,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp,
           if (isAsync) Math.max(mem.readPorts, mem.writePorts) else 0)
-        getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = true, Some(n))
+        getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
+        val mtyp = bsints.getBaseMemType(isAsync = mem.readLatency != Combinational,
+          getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp)
+        getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
@@ -65,21 +68,23 @@ object BSVSyntax {
     }
 
     def toType(t: Type): BSVType = t match {
+      case TObject(name, tparams, _) =>
+        BInterface(name.toString, tparams.map(t => BVar( "nocare", toType(t))))
       case TMemType(elem, addrSize, rlat, _, readPorts, writePorts) =>
         val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp, readPorts)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
-        val lidtyp =  if (limpl.useUniqueLockId()) {
+        val (lidSz, lidtyp) =  if (limpl.useUniqueLockId()) {
           if (idsz.isDefined) {
-            bsints.getLockHandleType(idsz.get)
-          } else bsints.getDefaultLockHandleType
+            (idsz, bsints.getLockHandleType(idsz.get))
+          } else (Some(bsints.defaultLockHandleSize), bsints.getDefaultLockHandleType)
         } else {
           //re-use the rid from the memory
-          mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
+          (None, mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ)
         }
-        getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
+        getLockedMemType(mem, mtyp, lidSz, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
       case TBool() => BBool
       case TString() => BString
@@ -151,6 +156,9 @@ object BSVSyntax {
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
       case EToMaybe(ex) => BTaggedValid(toExpr(ex))
+      case ECall(mod, method, args) if method.isDefined =>
+        //type doesn't matter on the var
+        BMethodInvoke(BVar(mod.v, BVoid), method.get.v, args.map(a => toExpr(a)))
       case _ => throw UnexpectedExpr(e)
     }
 
@@ -223,10 +231,12 @@ object BSVSyntax {
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
 
-    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType,
+    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdSz: Option[Int], lockIdTyp: BSVType,
       limpl: LockInterface, useTypeVars:Boolean = false, paramId: Option[Id]): BInterface = {
       val intName = limpl.getModuleName(m)
-      val lparams = limpl.getTypeArgs(List()).zipWithIndex.map(a => {
+      //TODO pass params better - requires passing ID first, if passing any
+      val szParams = if (lockIdSz.isDefined) List(lockIdSz.get) else List()
+      val lparams = limpl.getTypeArgs(szParams).zipWithIndex.map(a => {
         val sz = a._1
         val idx = a._2
         if (useTypeVars) {

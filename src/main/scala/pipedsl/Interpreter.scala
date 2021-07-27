@@ -69,7 +69,7 @@ class Interpreter(val maxIterations: Int) {
             }
             interp_function(func, newEnv)
         }
-        case ECall(id, args) => {
+        case ECall(id, name, args) => {
             var newEnv = new immutable.HashMap[Id, Any]()
             val moddef = modules(id)
             for (index <- 0 until args.length) {

@@ -8,21 +8,22 @@ typedef UInt#(TLog#(n)) SpecId#(numeric type n);
 
 interface SpecTable#(type sid);
     method ActionValue#(sid) alloc();
-    method Maybe#(Bool) nbcheck(sid s);   
-    method Maybe#(Bool) check(sid s);
+    method Maybe#(Bool) check(sid s, Integer i);
     method Action free(sid s);
-    method Action validate(sid s);
-    method Action invalidate(sid s);
+    method Action validate(sid s, Integer i);
+    method Action invalidate(sid s, Integer i);
 endinterface
 
 module mkSpecTable(SpecTable#(SpecId#(entries)));
 
-   //Schedule -> INVALIDATE must happen BEFORE NBCheck
-   // but not before BlockingCheck (this prevents combinational loops)
-   //Nothing needs to observe alloc
-
+   // Schedule => rules need to be associated with an index
+   // the _lower_ the index, the earlier they access the speculation table.
+   // Rules Containing speccall > containing update > only verify
+   // This ensures that speculative stages will not send data to the beginning of the pipeline IF we
+   // are also sending real data to the beginning
+   
     Vector#(entries, Reg#(Bool)) inUse <- replicateM(mkConfigReg(False));
-    Vector#(entries, Ehr#(2, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
+    Vector#(entries, Ehr#(3, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
 
     Reg#(SpecId#(entries)) head <- mkReg(0);
     Bool full = inUse[head];
@@ -45,46 +46,45 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    endrule
     */
    
-    //allocate a new entry in the table to track speculation	       
+   RWire#(Bool) doAlloc <- mkRWireSBR();
+   (*fire_when_enabled*)
+   rule doAllocRule (doAlloc.wget() matches tagged Valid.d);
+      head <= head + 1;
+      inUse[head] <= True;
+      specStatus[head][2] <= tagged Invalid;
+   endrule
+    //allocate a new entry in the table to track speculation. do this in a nonblocking way
+    //and just assume that only 1 client calls per cycle
    method ActionValue#(SpecId#(entries)) alloc() if (!full);
-        head <= head + 1;
-        inUse[head] <= True;
-        specStatus[head][1] <= tagged Invalid;
-        return head;
-    endmethod
-
-    //lookup a given entry
-    method Maybe#(Bool) nbcheck(SpecId#(entries) s);
-       if (!inUse[s])
-	  return tagged Invalid;
-       else
-	  return specStatus[s][1];
-    endmethod
-   
-   method Maybe#(Bool) check(SpecId#(entries) s);
-       if (!inUse[s])
-	  return tagged Invalid;
-       else
-	  return specStatus[s][0];
-    endmethod
+      doAlloc.wset(True);
+      return head;
+   endmethod
 
     method Action free(SpecId#(entries) s);
         inUse[s] <= False;
     endmethod
+   
+   method Maybe#(Bool) check(SpecId#(entries) s, Integer i);
+       if (!inUse[s])
+	  return tagged Invalid;
+       else
+	  return specStatus[s][i];
+    endmethod
+
 
     //mark s as valid (correctly speculated)
-    method Action validate(SpecId#(entries) s);
-        specStatus[s][0] <= tagged Valid True;
+    method Action validate(SpecId#(entries) s, Integer i);
+        specStatus[s][i] <= tagged Valid True;
     endmethod
 
     //mark s and all newer entries as invalid (misspeculated)
-    method Action invalidate(SpecId#(entries) s);
+    method Action invalidate(SpecId#(entries) s, Integer j);
        for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
 	  SpecId#(entries) lv = fromInteger(i);
-	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv][0] <= tagged Valid False;
+	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv][j] <= tagged Valid False;
        end
     endmethod
-
+   
 endmodule
 
 

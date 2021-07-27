@@ -1,7 +1,7 @@
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
-import pipedsl.common.Errors.UnexpectedCase
+import pipedsl.common.Errors.{UnexpectedCase, UnprovenLockState}
 import pipedsl.common.Locks
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
@@ -51,6 +51,9 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
   private var currentMod = Id("-invalid-")
 
   override def emptyEnv(): Environment[LockArg, Z3AST] = ConditionalLockEnv(ctx = ctx)
+
+  override def checkExt(e: ExternDef,
+    env: Environments.Environment[LockArg, Z3AST]): Environments.Environment[LockArg, Z3AST] = env
 
   //Functions can't interact with locks or memories right now.
   //Could add that to the function types explicitly to be able to check applications
@@ -151,7 +154,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           checkAcquired(mem, expr, env, c.predicateCtx.get)
         case (_, EMemAccess(mem, expr, _)) =>
           checkAcquired(mem, expr, env, c.predicateCtx.get)
-        case (_, ECall(mod, args)) =>
+        case (_, ECall(mod, name, args)) =>
           args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
         case _ => throw UnexpectedCase(c.pos)
       }
@@ -176,7 +179,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           case Z3Status.UNKNOWN =>
             throw new RuntimeException("An error occurred while attempting to solve the constraints")
           case Z3Status.SATISFIABLE =>
-            throw new RuntimeException(s"A possible thread of execution can cause this to fail: memories needs to be $expectedLockState before $op")
+            throw UnprovenLockState(c.pos, mem.id.v, expectedLockState)
         }
       case _ => env
     }
@@ -193,7 +196,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       val env2 = checkExpr(tval, env1, predicates)
       checkExpr(fval, env2, predicates)
     case EApp(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
-    case ECall(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
+    case ECall(_, name, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
     case ECast(_, exp) => checkExpr(exp, env, predicates)
     case _ => env
   }
@@ -284,7 +287,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       Acquired.order)
     match {
       case Z3Status.SATISFIABLE =>
-        throw new RuntimeException("A possible thread of execution can cause this to fail: memories needs to be acquired before accessing")
+        throw UnprovenLockState(expr.pos, mem.v, Locks.Acquired)
       case Z3Status.UNKNOWN =>
         throw new RuntimeException("An error occurred while attempting to solve the constraints")
       case Z3Status.UNSATISFIABLE =>

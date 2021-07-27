@@ -22,11 +22,14 @@ object Main {
         //In case directories don't exist
         config.out.mkdirs()
         (config.mode) match {
-          case ("parse") => parse(debug = true, printOutput = true, config.file, config.out)
-          case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
+          case ("parse") => parse(debug = true, printOutput = true, config.file, config.out,
+            rfLockImpl = config.defaultRegLock)
+          case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out,
+            rfLockImpl = config.defaultRegLock)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit, config.port_warn)
-          case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn)
+            config.debug, config.memInit, rfLockImpl = config.defaultRegLock)
+          case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn,
+            rfLockImpl = config.defaultRegLock)
           case _ =>
         }
       }
@@ -34,11 +37,12 @@ object Main {
     }
   }
   
-  def parse(debug: Boolean, printOutput: Boolean, inputFile: File, outDir: File): Prog = {
+  def parse(debug: Boolean, printOutput: Boolean, inputFile: File, outDir: File,
+            rfLockImpl: Option[String] = None): Prog = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
-    val p: Parser = new Parser()
+    val p: Parser = new Parser(rflockImpl = rfLockImpl.getOrElse("RenameRF"))
     val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile.toPath)))
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".parse"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
@@ -46,7 +50,8 @@ object Main {
     r.get
   }
   
-  def interpret(maxIterations:Int, memoryInputs: Seq[String], inputFile: File, outDir: File): Unit = {
+  def interpret(maxIterations:Int, memoryInputs: Seq[String], inputFile: File, outDir: File,
+                rfLockImpl: Option[String] = None): Unit = {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".interpret"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
     val prog = parse(debug = false, printOutput = false, inputFile, outDir)
@@ -54,14 +59,14 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean): (Prog, ProgInfo) = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean, rfLockImpl: Option[String] = None): (Prog, ProgInfo) = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".typecheck"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
 
-    val prog = parse(debug = false, printOutput = false, inputFile, outDir)
+    val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
     val pinfo = new ProgInfo(prog)
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
@@ -134,8 +139,8 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None, memInit: Map[String, String], port_warn :Boolean): Unit = {
-    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, port_warn)
+          memInit: Map[String, String],  rfLockImpl: Option[String] = None): Unit = {
+    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, port_warn, rfLockImpl = rfLockImpl)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
     //copies mem initialization to output directory
@@ -147,7 +152,7 @@ object Main {
     val memInitFileNames = memInit.foldLeft[Map[String,String]](Map())((map, kv) =>
       map + (kv._1 -> new File(kv._2).getName))
 
-    val bsints = new BluespecInterfaces(addrLockMod)
+    val bsints = new BluespecInterfaces()
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info,
       debug, bsints, memInit = memInitFileNames)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
