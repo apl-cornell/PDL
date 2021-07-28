@@ -54,6 +54,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
     {
       modLims.clear()
       optimalPorts.clear()
+      reserveMap.clear()
       m.modules.foreach(mod => mod.typ match {
         case TMemType(_, _, _, _, r, w) => modLims.addOne((mod.name, (r, w)))
         case TLockedMemType(TMemType(_, _, _, _, r, w), _, _) =>
