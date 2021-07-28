@@ -42,8 +42,8 @@ object MarkNonRecursiveModulePass extends ModulePass[ModuleDef] with ProgPass[Pr
       cases.foldLeft(hasRecursiveCall(default, mod))((b, c) => {
          or(b,or(hasRecursiveCall(c.body, mod), (hasRecCall(c.cond, mod), false)))
       })
-    case CAssign(_, rhs) => (hasRecCall(rhs, mod), false)
-    case CRecv(_, rhs) => (hasRecCall(rhs, mod), false)
+    case CAssign(_, rhs, _) => (hasRecCall(rhs, mod), false)
+    case CRecv(_, rhs, _) => (hasRecCall(rhs, mod), false)
     case COutput(exp) => (hasRecCall(exp, mod), false)
     case CExpr(exp) => (hasRecCall(exp, mod), false)
     case CSpecCall(_,pipe,_) if pipe == mod => (true, true)

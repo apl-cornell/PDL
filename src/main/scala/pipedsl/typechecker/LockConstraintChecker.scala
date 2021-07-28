@@ -143,8 +143,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           ctx)
         //Merge the two envs
         tenv.intersect(fenv) //real merge logic lives inside Envrionments.Z3AST
-      case CAssign(_, rhs) => checkExpr(rhs, env, c.predicateCtx.get)
-      case CRecv(lhs, rhs) => (lhs, rhs) match {
+      case CAssign(_, rhs, _) => checkExpr(rhs, env, c.predicateCtx.get)
+      case CRecv(lhs, rhs, _) => (lhs, rhs) match {
         case (EMemAccess(mem, expr, _), _) =>
           /*this is a write*/
           checkDisjoint(mem, c.predicateCtx.get)

@@ -174,4 +174,12 @@ object Errors {
   case class MultipleCall(pos :Position, sure :Boolean) extends RuntimeException(
     withPos(if (sure) "A thread potentially has more than one output xor call!"
     else "The solver is confused. A thread may have more than one output xor call", pos))
+
+  case class TooManyPorts(pos :Position, found :Int) extends RuntimeException(
+    withPos(s"Too many ports! Found $found", pos)
+  )
+
+  case class UnificationError(t1: Type, t2: Type) extends RuntimeException(
+    s"Unable to unify type $t1 and type $t2"
+  )
 }

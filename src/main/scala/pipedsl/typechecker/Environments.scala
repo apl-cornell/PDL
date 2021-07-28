@@ -1,6 +1,7 @@
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
+import pipedsl.typechecker.TypeInferenceWrapper.apply_subst_typ
 import pipedsl.common.Errors._
 import pipedsl.common.Locks._
 import pipedsl.common.Syntax._
@@ -81,6 +82,7 @@ object Environments {
                 }
             }))
         }
+        def apply_subst_typeenv(subst: List[(Id, Type)]): TypeEnv = TypeEnv(typeMap.foldLeft[Map[Id, Type]](Map())((e, kv) => e + (kv._1 -> apply_subst_typ(subst, kv._2))))
     }
 
     /*this is used for the port checker so that we can properly merge number*/

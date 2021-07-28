@@ -66,7 +66,7 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
   private def makeArgVariable(handle: Id, index: Integer, arg: Expr): CAssign = {
     val varId = Id("_" + handle.v + "_" + index).setPos(handle.pos)
     val aVar = EVar(varId).setPos(handle.pos)
-    CAssign(aVar, arg).setPos(handle.pos)
+    CAssign(aVar, arg, None).setPos(handle.pos)
   }
 
   //if the values are defined in either branch, take those.

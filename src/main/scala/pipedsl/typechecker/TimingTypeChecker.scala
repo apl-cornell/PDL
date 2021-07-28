@@ -70,12 +70,12 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       val (vt, nvt) = checkCommand(cons, vars, nextVars)
       val (vf, nvf) = checkCommand(alt, vars, nextVars)
       (vt.intersect(vf), nvt.intersect(nvf))
-    case CAssign(lhs, rhs) =>
+    case CAssign(lhs, rhs, _) =>
       if (checkExpr(rhs, vars) != Latency.Combinational) {
         throw UnexpectedAsyncReference(rhs.pos, rhs.toString)
       }
       (vars + lhs.id, nextVars)
-    case CRecv(lhs, rhs) =>
+    case CRecv(lhs, rhs, _) =>
       val rhsLat = checkExpr(rhs, vars)
       val lhsLat = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {

@@ -51,8 +51,8 @@ object Utilities {
         v ++ getUsedVars(c.cond) ++ getAllVarNames(c.body)
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
-    case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
-    case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CAssign(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CRecv(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
@@ -79,8 +79,8 @@ object Utilities {
         v ++ getWrittenVars(c.body)
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
-    case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
-    case CRecv(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
+    case CAssign(lhs, _, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
+    case CRecv(lhs, _, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
     case IMemSend(handle, _, _, _, _) => Set(handle.id)
@@ -112,8 +112,8 @@ object Utilities {
       })
     case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
-    case CAssign(_, rhs) => getUsedVars(rhs)
-    case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
+    case CAssign(_, rhs, _) => getUsedVars(rhs)
+    case CRecv(lhs, rhs, _) => getUsedVars(rhs) ++ (lhs match {
       case e:EMemAccess => getUsedVars(e)
       case _ => Set()
     })
@@ -317,5 +317,7 @@ object Utilities {
   /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =
     ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
+
+  val (defaultReadPorts, defaultWritePorts) = (5, 2)
 
 }

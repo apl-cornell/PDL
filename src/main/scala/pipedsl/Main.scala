@@ -10,6 +10,7 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
+import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
 import pipedsl.typechecker._
 
 object Main {
@@ -66,7 +67,8 @@ object Main {
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
       val canonProg = new CanonicalizePass().run(verifProg)
-      val basetypes = BaseTypeChecker.check(canonProg, None)
+      val basetypes = (new TypeInference).checkProgram(canonProg)
+//      val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
       MarkNonRecursiveModulePass.run(nprog)

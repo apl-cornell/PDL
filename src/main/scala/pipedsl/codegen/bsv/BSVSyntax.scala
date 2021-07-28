@@ -80,7 +80,7 @@ object BSVSyntax {
           mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
         getLockedMemType(mem, mtyp, lidtyp, limpl, useTypeVars = false, None)
-      case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
+      case TSizedInt(len, unsigned) => BSizedInt(unsigned, len.asInstanceOf[TBitWidthLen].len)
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
@@ -178,8 +178,8 @@ object BSVSyntax {
     //automatically determine an output type
     private def translateIntCast(from: TSizedInt, to:TSizedInt, e: Expr): BExpr = {
       val baseExpr = toExpr(e)
-      val needsExtend = from.len < to.len
-      val needsTruncate = to.len < from.len
+      val needsExtend = from.len.asInstanceOf[TBitWidthLen].len < to.len.asInstanceOf[TBitWidthLen].len
+      val needsTruncate = to.len.asInstanceOf[TBitWidthLen].len < from.len.asInstanceOf[TBitWidthLen].len
       val needsPack = from.unsigned != to.unsigned
       val extended = if (needsExtend) {
         //If making a signed number, sign extend
@@ -264,7 +264,7 @@ object BSVSyntax {
         translateFuncBody(c1) ++ translateFuncBody(c2)
       case CIf(cond, cons, alt) =>
         List(BIf(toExpr(cond), translateFuncBody(cons), translateFuncBody(alt)))
-      case CAssign(lhs, rhs) =>
+      case CAssign(lhs, rhs, _) =>
         List(BDecl(toVar(lhs), Some(toExpr(rhs))))
       case CReturn(exp) =>
         List(BReturnStmt(toExpr(exp)))
