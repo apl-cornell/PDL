@@ -276,13 +276,13 @@ object DAGSyntax {
     val defaultNum = conds.size
     val condVar = EVar(Id("__cond" + n.v))
     val intSize = log2(defaultNum)
-    condVar.typ = Some(TSizedInt(TBitWidthLen(intSize), unsigned = true))
+    condVar.typ = Some(TSizedInt(TBitWidthLen(intSize), sign = true))
     condVar.id.typ = condVar.typ
     var eTernary = ETernary(conds(defaultNum - 1), EInt(defaultNum - 1, bits = intSize), EInt(defaultNum, bits = intSize))
     for(i <- defaultNum-2 to 0 by -1 ) {
       eTernary = ETernary(conds(i), EInt(i, bits = intSize), eTernary.copy())
     }
-    this.addCmd(CAssign(condVar, eTernary, Some(TSizedInt(TBitWidthLen(intSize), unsigned = true))))
+    this.addCmd(CAssign(condVar, eTernary, Some(TSizedInt(TBitWidthLen(intSize), sign = true))))
     for (i <- 0 until defaultNum) {
       this.addEdgeTo(condStages(i).head, condSend = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))
       condStages(i).last.addEdgeTo(joinStage, condRecv = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))

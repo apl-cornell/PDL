@@ -301,7 +301,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           else {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv, None)
             idxt match {
-              case TSizedInt(l, true) if l.asInstanceOf[TBitWidthLen].len == memt.addrSize => tenv
+              case TSizedInt(l, TUnsigned()/*true*/) if l.asInstanceOf[TBitWidthLen].len == memt.addrSize => tenv
               case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
@@ -385,7 +385,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   private def _checkE(e: Expr, tenv: Environment[Id, Type], defaultType: Option[Type]): (Type, Environment[Id, Type] ) = e match {
     case e1@EInt(_, _, bits) =>
       if (e1.typ.isDefined) { (e1.typ.get, tenv) }
-      else { (TSizedInt(TBitWidthLen(bits), unsigned = false), tenv) }
+      else { (TSizedInt(TBitWidthLen(bits), TSigned()/*unsigned = false*/), tenv) }
     case EBool(v) => (TBool(), tenv)
     case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
@@ -446,12 +446,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
-        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, true)) if l.asInstanceOf[TBitWidthLen].len == s =>
+        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, TUnsigned()/*true*/)) if l.asInstanceOf[TBitWidthLen].len == s =>
           if (wm.isDefined) {
             val (wmt, _) = checkExpression(wm.get, tenv, None)
             wmt match {
               //TODO check that the mask size is correct (i.e., length of elemtype / 8)
-              case TSizedInt(lm, true) => ()
+              case TSizedInt(lm, TUnsigned()/*true*/) => ()
               case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
                 " to the number of bytes in the element type", wmt)
             }

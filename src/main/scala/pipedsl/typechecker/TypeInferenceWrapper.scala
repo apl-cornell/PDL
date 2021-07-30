@@ -27,7 +27,8 @@ object TypeInferenceWrapper
    { case Some(value) => Some(subst_into_type(typevar, toType, value))
     case None => None
    }, name)
-   case t: TBitWidth => t match
+   case t: TBitWidth =>
+    t match
    {
     case TBitWidthVar(name) => if (name == typevar) toType else inType
     case TBitWidthLen(len) => inType
@@ -37,10 +38,13 @@ object TypeInferenceWrapper
       case (TBitWidthLen(len1), TBitWidthLen(len2)) => TBitWidthLen(len1 + len2)
       case _ => t1
      }
-    case TBitWidthMax(b1, b2) => val t1 = TBitWidthMax(subst_into_type(typevar, toType, b1).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, b2).asInstanceOf[TBitWidth])
+    case TBitWidthMax(b1, b2) =>
+     val t1 = TBitWidthMax(subst_into_type(typevar, toType, b1).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, b2).asInstanceOf[TBitWidth])
      (t1.b1, t1.b2) match
      {
       case (TBitWidthLen(len1), TBitWidthLen(len2)) => TBitWidthLen(len1.max(len2))
+      case (TBitWidthLen(len), _ :TBitWidthVar) => TBitWidthLen(len)
+      case (_ :TBitWidthVar, TBitWidthLen(len)) => TBitWidthLen(len)
       case _ => t1
      }
    }
@@ -202,7 +206,7 @@ object TypeInferenceWrapper
           case Some(value) => val (s, t, e) = infer(env, value)
            val tempSub = compose_subst(sub, s)
            val tNew = apply_subst_typ(tempSub, t)
-           val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(TBitWidthLen(addrSize), unsigned = true)))
+           val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(TBitWidthLen(addrSize), TUnsigned()/*unsigned = true*/)))
            (e.apply_subst_typeenv(newSub), newSub)
           case None => (env, sub)
          }
@@ -211,7 +215,7 @@ object TypeInferenceWrapper
           case Some(value) => val (s, t, e) = infer(env, value)
            val tempSub = compose_subst(sub, s)
            val tNew = apply_subst_typ(tempSub, t)
-           val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(TBitWidthLen(addrSize), unsigned = true)))
+           val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(TBitWidthLen(addrSize), TUnsigned()/*unsigned = true*/)))
            (e.apply_subst_typeenv(newSub), newSub)
           case None => (env, sub)
          }
@@ -342,6 +346,12 @@ object TypeInferenceWrapper
       TBitWidthVar(Id("__BITWIDTH__" + counter))
      }
 
+    private def generateSignTypeVar(): TSignedNess =
+     {
+      counter += 1
+      TSignVar(Id("__SIGN__" + counter))
+     }
+    
     private def occursIn(name: Id, b: Type): Boolean = b match
     {
      case TSizedInt(len, unsigned) => occursIn(name, len)
@@ -374,10 +384,11 @@ object TypeInferenceWrapper
      case (_: TString, _: TString) => List()
      case (_: TBool, _: TBool) => List()
      case (_: TVoid, _: TVoid) => List()
-     case (TBool(), TSizedInt(len, u)) if len.asInstanceOf[TBitWidthLen].len == 1 && u => List()
-     case (TSizedInt(len, u), TBool()) if len.asInstanceOf[TBitWidthLen].len == 1 && u => List()
+     case (TBool(), TSizedInt(len, u)) if len.asInstanceOf[TBitWidthLen].len == 1 && u.unsigned() => List()
+     case (TSizedInt(len, u), TBool()) if len.asInstanceOf[TBitWidthLen].len == 1 && u.unsigned() => List()
      case (TSizedInt(len1, unsigned1), TSizedInt(len2, unsigned)) => unify(len1, len2) //TODO: TSIZEDINT
-     case (TFun(args1, ret1), TFun(args2, ret2)) if args1.length == args2.length => val s1 = args1.zip(args2).foldLeft[Subst](List())((s, t) => compose_subst(s, unify(apply_subst_typ(s, t._1), apply_subst_typ(s, t._2))))
+     case (TFun(args1, ret1), TFun(args2, ret2)) if args1.length == args2.length =>
+      val s1 = args1.zip(args2).foldLeft[Subst](List())((s, t) => compose_subst(s, unify(apply_subst_typ(s, t._1), apply_subst_typ(s, t._2))))
       compose_subst(s1, unify(apply_subst_typ(s1, ret1), apply_subst_typ(s1, ret2)))
      case (TModType(input1, refs1, retType1, name1), TModType(input2, refs2, retType2, name2)) => //TODO: Name?\ if (name1 != name2) throw UnificationError(a, b)
       val s1 = input1.zip(input2).foldLeft[Subst](List())((s, t) => compose_subst(s, unify(apply_subst_typ(s, t._1), apply_subst_typ(s, t._2))))
@@ -400,8 +411,9 @@ object TypeInferenceWrapper
     //The environment returned is guaratneed to already have been substituted into with the returned substitution private
     def infer(env: TypeEnv, e: Expr): (Subst, Type, TypeEnv) = e match
     {
-     case EInt(v, base, bits) => val is_unsigned = e.typ.get.asInstanceOf[TSizedInt].unsigned
-      (List(), TSizedInt(TBitWidthLen(bits), is_unsigned), env)
+     case EInt(v, base, bits) =>
+      val is_unsigned = if (e.typ.isDefined) e.typ.get.asInstanceOf[TSizedInt].sign else generateSignTypeVar()
+      (List(), if(e.typ.isDefined) TSizedInt(TBitWidthLen(bits), is_unsigned) else generateTypeVar(), env)
      case EString(v) => (List(), TString(), env)
      case EBool(v) => (List(), TBool(), env)
      case EUop(op, ex) => val (s, t, env1) = infer(env, ex)
@@ -411,15 +423,24 @@ object TypeInferenceWrapper
       val retSubst = compose_subst(s, subst)
       val retTyp = apply_subst_typ(retSubst, retType)
       (retSubst, retTyp, env1.apply_subst_typeenv(retSubst))
-     case EBinop(op, e1, e2) => val (s1, t1, env1) = infer(env, e1)
+     case EBinop(op, e1, e2) =>
+      println(s"inferring for op $op")
+      val (s1, t1, env1) = infer(env, e1)
       val (s2, t2, env2) = infer(env1, e2)
+      println(s"inferred left = $t1; right = $t2")
       val retType = generateTypeVar()
       val subTemp = compose_subst(s1, s2)
       val t1New = apply_subst_typ(subTemp, t1)
       val t2New = apply_subst_typ(subTemp, t2)
+      println(s"t1New: $t1New; t2New: $t2New")
       val subst = unify(TFun(List(t1New, t2New), retType), binOpExpectedType(op))
       val retSubst = compose_many_subst(subTemp, subst)
       val retTyp = apply_subst_typ(retSubst, retType)
+      val t1VNew = apply_subst_typ(retSubst, t1New)
+      val t2VNew = apply_subst_typ(retSubst, t2New)
+      e1.typ = Some(t1VNew)
+      e2.typ = Some(t2VNew)
+      println(s"retTyp: $retTyp;\nt1VNew: $t1VNew;\nt2VNew: $t2VNew")
       (retSubst, retTyp, env2.apply_subst_typeenv(retSubst))
      case EMemAccess(mem, index, wmask) => if (!(env(mem).isInstanceOf[TMemType] || env(mem).isInstanceOf[TLockedMemType])) throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env(mem))
 
@@ -439,8 +460,9 @@ object TypeInferenceWrapper
      case EBitExtract(num, start, end) => val (s, t, e) = infer(env, num)
       t match
       {
-       case TSizedInt(TBitWidthLen(len), unsigned) if len >= (math.abs(end - start) + 1) => (s, TSizedInt(TBitWidthLen(math.abs(end - start) + 1), true), e)
-       case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), true)) //TODO Add better error message
+       case TSizedInt(TBitWidthLen(len), unsigned) if len >= (math.abs(end - start) + 1) => 
+        (s, TSizedInt(TBitWidthLen(math.abs(end - start) + 1), TUnsigned()/*true*/), e)
+       case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), TUnsigned()/*true*/)) //TODO Add better error message
       } //TODO
      case ETernary(cond, tval, fval) => val (sc, tc, env1) = infer(env, cond)
       val (st, tt, env2) = infer(env1, tval)
@@ -504,34 +526,42 @@ object TypeInferenceWrapper
     {
      case EqOp(op) => val t = generateTypeVar() // TODO: This can be anything?
       TFun(List(t, t), TBool())
-     case CmpOp(op) => TFun(List(TSizedInt(generateBitWidthTypeVar(), true), TSizedInt(generateBitWidthTypeVar(), true)), TBool()) //TODO: TSizedInt?
+     case CmpOp(op) => 
+      val t = generateSignTypeVar()
+      TFun(List(TSizedInt(generateBitWidthTypeVar(), t), TSizedInt(generateBitWidthTypeVar(), t)), TBool()) //TODO: TSizedInt?
      case BoolOp(op, fun) => TFun(List(TBool(), TBool()), TBool())
      case NumOp(op, fun) => val b1 = generateBitWidthTypeVar()
       val b2 = generateBitWidthTypeVar()
+      val s = generateSignTypeVar()
       op match
       {
-       case "/" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(b1, true))
-       case "*" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthAdd(b1, b2), true))
-       case "+" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthMax(b1, b2), true))
-       case "-" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthMax(b1, b2), true))
-       case "%" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(b1, true))
+       case "/" => TFun(List(TSizedInt(b1, s), TSizedInt(b2, s)), TSizedInt(b1, s))
+       case "*" => TFun(List(TSizedInt(b1, s), TSizedInt(b2, s)), TSizedInt(TBitWidthAdd(b1, b2), s))
+      // case "+" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthMax(b1, b2), true))
+       case "+" => TFun(List(TSizedInt(b1, s), TSizedInt(b1, s)), TSizedInt(b1, s))
+       //case "-" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthMax(b1, b2), true))
+       case "-" => TFun(List(TSizedInt(b1, s), TSizedInt(b1, s)), TSizedInt(b1, s))
+       case "%" => TFun(List(TSizedInt(b1, s), TSizedInt(b2, s)), TSizedInt(b1, s))
       }
      case BitOp(op, fun) => val b1 = generateBitWidthTypeVar()
       val b2 = generateBitWidthTypeVar()
+      val s = generateSignTypeVar()
       op match
       {
-       case "++" => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(TBitWidthAdd(b1, b2), true))
-       case _ => TFun(List(TSizedInt(b1, true), TSizedInt(b2, true)), TSizedInt(b1, true))
+       case "++" => TFun(List(TSizedInt(b1, s), TSizedInt(b2, s)), TSizedInt(TBitWidthAdd(b1, b2), s))
+       case _ => TFun(List(TSizedInt(b1, s), TSizedInt(b2, s)), TSizedInt(b1, s))
       }
     }
 
     private def uOpExpectedType(u: UOp): Type = u match
     {
      case BitUOp(op) => val b1 = generateBitWidthTypeVar() //TODO: Fix this
-      TFun(List(TSizedInt(b1, true)), TSizedInt(b1, true))
+      val s = generateSignTypeVar()
+      TFun(List(TSizedInt(b1, s)), TSizedInt(b1, s))
      case BoolUOp(op) => TFun(List(TBool()), TBool())
      case NumUOp(op) => val b1 = generateBitWidthTypeVar()
-      TFun(List(TSizedInt(b1, true)), TSizedInt(b1, true))
+      val s = generateSignTypeVar()
+      TFun(List(TSizedInt(b1, s)), TSizedInt(b1, s))
 
     }
 
@@ -545,7 +575,7 @@ object TypeInferenceWrapper
 
     private def getMemAccessType(t: TMemType): TFun =
      {
-      TFun(List(TSizedInt(TBitWidthLen(t.addrSize), unsigned = true)), t.elem)
+      TFun(List(TSizedInt(TBitWidthLen(t.addrSize), sign = TUnsigned()/*true*/)), t.elem)
      }
 
    }

@@ -67,8 +67,8 @@ object Main {
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
       val canonProg = new CanonicalizePass().run(verifProg)
-      val basetypes = (new TypeInference).checkProgram(canonProg)
-//      val basetypes = BaseTypeChecker.check(canonProg, None)
+      /*val basetypes = */(new TypeInference).checkProgram(canonProg)
+      val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
       MarkNonRecursiveModulePass.run(nprog)

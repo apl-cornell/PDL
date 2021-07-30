@@ -89,7 +89,7 @@ object Syntax {
       case _: TVoid => "void"
       case _: TBool => "bool"
       case _: TString => "String"
-      case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
+      case TSizedInt(l, un) => s"${if (un.unsigned()) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat, rPorts, wPorts) =>
@@ -101,7 +101,7 @@ object Syntax {
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
       case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")"
-      case TBitWidthLen(len) => len.toString()
+      case TBitWidthLen(len) => len.toString
       case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")"
       case TBitWidthVar(name) => "bitVar(" + name + ")"
 
@@ -109,7 +109,29 @@ object Syntax {
   }
   // Types that can be upcast to Ints
   sealed trait IntType
-  case class TSizedInt(len: TBitWidth, unsigned: Boolean) extends Type with IntType
+  trait TSignedNess extends Type
+  {
+    def signed() :Boolean = this match
+    {
+      case TSigned() => true
+      case TUnsigned() => false
+    }
+    def unsigned() :Boolean = this match {
+      case TSigned() => false
+      case TUnsigned() => true
+    }
+  }
+  object SignFactory
+  {
+    def ofBool(signed :Boolean) :TSignedNess =
+      {
+        if(signed) TSigned() else TUnsigned()
+      }
+  }
+  case class TSigned() extends TSignedNess
+  case class TUnsigned() extends TSignedNess
+  case class TSignVar(id :Id) extends TSignedNess
+  case class TSizedInt(len: TBitWidth, sign: TSignedNess) extends Type with IntType
   // Use case class instead of case object to get unique positions
   case class TString() extends Type
   case class TVoid() extends Type

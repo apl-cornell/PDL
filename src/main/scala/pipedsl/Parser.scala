@@ -33,7 +33,11 @@ class Parser extends RegexParsers with PackratParsers {
 
   private def toInt(n: Int, base: Int, bits: Option[Int], isUnsigned: Boolean): EInt = {
     val e = EInt(n, base, if (bits.isDefined) bits.get else log2(n))
-    e.typ = Some(TSizedInt(TBitWidthLen(e.bits), unsigned = isUnsigned))
+    e.typ = bits match {
+      case Some(b) => Some(TSizedInt(TBitWidthLen(b), SignFactory.ofBool(!isUnsigned)))
+      case None => None
+    }
+   // e.typ = Some(TSizedInt(TBitWidthLen(e.bits), unsigned = isUnsigned))
     e
   }
 
@@ -260,8 +264,8 @@ class Parser extends RegexParsers with PackratParsers {
       seqCmd
   }
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), unsigned = false) } |
-  "uint" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), unsigned = true) }
+  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TUnsigned() /*unsigned = false*/) } |
+  "uint" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TUnsigned() /*unsigned = true*/) }
 
   lazy val latency: P[Latency.Latency] =
     "c" ^^ { _ => Latency.Combinational } |
