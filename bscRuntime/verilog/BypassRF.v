@@ -110,38 +110,40 @@ module BypassRF(CLK,
    
    //conflicting pending writes
    reg [name_width - 1 : 0]    rf1_conflict, rf2_conflict;
-   reg 			       rf1_hasc, rf2_hasc;
+   reg 			       rf1_hasc, rf2_hasc, rf1_foundc, rf2_foundc;
    
    integer 		       ii,jj;   
    reg [name_width - 1 : 0] 		       idxi,idxj;
 
-   always@(ADDR_1, ADDR_2)
+   always@(*)
      begin
+	rf1_foundc = 0;
+	rf2_foundc = 0;	
 	rf1_hasc = 0;
 	rf2_hasc = 0;
 	rf1_conflict = 0;
 	rf2_conflict = 0;	
-	for (ii = 0; ii < numNames && !rf1_hasc; ii = ii + 1)
+	for (ii = 0; ii < numNames && !rf1_foundc; ii = ii + 1)
 	  begin
-	     idxi = wQueueHead - ii - 1;
+	     idxi = wQueueHead - ii - 1;	     
 	     if (		 
 		 wQueueValid[idxi] &&
-		 (wQueueAddr[idxi] == ADDR_1) &&
-		 !wQueueWritten[idxi])
+		 (wQueueAddr[idxi] == ADDR_1))
 	       begin
-		  rf1_hasc = 1;
+		  rf1_foundc = 1; //found matching write		  
+		  rf1_hasc = !wQueueWritten[idxi]; //only conflicts if data not there 	  
 		  rf1_conflict = idxi;		  
 	       end	     	     	     
 	  end
-	for (jj = 0; jj < numNames && !rf2_hasc; jj = jj + 1)
+	for (jj = 0; jj < numNames && !rf2_foundc; jj = jj + 1)
 	  begin	
 	     idxj = wQueueHead - jj - 1;	     
 	     if (
 		 wQueueValid[idxj] &&
-		 (wQueueAddr[idxj] == ADDR_2) &&
-		  !wQueueWritten[idxj])
+		 (wQueueAddr[idxj] == ADDR_2))
 	       begin
-		  rf2_hasc = 1;
+		  rf2_foundc = 1;		  
+		  rf2_hasc = !wQueueWritten[idxj];		  
 		  rf2_conflict = idxj;		  
 	       end	     	     
 	  end	
@@ -240,6 +242,7 @@ module BypassRF(CLK,
 	  //write reservation
 	  if (ALLOC_E && ALLOC_READY)
 	    begin
+	       wQueueWritten[wQueueHead] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	       wQueueValid[wQueueHead] <= `BSV_ASSIGNMENT_DELAY 1;
 	       wQueueAddr[wQueueHead] <= `BSV_ASSIGNMENT_DELAY ADDR_IN;	       
 	       wQueueHead <= `BSV_ASSIGNMENT_DELAY wQueueHead + 1;
