@@ -5,6 +5,10 @@ import com.sun.org.apache.xpath.internal.Expression
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Syntax._
+import sun.reflect.generics.visitor.Visitor
+import sun.security.rsa.RSAKeyFactory.PSS
+
+import scala.collection.mutable
 
 
 object Utilities {
@@ -241,6 +245,51 @@ object Utilities {
     result
   }
 
+  def depthFirstTrav[T](stg :PStage,
+                        start :T,
+                        visitor :(PStage, T) => T,
+                        succs :PStage => Iterable[PStage],
+                        visited :mutable.HashSet[PStage] = mutable.HashSet.empty[PStage]) :T =
+    {
+      if(visited.contains(stg)) return start
+      val result = visitor(stg, start)
+      visited.add(stg)
+      val fringe = succs(stg)
+      fringe.foldLeft(result)((acc, st) => depthFirstTrav(st, acc, visitor, succs, visited))
+    }
+
+  val annotateSpecTimings :PStage => Map[PStage, Option[Int]] = end =>
+    {
+     // val hasSpecCmd :Command => Boolean =
+      def hasSpecCmd(c :Command) :Boolean = c match
+      {
+        case CSeq(c1, c2) =>  hasSpecCmd(c1) || hasSpecCmd(c2)
+        case CTBar(c1, c2) => hasSpecCmd(c1) || hasSpecCmd(c2)
+        case CIf(_, cons, alt) => hasSpecCmd(cons) || hasSpecCmd(alt)
+        case CSpecCall(_, _, _) => true
+        case CCheckSpec(_) => true
+        case CVerify(_, _, _, _) => true
+        case CUpdate(_, _, _, _) => true
+        case CInvalidate(_) => true
+        case CSplit(cases, default) => cases.exists(c => hasSpecCmd(c.body)) || hasSpecCmd(default)
+        case ICondCommand(_, cs) => cs.exists(hasSpecCmd)
+        case _:IUpdate => true
+        case _:ICheck => true
+        case _ => false
+      }
+      val hasSpecStg :(PStage) => Boolean = stg =>
+        {
+          stg.getCmds.exists(c => hasSpecCmd(c))
+        }
+      depthFirstTrav[(Map[PStage, Option[Int]], Int)](end,
+        (Map.empty[PStage, Option[Int]], 0),
+        (stg, mapnum) =>
+          {val map = mapnum._1; val num = mapnum._2
+            if (hasSpecStg(stg)) (map + (stg -> Some(num)), num + 1)
+            else (map + (stg -> None), num)},
+        stg => stg.preds)._1
+    }
+
   def flattenStageList(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
       case s: DAGSyntax.IfStage => (l :+ s) ++ s.condStages.flatMap(stg => flattenStageList(stg)) ++ flattenStageList(s.defaultStages)
@@ -326,5 +375,7 @@ object Utilities {
   /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =
     ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
+
+
 
 }
