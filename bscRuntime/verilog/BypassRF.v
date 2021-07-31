@@ -26,7 +26,7 @@ module BypassRF(CLK,
    parameter addr_width = 1;
    parameter data_width = 1;
    parameter name_width = 1;
-   localparam numNames = 2 ** name_width;   
+   parameter numNames = 2 ** name_width;
    parameter lo_arch = 0;
    parameter hi_arch = 1;   
    parameter binaryInit = 0;
@@ -107,48 +107,55 @@ module BypassRF(CLK,
    reg 			       wQueueValid[ 0 : numNames - 1];
    reg 			       wQueueWritten[ 0 : numNames - 1];      
    reg [name_width - 1 : 0]    wQueueOwner;
-   
-   //conflicting pending writes
-   reg [name_width - 1 : 0]    rf1_conflict, rf2_conflict;
-   reg 			       rf1_hasc, rf2_hasc, rf1_foundc, rf2_foundc;
-   
-   integer 		       ii,jj;   
-   reg [name_width - 1 : 0] 		       idxi,idxj;
 
-   always@(*)
-     begin
-	rf1_foundc = 0;
-	rf2_foundc = 0;	
-	rf1_hasc = 0;
-	rf2_hasc = 0;
-	rf1_conflict = 0;
-	rf2_conflict = 0;	
-	for (ii = 0; ii < numNames && !rf1_foundc; ii = ii + 1)
-	  begin
-	     idxi = wQueueHead - ii - 1;	     
-	     if (		 
-		 wQueueValid[idxi] &&
-		 (wQueueAddr[idxi] == ADDR_1))
-	       begin
-		  rf1_foundc = 1; //found matching write		  
-		  rf1_hasc = !wQueueWritten[idxi]; //only conflicts if data not there 	  
-		  rf1_conflict = idxi;		  
-	       end	     	     	     
-	  end
-	for (jj = 0; jj < numNames && !rf2_foundc; jj = jj + 1)
-	  begin	
-	     idxj = wQueueHead - jj - 1;	     
-	     if (
-		 wQueueValid[idxj] &&
-		 (wQueueAddr[idxj] == ADDR_2))
-	       begin
-		  rf2_foundc = 1;		  
-		  rf2_hasc = !wQueueWritten[idxj];		  
-		  rf2_conflict = idxj;		  
-	       end	     	     
-	  end	
-     end // always@ begin 
+   //find conflicting writes   
+   wire 				       rf1_foundc_stg [0: numNames];
+   wire 				       rf1_foundc;
+   wire [name_width - 1 : 0] 		       rf1_idx [0: numNames];   
+   wire [name_width - 1 : 0] 		       rf1_conflict_stg [0: numNames];
+   wire [name_width - 1 : 0] 		       rf1_conflict;
+   
+   assign rf1_foundc_stg[0] = 0;
+   assign rf1_conflict_stg[0] = 0;
+   assign rf1_idx[0] = wQueueHead - 1;   
+   generate genvar i;
+      for (i=0; i < numNames; i = i + 1)
+	begin
+	   assign rf1_foundc_stg[i+1] = rf1_foundc_stg[i] || (wQueueValid[rf1_idx[i]] && (wQueueAddr[rf1_idx[i]] == ADDR_1));
+	   assign rf1_conflict_stg[i+1] = (rf1_foundc_stg[i]) ? rf1_conflict_stg[i] : (rf1_idx[i]);
+	   assign rf1_idx[i+1] = rf1_idx[i] - 1; 
+	end
+   endgenerate
 
+   assign rf1_foundc = rf1_foundc_stg[numNames];   
+   assign rf1_conflict = rf1_conflict_stg[numNames];
+
+
+   wire 				       rf2_foundc_stg [0: numNames];
+   wire 				       rf2_foundc;
+   wire [name_width - 1 : 0] 		       rf2_idx [0: numNames];   
+   wire [name_width - 1 : 0] 		       rf2_conflict_stg [0: numNames];
+   wire [name_width - 1 : 0] 		       rf2_conflict;
+   
+   assign rf2_foundc_stg[0] = 0;
+   assign rf2_conflict_stg[0] = 0;
+   assign rf2_idx[0] = wQueueHead - 1;   
+   generate genvar j;
+      for (j=0; j < numNames; j = j + 1)
+	begin
+	   assign rf2_foundc_stg[j+1] = rf2_foundc_stg[j] || (wQueueValid[rf2_idx[j]] && (wQueueAddr[rf2_idx[j]] == ADDR_2));
+	   assign rf2_conflict_stg[j+1] = (rf2_foundc_stg[j]) ? rf2_conflict_stg[j] : (rf2_idx[j]);
+	   assign rf2_idx[j+1] = rf2_idx[j] - 1;	   
+	end
+   endgenerate
+
+   assign rf2_foundc = rf2_foundc_stg[numNames];   
+   assign rf2_conflict = rf2_conflict_stg[numNames];  
+
+   wire rf1_hasc,rf2_hasc;
+   assign rf1_hasc = rf1_foundc && !wQueueWritten[rf1_conflict];
+   assign rf2_hasc = rf2_foundc && !wQueueWritten[rf2_conflict];
+   
    //data from actual regfile + forwarding
    wire [ data_width - 1 : 0 ] RF_DATA_1, RF_DATA_2;
    wire 		       RF_FWD11, RF_FWD12, RF_FWD21, RF_FWD22;   
@@ -246,6 +253,9 @@ module BypassRF(CLK,
 	       wQueueValid[wQueueHead] <= `BSV_ASSIGNMENT_DELAY 1;
 	       wQueueAddr[wQueueHead] <= `BSV_ASSIGNMENT_DELAY ADDR_IN;	       
 	       wQueueHead <= `BSV_ASSIGNMENT_DELAY wQueueHead + 1;
+	  `ifdef DEBUG	       
+	       $display("ALLOC W entry %d for addr %d", wQueueHead, ADDR_IN);
+	  `endif
 	    end
 	  //write 1
 	  if (WE_1)
@@ -273,6 +283,9 @@ module BypassRF(CLK,
 	       rf1_write <= `BSV_ASSIGNMENT_DELAY rf1_conflict;	       
 	       rf1 <= `BSV_ASSIGNMENT_DELAY RF_DATA_1;
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict1;
+	  `ifdef DEBUG
+	       $display("RF1 Res found conflict %b, with entry %d for addr %d", rf1_foundc, rf1_conflict, ADDR_1);
+	  `endif
 	    end
 	  //freeing
 	  else if ((FE_1 && RD_F_1 == RS1) || (FE_2 && RD_F_2 == RS1))
@@ -293,6 +306,9 @@ module BypassRF(CLK,
 	       rf2_write <= `BSV_ASSIGNMENT_DELAY rf2_conflict;
 	       rf2_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict2;	       
 	       rf2 <= `BSV_ASSIGNMENT_DELAY RF_DATA_2;
+	  `ifdef DEBUG
+	       $display("RF2 Res found conflict %b, with entry %d for addr %d", rf2_foundc, rf2_conflict, ADDR_2);
+	  `endif
 	    end
 	  //freeing
 	  else if ((FE_1 && RD_F_1 == RS2) || (FE_2 && RD_F_2 == RS2))
