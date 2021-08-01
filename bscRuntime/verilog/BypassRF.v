@@ -109,10 +109,22 @@ module BypassRF(CLK,
    reg 			       wQueueWritten[ 0 : numNames - 1];      
    reg [name_width - 1 : 0]    wQueueOwner;
 
+   function automatic [0:0] isNewer(input [name_width - 1 : 0] a, b, h);
+      reg 		       nohmid;      
+      reg 		       hmid;
+      reg 		       isOlder;
+      begin
+	 nohmid = a < b && !(a < h && b >= h);
+	 hmid = (b < h) && (a >= h);
+	 isOlder = nohmid || hmid;
+	 isNewer = 1;
+      end
+   endfunction // isNewer
+   
+   
    //find conflicting writes   
    wire [numNames - 1 : 0]   rf1_foundc_bv;   
    wire 				       rf1_foundc;
-   wire [name_width - 1 : 0] 		       rf1_idx [0: numNames - 1];
    wire 				       rf1_foundc_stg [0: numNames]; 				       
    wire [name_width - 1 : 0] 		       rf1_conflict_stg [0: numNames];
    wire [name_width - 1 : 0] 		       rf1_conflict;
@@ -120,7 +132,6 @@ module BypassRF(CLK,
    generate genvar k;
       for(k=0; k <numNames; k = k + 1)
 	begin
-	   assign rf1_idx[k] = wQueueHead - 1 - k;	   
 	   assign rf1_foundc_bv[k] = (wQueueAddr[k] == ADDR_1) && wQueueValid[k];
 	end
    endgenerate
@@ -133,8 +144,9 @@ module BypassRF(CLK,
    generate genvar i;
       for(i=0; i < numNames; i = i + 1)
 	begin
-	   assign rf1_foundc_stg[i+1] = (rf1_foundc_stg[i]) ? 1 : rf1_foundc_bv[rf1_idx[i]];	   
-	   assign rf1_conflict_stg[i+1] = (rf1_foundc_stg[i]) ? rf1_conflict_stg[i] : rf1_idx[i];
+	   assign rf1_foundc_stg[i+1] = (rf1_foundc_bv[i]) ? 1 : rf1_foundc_stg[i];
+	   assign rf1_conflict_stg[i+1] = (rf1_foundc_bv[i] && (isNewer(i, rf1_conflict_stg[i], wQueueHead) || !rf1_foundc_stg[i])) ?
+					   i : rf1_conflict_stg[i];
 	end
    endgenerate
 
@@ -142,7 +154,6 @@ module BypassRF(CLK,
 
    wire [numNames - 1 : 0]   rf2_foundc_bv;   
    wire 				       rf2_foundc;
-   wire [name_width - 1 : 0] 		       rf2_idx [0: numNames - 1];
    wire 				       rf2_foundc_stg [0: numNames]; 				       
    wire [name_width - 1 : 0] 		       rf2_conflict_stg [0: numNames];
    wire [name_width - 1 : 0] 		       rf2_conflict;
@@ -150,8 +161,7 @@ module BypassRF(CLK,
    generate genvar j;
       for(j=0; j <numNames; j = j + 1)
 	begin
-	   assign rf2_idx[j] = wQueueHead - 1 - j;	   
-	   assign rf2_foundc_bv[j] = (wQueueAddr[j] == ADDR_2) && wQueueValid[j];
+	   assign rf2_foundc_bv[j] = (wQueueAddr[j] == ADDR_2) && wQueueValid[j];	   
 	end
    endgenerate
    //found if found in any entry
@@ -163,8 +173,9 @@ module BypassRF(CLK,
    generate genvar l;
       for(l=0; l < numNames; l = l + 1)
 	begin
-	   assign rf2_foundc_stg[l+1] = (rf2_foundc_stg[l]) ? 1 : rf2_foundc_bv[rf2_idx[l]];	   
-	   assign rf2_conflict_stg[l+1] = (rf2_foundc_stg[l]) ? rf2_conflict_stg[l] : rf2_idx[l];
+	   assign rf2_foundc_stg[l+1] = (rf2_foundc_bv[l]) ? 1 : rf2_foundc_stg[l];
+	   assign rf2_conflict_stg[l+1] = (rf2_foundc_bv[l] && (isNewer(l, rf2_conflict_stg[l], wQueueHead) || !rf2_foundc_stg[l])) ?
+					   l : rf2_conflict_stg[l];
 	end
    endgenerate
 
