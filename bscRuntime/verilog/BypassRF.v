@@ -7,6 +7,7 @@
  `define BSV_RESET_VALUE 1
 `endif
 
+`define DEBUG 1
 module BypassRF(CLK,
 		RST,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //write res req
@@ -102,55 +103,74 @@ module BypassRF(CLK,
    reg 			       rf2_inUse;
    
    //write queue
-   reg [name_width - 1 : 0]    wQueueHead;
+   reg [name_width - 1: 0]    wQueueHead;
    reg [addr_width - 1 : 0]    wQueueAddr[ 0 : numNames - 1];   
    reg 			       wQueueValid[ 0 : numNames - 1];
    reg 			       wQueueWritten[ 0 : numNames - 1];      
    reg [name_width - 1 : 0]    wQueueOwner;
 
    //find conflicting writes   
-   wire 				       rf1_foundc_stg [0: numNames];
+   wire [numNames - 1 : 0]   rf1_foundc_bv;   
    wire 				       rf1_foundc;
-   wire [name_width - 1 : 0] 		       rf1_idx [0: numNames];   
+   wire [name_width - 1 : 0] 		       rf1_idx [0: numNames - 1];
+   wire 				       rf1_foundc_stg [0: numNames]; 				       
    wire [name_width - 1 : 0] 		       rf1_conflict_stg [0: numNames];
    wire [name_width - 1 : 0] 		       rf1_conflict;
-   
-   assign rf1_foundc_stg[0] = 0;
-   assign rf1_conflict_stg[0] = 0;
-   assign rf1_idx[0] = wQueueHead - 1;   
-   generate genvar i;
-      for (i=0; i < numNames; i = i + 1)
+
+   generate genvar k;
+      for(k=0; k <numNames; k = k + 1)
 	begin
-	   assign rf1_foundc_stg[i+1] = rf1_foundc_stg[i] || (wQueueValid[rf1_idx[i]] && (wQueueAddr[rf1_idx[i]] == ADDR_1));
-	   assign rf1_conflict_stg[i+1] = (rf1_foundc_stg[i]) ? rf1_conflict_stg[i] : (rf1_idx[i]);
-	   assign rf1_idx[i+1] = rf1_idx[i] - 1; 
+	   assign rf1_idx[k] = wQueueHead - 1 - k;	   
+	   assign rf1_foundc_bv[k] = (wQueueAddr[k] == ADDR_1) && wQueueValid[k];
+	end
+   endgenerate
+   //found if found in any entry
+   assign rf1_foundc = |rf1_foundc_bv;
+
+   assign rf1_foundc_stg[0] = 0;
+   assign rf1_conflict_stg[0] = 0;   
+
+   generate genvar i;
+      for(i=0; i < numNames; i = i + 1)
+	begin
+	   assign rf1_foundc_stg[i+1] = (rf1_foundc_stg[i]) ? 1 : rf1_foundc_bv[rf1_idx[i]];	   
+	   assign rf1_conflict_stg[i+1] = (rf1_foundc_stg[i]) ? rf1_conflict_stg[i] : rf1_idx[i];
 	end
    endgenerate
 
-   assign rf1_foundc = rf1_foundc_stg[numNames];   
    assign rf1_conflict = rf1_conflict_stg[numNames];
 
-
-   wire 				       rf2_foundc_stg [0: numNames];
+   wire [numNames - 1 : 0]   rf2_foundc_bv;   
    wire 				       rf2_foundc;
-   wire [name_width - 1 : 0] 		       rf2_idx [0: numNames];   
+   wire [name_width - 1 : 0] 		       rf2_idx [0: numNames - 1];
+   wire 				       rf2_foundc_stg [0: numNames]; 				       
    wire [name_width - 1 : 0] 		       rf2_conflict_stg [0: numNames];
    wire [name_width - 1 : 0] 		       rf2_conflict;
-   
-   assign rf2_foundc_stg[0] = 0;
-   assign rf2_conflict_stg[0] = 0;
-   assign rf2_idx[0] = wQueueHead - 1;   
+
    generate genvar j;
-      for (j=0; j < numNames; j = j + 1)
+      for(j=0; j <numNames; j = j + 1)
 	begin
-	   assign rf2_foundc_stg[j+1] = rf2_foundc_stg[j] || (wQueueValid[rf2_idx[j]] && (wQueueAddr[rf2_idx[j]] == ADDR_2));
-	   assign rf2_conflict_stg[j+1] = (rf2_foundc_stg[j]) ? rf2_conflict_stg[j] : (rf2_idx[j]);
-	   assign rf2_idx[j+1] = rf2_idx[j] - 1;	   
+	   assign rf2_idx[j] = wQueueHead - 1 - j;	   
+	   assign rf2_foundc_bv[j] = (wQueueAddr[j] == ADDR_2) && wQueueValid[j];
+	end
+   endgenerate
+   //found if found in any entry
+   assign rf2_foundc = |rf2_foundc_bv;
+
+   assign rf2_foundc_stg[0] = 0;
+   assign rf2_conflict_stg[0] = 0;   
+
+   generate genvar l;
+      for(l=0; l < numNames; l = l + 1)
+	begin
+	   assign rf2_foundc_stg[l+1] = (rf2_foundc_stg[l]) ? 1 : rf2_foundc_bv[rf2_idx[l]];	   
+	   assign rf2_conflict_stg[l+1] = (rf2_foundc_stg[l]) ? rf2_conflict_stg[l] : rf2_idx[l];
 	end
    endgenerate
 
-   assign rf2_foundc = rf2_foundc_stg[numNames];   
-   assign rf2_conflict = rf2_conflict_stg[numNames];  
+   assign rf2_conflict = rf2_conflict_stg[numNames];
+
+
 
    wire rf1_hasc,rf2_hasc;
    assign rf1_hasc = rf1_foundc && !wQueueWritten[rf1_conflict];
@@ -275,6 +295,9 @@ module BypassRF(CLK,
 	       wQueueValid[W_F] <= `BSV_ASSIGNMENT_DELAY 0;
 	       wQueueWritten[W_F] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	       wQueueOwner <= `BSV_ASSIGNMENT_DELAY wQueueOwner + 1;
+	  `ifdef DEBUG
+	       $display("Freeing entry %d for addr %d", W_F, wQueueAddr[W_F]);	       
+	  `endif
 	    end
 	  //rf1 res regs
 	  if (RRES_READY_1 & RRESE_1)
