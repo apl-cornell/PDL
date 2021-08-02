@@ -104,7 +104,9 @@ object Syntax {
       case TBitWidthLen(len) => len.toString
       case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")"
       case TBitWidthVar(name) => "bitVar(" + name + ")"
-
+      case TSigned() => "signed"
+      case TUnsigned() => "unsigned"
+      case TSignVar(name) => "sign(" + name + ")"
     }
   }
   // Types that can be upcast to Ints
@@ -115,10 +117,12 @@ object Syntax {
     {
       case TSigned() => true
       case TUnsigned() => false
+      case _ => false
     }
     def unsigned() :Boolean = this match {
       case TSigned() => false
       case TUnsigned() => true
+      case _ => false
     }
   }
   object SignFactory

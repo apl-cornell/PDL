@@ -35,7 +35,8 @@ class Parser extends RegexParsers with PackratParsers {
     val e = EInt(n, base, if (bits.isDefined) bits.get else log2(n))
     e.typ = bits match {
       case Some(b) => Some(TSizedInt(TBitWidthLen(b), SignFactory.ofBool(!isUnsigned)))
-      case None => None
+      case None if isUnsigned => Some(TSizedInt(TBitWidthLen(e.bits), TUnsigned()))
+      case _ => None
     }
    // e.typ = Some(TSizedInt(TBitWidthLen(e.bits), unsigned = isUnsigned))
     e
@@ -264,7 +265,7 @@ class Parser extends RegexParsers with PackratParsers {
       seqCmd
   }
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TUnsigned() /*unsigned = false*/) } |
+  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TSigned() /*unsigned = false*/) } |
   "uint" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TUnsigned() /*unsigned = true*/) }
 
   lazy val latency: P[Latency.Latency] =

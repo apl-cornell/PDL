@@ -6,6 +6,8 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Syntax._
 
+import scala.annotation.tailrec
+
 
 object Utilities {
 
@@ -304,6 +306,99 @@ object Utilities {
       case None => throw except
     }
   }
+
+
+  def opt_func[A, B](f :A => B) : Option[A] => Option[B] =
+    {
+      case Some(value) => Some(f(value))
+      case None => None
+    }
+
+  private def typeMapExpr(e :Expr, f_opt : Option[Type] => Option[Type]) : Unit =
+    {
+      println(s"setting ${e.typ} to ${f_opt(e.typ)}")
+      e.typ = f_opt(e.typ)
+      e match
+      {
+        case EIsValid(ex) => typeMapExpr(ex, f_opt)
+        case EFromMaybe(ex) => typeMapExpr(ex, f_opt)
+        case EToMaybe(ex) => typeMapExpr(ex, f_opt)
+        case EUop(_, ex) => typeMapExpr(ex, f_opt)
+        case EBinop(_, e1, e2) => typeMapExpr(e1, f_opt); typeMapExpr(e2, f_opt)
+        case ERecAccess(rec, fieldName) => typeMapId(fieldName, f_opt); typeMapExpr(rec, f_opt);
+        case ERecLiteral(fields) =>
+          fields.foreach(idex => {typeMapId(idex._1, f_opt); typeMapExpr(idex._2, f_opt)})
+        case EMemAccess(mem, index, wmask) =>
+          typeMapId(mem, f_opt); typeMapExpr(index, f_opt)
+          wmask.fold(())(typeMapExpr(_, f_opt))
+        case EBitExtract(num, _, _) => typeMapExpr(num, f_opt)
+        case ETernary(cond, tval, fval) =>
+          typeMapExpr(cond, f_opt); typeMapExpr(tval, f_opt); typeMapExpr(fval, f_opt)
+        case EApp(func, args) =>
+          typeMapId(func, f_opt); args.foreach(typeMapExpr(_, f_opt))
+        case ECall(mod, args) =>
+          typeMapId(mod, f_opt); args.foreach(typeMapExpr(_, f_opt))
+        case EVar(id) => typeMapId(id, f_opt)
+        case ECast(_, exp) => typeMapExpr(exp, f_opt)
+        case expr: CirExpr => expr match
+        {
+          case CirLock(mem, _, _) => typeMapId(mem, f_opt)
+          case CirNew(mod, mods) => typeMapId(mod, f_opt)
+            mods.foreach((i: Id) => typeMapId(i, f_opt))
+          case CirCall(mod, args) => typeMapId(mod, f_opt)
+            args.foreach(typeMapExpr(_, f_opt))
+          case _ => ()
+        }
+        case _ => ()
+      }
+    }
+  private def typeMapCmd(c :Command, f_opt :Option[Type] => Option[Type]) :Unit = c match
+  {
+    case CSeq(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
+    case CTBar(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
+    case CIf(cond, cons, alt) => typeMapExpr(cond, f_opt); typeMapCmd(cons, f_opt); typeMapCmd(alt, f_opt)
+    case CAssign(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
+    case CRecv(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
+    case CSpecCall(handle, pipe, args) =>
+      typeMapExpr(handle, f_opt); typeMapId(pipe, f_opt); args.foreach(typeMapExpr(_, f_opt))
+    case CVerify(handle, args, preds) =>
+      typeMapExpr(handle, f_opt); args.foreach(typeMapExpr(_, f_opt)); preds.foreach(typeMapExpr(_, f_opt))
+    case CInvalidate(handle) => typeMapExpr(handle, f_opt)
+    case CPrint(args) => args.foreach(typeMapExpr(_, f_opt))
+    case COutput(exp) => typeMapExpr(exp, f_opt)
+    case CReturn(exp) => typeMapExpr(exp, f_opt)
+    case CExpr(exp) => typeMapExpr(exp, f_opt)
+    case CLockStart(mod) => typeMapId(mod, f_opt)
+    case CLockEnd(mod) => typeMapId(mod, f_opt)
+    case CLockOp(mem, _, _) =>
+      typeMapId(mem.id, f_opt);
+      mem.evar match
+      {case Some(value) => typeMapExpr(value, f_opt)
+      case None => ()}
+    case CSplit(cases, default) =>
+      cases.foreach(cs => {typeMapExpr(cs.cond, f_opt); typeMapCmd(cs.body, f_opt)})
+      typeMapCmd(default, f_opt)
+    case _ => ()
+  }
+
+  private def typeMapId(i: Id, f_opt: Option[Type] => Option[Type]):Unit =
+    {
+      i.typ = f_opt(i.typ)
+    }
+
+
+
+  def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => Option[Type]) :Unit = typeMapCmd(fun.body, f_opt)
+  def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => Option[Type]) :Unit = typeMapCmd(mod.body, f_opt)
+
+  def typeMap(p: Prog, f: Type => Type) :Unit=
+    {
+      val f_opt = opt_func(f)
+      p.fdefs.foreach(typeMapFunc(_, f_opt))
+      p.moddefs.foreach(typeMapModule(_, f_opt))
+    }
+
+
 
   /** Like [[Z3Context.mkAnd]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkAnd(ctx: Z3Context, expressions: Z3AST *): Z3BoolExpr =

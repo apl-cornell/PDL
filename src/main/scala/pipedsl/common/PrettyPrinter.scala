@@ -148,7 +148,7 @@ class PrettyPrinter(output: Option[File]) {
 
   def printType(t: Type): Unit = pline(printTypeToString(t))
   def printTypeToString(t: Type): String = t match {
-    case TSizedInt(len, unsigned) => (if (!unsigned) "s" else "") + "int<" + len.toString + ">"
+    case TSizedInt(len, sign) => (if (sign.signed()) "s" else "") + "int<" + len.toString + ">"
     case TVoid() => "void"
     case TBool() => "bool"
     case TFun(args, ret) => "(" + args.map(a => printTypeToString(a)).mkString(",") + ") -> " + printTypeToString(ret)

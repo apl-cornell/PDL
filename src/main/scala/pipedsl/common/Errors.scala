@@ -180,6 +180,6 @@ object Errors {
   )
 
   case class UnificationError(t1: Type, t2: Type) extends RuntimeException(
-    s"Unable to unify type $t1 and type $t2"
+    withPos(s"Unable to unify type $t1 and type $t2", t1.pos)
   )
 }
