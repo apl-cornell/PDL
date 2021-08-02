@@ -338,7 +338,7 @@ circuit {
     i = Queue(ti);
     td = memory(int<32>, 16);
     d = Queue(td);
-    rf = rflock BypassRF(int<32>, 5, 4);
+    rf = rflock BypassRF(int<32>, 5, 8);
     div = new multi_stg_div[];
     b = new BHT[](4);
     c = new cpu[rf, i, d, div, b];
