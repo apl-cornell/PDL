@@ -7,7 +7,6 @@
  `define BSV_RESET_VALUE 1
 `endif
 
-`define DEBUG 1
 module BypassRF(CLK,
 		RST,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //write res req
