@@ -285,8 +285,8 @@ class BluespecInterfaces() {
 
   def getSpecTable: BModule = BModule(specModuleName, List())
 
-  def getSpecTableType(typ: BSVType): BInterface = {
-    BInterface(specModuleType, List(BVar("sidTyp", typ)))
+  def getSpecTableType(typ: BSVType, sz:Int): BInterface = {
+    BInterface(specModuleType, List(BVar("sidTyp", typ), BVar("bypassCnt", BNumericType(sz))))
   }
 
   def getSpecAlloc(st: BExpr): BExpr = {

@@ -6,7 +6,7 @@ import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, log2}
+import pipedsl.common.Utilities.{flattenStageList, log2, annotateSpecTimings}
 
 import scala.collection.immutable.ListMap
 
@@ -358,9 +358,12 @@ object BluespecGeneration {
     }
 
     //TODO make the sid size parameterizable
+    //Specuation information
+    private val specAnnotations = annotateSpecTimings((firstStage +: otherStages).filter(s => s.succs.isEmpty))
+    private val maxAnnotation = specAnnotations.values.flatten.foldLeft(1)((i, v) => { if ((v + 1) > i) v + 1 else i })    
     private val specIdName = "_specId"
     private val specIdTyp: BSVType = bsInts.getDefaultSpecHandleType
-    private val specTable: BVar = BVar("_specTable",  bsInts.getSpecTableType(specIdTyp))
+    private val specTable: BVar = BVar("_specTable",  bsInts.getSpecTableType(specIdTyp, maxAnnotation))
     private val specIdVar = BVar(specIdName, BMaybe(specIdTyp))
     private def getSpecIdVal = BFromMaybe(BDontCare, translator.toBSVVar(specIdVar))
     //Registers for external communication
@@ -529,7 +532,10 @@ object BluespecGeneration {
       //Generate set of definitions needed by rule conditions
       //(declaring variables read from unconditional inputs)
       translator.setVariablePrefix(getStagePrefix(stg))
-      stgSpecOrder = getSpecOrder(stg.getCmds)
+      val specAnnotation = specAnnotations(stg)
+      if (specAnnotation.isDefined) {
+        stgSpecOrder = specAnnotation.get
+      }
       val sBody = getStageBody(stg)
       //Generate the set of execution rules for reading args and writing outputs
       val execRule = getStageRule(stg)
