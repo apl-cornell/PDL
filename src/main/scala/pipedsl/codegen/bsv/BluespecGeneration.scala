@@ -6,7 +6,7 @@ import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, log2}
+import pipedsl.common.Utilities.{flattenStageList, log2, annotateSpecTimings}
 
 import scala.collection.immutable.ListMap
 
@@ -407,6 +407,7 @@ object BluespecGeneration {
     })
 
     //Generate statements and rules for each stage
+    private val specAnnotations = annotateSpecTimings((firstStage +: otherStages).filter(s => s.succs.isEmpty))
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
       m + (s -> getStageCode(s))
     })
@@ -529,7 +530,10 @@ object BluespecGeneration {
       //Generate set of definitions needed by rule conditions
       //(declaring variables read from unconditional inputs)
       translator.setVariablePrefix(getStagePrefix(stg))
-      stgSpecOrder = getSpecOrder(stg.getCmds)
+      val specAnnotation = specAnnotations(stg)
+      if (specAnnotation.isDefined) {
+        stgSpecOrder = specAnnotation.get
+      }
       val sBody = getStageBody(stg)
       //Generate the set of execution rules for reading args and writing outputs
       val execRule = getStageRule(stg)

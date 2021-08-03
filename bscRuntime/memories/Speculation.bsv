@@ -23,7 +23,7 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    // are also sending real data to the beginning
    
     Vector#(entries, Reg#(Bool)) inUse <- replicateM(mkConfigReg(False));
-    Vector#(entries, Ehr#(3, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
+    Vector#(entries, Ehr#(4, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
 
     Reg#(SpecId#(entries)) head <- mkReg(0);
     Bool full = inUse[head];

@@ -1,12 +1,9 @@
 package pipedsl.common
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
-import com.sun.org.apache.xpath.internal.Expression
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
 import pipedsl.common.Syntax._
-import sun.reflect.generics.visitor.Visitor
-import sun.security.rsa.RSAKeyFactory.PSS
 
 import scala.collection.mutable
 
@@ -244,7 +241,6 @@ object Utilities {
     }
     result
   }
-
   def depthFirstTrav[T](stg :PStage,
                         start :T,
                         visitor :(PStage, T) => T,
@@ -258,10 +254,8 @@ object Utilities {
       fringe.foldLeft(result)((acc, st) => depthFirstTrav(st, acc, visitor, succs, visited))
     }
 
-  val annotateSpecTimings :PStage => Map[PStage, Option[Int]] = end =>
-    {
-     // val hasSpecCmd :Command => Boolean =
-      def hasSpecCmd(c :Command) :Boolean = c match
+  def annotateSpecTimings(ends: Iterable[PStage]): Map[PStage, Option[Int]] = {
+    def hasSpecCmd(c :Command) :Boolean = c match
       {
         case CSeq(c1, c2) =>  hasSpecCmd(c1) || hasSpecCmd(c2)
         case CTBar(c1, c2) => hasSpecCmd(c1) || hasSpecCmd(c2)
@@ -277,18 +271,22 @@ object Utilities {
         case _:ICheck => true
         case _ => false
       }
-      val hasSpecStg :(PStage) => Boolean = stg =>
-        {
-          stg.getCmds.exists(c => hasSpecCmd(c))
-        }
-      depthFirstTrav[(Map[PStage, Option[Int]], Int)](end,
-        (Map.empty[PStage, Option[Int]], 0),
-        (stg, mapnum) =>
-          {val map = mapnum._1; val num = mapnum._2
-            if (hasSpecStg(stg)) (map + (stg -> Some(num)), num + 1)
-            else (map + (stg -> None), num)},
-        stg => stg.preds)._1
+    val hasSpecStg :(PStage) => Boolean = stg => {
+      stg.getCmds.exists(c => hasSpecCmd(c))
     }
+    val initMap = (Map.empty[PStage, Option[Int]], 0)
+    val visited = mutable.HashSet.empty[PStage]
+    def update(stg: PStage, t: Tuple2[Map[PStage, Option[Int]],Int]): Tuple2[Map[PStage, Option[Int]], Int] = {
+      val map = t._1
+      val num = t._2
+      if (hasSpecStg(stg)) (map + (stg -> Some(num)), num + 1)
+      else (map + (stg -> None), num)
+    }
+    def pred(stg: PStage): Iterable[PStage] = { stg.preds }
+    ends.foldLeft(initMap)((m, s) => {
+      depthFirstTrav(s, m, update, pred, visited)
+    })._1
+  }
 
   def flattenStageList(stgs: List[PStage]): List[PStage] = {
     stgs.foldLeft(List[PStage]())((l, stg) => stg match {
