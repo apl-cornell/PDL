@@ -358,9 +358,12 @@ object BluespecGeneration {
     }
 
     //TODO make the sid size parameterizable
+    //Specuation information
+    private val specAnnotations = annotateSpecTimings((firstStage +: otherStages).filter(s => s.succs.isEmpty))
+    private val maxAnnotation = specAnnotations.values.flatten.foldLeft(1)((i, v) => { if ((v + 1) > i) v + 1 else i })    
     private val specIdName = "_specId"
     private val specIdTyp: BSVType = bsInts.getDefaultSpecHandleType
-    private val specTable: BVar = BVar("_specTable",  bsInts.getSpecTableType(specIdTyp))
+    private val specTable: BVar = BVar("_specTable",  bsInts.getSpecTableType(specIdTyp, maxAnnotation))
     private val specIdVar = BVar(specIdName, BMaybe(specIdTyp))
     private def getSpecIdVal = BFromMaybe(BDontCare, translator.toBSVVar(specIdVar))
     //Registers for external communication
@@ -407,7 +410,6 @@ object BluespecGeneration {
     })
 
     //Generate statements and rules for each stage
-    private val specAnnotations = annotateSpecTimings((firstStage +: otherStages).filter(s => s.succs.isEmpty))
     private val stgMap = (firstStage +: otherStages).foldLeft(Map[PStage, StageCode]())((m, s) => {
       m + (s -> getStageCode(s))
     })

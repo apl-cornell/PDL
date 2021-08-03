@@ -6,7 +6,7 @@ import Ehr :: *;
 
 typedef UInt#(TLog#(n)) SpecId#(numeric type n);
 
-interface SpecTable#(type sid);
+interface SpecTable#(type sid, numeric type bypcnt);
     method ActionValue#(sid) alloc();
     method Maybe#(Bool) check(sid s, Integer i);
     method Action free(sid s);
@@ -14,7 +14,7 @@ interface SpecTable#(type sid);
     method Action invalidate(sid s, Integer i);
 endinterface
 
-module mkSpecTable(SpecTable#(SpecId#(entries)));
+module mkSpecTable(SpecTable#(SpecId#(entries), bypassCnt));
 
    // Schedule => rules need to be associated with an index
    // the _lower_ the index, the earlier they access the speculation table.
@@ -23,7 +23,7 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    // are also sending real data to the beginning
    
     Vector#(entries, Reg#(Bool)) inUse <- replicateM(mkConfigReg(False));
-    Vector#(entries, Ehr#(4, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
+    Vector#(entries, Ehr#(bypassCnt, Maybe#(Bool))) specStatus <- replicateM(mkEhr(tagged Invalid));
 
     Reg#(SpecId#(entries)) head <- mkReg(0);
     Bool full = inUse[head];
@@ -51,7 +51,7 @@ module mkSpecTable(SpecTable#(SpecId#(entries)));
    rule doAllocRule (doAlloc.wget() matches tagged Valid.d);
       head <= head + 1;
       inUse[head] <= True;
-      specStatus[head][2] <= tagged Invalid;
+      specStatus[head][valueOf(bypassCnt)-1] <= tagged Invalid;
    endrule
     //allocate a new entry in the table to track speculation. do this in a nonblocking way
     //and just assume that only 1 client calls per cycle
