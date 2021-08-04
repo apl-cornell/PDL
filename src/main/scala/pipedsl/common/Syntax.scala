@@ -7,6 +7,7 @@ import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
 
 
+
 object Syntax {
   /**
    * Annotations added by the various passes of the type checker.
@@ -15,6 +16,7 @@ object Syntax {
     sealed trait TypeAnnotation {
       var typ: Option[Type] = None
     }
+
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
@@ -35,6 +37,11 @@ object Syntax {
     {
       var portNum :Option[Int] = None
     }
+  }
+
+  sealed trait HasCopyMeta
+  {
+    val copyMeta : HasCopyMeta => HasCopyMeta = x => x
   }
 
   object Latency extends Enumeration {
@@ -82,9 +89,15 @@ object Syntax {
 
   case class Id(v: String) extends Positional with TypeAnnotation {
     override def toString = s"$v"
+    def copyMeta(from :Id) :Id =
+      {
+        setPos(from.pos)
+        typ = from.typ
+        this
+      }
   }
 
-  sealed trait Type extends Positional with LabelAnnotation with SpeculativeAnnotation {
+  sealed trait Type extends Positional with LabelAnnotation with SpeculativeAnnotation with HasCopyMeta {
     override def toString: String = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
@@ -104,10 +117,21 @@ object Syntax {
       case TBitWidthLen(len) => len.toString
       case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")"
       case TBitWidthVar(name) => "bitVar(" + name + ")"
-      case TSigned() => "signed"
-      case TUnsigned() => "unsigned"
-      case TSignVar(name) => "sign(" + name + ")"
+      case t :TSignedNess => t match
+      {
+        case TSigned() => "signed"
+        case TUnsigned() => "unsigned"
+        case TSignVar(name) => "sign(" + name + ")"
+      }
     }
+    override val copyMeta: HasCopyMeta => Type =
+      {
+        case from :Type =>
+          setPos(from.pos)
+          lbl = from.lbl
+          maybeSpec = from.maybeSpec
+          this
+      }
   }
   // Types that can be upcast to Ints
   sealed trait IntType
@@ -239,6 +263,7 @@ object Syntax {
     def copyMeta(from: Expr): Expr = {
       setPos(from.pos)
       typ = from.typ
+      portNum = from.portNum
       this
     }
   }
@@ -267,7 +292,17 @@ object Syntax {
   case class ECast(ctyp: Type, exp: Expr) extends Expr
 
 
-  sealed trait Command extends Positional with SMTPredicate with PortAnnotation
+  sealed trait Command extends Positional with SMTPredicate with PortAnnotation with HasCopyMeta
+  {
+    override val copyMeta: HasCopyMeta => Command =
+      {
+        case from :Command =>
+        setPos(from.pos)
+        portNum = from.portNum
+        predicateCtx = from.predicateCtx
+        this
+      }
+  }
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
@@ -331,7 +366,17 @@ object Syntax {
     inputs: List[Param],
     modules: List[Param],
     ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation
+    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+    {
+      override val copyMeta: HasCopyMeta => ModuleDef =
+        {
+          case from :ModuleDef =>
+          maybeSpec = from.maybeSpec
+          isRecursive = from.isRecursive
+          pos = from.pos
+          this
+        }
+    }
 
   case class Param(name: Id, typ: Type) extends Positional
 

@@ -1,0 +1,159 @@
+
+def helper1(a: int<32>, b:bool, c: String): int<32> {
+  d = a + 1<16>;
+  e = b && false;
+  if (e) {
+    f = c;
+  }
+  return d;
+}
+
+def helper2(a:bool, b: bool): bool {
+  c = a && b;
+  return c;
+}
+
+pipe test1(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  }
+  call test1(input);
+}
+
+pipe test2(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  } else {
+    d = b;
+  }
+  call test2(input);
+}
+
+pipe test3()[] {
+  a = true;
+  b = a;
+  c = a || b;
+  d = c || b;
+  if (c) {
+    e = 1<32>;
+  }
+  if (d) {
+    f = 1<32>;
+  }
+  call test3();
+}
+
+pipe test4()[] {
+  a = true;
+  b = false;
+  c = a == b;
+  d = 5<32>;
+  e = 6<32>;
+  f = e==d;
+  if (c) {
+
+  }
+  if (f) {
+
+  }
+  call test4();
+}
+
+pipe test5()[] {
+  a = 5<32>;
+  b = 6<32>;
+  c = a + b;
+  d = cast(c * b, int<32>);
+  e = c / d;
+  f = e % d;
+  g = e - f;
+  h = g > f;
+  i = g <= f;
+  j = h && i;
+  if (j) {
+
+  }
+  call test5();
+}
+
+
+pipe test6(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  } else {
+    d = b;
+  }
+  call test6(input);
+}
+
+pipe test7()[rf: uint<32>[32]] {
+  a = 1;
+  b = a;
+  start(rf);
+  acquire(rf[a], R);
+  c <- rf[a];
+  release(rf[a]);
+  end(rf);
+  ---
+  d = c == a;
+  e = d && d;
+  call test7();
+} 
+
+pipe test8()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = true;
+  c = false;
+  if (helper2(helper2(b, c),b)) {
+    d = a;
+  }
+  f = a;
+  s = "yES";
+  e = helper1(f, helper2(b, c), s);
+  if (e==f) {
+
+  }
+  call test8();
+}
+
+pipe test9()[rf: int<32>[32]] {
+  a = true || false;
+  b = a;
+  c = b ;
+  d = b && c;
+  e = (b) ? d : c;
+  if (!e) {
+
+  }
+  call test9();
+}
+
+pipe test10(a: bool, b: int<32>)[rf: int<32>[32]]: int<32> {
+  output(5<32>);
+}
+
+pipe test11()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = 10<32>;
+  c = a + b;
+  d = false;
+  e = true;
+  f = e || d;
+  g <- call test10(f, c);
+  ---
+  h = g == b;
+  call test11();
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

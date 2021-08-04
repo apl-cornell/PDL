@@ -17,6 +17,7 @@ object CommandLineParser {
     defaultAddrLock: Option[String] = None,
     memInit: Map[String, String] = Map(),
     port_warn: Boolean = false,
+    autocast :Boolean = false,
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -40,6 +41,9 @@ object CommandLineParser {
         opt[Unit]('p', "portwarn")
           .action((_, c) => c.copy(port_warn = true))
           .text("Throw errors for port conflicts between stages"),
+        opt[Unit]('a', "autocast")
+          .action((_, c) => c.copy(autocast = true))
+          .text("Insert casts to allow for subtyping of integers"),
         arg[File]("<file>...")
           .action((x, c) => c.copy(file = x))
           .text("pdl files to parse"),

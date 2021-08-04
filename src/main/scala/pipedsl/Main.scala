@@ -26,8 +26,8 @@ object Main {
           case ("parse") => parse(debug = true, printOutput = true, config.file, config.out)
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.defaultAddrLock, config.memInit, config.port_warn)
-          case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn)
+            config.debug, config.defaultAddrLock, config.memInit, config.port_warn, config.autocast)
+          case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn, config.autocast)
           case _ =>
         }
       }
@@ -55,7 +55,7 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean): (Prog, ProgInfo) = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean, autocast :Boolean): (Prog, ProgInfo) = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
@@ -66,8 +66,8 @@ object Main {
     val pinfo = new ProgInfo(prog)
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
-      val canonProg = new CanonicalizePass().run(verifProg)
-      /*val basetypes = */(new TypeInference).checkProgram(canonProg)
+      val canonProg1 = new CanonicalizePass().run(verifProg)
+      val canonProg = (new TypeInference(autocast)).checkProgram(canonProg1)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
@@ -136,8 +136,8 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    addrLockMod: Option[String] = None, memInit: Map[String, String], port_warn :Boolean): Unit = {
-    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, port_warn)
+    addrLockMod: Option[String] = None, memInit: Map[String, String], port_warn :Boolean, autocast :Boolean): Unit = {
+    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, port_warn, autocast)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
     //copies mem initialization to output directory

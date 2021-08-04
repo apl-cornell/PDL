@@ -1,0 +1,8 @@
+pipe test1(input: int<32>)[rf: int<32>[32]] {
+  a = true;
+  b = a == input;
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

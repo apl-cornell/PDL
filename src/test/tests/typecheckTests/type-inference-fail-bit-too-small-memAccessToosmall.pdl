@@ -1,0 +1,9 @@
+
+pipe test6()[rf: int<32>[32]] {
+  int<64> a = 6 * 6;
+  c = rf[a];
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

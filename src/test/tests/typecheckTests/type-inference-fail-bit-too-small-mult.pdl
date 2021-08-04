@@ -1,0 +1,9 @@
+
+pipe test6()[] {
+  a = 6 * 6;
+  int<5> b = a;
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

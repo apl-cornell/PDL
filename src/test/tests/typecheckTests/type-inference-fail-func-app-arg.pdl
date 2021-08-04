@@ -1,0 +1,12 @@
+def func(a: bool, b: int<32>): bool {
+  return b;
+}
+
+pipe test1(input: int<32>)[rf: int<32>[32]] {
+  a = true;
+  b = func(a, a);
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

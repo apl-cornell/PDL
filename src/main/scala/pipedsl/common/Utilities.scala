@@ -316,7 +316,6 @@ object Utilities {
 
   private def typeMapExpr(e :Expr, f_opt : Option[Type] => Option[Type]) : Unit =
     {
-      println(s"setting ${e.typ} to ${f_opt(e.typ)}")
       e.typ = f_opt(e.typ)
       e match
       {
@@ -352,34 +351,38 @@ object Utilities {
         case _ => ()
       }
     }
-  private def typeMapCmd(c :Command, f_opt :Option[Type] => Option[Type]) :Unit = c match
-  {
-    case CSeq(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
-    case CTBar(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
-    case CIf(cond, cons, alt) => typeMapExpr(cond, f_opt); typeMapCmd(cons, f_opt); typeMapCmd(alt, f_opt)
-    case CAssign(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
-    case CRecv(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
-    case CSpecCall(handle, pipe, args) =>
-      typeMapExpr(handle, f_opt); typeMapId(pipe, f_opt); args.foreach(typeMapExpr(_, f_opt))
-    case CVerify(handle, args, preds) =>
-      typeMapExpr(handle, f_opt); args.foreach(typeMapExpr(_, f_opt)); preds.foreach(typeMapExpr(_, f_opt))
-    case CInvalidate(handle) => typeMapExpr(handle, f_opt)
-    case CPrint(args) => args.foreach(typeMapExpr(_, f_opt))
-    case COutput(exp) => typeMapExpr(exp, f_opt)
-    case CReturn(exp) => typeMapExpr(exp, f_opt)
-    case CExpr(exp) => typeMapExpr(exp, f_opt)
-    case CLockStart(mod) => typeMapId(mod, f_opt)
-    case CLockEnd(mod) => typeMapId(mod, f_opt)
-    case CLockOp(mem, _, _) =>
-      typeMapId(mem.id, f_opt);
-      mem.evar match
-      {case Some(value) => typeMapExpr(value, f_opt)
-      case None => ()}
-    case CSplit(cases, default) =>
-      cases.foreach(cs => {typeMapExpr(cs.cond, f_opt); typeMapCmd(cs.body, f_opt)})
-      typeMapCmd(default, f_opt)
-    case _ => ()
-  }
+  private def typeMapCmd(c :Command, f_opt :Option[Type] => Option[Type]) :Unit =
+    {
+      c match
+      {
+        case CSeq(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
+        case CTBar(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
+        case CIf(cond, cons, alt) => typeMapExpr(cond, f_opt); typeMapCmd(cons, f_opt); typeMapCmd(alt, f_opt)
+        case CAssign(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
+        case CRecv(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
+        case CSpecCall(handle, pipe, args) => typeMapExpr(handle, f_opt); typeMapId(pipe, f_opt); args.foreach(typeMapExpr(_, f_opt))
+        case CVerify(handle, args, preds) => typeMapExpr(handle, f_opt); args.foreach(typeMapExpr(_, f_opt)); preds.foreach(typeMapExpr(_, f_opt))
+        case CInvalidate(handle) => typeMapExpr(handle, f_opt)
+        case CPrint(args) => args.foreach(typeMapExpr(_, f_opt))
+        case COutput(exp) => typeMapExpr(exp, f_opt)
+        case CReturn(exp) => typeMapExpr(exp, f_opt)
+        case CExpr(exp) => typeMapExpr(exp, f_opt)
+        case CLockStart(mod) => typeMapId(mod, f_opt)
+        case CLockEnd(mod) => typeMapId(mod, f_opt)
+        case CLockOp(mem, _, _) => typeMapId(mem.id, f_opt);
+          mem.evar match
+          {
+            case Some(value) => typeMapExpr(value, f_opt)
+            case None => ()
+          }
+        case CSplit(cases, default) => cases.foreach(cs =>
+          {
+            typeMapExpr(cs.cond, f_opt); typeMapCmd(cs.body, f_opt)
+          })
+          typeMapCmd(default, f_opt)
+        case _ => ()
+      }
+    }
 
   private def typeMapId(i: Id, f_opt: Option[Type] => Option[Type]):Unit =
     {
