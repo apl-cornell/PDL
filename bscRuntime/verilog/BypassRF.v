@@ -64,15 +64,13 @@ module BypassRF(CLK,
    input [name_width - 1 : 0] NAME_IN_2;
    input [data_width - 1 : 0] D_IN_2;
    input 		      WE_2;   
-   input [name_width - 1 : 0] NAME_1;
-   input [name_width - 1 : 0] NAME_2;
 
+   input [name_width - 1 : 0] RD_NAME_1;
+   input [name_width - 1 : 0] RD_NAME_2;   
    output [data_width - 1 : 0] D_OUT_1;
    output [data_width - 1 : 0] D_OUT_2;
 
    //data busy
-   input [name_width - 1 : 0]  VALID_NAME_1;
-   input [name_width - 1 : 0]  VALID_NAME_2;
    output 		       VALID_OUT_1;   
    output 		       VALID_OUT_2;
 

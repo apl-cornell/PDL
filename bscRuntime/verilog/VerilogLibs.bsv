@@ -135,10 +135,10 @@ module mkBypassRF#(Integer regnum, Bool init, String fileInit)(BypassRF#(addr, e
    method VALID_OUT_1 owns1();
    method VALID_OUT_2 owns2();
    method write[2](NAME_IN, D_IN) enable (WE);   
-   method D_OUT_1 read1();
-   method D_OUT_2 read2();
-   method freeRead1(RD_NAME_1) enable (FE_1);
-   method freeRead2(RD_NAME_2) enable (FE_2);
+   method D_OUT_1 read1(RD_NAME_1);
+   method D_OUT_2 read2(RD_NAME_2);
+   method freeRead1() enable (FE_1);
+   method freeRead2() enable (FE_2);
    method freeWrite(W_F) enable (WFE) ready (F_READY);
    
       schedule (reserveWrite) C (reserveWrite);

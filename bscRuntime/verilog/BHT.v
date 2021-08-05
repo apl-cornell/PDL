@@ -2,6 +2,10 @@
 `else
 `define BSV_ASSIGNMENT_DELAY
 `endif
+`ifdef BSV_RESET_VALUE
+`else
+ `define BSV_RESET_VALUE 1
+`endif
 
 module BHT(CLK,
 	   RST,

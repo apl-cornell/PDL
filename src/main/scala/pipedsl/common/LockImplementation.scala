@@ -419,8 +419,6 @@ object LockImplementation {
 
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
-    override def addWritePort: Boolean = true
-
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
