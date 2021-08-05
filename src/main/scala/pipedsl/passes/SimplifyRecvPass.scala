@@ -60,7 +60,10 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       case (EVar(_), EMemAccess(_, EVar(_),_)) => c //leave it alone, already in the form we want
       case (EVar(_), EMemAccess(mem, idx, wm)) => //separate out the index computation
         val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
-        CSeq(idxAssgn, CRecv(lhs, EMemAccess(mem, idxAssgn.lhs, wm).setPos(rhs.pos))).setPos(c.pos)
+        val access = EMemAccess(mem, idxAssgn.lhs, wm).setPos(rhs.pos)
+        access.typ = rhs.typ
+        access.portNum = rhs.portNum
+        CSeq(idxAssgn, CRecv(lhs, access)).setPos(c.pos)
       case (EMemAccess(_, EVar(_), _), EVar(_)) => c //leave it alone, already in form we want
       case (EMemAccess(_,EVar(_), _), _) => // separate out the RHS computation
         val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs).setPos(rhs.pos)
@@ -69,12 +72,14 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
         val access = EMemAccess(mem, idxAssgn.lhs, wm).setPos(lhs.pos)
         access.typ = lhs.typ
+        access.portNum = lhs.portNum
         CSeq(idxAssgn, CRecv(access, rhs).setPos(c.pos)).setPos(c.pos)
       case (EMemAccess(mem,idx, wm), _) => //separate the index computation AND the rhs computation into new variables
         val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
         val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs).setPos(rhs.pos)
         val access = EMemAccess(mem, idxAssgn.lhs, wm).setPos(lhs.pos)
         access.typ = lhs.typ
+        access.portNum = lhs.portNum
         CSeq(idxAssgn,
           CSeq(rhsAssgn,
             CRecv(access, rhsAssgn.lhs).setPos(c.pos))

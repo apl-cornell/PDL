@@ -2,6 +2,7 @@ package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
+import pipedsl.common.Syntax.Annotations.PortAnnotation
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
 
@@ -127,6 +128,8 @@ object LockImplementation {
      */
     def getReadArgs(addr: Expr, lock: Expr): Expr
 
+    def addReadPort: Boolean = false
+
     /**
      * Each lock implementation may require any non-empty subset
      * of the address and the lock handle to serve read and write
@@ -137,6 +140,8 @@ object LockImplementation {
      *         (excluding the data).
      */
     def getWriteArgs(addr: Expr, lock: Expr): Expr
+
+    def addWritePort: Boolean = false
 
     def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo]
 
@@ -405,12 +410,16 @@ object LockImplementation {
 
     override def granularity: LockGranularity = Specific
 
-    private def getPortString(l: IReserveLock): String = if (l.portNum.isDefined) l.portNum.get.toString else ""
+    private def getPortString(l: PortAnnotation): String = if (l.portNum.isDefined) l.portNum.get.toString else ""
 
     //TODO pass no read arg and add port number to reads (probably somewhere else)
     override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
 
+    override def addReadPort: Boolean = true
+
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+
+    override def addWritePort: Boolean = true
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 

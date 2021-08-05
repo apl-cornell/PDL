@@ -70,6 +70,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
       val res = EMemAccess(mem, newArg, wm).setPos(em.pos)
       res.typ = em.typ
       res.memOpType = em.memOpType
+      res.portNum = em.portNum
       res
     case et@ETernary(cond, tval, fval) =>
       val ncond = modifyMemArg(cond, isLhs)
@@ -149,6 +150,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
         val newSend = IMemWrite(mem, newVar, data).setPos(im.pos)
+        newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         List(newAssn, newSend)
       case _ => List(c)

@@ -2,6 +2,7 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
+import pipedsl.common.Syntax.TLockedMemType
 
 class BluespecInterfaces() {
 
@@ -204,11 +205,13 @@ class BluespecInterfaces() {
       case 2 => BMethodInvoke(mem, memAsync2PeekName2, List(handle))
     }
   }
-  def getCombRead(mem: BVar, addr: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memCombReadName, List(addr))
+  def getCombRead(mem: BVar, addr: BExpr, port: Option[Int]): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, memCombReadName + portString, List(addr))
   }
-  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memCombWriteName, List(addr, data))
+  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr, port: Option[Int]): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, memCombWriteName + portString, List(addr, data))
   }
 //  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
 //    val isWrite = data.isDefined

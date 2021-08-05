@@ -16,8 +16,8 @@ module BypassRF(CLK,
 		ADDR_2, RNAME_OUT_2, RRESE_2, RRES_READY_2,  //read res 2
 		NAME_IN_1, D_IN_1, WE_1,     //write data 1
 		NAME_IN_2, D_IN_2, WE_2,     //write data 2		
-		D_OUT_1,            //read data 1
-		D_OUT_2,            //read data 2
+		RD_NAME_1, D_OUT_1,            //read data 1
+		RD_NAME_2, D_OUT_2,            //read data 2
 		VALID_OUT_1,    //check valid data 1		
 		VALID_OUT_2,    //check valid data 2
 		W_F, WFE, F_READY,                     //free write port
