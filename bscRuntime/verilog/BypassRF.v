@@ -16,13 +16,13 @@ module BypassRF(CLK,
 		ADDR_2, RNAME_OUT_2, RRESE_2, RRES_READY_2,  //read res 2
 		NAME_IN_1, D_IN_1, WE_1,     //write data 1
 		NAME_IN_2, D_IN_2, WE_2,     //write data 2		
-		NAME_1, D_OUT_1,            //read data 1
-		NAME_2, D_OUT_2,            //read data 2
-		VALID_NAME_1, VALID_OUT_1,    //check valid data 1		
-		VALID_NAME_2, VALID_OUT_2,    //check valid data 2
+		D_OUT_1,            //read data 1
+		D_OUT_2,            //read data 2
+		VALID_OUT_1,    //check valid data 1		
+		VALID_OUT_2,    //check valid data 2
 		W_F, WFE, F_READY,                     //free write port
-		RD_F_1, FE_1,                 //free rd port 1
-		RD_F_2, FE_2                  //free rd port 2
+		FE_1,                 //free rd port 1
+		FE_2                  //free rd port 2
 		);
 
    parameter addr_width = 1;
@@ -82,9 +82,7 @@ module BypassRF(CLK,
    output                      F_READY;
  		       
    //free rd ports
-   input [name_width - 1 : 0]  RD_F_1;   
    input 		       FE_1;
-   input [name_width - 1 : 0]  RD_F_2;   
    input 		       FE_2;
 
    //phys_regfile
@@ -215,32 +213,46 @@ module BypassRF(CLK,
    //read res req
    assign RNAME_OUT_1 = RS1;   
    assign RNAME_OUT_2 = RS2;
-   assign RRES_READY_1 = !rf1_inUse | (FE_1 && RD_F_1 == RS1) | (FE_2 && RD_F_2 == RS1);   
-   assign RRES_READY_2 = !rf2_inUse | (FE_1 && RD_F_1 == RS2) | (FE_2 && RD_F_2 == RS2);
+   assign RRES_READY_1 = !rf1_inUse | FE_1;
+   assign RRES_READY_2 = !rf2_inUse | FE_2;   
    
    //Forward from either write port to rfx_data;
    wire FWD11, FWD12, FWD21, FWD22;
-   assign FWD11 = WE_1 & (NAME_IN_1 == rf1_write) & rf1_inUse & !rf1_valid;
-   assign FWD21 = WE_2 & (NAME_IN_2 == rf1_write) & rf1_inUse & !rf1_valid;
-   assign FWD12 = WE_1 & (NAME_IN_1 == rf2_write) & rf2_inUse & !rf2_valid;
-   assign FWD22 = WE_2 & (NAME_IN_2 == rf2_write) & rf2_inUse & !rf2_valid;
+   assign FWD11 = WE_1 & (NAME_IN_1 == rf1_write);   
+   assign FWD21 = WE_2 & (NAME_IN_2 == rf1_write);
+   assign FWD12 = WE_1 & (NAME_IN_1 == rf2_write);   
+   assign FWD22 = WE_2 & (NAME_IN_2 == rf2_write);   
    
    //Read data from saved reg unless forwarding
-   wire [data_width - 1 : 0 ] RF1_OUT, RF2_OUT;
+   reg [data_width - 1 : 0 ] RF1_OUT, RF2_OUT;
    
-   assign RF1_OUT = (rf1_valid) ? rf1 : ((FWD11) ? D_IN_1 : D_IN_2);
-   assign RF2_OUT = (rf2_valid) ? rf2 : ((FWD12) ? D_IN_1 : D_IN_2);   
+//   assign RF1_OUT = (rf1_valid) ? rf1 : ((FWD11) ? D_IN_1 : D_IN_2);
+//   assign RF2_OUT = (rf2_valid) ? rf2 : ((FWD12) ? D_IN_1 : D_IN_2);   
 
-   assign D_OUT_1 = (NAME_1 == RS1) ? RF1_OUT : RF2_OUT;
-   assign D_OUT_2 = (NAME_2 == RS1) ? RF1_OUT : RF2_OUT;   
+   always@(*)
+     begin
+	case ({rf1_valid, FWD11, FWD21})
+	  3'b010 : RF1_OUT <= D_IN_1;
+	  3'b001 : RF1_OUT <= D_IN_2;
+	  default : RF1_OUT <= rf1;	  
+	endcase // case ({rf1_valid, FWD11, FWD21})
+	case ({rf2_valid, FWD12, FWD22})
+	  3'b010 : RF2_OUT <= D_IN_1;
+	  3'b001 : RF2_OUT <= D_IN_2;
+	  default : RF2_OUT <= rf2;	  	  
+	endcase // case ({rf2_valid, FWD12, FWD22})	
+     end // always@ (*)   
+   
+   assign D_OUT_1 =  RF1_OUT;   
+   assign D_OUT_2 =  RF2_OUT;
    
    //Readiness of data
    wire RF1_VALID, RF2_VALID;   
-   assign RF1_VALID = rf1_valid | FWD11 | FWD21;   
-   assign RF2_VALID = rf2_valid | FWD12 | FWD22;
+   assign RF1_VALID = rf1_inUse & (rf1_valid | FWD11 | FWD21);   
+   assign RF2_VALID = rf2_inUse & (rf2_valid | FWD12 | FWD22);   
 
-   assign VALID_OUT_1 = (VALID_NAME_1 == RS1) ? RF1_VALID : RF2_VALID;
-   assign VALID_OUT_2 = (VALID_NAME_2 == RS1) ? RF1_VALID : RF2_VALID;
+   assign VALID_OUT_1 = RF1_VALID;   
+   assign VALID_OUT_2 = RF2_VALID;
     
    integer 		       initq;
    integer 		       siminit;  
@@ -323,7 +335,7 @@ module BypassRF(CLK,
 	  `endif
 	    end
 	  //freeing
-	  else if ((FE_1 && RD_F_1 == RS1) || (FE_2 && RD_F_2 == RS1))
+	  else if (FE_1)
 	    begin
 	       rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;
@@ -346,7 +358,7 @@ module BypassRF(CLK,
 	  `endif
 	    end
 	  //freeing
-	  else if ((FE_1 && RD_F_1 == RS2) || (FE_2 && RD_F_2 == RS2))
+	  else if (FE_2)
 	    begin
 	       rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;
 	       rf2_valid <= `BSV_ASSIGNMENT_DELAY 0;
