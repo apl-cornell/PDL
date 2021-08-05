@@ -405,6 +405,9 @@ object LockImplementation {
 
     override def granularity: LockGranularity = Specific
 
+    private def getPortString(l: IReserveLock): String = if (l.portNum.isDefined) l.portNum.get.toString else ""
+
+    //TODO pass no read arg and add port number to reads (probably somewhere else)
     override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
 
     override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
@@ -412,15 +415,14 @@ object LockImplementation {
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("owns", doesModify = false, List(extractHandle(l.handle))))
+      case Some(LockRead) => Some(MethodInfo("owns" + getPortString(l), doesModify = false, List()))
       case Some(LockWrite) => None
       case None => None //TODO throw error
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
       case Some(LockRead) =>
-        val methodNum = if (l.portNum.isDefined) l.portNum.get.toString else ""
-        Some(MethodInfo("reserveRead" + methodNum, doesModify = true, List(l.mem.evar.get)))
+        Some(MethodInfo("reserveRead" + getPortString(l), doesModify = true, List(l.mem.evar.get)))
       case Some(LockWrite) =>  Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
       case None => None //TODO throw error
     }
@@ -428,7 +430,7 @@ object LockImplementation {
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) =>  Some(MethodInfo("freeRead", doesModify = true, List(extractHandle(l.handle))))
+      case Some(LockRead) =>  Some(MethodInfo("freeRead" + getPortString(l), doesModify = true, List()))
       case Some(LockWrite) =>  Some(MethodInfo("freeWrite", doesModify = true, List(extractHandle(l.handle))))
       case None => None //TODO throw error
     }
