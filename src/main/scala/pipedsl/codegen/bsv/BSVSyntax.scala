@@ -147,7 +147,11 @@ object BSVSyntax {
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index, _) =>
-        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index))
+        val portNum = mem.typ.get match {
+          case memType: TLockedMemType => if (memType.limpl.addReadPort) e.portNum else None
+          case _ => None
+        }
+        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index),portNum)
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toExpr(ex))
       case EInvalid => BInvalid

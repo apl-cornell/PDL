@@ -229,7 +229,8 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           else
             modLims(mem.id)._1
           
-          val port = (ret(mangled)._1 + start_env(mangled)._1) % limit
+          var port = (ret(mangled)._1 + start_env(mangled)._1) % limit
+          if (port == 0) port = limit
           reserveMap.update (mem, port)
           c.portNum = Some(port)
           if (ret(mangled)._1 > limit)
