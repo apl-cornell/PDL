@@ -339,7 +339,7 @@ module BypassRF(CLK,
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;
 	    end
 	  //forwarding from writes
-	  else if (FWD11 || FWD21)
+	  else if ((!rf1_valid) && (FWD11 || FWD21))
 	    begin
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 1;
 	       rf1 <= `BSV_ASSIGNMENT_DELAY (FWD11) ? D_IN_1 : D_IN_2;
@@ -362,7 +362,7 @@ module BypassRF(CLK,
 	       rf2_valid <= `BSV_ASSIGNMENT_DELAY 0;
 	    end
 	  //forwarding from writes
-	  else if (FWD12 || FWD22)
+	  else if ((!rf2_valid) && (FWD12 || FWD22))
 	    begin
 	       rf2_valid <= `BSV_ASSIGNMENT_DELAY 1;
 	       rf2 <= `BSV_ASSIGNMENT_DELAY (FWD12) ? D_IN_1 : D_IN_2;
