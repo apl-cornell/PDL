@@ -1,6 +1,6 @@
 package pipedsl.common
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{NoPosition, Position}
 import Syntax._
 import pipedsl.common.Locks.LockState
 
@@ -181,5 +181,13 @@ object Errors {
 
   case class UnificationError(t1: Type, t2: Type) extends RuntimeException(
     withPos(s"Unable to unify type $t1 and type $t2", t1.pos)
+  )
+
+  case class TypeMeetError(t1 :Type, t2 :Type) extends RuntimeException(
+    withPos(s"Cannot generate meet of type $t1 and type $t2", if (t1.pos eq NoPosition) t2.pos else t1.pos)
+  )
+
+  case class LackOfConstraints(e :Expr) extends RuntimeException(
+    withPos(s"Not enough constraints provided to infer types. Found error at $e", e.pos)
   )
 }

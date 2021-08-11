@@ -246,7 +246,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
     //The locks are still in Read mode, so if it is possible to be in
     //Write mode, it is error.
     val check = solver.check()
-    solver.reset
+    solver.reset()
     check
   }
 

@@ -12,6 +12,7 @@ out
 testOutputs/*
 miscnotes
 \#*
+tmp/
 
 ### SBT ###
 

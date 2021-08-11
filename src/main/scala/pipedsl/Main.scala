@@ -40,11 +40,11 @@ object Main {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val p: Parser = new Parser()
-    val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile.toPath)))
-    val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".parse"
+   val prog = p.parseCode(new String(Files.readAllBytes(inputFile.toPath)))
+   val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".parse"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
-    if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(r.get)
-    r.get
+    if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(prog)
+    prog
   }
   
   def interpret(maxIterations:Int, memoryInputs: Seq[String], inputFile: File, outDir: File): Unit = {
@@ -67,7 +67,7 @@ object Main {
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
       val canonProg1 = new CanonicalizePass().run(verifProg)
-      val canonProg = (new TypeInference(autocast)).checkProgram(canonProg1)
+      val canonProg = new TypeInference(autocast).checkProgram(canonProg1)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))

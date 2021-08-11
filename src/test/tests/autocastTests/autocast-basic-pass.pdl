@@ -1,4 +1,3 @@
-
 def helper1(a: int<32>, b:bool, c: String): int<32> {
   d = a + 1<16>;
   e = b && false;
@@ -12,6 +11,81 @@ def helper2(a:bool, b: bool): bool {
   c = a && b;
   return c;
 }
+
+def ret_cast_test() :int<32>
+  {
+    b = 69<16>;
+    a = 15<12>;
+    return a + b;
+  }
+
+def ass_cast_test() :int<32>
+  {
+    a = 10<10>;
+    b = 5<10>;
+    int<32> c = a + b;
+    return c;
+  }
+
+def tern_cast_test(input :bool) :int<32>
+  {
+    a = 10<10>;
+    b = 1<30>;
+    d = ((input) ? (a) : (b));
+    return d;
+  }
+
+pipe app_cast()[]
+  {
+    s = "owgeu";
+    a = helper1(10<5>, true, s);
+    call app_cast();
+  }
+
+pipe phelper1(a: int<32>, b:bool, c: String)[]: int<32>
+{
+  d = a + 1<16>;
+  e = b && false;
+  if (e) {
+    f = c;
+  }
+  output(d);
+}
+
+
+pipe call_cast()[]
+  {
+    s = "owgeu";
+    a <- call phelper1(10<19>, true, s);
+    ---
+    call call_cast();
+  }
+
+pipe output_cast()[] :int<32>
+  { output(10<5>); }
+
+
+
+pipe recv_cast1(input :uint<32>)[rf :int<32>[32]]
+  {
+    start(rf);
+    reserve(rf[input], W);
+    end(rf);
+    ---
+    int<10> a = 4;
+    block(rf[input]);
+    rf[input] <- a;
+    ---
+    release(rf[input]);
+    call recv_cast1(input);
+  }
+
+pipe recv_cast2()[]
+  {
+    int<32> a <- 5<12>;
+    call recv_cast2();
+  }
+
 
 pipe test1(input: int<32>)[rf: int<32>[32]] {
   a = input;

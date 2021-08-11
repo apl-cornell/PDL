@@ -118,8 +118,8 @@ class PrettyPrinter(output: Option[File]) {
       case 16 => "0x" + v.toHexString
     }) + "<" + bits.toString + ">"
     case Syntax.EBool(v) => v.toString
-    case Syntax.EUop(op, ex) => op.op + printExprToString(ex)
-    case Syntax.EBinop(op, e1, e2) => printExprToString(e1) + " " + op.op + " " + printExprToString(e2)
+    case Syntax.EUop(op, ex) => op.op + "(" + printExprToString(ex) + ")"
+    case Syntax.EBinop(op, e1, e2) => "(" + printExprToString(e1) + " " + op.op + " " + printExprToString(e2) + ")"
     case Syntax.ERecAccess(rec, fieldName) => printExprToString(rec) + "." + fieldName
     case Syntax.ERecLiteral(fields) => "{" + fields.keySet.map(i => i.v + printExprToString(fields(i))).mkString(",") + "}"
     case Syntax.EMemAccess(mem, index, m) => mem.v + "[" + printExprToString(index) +
@@ -158,7 +158,8 @@ class PrettyPrinter(output: Option[File]) {
       "<" + rlat + rPorts + ", " + wlat + wPorts + ">"
     case TModType(_, _, _, _) => "TODO MOD TYPE"
     case TNamedType(name) =>  name.v
-    case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)
+    case x => x.toString
+    //case _ => throw UnexpectedType(t.pos, "pretty printing", "unimplemented", t)
   }
 
   def printStageGraph(name: String, stages: List[PStage]): Unit = {

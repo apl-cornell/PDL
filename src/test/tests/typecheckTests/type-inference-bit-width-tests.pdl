@@ -13,7 +13,7 @@ def helper2(a:bool, b: bool): bool {
 }
 
 pipe test1(input: int<32>)[rf: int<32>[32]] {
-  a = 6 * 6;
+  a = 6 * 6<5>;
   int<32> b = a;
   int<32> c = a + b;
   call test1(c);
@@ -31,7 +31,7 @@ pipe test2(input: int<32>)[rf: int<32>[32]] {
 }
 
 pipe test3(input: int<32>)[rf: int<32>[32]] {
-  a = 1;
+  a = 1<32>;
   int<32> b = a << 4;
   c = a << 4;
   call test3(c);
@@ -44,7 +44,7 @@ pipe test4(input: int<32>)[rf: int<32>[32]] {
 }
 
 pipe test5()[] {
-  a = 6 * 6;
+  a = 6 * 6<3>;
   int<6> b = a;
   int<32> c = helper1(cast(a, int<32>), true, "hi");
   call test5();

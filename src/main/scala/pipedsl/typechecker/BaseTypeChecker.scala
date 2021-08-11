@@ -302,7 +302,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv, None)
             idxt match {
               case TSizedInt(l, TUnsigned()/*true*/) if l.asInstanceOf[TBitWidthLen].len == memt.addrSize => tenv
-              case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
+              case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
         }
@@ -521,7 +521,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         id.typ = Some(t)
         (t, tenv)
       } else {
-        throw UnexpectedType(id.pos, "variable", "variable type set to new conflicting type", t)
+        throw UnexpectedType(id.pos, "variable", s"variable type set to new conflicting type : ${tenv(id)}", t)
       }
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
       case None => id.typ = defaultType; (defaultType.get, tenv)

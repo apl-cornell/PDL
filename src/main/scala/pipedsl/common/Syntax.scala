@@ -5,6 +5,9 @@ import Security._
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
+import pipedsl.typechecker.Subtypes
+
+
 
 
 
@@ -132,10 +135,85 @@ object Syntax {
           maybeSpec = from.maybeSpec
           this
       }
+
+    //hex code 22C1
+    def ⋁(that :Type) :Type = this match
+    {
+      case ness: TSignedNess => ness match
+      {
+        case TSignVar(id1) => that match
+        {
+          case TSignVar(id2) => if (id1.v != id2.v) throw TypeMeetError(this, that) else this
+          case _ => that
+        }
+        case TSigned() => if (that.isInstanceOf[TUnsigned]) throw TypeMeetError(this, that) else this
+        case TUnsigned() => if (that.isInstanceOf[TSigned]) throw TypeMeetError(this, that) else this
+        case _ => throw TypeMeetError(this, that)
+      }
+      case TSizedInt(len1, sign1) => that match
+      {
+        case TSizedInt(len2, sign2) =>
+          TSizedInt((len1 ⋁ len2).asInstanceOf[TBitWidth], (sign1 ⋁ sign2).asInstanceOf[TSignedNess])
+        case TNamedType(name) => this
+        case _ =>  throw TypeMeetError(this, that)
+      }
+      case TFun(args1, ret1) => that match {
+        case TFun(args2, ret2) =>
+          TFun(args1.zip(args2).map(t1t2 => t1t2._1 ⋁ t1t2._2), ret1 ⋁ ret2)
+        case _ => throw TypeMeetError(this, that)
+      }
+      case TRecType(name, fields) => if (this eq that) this else throw TypeMeetError(this, that)
+      case TMemType(elem, addrSize, readLatency, writeLatency, readPorts, writePorts) =>
+        if(this eq that) this else throw TypeMeetError(this, that)
+      case TModType(inputs, refs, retType, name) =>
+        if(this eq that) this else throw TypeMeetError(this, that)
+      case TLockedMemType(mem, idSz, limpl) =>
+        if(this eq that) this else throw TypeMeetError(this, that)
+      case TRequestHandle(mod, rtyp) =>
+        if(this eq that) this else throw TypeMeetError(this, that)
+      case TNamedType(name) =>
+        that match {
+          case TNamedType(name2) => if (name.v eq name2.v) this else throw TypeMeetError(this, that)
+          case _ => that
+        }
+      case TMaybe(btyp) => that match {
+        case TMaybe(btyp2) => TMaybe(btyp ⋁ btyp2)
+        case _ => throw TypeMeetError(this, that)
+      }
+      case width: TBitWidth => that match {
+        case w2 :TBitWidth => (width, w2) match {
+          case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(Math.max(l1, l2))
+          case (w1, w2) if w1 === w2 => w1
+          case _ => TBitWidthMax(width, w2)
+        }
+        case _ => throw TypeMeetError(this, that)
+      }
+      case _ => if (this.getClass eq that.getClass) this else throw TypeMeetError(this, that)
+    }
+    def ===(that :Any) :Boolean =
+      {
+        that match {
+          case that :Type => Subtypes.areEqual(this, that)
+          case _ => throw new IllegalArgumentException
+        }
+      }
+    def =!=(that :Any) :Boolean = !(this === that)
+
+    def <<=(that :Any) :Boolean = that match {
+      case that :Type => Subtypes.isSubtype(this, that)
+      case _ => throw new IllegalArgumentException
+    }
+
+    def >>=(that :Any) :Boolean = that match {
+      case that :Type  => Subtypes.isSubtype(that, this)
+      case _ => throw new IllegalArgumentException
+    }
+
+    def meet(that :Type) :Type = ⋁(that)
   }
   // Types that can be upcast to Ints
   sealed trait IntType
-  trait TSignedNess extends Type
+  sealed trait TSignedNess extends Type
   {
     def signed() :Boolean = this match
     {
@@ -160,12 +238,34 @@ object Syntax {
   case class TUnsigned() extends TSignedNess
   case class TSignVar(id :Id) extends TSignedNess
   case class TSizedInt(len: TBitWidth, sign: TSignedNess) extends Type with IntType
+  {
+    override def setPos(newpos: Position): TSizedInt.this.type =
+      {
+        sign.setPos(newpos)
+        super.setPos(newpos)
+      }
+  }
   // Use case class instead of case object to get unique positions
   case class TString() extends Type
   case class TVoid() extends Type
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
+  {
+    override def setPos(newpos: Position): TFun.this.type =
+      {
+        args.foreach(a => a.setPos(newpos))
+        ret.setPos(newpos)
+        super.setPos(newpos)
+      }
+  }
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
+  {
+    override def setPos(newpos :Position) :TRecType.this.type =
+      {
+        fields.foreach(idtp => idtp._2.setPos(newpos))
+        super.setPos(newpos)
+      }
+  }
   case class TMemType(elem: Type,
                       addrSize: Int,
                       readLatency: Latency = Latency.Asynchronous,
@@ -217,6 +317,7 @@ object Syntax {
 
   def NegOp(): NumUOp = NumUOp("-")
   def NotOp(): BoolUOp = BoolUOp("!")
+  def InvOp(): BitUOp = BitUOp("~")
   def MagOp(): NumUOp = NumUOp("abs")
   def SignOp(): NumUOp = NumUOp("signum")
   def AndOp(e1: Expr,e2: Expr): EBinop = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
@@ -290,6 +391,9 @@ object Syntax {
   case class ECall(mod: Id, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
+  {
+    typ = Some(ctyp)
+  }
 
 
   sealed trait Command extends Positional with SMTPredicate with PortAnnotation with HasCopyMeta

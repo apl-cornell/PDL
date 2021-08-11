@@ -3,7 +3,7 @@ package pipedsl.common
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
 import com.sun.org.apache.xpath.internal.Expression
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Errors.UnexpectedCommand
+import pipedsl.common.Errors.{LackOfConstraints, UnexpectedCommand}
 import pipedsl.common.Syntax._
 
 import scala.annotation.tailrec
@@ -314,85 +314,150 @@ object Utilities {
       case None => None
     }
 
-  private def typeMapExpr(e :Expr, f_opt : Option[Type] => Option[Type]) : Unit =
+  /**
+   * Maps the function f_opt over the types of e1.
+   * MODIFIES THE TYPE OF e1
+   * @param e1 the expression to map over
+   * @param f_opt the function to apply to the types
+   * @return the expression with new types
+   */
+  private def typeMapExpr(e1 :Expr, f_opt : Option[Type] => Option[Type]) : Expr =
     {
-      e.typ = f_opt(e.typ)
-      e match
+      try
+        {
+          e1.typ = f_opt(e1.typ)
+        } catch
+        {
+          case _ :scala.MatchError =>
+            e1 match {
+              case EInt(v, _, _) =>
+//                println(s"DEFAULTING ON INT. CURRENTLY: ${e1.typ}")
+                val sign :TSignedNess = if(e1.typ.isDefined && e1.typ.get.isInstanceOf[TSizedInt])
+                  if(e1.typ.get.asInstanceOf[TSizedInt].sign == TSigned() || e1.typ.get.asInstanceOf[TSizedInt].sign == TUnsigned())
+                    e1.typ.get.asInstanceOf[TSizedInt].sign
+                  else TSigned()
+                else TSigned()
+                e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
+              case _ => throw LackOfConstraints(e1)
+            }
+        }
+      e1 match
       {
-        case EIsValid(ex) => typeMapExpr(ex, f_opt)
-        case EFromMaybe(ex) => typeMapExpr(ex, f_opt)
-        case EToMaybe(ex) => typeMapExpr(ex, f_opt)
-        case EUop(_, ex) => typeMapExpr(ex, f_opt)
-        case EBinop(_, e1, e2) => typeMapExpr(e1, f_opt); typeMapExpr(e2, f_opt)
-        case ERecAccess(rec, fieldName) => typeMapId(fieldName, f_opt); typeMapExpr(rec, f_opt);
-        case ERecLiteral(fields) =>
-          fields.foreach(idex => {typeMapId(idex._1, f_opt); typeMapExpr(idex._2, f_opt)})
-        case EMemAccess(mem, index, wmask) =>
-          typeMapId(mem, f_opt); typeMapExpr(index, f_opt)
-          wmask.fold(())(typeMapExpr(_, f_opt))
-        case EBitExtract(num, _, _) => typeMapExpr(num, f_opt)
-        case ETernary(cond, tval, fval) =>
-          typeMapExpr(cond, f_opt); typeMapExpr(tval, f_opt); typeMapExpr(fval, f_opt)
-        case EApp(func, args) =>
-          typeMapId(func, f_opt); args.foreach(typeMapExpr(_, f_opt))
-        case ECall(mod, args) =>
-          typeMapId(mod, f_opt); args.foreach(typeMapExpr(_, f_opt))
-        case EVar(id) => typeMapId(id, f_opt)
-        case ECast(_, exp) => typeMapExpr(exp, f_opt)
+        case e@EInt(v, base, bits) =>
+//          println(s"bits: $bits;\ttype: ${e.typ}\t$e")
+          if(e.typ.isEmpty)
+            e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
+          e.copy(bits = e.typ.get.asInstanceOf[TSizedInt].len.asInstanceOf[TBitWidthLen].len).copyMeta(e)
+        case e@EIsValid(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
+        case e@EFromMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
+        case e@EToMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
+        case e@EUop(_, ex) =>  e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
+        case e@EBinop(_, e1, e2) =>
+          e.copy(e1 = typeMapExpr(e1, f_opt),
+            e2 = typeMapExpr(e2, f_opt)).copyMeta(e)
+        case e@ERecAccess(rec, fieldName) =>
+          e.copy(fieldName = typeMapId(fieldName, f_opt), rec = typeMapExpr(rec, f_opt)).copyMeta(e)
+        case e@ERecLiteral(fields) =>
+          e.copy(fields = fields.map(idex => typeMapId(idex._1, f_opt) -> typeMapExpr(idex._2, f_opt))).copyMeta(e)
+        case e@EMemAccess(mem, index, wmask) =>
+          e.copy(mem = typeMapId(mem, f_opt), index = typeMapExpr(index, f_opt),
+            wmask = opt_func(typeMapExpr(_, f_opt))(wmask)).copyMeta(e)
+        case e@EBitExtract(num, _, _) => e.copy(num = typeMapExpr(num, f_opt)).copyMeta(e)
+        case e@ETernary(cond, tval, fval) =>
+          e.copy(cond = typeMapExpr(cond, f_opt),
+            tval = typeMapExpr(tval, f_opt),
+            fval = typeMapExpr(fval, f_opt)).copyMeta(e)
+        case e@EApp(func, args) =>
+          e.copy(func = typeMapId(func, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
+        case e@ECall(mod, args) =>
+          e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
+        case e@EVar(id) => e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
+        case e@ECast(tp, exp) =>
+          val ntp = f_opt(Some(tp)).get
+          val tmp = e.copy(ctyp = ntp, exp = typeMapExpr(exp, f_opt)).copyMeta(e)
+//          println(s"setting $e type to $ntp")
+          tmp.typ = Some(ntp)
+          tmp
         case expr: CirExpr => expr match
         {
-          case CirLock(mem, _, _) => typeMapId(mem, f_opt)
-          case CirNew(mod, mods) => typeMapId(mod, f_opt)
-            mods.foreach((i: Id) => typeMapId(i, f_opt))
-          case CirCall(mod, args) => typeMapId(mod, f_opt)
-            args.foreach(typeMapExpr(_, f_opt))
-          case _ => ()
+          case e@CirLock(mem, _, _) => e.copy(mem = typeMapId(mem, f_opt)).copyMeta(e)
+          case e@CirNew(mod, mods) => e.copy(mod = typeMapId(mod, f_opt),
+            mods = mods.map((i: Id) => typeMapId(i, f_opt))).copyMeta(e)
+          case e@CirCall(mod, args) => e.copy(mod = typeMapId(mod, f_opt),
+            args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
+          case _ => e1
         }
-        case _ => ()
+        case _ => e1
       }
     }
-  private def typeMapCmd(c :Command, f_opt :Option[Type] => Option[Type]) :Unit =
+
+  /**
+   * maps a function over the types of a command
+   * CHANGED THE TYPES OF THE ORIGINAL COMMAND
+   * @param c1 the command to map over
+   * @param f_opt the function from types to types
+   * @return a new command with the types mapped
+   */
+  private def typeMapCmd(c1 :Command, f_opt :Option[Type] => Option[Type]) :Command =
     {
-      c match
+      c1 match
       {
-        case CSeq(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
-        case CTBar(c1, c2) => typeMapCmd(c1, f_opt); typeMapCmd(c2, f_opt)
-        case CIf(cond, cons, alt) => typeMapExpr(cond, f_opt); typeMapCmd(cons, f_opt); typeMapCmd(alt, f_opt)
-        case CAssign(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
-        case CRecv(lhs, rhs, _) => typeMapExpr(lhs, f_opt); typeMapExpr(rhs, f_opt)
-        case CSpecCall(handle, pipe, args) => typeMapExpr(handle, f_opt); typeMapId(pipe, f_opt); args.foreach(typeMapExpr(_, f_opt))
-        case CVerify(handle, args, preds) => typeMapExpr(handle, f_opt); args.foreach(typeMapExpr(_, f_opt)); preds.foreach(typeMapExpr(_, f_opt))
-        case CInvalidate(handle) => typeMapExpr(handle, f_opt)
-        case CPrint(args) => args.foreach(typeMapExpr(_, f_opt))
-        case COutput(exp) => typeMapExpr(exp, f_opt)
-        case CReturn(exp) => typeMapExpr(exp, f_opt)
-        case CExpr(exp) => typeMapExpr(exp, f_opt)
-        case CLockStart(mod) => typeMapId(mod, f_opt)
-        case CLockEnd(mod) => typeMapId(mod, f_opt)
-        case CLockOp(mem, _, _) => typeMapId(mem.id, f_opt);
-          mem.evar match
-          {
-            case Some(value) => typeMapExpr(value, f_opt)
-            case None => ()
-          }
-        case CSplit(cases, default) => cases.foreach(cs =>
-          {
-            typeMapExpr(cs.cond, f_opt); typeMapCmd(cs.body, f_opt)
-          })
-          typeMapCmd(default, f_opt)
-        case _ => ()
+        case c@CSeq(c1, c2) => c.copy(c1 = typeMapCmd(c1, f_opt), c2 = typeMapCmd(c2, f_opt)).copyMeta(c)
+        case c@CTBar(c1, c2) => c.copy(c1 = typeMapCmd(c1, f_opt), c2 = typeMapCmd(c2, f_opt)).copyMeta(c)
+        case c@CIf(cond, cons, alt) =>
+          c.copy(cond = typeMapExpr(cond, f_opt),
+            cons = typeMapCmd(cons, f_opt),
+            alt = typeMapCmd(alt, f_opt)).copyMeta(c)
+        case c@CAssign(lhs, rhs, _) =>
+          c.copy(lhs = typeMapExpr(lhs, f_opt).asInstanceOf[EVar], rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
+        case c@CRecv(lhs, rhs, _) =>
+          c.copy(lhs = typeMapExpr(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
+        case c@CSpecCall(handle, pipe, args) =>
+          c.copy(handle = typeMapExpr(handle, f_opt).asInstanceOf[EVar],
+            pipe = typeMapId(pipe, f_opt),
+            args = args.map(typeMapExpr(_, f_opt))).copyMeta(c)
+        case c@CVerify(handle, args, preds) =>
+          c.copy(handle = typeMapExpr(handle, f_opt).asInstanceOf[EVar],
+            args = args.map(typeMapExpr(_, f_opt)),
+            preds = preds.map(typeMapExpr(_, f_opt))).copyMeta(c)
+        case c@CInvalidate(handle) => c.copy(typeMapExpr(handle, f_opt).asInstanceOf[EVar]).copyMeta(c)
+        case c@CPrint(args) => c.copy(args = args.map(typeMapExpr(_, f_opt))).copyMeta(c)
+        case c@COutput(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
+        case c@CReturn(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
+        case c@CExpr(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
+        case c@CLockStart(mod) => c.copy(mod = typeMapId(mod, f_opt)).copyMeta(c)
+        case c@CLockEnd(mod) => c.copy(mod = typeMapId(mod, f_opt)).copyMeta(c)
+        case c@CLockOp(mem@LockArg(id, evar), _, _) =>
+          c.copy(mem = mem.copy(id = typeMapId(id, f_opt), evar = evar match {
+            case Some(e) => Some(typeMapExpr(e, f_opt).asInstanceOf[EVar])
+            case None => None
+          })).copyMeta(c)
+        case c@CSplit(cases, default) =>
+          c.copy(cases = cases.map(cs => cs.copy(cond = typeMapExpr(cs.cond, f_opt), body = typeMapCmd(cs.body, f_opt))),
+            default = typeMapCmd(default, f_opt)).copyMeta(c)
+        case _ => c1
       }
     }
 
-  private def typeMapId(i: Id, f_opt: Option[Type] => Option[Type]):Unit =
+  /**
+   * Maps a function over the type of an Id
+   * @param i the id to map over
+   * @param f_opt the function to apply to i.typ
+   * @return a COPY of i with a (potentially) new type
+   */
+  private def typeMapId(i: Id, f_opt: Option[Type] => Option[Type]) :Id =
     {
-      i.typ = f_opt(i.typ)
+      val ni = i.copy()
+      ni.typ = f_opt(i.typ)
+      ni
     }
 
 
 
-  def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => Option[Type]) :Unit = typeMapCmd(fun.body, f_opt)
-  def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => Option[Type]) :Unit = typeMapCmd(mod.body, f_opt)
+  def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => Option[Type]) :FuncDef =
+    fun.copy(body = typeMapCmd(fun.body, f_opt))
+  def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => Option[Type]) :ModuleDef =
+    mod.copy(body = typeMapCmd(mod.body, f_opt)).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Type) :Unit=
     {
