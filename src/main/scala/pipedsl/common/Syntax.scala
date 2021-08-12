@@ -42,6 +42,9 @@ object Syntax {
     }
   }
 
+  /**
+   * forces us to implement .copyMeta() for things that should have it
+   */
   sealed trait HasCopyMeta
   {
     val copyMeta : HasCopyMeta => HasCopyMeta = x => x
@@ -127,6 +130,13 @@ object Syntax {
         case TSignVar(name) => "sign(" + name + ")"
       }
     }
+
+    /**
+     * function to copy metadata for types.
+     * TODO: can we make this happen whenever .copy() is called? that would be really cool
+     * if you want .copy() to work the way you might think it does you MUST do
+     * a.copy(...).copyMeta(a);
+     */
     override val copyMeta: HasCopyMeta => Type =
       {
         case from :Type =>
@@ -136,7 +146,10 @@ object Syntax {
           this
       }
 
-    //hex code 22C1
+    /**
+     * operator to calculate some semblance of a meet of this and that
+     * hex code 22C1 :)
+     */
     def ⋁(that :Type) :Type = this match
     {
       case ness: TSignedNess => ness match
@@ -154,7 +167,7 @@ object Syntax {
       {
         case TSizedInt(len2, sign2) =>
           TSizedInt((len1 ⋁ len2).asInstanceOf[TBitWidth], (sign1 ⋁ sign2).asInstanceOf[TSignedNess])
-        case TNamedType(name) => this
+        case TNamedType(_) => this
         case _ =>  throw TypeMeetError(this, that)
       }
       case TFun(args1, ret1) => that match {
@@ -162,18 +175,18 @@ object Syntax {
           TFun(args1.zip(args2).map(t1t2 => t1t2._1 ⋁ t1t2._2), ret1 ⋁ ret2)
         case _ => throw TypeMeetError(this, that)
       }
-      case TRecType(name, fields) => if (this eq that) this else throw TypeMeetError(this, that)
-      case TMemType(elem, addrSize, readLatency, writeLatency, readPorts, writePorts) =>
-        if(this eq that) this else throw TypeMeetError(this, that)
-      case TModType(inputs, refs, retType, name) =>
-        if(this eq that) this else throw TypeMeetError(this, that)
-      case TLockedMemType(mem, idSz, limpl) =>
-        if(this eq that) this else throw TypeMeetError(this, that)
-      case TRequestHandle(mod, rtyp) =>
-        if(this eq that) this else throw TypeMeetError(this, that)
+      case _ :TRecType => if (this == that) this else throw TypeMeetError(this, that)
+      case _ :TMemType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TModType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TLockedMemType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TRequestHandle =>
+        if(this == that) this else throw TypeMeetError(this, that)
       case TNamedType(name) =>
         that match {
-          case TNamedType(name2) => if (name.v eq name2.v) this else throw TypeMeetError(this, that)
+          case TNamedType(name2) => if (name.v == name2.v) this else throw TypeMeetError(this, that)
           case _ => that
         }
       case TMaybe(btyp) => that match {
@@ -183,32 +196,50 @@ object Syntax {
       case width: TBitWidth => that match {
         case w2 :TBitWidth => (width, w2) match {
           case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(Math.max(l1, l2))
-          case (w1, w2) if w1 === w2 => w1
+          case (w1, w2) if w1 ==== w2 => w1
           case _ => TBitWidthMax(width, w2)
         }
         case _ => throw TypeMeetError(this, that)
       }
-      case _ => if (this.getClass eq that.getClass) this else throw TypeMeetError(this, that)
+      case _ => if (this.getClass == that.getClass) this else throw TypeMeetError(this, that)
     }
-    def ===(that :Any) :Boolean =
+
+    /**
+     * operator for type equality. basically sugar for Subtypes.areEqual
+     * four equal signs instead of three so that JS users don't feel too welcome
+     */
+    def ====(that:Any) :Boolean =
       {
         that match {
           case that :Type => Subtypes.areEqual(this, that)
           case _ => throw new IllegalArgumentException
         }
       }
-    def =!=(that :Any) :Boolean = !(this === that)
 
+    /**
+     * operator for type inequality
+     */
+    def =!=(that :Any) :Boolean = !(this ==== that)
+
+    /**
+     * operator to check subtypes. Again basically sugar
+     */
     def <<=(that :Any) :Boolean = that match {
       case that :Type => Subtypes.isSubtype(this, that)
       case _ => throw new IllegalArgumentException
     }
 
+    /**
+     * operator to check supertypes. More sugar
+     */
     def >>=(that :Any) :Boolean = that match {
       case that :Type  => Subtypes.isSubtype(that, this)
       case _ => throw new IllegalArgumentException
     }
 
+    /**
+     * alias for ⋁ in case someone doesn't wanna type that
+     */
     def meet(that :Type) :Type = ⋁(that)
   }
   // Types that can be upcast to Ints
@@ -326,7 +357,7 @@ object Syntax {
 
   sealed trait BOp extends Positional {
     val op: String;
-    override def toString = this.op
+    override def toString: String = this.op
     def operate(v1: Any, v2: Any): Option[Any] = this match {
       case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].intValue(),
         v2.asInstanceOf[Number].intValue()))
@@ -356,7 +387,7 @@ object Syntax {
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
   sealed trait Expr extends Positional with TypeAnnotation with PortAnnotation {
-    def isLVal = this match {
+    def isLVal: Boolean = this match {
       case _:EVar => true
       case _:EMemAccess => true
       case _ => false
