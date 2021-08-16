@@ -658,23 +658,23 @@ object TypeInferenceWrapper
      {
       val tmp = b match
       {
-       case EqOp(_) => val meet = t1 ⋁ t2
+       case EqOp(_) => val meet = t1 ⊓ t2
         (if (meet ==== t1) None else Some(meet), if (meet ==== t2) None else Some(meet))
-       case CmpOp(_) => val meet = t1 ⋁ t2
+       case CmpOp(_) => val meet = t1 ⊓ t2
         (if (meet ==== t1) None else Some(meet), if (meet ==== t2) None else Some(meet))
        case _: BoolOp => (None, None)
        case NumOp(op, _) => op match
        {
-        case "/" | "%" => val meet = retType ⋁ t1
+        case "/" | "%" => val meet = retType ⊓ t1
          if (meet ==== t1) (None, None) else (Some(meet), None)
         case "*" => (None, None)
-        case "+" | "-" | "$*" => val meet = t1 ⋁ t2 ⋁ retType
+        case "+" | "-" | "$*" => val meet = t1 ⊓ t2 ⊓ retType
          (if (meet ==== t1) None else Some(meet), if (meet ==== t2) None else Some(meet))
        }
        case BitOp(op, _) => op match
        {
         case "++" => (None, None)
-        case _ => val meet = t1 ⋁ retType
+        case _ => val meet = t1 ⊓ retType
          if (meet ==== t1) (None, None) else (Some(meet), None)
        }
       }

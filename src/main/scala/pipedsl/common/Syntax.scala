@@ -148,9 +148,9 @@ object Syntax {
 
     /**
      * operator to calculate some semblance of a meet of this and that
-     * hex code 22C1 :)
+     * hex code 2293 :)
      */
-    def ⋁(that :Type) :Type = this match
+    def ⊓(that:Type) :Type = this match
     {
       case ness: TSignedNess => ness match
       {
@@ -166,13 +166,13 @@ object Syntax {
       case TSizedInt(len1, sign1) => that match
       {
         case TSizedInt(len2, sign2) =>
-          TSizedInt((len1 ⋁ len2).asInstanceOf[TBitWidth], (sign1 ⋁ sign2).asInstanceOf[TSignedNess])
+          TSizedInt((len1 ⊓ len2).asInstanceOf[TBitWidth], (sign1 ⊓ sign2).asInstanceOf[TSignedNess])
         case TNamedType(_) => this
         case _ =>  throw TypeMeetError(this, that)
       }
       case TFun(args1, ret1) => that match {
         case TFun(args2, ret2) =>
-          TFun(args1.zip(args2).map(t1t2 => t1t2._1 ⋁ t1t2._2), ret1 ⋁ ret2)
+          TFun(args1.zip(args2).map(t1t2 => t1t2._1 ⊓ t1t2._2), ret1 ⊓ ret2)
         case _ => throw TypeMeetError(this, that)
       }
       case _ :TRecType => if (this == that) this else throw TypeMeetError(this, that)
@@ -190,7 +190,7 @@ object Syntax {
           case _ => that
         }
       case TMaybe(btyp) => that match {
-        case TMaybe(btyp2) => TMaybe(btyp ⋁ btyp2)
+        case TMaybe(btyp2) => TMaybe(btyp ⊓ btyp2)
         case _ => throw TypeMeetError(this, that)
       }
       case width: TBitWidth => that match {
@@ -208,39 +208,27 @@ object Syntax {
      * operator for type equality. basically sugar for Subtypes.areEqual
      * four equal signs instead of three so that JS users don't feel too welcome
      */
-    def ====(that:Any) :Boolean =
-      {
-        that match {
-          case that :Type => Subtypes.areEqual(this, that)
-          case _ => throw new IllegalArgumentException
-        }
-      }
+    def ====(that:Type) :Boolean = Subtypes.areEqual(this, that)
 
     /**
      * operator for type inequality
      */
-    def =!=(that :Any) :Boolean = !(this ==== that)
+    def =!=(that :Type) :Boolean = !(this ==== that)
 
     /**
      * operator to check subtypes. Again basically sugar
      */
-    def <<=(that :Any) :Boolean = that match {
-      case that :Type => Subtypes.isSubtype(this, that)
-      case _ => throw new IllegalArgumentException
-    }
+    def <<=(that :Type) :Boolean = Subtypes.isSubtype(this, that)
 
     /**
      * operator to check supertypes. More sugar
      */
-    def >>=(that :Any) :Boolean = that match {
-      case that :Type  => Subtypes.isSubtype(that, this)
-      case _ => throw new IllegalArgumentException
-    }
+    def >>=(that :Type) :Boolean = Subtypes.isSubtype(that, this)
 
     /**
-     * alias for ⋁ in case someone doesn't wanna type that
+     * alias for ⊓ in case someone doesn't wanna type that
      */
-    def meet(that :Type) :Type = ⋁(that)
+    def meet(that :Type) :Type = ⊓(that)
   }
   // Types that can be upcast to Ints
   sealed trait IntType
