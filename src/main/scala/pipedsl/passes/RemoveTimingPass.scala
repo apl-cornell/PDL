@@ -39,7 +39,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
         val newArgs: ListBuffer[Expr] = new ListBuffer[Expr]()
         for (index <- args.indices) {
           val arg = EVar(Id("__" + id.v + "__" + calls.length + index))
-          assigns.addOne(CAssign(arg, args(index), None))
+          assigns.addOne(CAssign(arg, args(index)))
           newArgs.addOne(arg)
         }
         calls.addOne(CExpr(ECall(id, newArgs.toList)))

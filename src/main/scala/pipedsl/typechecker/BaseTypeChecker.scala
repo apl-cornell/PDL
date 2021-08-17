@@ -119,11 +119,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ast = checkModuleBodyWellFormed(cons, assignees)
       val asf = checkModuleBodyWellFormed(alt, assignees)
       ast ++ asf
-    case CRecv(lhs@EVar(id), _, _) =>
+    case CRecv(lhs@EVar(id), _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
       }
-    case CAssign(lhs@EVar(id), _, _) =>
+    case CAssign(lhs@EVar(id), _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
     }
@@ -250,13 +250,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val efalse = checkCommand(alt, cenv)
       etrue.intersect(efalse)
     }
-    case CAssign(lhs, rhs, _) => {
+    case CAssign(lhs, rhs) => {
       val (rTyp, renv) = checkExpression(rhs, tenv, None)
       val (lTyp, lenv) = checkExpression(lhs, renv, Some(rTyp))
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "assignment", lTyp, rTyp)
     }
-    case CRecv(lhs, rhs, _) => {
+    case CRecv(lhs, rhs) => {
       val (rTyp, renv) = checkExpression(rhs, tenv, None)
       val (lTyp, lenv) = checkExpression(lhs, renv, None)
       if (isSubtype(rTyp, lTyp)) lenv
@@ -301,7 +301,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           else {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv, None)
             idxt match {
-              case TSizedInt(l, TUnsigned()/*true*/) if l.asInstanceOf[TBitWidthLen].len == memt.addrSize => tenv
+              case TSizedInt(l, TUnsigned()) if l.getLen == memt.addrSize => tenv
               case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
@@ -402,7 +402,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       op match {
         case BitOp("++", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>
-            (TSizedInt(TBitWidthLen(l1.asInstanceOf[TBitWidthLen].len + l2.asInstanceOf[TBitWidthLen].len), u1), env2)
+            (TSizedInt(TBitWidthLen(l1.getLen + l2.getLen), u1), env2)
           case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
         }
         case BitOp("<<", _) => (t1, t2) match {
@@ -413,7 +413,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
         case NumOp("*", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>
-            (TSizedInt(TBitWidthLen(l1.asInstanceOf[TBitWidthLen].len + l2.asInstanceOf[TBitWidthLen].len), u1), env2)
+            (TSizedInt(TBitWidthLen(l1.getLen + l2.getLen), u1), env2)
           case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
         }
         case _ => if (!areEqual(t1, t2)) { throw UnexpectedType(e2.pos, e2.toString, t1.toString(), t2) } else {
@@ -446,7 +446,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
-        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, TUnsigned()/*true*/)) if l.asInstanceOf[TBitWidthLen].len == s =>
+        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, TUnsigned())) if l.getLen == s =>
           if (wm.isDefined) {
             val (wmt, _) = checkExpression(wm.get, tenv, None)
             wmt match {
@@ -464,7 +464,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val (ntyp, nenv) = checkExpression(num, tenv, None)
       val bitsLeft = math.abs(end - start) + 1
       ntyp.matchOrError(e.pos, "bit extract", "sized number") {
-        case TSizedInt(l, u) if l.asInstanceOf[TBitWidthLen].len >= bitsLeft => (TSizedInt(TBitWidthLen(bitsLeft), u), nenv)
+        case TSizedInt(l, u) if l.getLen >= bitsLeft => (TSizedInt(TBitWidthLen(bitsLeft), u), nenv)
         case _ => throw UnexpectedType(e.pos, "bit extract", "sized number larger than extract range", ntyp)
       }
     }

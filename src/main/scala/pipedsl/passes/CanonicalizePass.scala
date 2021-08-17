@@ -30,7 +30,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         usedNames = usedNames + name
         val evar = EVar(Id(name).setPos(e.pos)).setPos(e.pos)
         evar.typ = e.typ
-        CAssign(evar, e, e.typ).setPos(e.pos)
+        CAssign(evar, e).setPos(e.pos)
       }
 
     override def run(c: Command): Command =
@@ -82,13 +82,13 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
             l :+ CaseObj(ncond, nbody).setPos(cobj.pos)
           })
         CSeq(assngs, CSplit(ncases, ndef).setPos(c.pos)).setPos(c.pos)
-      case CAssign(lhs, rhs, typ) => val (nrhs, nassgns) = extractCastVars(rhs)
-        val nc = CAssign(lhs, nrhs, typ).setPos(c.pos)
+      case CAssign(lhs, rhs) => val (nrhs, nassgns) = extractCastVars(rhs)
+        val nc = CAssign(lhs, nrhs).setPos(c.pos)
         CSeq(nassgns, nc).setPos(c.pos)
-      case CRecv(lhs, rhs, typ) => val (nrhs, na1) = extractCastVars(rhs)
+      case CRecv(lhs, rhs) => val (nrhs, na1) = extractCastVars(rhs)
         val (nlhs, na2) = extractCastVars(lhs)
         val nassgns = CSeq(na1, na2).setPos(c.pos)
-        CSeq(nassgns, CRecv(nlhs, nrhs, typ).setPos(c.pos)).setPos(c.pos)
+        CSeq(nassgns, CRecv(nlhs, nrhs).setPos(c.pos)).setPos(c.pos)
       case CSpecCall(handle, pipe, args) => val (nargs, nc) = extractCastVars(args)
         CSeq(nc, CSpecCall(handle, pipe, nargs).setPos(c.pos)).setPos(c.pos)
       case CCheckSpec(_) => c

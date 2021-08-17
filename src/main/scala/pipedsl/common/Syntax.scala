@@ -298,6 +298,10 @@ object Syntax {
   case class TNamedType(name: Id) extends Type
   case class TMaybe(btyp: Type) extends Type
   sealed trait TBitWidth extends Type
+  {
+    def getLen :Int = this.matchOrError(this.pos, "bit width", "bit width len")
+    { case l : TBitWidthLen => l.len}
+  }
   case class TBitWidthVar(name: Id) extends TBitWidth
   case class TBitWidthLen(len: Int) extends TBitWidth
   case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
@@ -429,10 +433,10 @@ object Syntax {
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: EVar, rhs: Expr, typ: Option[Type]) extends Command{
+  case class CAssign(lhs: EVar, rhs: Expr) extends Command{
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CRecv(lhs: Expr, rhs: Expr, typ: Option[Type]) extends Command {
+  case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command

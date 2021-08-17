@@ -3,6 +3,8 @@ package pipedsl
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.typesafe.scalalogging.Logger
+
+import scala.util.parsing.combinator._
 import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
@@ -12,6 +14,7 @@ import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, Prog
 import pipedsl.passes._
 import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
 import pipedsl.typechecker._
+
 
 object Main {
   val logger: Logger = Logger("main")

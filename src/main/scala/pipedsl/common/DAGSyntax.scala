@@ -282,7 +282,7 @@ object DAGSyntax {
     for(i <- defaultNum-2 to 0 by -1 ) {
       eTernary = ETernary(conds(i), EInt(i, bits = intSize), eTernary.copy())
     }
-    this.addCmd(CAssign(condVar, eTernary, Some(TSizedInt(TBitWidthLen(intSize), TUnsigned()))))
+    this.addCmd(CAssign(condVar, eTernary))
     for (i <- 0 until defaultNum) {
       this.addEdgeTo(condStages(i).head, condSend = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))
       condStages(i).last.addEdgeTo(joinStage, condRecv = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))

@@ -1,12 +1,10 @@
 package pipedsl.common
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
-import com.sun.org.apache.xpath.internal.Expression
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{LackOfConstraints, UnexpectedCommand}
 import pipedsl.common.Syntax._
 
-import scala.annotation.tailrec
 
 
 object Utilities {
@@ -53,8 +51,8 @@ object Utilities {
         v ++ getUsedVars(c.cond) ++ getAllVarNames(c.body)
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
-    case CAssign(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
-    case CRecv(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
@@ -81,8 +79,8 @@ object Utilities {
         v ++ getWrittenVars(c.body)
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
-    case CAssign(lhs, _, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
-    case CRecv(lhs, _, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
+    case CAssign(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
+    case CRecv(lhs, _) => lhs match { case EVar(id) => Set(id) ; case _ => Set() }
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
     case IMemSend(handle, _, _, _, _) => Set(handle.id)
@@ -114,8 +112,8 @@ object Utilities {
       })
     case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
-    case CAssign(_, rhs, _) => getUsedVars(rhs)
-    case CRecv(lhs, rhs, _) => getUsedVars(rhs) ++ (lhs match {
+    case CAssign(_, rhs) => getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
       case e:EMemAccess => getUsedVars(e)
       case _ => Set()
     })
@@ -314,6 +312,47 @@ object Utilities {
       case None => None
     }
 
+  def fopt_func[A, B](f :A => Option[B]) :Option[A] => FOption[B] =
+    {
+      case Some(value) => f(value) match
+      {
+        case Some(value) => FSome(value)
+        case None => FError
+      }
+      case None => FNone
+    }
+
+  sealed abstract class FOption[+A]()
+    {
+      def get :A
+      def toOptionOrThrow(x :Exception) :Option[A]
+      def toOptionUnsafe = toOptionOrThrow(new RuntimeException("you brought this upon yourself"))
+      def isEmpty :Boolean
+      def isError :Boolean
+    }
+  final case class FSome[+A](value :A) extends FOption[A]
+  {
+    override def get: A = value
+    override def toOptionOrThrow(x :Exception): Option[A] = Some(value)
+    override def isError: Boolean = false
+    override def isEmpty: Boolean = false
+  }
+  case object FNone extends FOption[Nothing]
+  {
+    override def get: Nothing = throw new RuntimeException("empty")
+    override def toOptionOrThrow(x :Exception): Option[Nothing] = None
+    override def isEmpty: Boolean = true
+    override def isError: Boolean = false
+  }
+  case object FError extends FOption[Nothing]
+  {
+    override def get: Nothing = throw new RuntimeException("error")
+    override def toOptionOrThrow(x :Exception): Option[Nothing] = throw x
+    override def isEmpty: Boolean = true
+    override def isError: Boolean = true
+  }
+
+
   /**
    * Maps the function f_opt over the types of e1.
    * MODIFIES THE TYPE OF e1
@@ -321,33 +360,33 @@ object Utilities {
    * @param f_opt the function to apply to the types
    * @return the expression with new types
    */
-  private def typeMapExpr(e1 :Expr, f_opt : Option[Type] => Option[Type]) : Expr =
+  private def typeMapExpr(e1 :Expr, f_opt : Option[Type] => FOption[Type]) : Expr =
     {
-      try
+      f_opt(e1.typ) match
+      {
+        case FError => e1 match
         {
-          e1.typ = f_opt(e1.typ)
-        } catch
-        {
-          case _ :scala.MatchError =>
-            e1 match {
-              case EInt(v, _, _) =>
-//                println(s"DEFAULTING ON INT. CURRENTLY: ${e1.typ}")
-                val sign :TSignedNess = if(e1.typ.isDefined && e1.typ.get.isInstanceOf[TSizedInt])
-                  if(e1.typ.get.asInstanceOf[TSizedInt].sign == TSigned() || e1.typ.get.asInstanceOf[TSizedInt].sign == TUnsigned())
-                    e1.typ.get.asInstanceOf[TSizedInt].sign
-                  else TSigned()
-                else TSigned()
-                e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
-              case _ => throw LackOfConstraints(e1)
+          case EInt(v, _, _) => val sign: TSignedNess =
+            e1.typ match {
+              case Some(TSizedInt(_, sign)) => sign match
+              {
+                case TSignVar(_) => TSigned()
+                case defined => defined
+              }
+              case Some(_) => TSigned()
             }
+            e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
+          case _ => throw LackOfConstraints(e1)
         }
+        case t => e1.typ = t.toOptionUnsafe
+      }
       e1 match
       {
-        case e@EInt(v, base, bits) =>
-//          println(s"bits: $bits;\ttype: ${e.typ}\t$e")
+        case e@EInt(v, _, _) =>
           if(e.typ.isEmpty)
             e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
-          e.copy(bits = e.typ.get.asInstanceOf[TSizedInt].len.asInstanceOf[TBitWidthLen].len).copyMeta(e)
+          e.copy(bits = e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
+            {case t :TSizedInt => t}.len.getLen).copyMeta(e)
         case e@EIsValid(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EFromMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EToMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
@@ -375,7 +414,6 @@ object Utilities {
         case e@ECast(tp, exp) =>
           val ntp = f_opt(Some(tp)).get
           val tmp = e.copy(ctyp = ntp, exp = typeMapExpr(exp, f_opt)).copyMeta(e)
-//          println(s"setting $e type to $ntp")
           tmp.typ = Some(ntp)
           tmp
         case expr: CirExpr => expr match
@@ -398,7 +436,7 @@ object Utilities {
    * @param f_opt the function from types to types
    * @return a new command with the types mapped
    */
-  private def typeMapCmd(c1 :Command, f_opt :Option[Type] => Option[Type]) :Command =
+  private def typeMapCmd(c1 :Command, f_opt :Option[Type] => FOption[Type]) :Command =
     {
       c1 match
       {
@@ -408,9 +446,9 @@ object Utilities {
           c.copy(cond = typeMapExpr(cond, f_opt),
             cons = typeMapCmd(cons, f_opt),
             alt = typeMapCmd(alt, f_opt)).copyMeta(c)
-        case c@CAssign(lhs, rhs, _) =>
+        case c@CAssign(lhs, rhs) =>
           c.copy(lhs = typeMapExpr(lhs, f_opt).asInstanceOf[EVar], rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
-        case c@CRecv(lhs, rhs, _) =>
+        case c@CRecv(lhs, rhs) =>
           c.copy(lhs = typeMapExpr(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
         case c@CSpecCall(handle, pipe, args) =>
           c.copy(handle = typeMapExpr(handle, f_opt).asInstanceOf[EVar],
@@ -445,23 +483,23 @@ object Utilities {
    * @param f_opt the function to apply to i.typ
    * @return a COPY of i with a (potentially) new type
    */
-  private def typeMapId(i: Id, f_opt: Option[Type] => Option[Type]) :Id =
+  private def typeMapId(i: Id, f_opt: Option[Type] => FOption[Type]) :Id =
     {
       val ni = i.copy()
-      ni.typ = f_opt(i.typ)
+      ni.typ = f_opt(i.typ).toOptionOrThrow(LackOfConstraints(i))
       ni
     }
 
 
 
-  def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => Option[Type]) :FuncDef =
+  def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => FOption[Type]) :FuncDef =
     fun.copy(body = typeMapCmd(fun.body, f_opt))
-  def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => Option[Type]) :ModuleDef =
+  def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
     mod.copy(body = typeMapCmd(mod.body, f_opt)).copyMeta(mod)
 
-  def typeMap(p: Prog, f: Type => Type) :Unit=
+  def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {
-      val f_opt = opt_func(f)
+      val f_opt = fopt_func(f)
       p.fdefs.foreach(typeMapFunc(_, f_opt))
       p.moddefs.foreach(typeMapModule(_, f_opt))
     }

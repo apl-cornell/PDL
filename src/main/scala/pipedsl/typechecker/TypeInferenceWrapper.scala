@@ -4,9 +4,10 @@ import pipedsl.common.Errors
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, opt_func, typeMapFunc, typeMapModule}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, fopt_func, opt_func, typeMapFunc, typeMapModule}
 import pipedsl.typechecker.Environments.{Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
+
 import scala.collection.mutable
 
 object TypeInferenceWrapper
@@ -16,11 +17,28 @@ object TypeInferenceWrapper
 
   def apply_subst_typ(subst: Subst, t: Type): Type = subst.foldLeft[Type](t)((t1, s) => subst_into_type(s._1, s._2, t1))
 
+  private implicit class PipelineContainer[F](val value: F) {
+   def |>[G] (f: F => G) :G = f(value)
+  }
+
+
+  private def to_width(tp : Type): TBitWidth = tp.matchOrError(tp.pos, "width", "TBitWidth")
+   {case w : TBitWidth => w}
+
+  private def to_sign(tp : Type): TSignedNess = tp.matchOrError(tp.pos, "width", "TBitWidth")
+  {case s : TSignedNess => s}
+
+  private def to_len(tp :Type) :Int = tp.matchOrError(tp.pos, "len", "TBitWidthLen")
+  {case l : TBitWidthLen => l.len}
+
   private def subst_into_type(typevar: Id, toType: Type, inType: Type): Type = inType match
   {
    case t: TMemType => t.copy(elem = subst_into_type(typevar, toType, t.elem)).setPos(t.pos)
    case t1@TLockedMemType(t2: TMemType, _, _) => t1.copy(t2.copy(elem = subst_into_type(typevar, toType, t2.elem))).setPos(t1.pos)
-   case TSizedInt(len, signedness) => TSizedInt(subst_into_type(typevar, toType, len).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, signedness).asInstanceOf[TSignedNess]).setPos(inType.pos)
+   case TSizedInt(len, signedness) =>
+    val width = subst_into_type(typevar, toType, len) |> to_width
+    val sign = subst_into_type(typevar, toType, signedness) |> to_sign
+    TSizedInt(width, sign).setPos(inType.pos)
    case TString() => inType
    case TBool() => inType
    case TVoid() => inType
@@ -37,13 +55,18 @@ object TypeInferenceWrapper
    {
     case TBitWidthVar(name) => if (name == typevar) toType else inType
     case TBitWidthLen(_) => inType
-    case TBitWidthAdd(b1, b2) => val t1 = TBitWidthAdd(subst_into_type(typevar, toType, b1).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, b2).asInstanceOf[TBitWidth])
+    case TBitWidthAdd(b1, b2) =>
+     val w1 = subst_into_type(typevar, toType, b1) |> to_width
+     val w2 = subst_into_type(typevar, toType, b2) |> to_width
+     val t1 = TBitWidthAdd(w1, w2)
      (t1.b1, t1.b2) match
      {
       case (TBitWidthLen(len1), TBitWidthLen(len2)) => TBitWidthLen(len1 + len2).setPos(inType.pos)
       case _ => t1.setPos(inType.pos)
      }
-    case TBitWidthMax(b1, b2) => val t1 = TBitWidthMax(subst_into_type(typevar, toType, b1).asInstanceOf[TBitWidth], subst_into_type(typevar, toType, b2).asInstanceOf[TBitWidth])
+    case TBitWidthMax(b1, b2) =>
+     val t1 = TBitWidthMax(subst_into_type(typevar, toType, b1) |> to_width,
+      subst_into_type(typevar, toType, b2) |> to_width)
      (t1.b1, t1.b2) match
      {
       case (TBitWidthLen(len1), TBitWidthLen(len2)) => TBitWidthLen(len1.max(len2)).setPos(inType.pos)
@@ -55,14 +78,24 @@ object TypeInferenceWrapper
    }
   }
 
+  private def type_subst_map_fopt(t :Type, tp_mp: mutable.HashMap[Id, Type]) :Option[Type] = try
+    {
+     Some(type_subst_map(t, tp_mp))
+    } catch
+   {
+    case IntWidthNotSpecified() => None
+   }
+
   private def type_subst_map(t: Type, tp_mp: mutable.HashMap[Id, Type]): Type = t match
   {
    case TSignVar(nm) => tp_mp.get(nm) match
    {
     case Some(value) => type_subst_map(value, tp_mp)
    }
-   case sz@TSizedInt(len, sign) => val tmp = sz.copy(len = type_subst_map(len, tp_mp).copyMeta(sz).asInstanceOf[TBitWidth], sign = type_subst_map(sign, tp_mp).asInstanceOf[TSignedNess])
-    tmp
+   case sz@TSizedInt(len, sign) =>
+    val width = type_subst_map(len, tp_mp).copyMeta(sz) |> to_width
+    val sn = type_subst_map(sign, tp_mp).copyMeta(sign) |> to_sign
+    sz.copy(len = width, sign = sn)
    case f@TFun(args, ret) => f.copy(args = args.map(type_subst_map(_, tp_mp)), ret = type_subst_map(ret, tp_mp)).copyMeta(f)
    case r@TRecType(_, fields) => r.copy(fields = fields.map(idtp => (idtp._1, type_subst_map(idtp._2, tp_mp)))).copyMeta(r)
    case m: TMemType => m.copy(elem = type_subst_map(m.elem, tp_mp)).copyMeta(m)
@@ -71,17 +104,21 @@ object TypeInferenceWrapper
    case TNamedType(name) => tp_mp.get(name) match
    {
     case Some(value) => type_subst_map(value, tp_mp)
+    case None => throw IntWidthNotSpecified()
    }
    case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp))
-   case TBitWidthAdd(b1, b2) => val tmp = TBitWidthLen(type_subst_map(b1, tp_mp).asInstanceOf[TBitWidthLen].len + type_subst_map(b2, tp_mp).asInstanceOf[TBitWidthLen].len)
-    tmp
+   case TBitWidthAdd(b1, b2) =>
+    val len1 = type_subst_map(b1, tp_mp) |> to_len
+    val len2 = type_subst_map(b2, tp_mp) |> to_len
+    TBitWidthLen(len1 + len2)
    case TBitWidthMax(b1, b2) =>
-
-
-    TBitWidthLen(Math.max(type_subst_map(b1, tp_mp).asInstanceOf[TBitWidthLen].len, type_subst_map(b2, tp_mp).asInstanceOf[TBitWidthLen].len))
+    val len1 = type_subst_map(b1, tp_mp) |> to_len
+    val len2 = type_subst_map(b2, tp_mp) |> to_len
+    TBitWidthLen(Math.max(len1, len2))
    case TBitWidthVar(name) => tp_mp.get(name) match
    {
     case Some(value) => type_subst_map(value, tp_mp)
+    case None => throw IntWidthNotSpecified()
    }
    case _ => t
   }
@@ -133,7 +170,7 @@ object TypeInferenceWrapper
       val pipeEnv = m.modules.zip(modTypes).foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m._1.name, m._2))
       val (fixed_cmd, _, subst) = checkCommand(m.body, pipeEnv.asInstanceOf[TypeEnv], List())
       val hash = mutable.HashMap.from(subst)
-      val newMod = typeMapModule(m.copy(body = fixed_cmd).copyMeta(m), opt_func(type_subst_map(_, hash)))
+      val newMod = typeMapModule(m.copy(body = fixed_cmd).copyMeta(m), fopt_func(type_subst_map_fopt(_, hash)))
       (modEnv, newMod)
      }
 
@@ -145,7 +182,7 @@ object TypeInferenceWrapper
       val inEnv = f.args.foldLeft[Environment[Id, Type]](funEnv)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
       val hash = mutable.HashMap.from(subst)
-      val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), opt_func(type_subst_map(_, hash)))
+      val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash)))
       (funEnv, newFunc)
      }
 
@@ -257,7 +294,9 @@ object TypeInferenceWrapper
        }
        case b => throw UnexpectedType(c.pos, c.toString, modT.toString, b)
       }
-     case cr@CRecv(lhs, rhs, typ) => val (slhs, tlhs, lhsEnv, lhsFixed) = lhs match
+     case cr@CRecv(lhs, rhs) =>
+      val typ = lhs.typ
+      val (slhs, tlhs, lhsEnv, lhsFixed) = lhs match
      {
       case EVar(_) => (List(), typ.getOrElse(generateTypeVar()), env, lhs)
       case _ => infer(env, lhs)
@@ -282,7 +321,9 @@ object TypeInferenceWrapper
        case _ => rhsEnv
       }
       (cr.copy(lhs = lhsFixed, rhs = rhsFixed1).copyMeta(cr), newEnv.asInstanceOf[TypeEnv].apply_subst_typeenv(sret), sret)
-     case ca@CAssign(lhs, rhs, typ) => val (slhs, tlhs, lhsEnv) = (List(), typ.getOrElse(generateTypeVar()), env)
+     case ca@CAssign(lhs, rhs) =>
+      val typ = lhs.typ
+      val (slhs, tlhs, lhsEnv) = (List(), typ.getOrElse(generateTypeVar()), env)
       val (srhs, trhs, rhsEnv, rhsFixed) = infer(lhsEnv, rhs)
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
@@ -323,8 +364,8 @@ object TypeInferenceWrapper
        case (_: TVoid, _: TVoid) => (List(), false)
        case (_: TSigned, _: TSigned) => (List(), false)
        case (_: TUnsigned, _: TUnsigned) => (List(), false)
-       case (TBool(), TSizedInt(len, u)) if len.asInstanceOf[TBitWidthLen].len == 1 && u.unsigned() => (List(), false)
-       case (TSizedInt(len, u), TBool()) if len.asInstanceOf[TBitWidthLen].len == 1 && u.unsigned() => (List(), false)
+       case (TBool(), TSizedInt(len, u)) if len.getLen == 1 && u.unsigned() => (List(), false)
+       case (TSizedInt(len, u), TBool()) if len.getLen == 1 && u.unsigned() => (List(), false)
        case (TSizedInt(len1, signed1), TSizedInt(len2, signed2)) => val (s1, c1) = unify(len1, len2, binop)
         val (s2, c2) = unify(signed1, signed2, binop)
         (compose_subst(s1, s2), c1 || c2)

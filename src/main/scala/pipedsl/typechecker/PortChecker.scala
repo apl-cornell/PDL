@@ -135,9 +135,9 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
     case CTBar(_, _) => checkPipe(c, start_env)
     case CIf(_, cons, alt) =>
       checkCommand(cons, env, start_env).union(checkCommand(alt, env, start_env))
-    case CAssign(_, data, _) =>
+    case CAssign(_, data) =>
       checkExpr(data, env, start_env)
-    case CRecv(EVar(_), EMemAccess(mem, EVar(_), _), _) =>
+    case CRecv(EVar(_), EMemAccess(mem, EVar(_), _)) =>
       /*asynch read*/
       {mem.typ.get match {
         case TMemType(_, _, rlat, _, _, _) =>
@@ -173,7 +173,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           ret
       }
 
-    case CRecv(EMemAccess(mem, _, _), _, _) =>
+    case CRecv(EMemAccess(mem, _, _), _) =>
       /*any write, asynch or sequential*/
       /*println("any write: " + mem + " : " + env(mem) + " : " + start_env(mem))*/
       val ret = env.add(mem, (0, 1))
@@ -189,7 +189,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       optimalPorts.update(mem, (cur_opt._1, cur_opt._2 + 1))
       /*println(optimalPorts(mem))*/
       ret
-    case CRecv(EVar(_), data, _) =>
+    case CRecv(EVar(_), data) =>
       checkExpr(data, env, start_env)
     case CSpecCall(_, pipe, args) =>
       //callees += pipe

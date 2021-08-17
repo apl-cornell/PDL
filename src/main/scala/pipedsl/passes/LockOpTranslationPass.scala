@@ -119,13 +119,13 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def modifyMemOpsArgs(c: Command): List[Command] = {
     c match {
       //SimplifyRecvPass ensures that rhs is always a MemAccess xor a complex expression w/o memaccesses
-      case CAssign(lhs, rhs, typ) =>
+      case CAssign(lhs, rhs) =>
         val nrhs = modifyMemArg(rhs, isLhs = false)
-        List(CAssign(lhs, nrhs, typ).setPos(c.pos))
-      case CRecv(lhs, rhs, typ) =>
+        List(CAssign(lhs, nrhs).setPos(c.pos))
+      case CRecv(lhs, rhs) =>
         val nlhs = modifyMemArg(lhs, isLhs = true)
         val nrhs = modifyMemArg(rhs, isLhs = false)
-        List(CRecv(nlhs, nrhs, typ).setPos(c.pos))
+        List(CRecv(nlhs, nrhs).setPos(c.pos))
       //lhs should not contain _any_ memaccesses thanks to the ConvertAsyncPass (but adding this doesn't hurt)
       case CExpr(exp) => List(CExpr(modifyMemArg(exp, isLhs = false)).setPos(c.pos))
       case im@IMemSend(_, _, _, _, _) if im.granularity == General => List(im)
@@ -139,7 +139,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         newVar.id.typ = newVar.typ
         val newSend = IMemSend(h, writeMask, mem, d, newVar).setPos(im.pos)
         newSend.portNum = im.portNum
-        val newAssn = CAssign(newVar, newAddr, newVar.typ).setPos(im.pos)
+        val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         List(newAssn, newSend)
       case im@IMemWrite(_, _, _) if im.granularity == General => List(im)
       case im@IMemWrite(mem, addr, data) if im.granularity == Specific =>
@@ -149,7 +149,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
         val newSend = IMemWrite(mem, newVar, data).setPos(im.pos)
-        val newAssn = CAssign(newVar, newAddr, newVar.typ).setPos(im.pos)
+        val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         List(newAssn, newSend)
       case _ => List(c)
     }

@@ -56,45 +56,45 @@ object SimplifyRecvPass extends CommandPass[Command] with ModulePass[ModuleDef] 
       })
       CSplit(newcases, runHelper(default).setPos(default.pos)).setPos(c.pos)
     case CIf(cond, cons, alt) => CIf(cond, runHelper(cons), runHelper(alt)).setPos(c.pos)
-    case CRecv(lhs, rhs, typ) => (lhs, rhs) match {
+    case CRecv(lhs, rhs) => (lhs, rhs) match {
       case (EVar(_), EMemAccess(_, EVar(_),_)) => c //leave it alone, already in the form we want
       case (EVar(_), EMemAccess(mem, idx, wm)) => //separate out the index computation
-        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx, typ).setPos(idx.pos)
-        CSeq(idxAssgn, CRecv(lhs, EMemAccess(mem, idxAssgn.lhs, wm).setPos(rhs.pos), typ)).setPos(c.pos)
+        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
+        CSeq(idxAssgn, CRecv(lhs, EMemAccess(mem, idxAssgn.lhs, wm).setPos(rhs.pos))).setPos(c.pos)
       case (EMemAccess(_, EVar(_), _), EVar(_)) => c //leave it alone, already in form we want
       case (EMemAccess(_,EVar(_), _), _) => // separate out the RHS computation
-        val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs, typ).setPos(rhs.pos)
-        CSeq(rhsAssgn, CRecv(lhs, rhsAssgn.lhs, typ).setPos(c.pos)).setPos(c.pos)
+        val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs).setPos(rhs.pos)
+        CSeq(rhsAssgn, CRecv(lhs, rhsAssgn.lhs).setPos(c.pos)).setPos(c.pos)
       case (EMemAccess(mem,idx,wm), EVar(_)) => //separate out the index computation
-        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx, typ).setPos(idx.pos)
+        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
         val access = EMemAccess(mem, idxAssgn.lhs, wm).setPos(lhs.pos)
         access.typ = lhs.typ
-        CSeq(idxAssgn, CRecv(access, rhs, typ).setPos(c.pos)).setPos(c.pos)
+        CSeq(idxAssgn, CRecv(access, rhs).setPos(c.pos)).setPos(c.pos)
       case (EMemAccess(mem,idx, wm), _) => //separate the index computation AND the rhs computation into new variables
-        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx, typ).setPos(idx.pos)
-        val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs, typ).setPos(rhs.pos)
+        val idxAssgn = CAssign(newVar("index", idx.pos, idx.typ), idx).setPos(idx.pos)
+        val rhsAssgn = CAssign(newVar("msg", rhs.pos, rhs.typ), rhs).setPos(rhs.pos)
         val access = EMemAccess(mem, idxAssgn.lhs, wm).setPos(lhs.pos)
         access.typ = lhs.typ
         CSeq(idxAssgn,
           CSeq(rhsAssgn,
-            CRecv(access, rhsAssgn.lhs, typ).setPos(c.pos))
+            CRecv(access, rhsAssgn.lhs).setPos(c.pos))
             .setPos(c.pos))
           .setPos(c.pos)
       case (EVar(_), ECall(id, args)) =>
         //TODO cleanup and stop copying code
         val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty(), List()))((cs, a) => {
-          val argAssn = CAssign(newVar("carg", a.pos, a.typ), a, typ).setPos(a.pos)
+          val argAssn = CAssign(newVar("carg", a.pos, a.typ), a).setPos(a.pos)
           (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
         })
-        CSeq(argAssgns._1, CRecv(lhs, ECall(id, argAssgns._2).setPos(c.pos), typ).setPos(c.pos)).setPos(c.pos)
+        CSeq(argAssgns._1, CRecv(lhs, ECall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)).setPos(c.pos)
       case (l@EVar(_), _) =>
-        CAssign(l, rhs, typ).setPos(c.pos)
+        CAssign(l, rhs).setPos(c.pos)
       case _ => throw UnexpectedCase(c.pos)
     }
     //calls also get translated to send statements later
     case CExpr(ECall(id, args)) =>
       val argAssgns = args.foldLeft[(Command, List[Expr])]((CEmpty(), List()))((cs, a) => {
-        val argAssn = CAssign(newVar("carg", a.pos, a.typ), a, a.typ).setPos(a.pos)
+        val argAssn = CAssign(newVar("carg", a.pos, a.typ), a).setPos(a.pos)
         (CSeq(cs._1, argAssn).setPos(a.pos), cs._2 :+ argAssn.lhs)
       })
       CSeq(argAssgns._1, CExpr(ECall(id, argAssgns._2).setPos(c.pos)).setPos(c.pos)).setPos(c.pos)

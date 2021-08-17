@@ -911,7 +911,7 @@ object BluespecGeneration {
     }
 
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
-      case CAssign(lhs, _, _) => Some(BDecl(translator.toVar(lhs), None))
+      case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
@@ -938,7 +938,7 @@ object BluespecGeneration {
      * @return Some(translation) if cmd is combinational, otherwise None
      */
     private def getCombinationalCommand(cmd: Command): Option[BStatement] = cmd match {
-      case CAssign(lhs, rhs, _) =>
+      case CAssign(lhs, rhs) =>
         Some(BAssign(translator.toVar(lhs), translator.toExpr(rhs)))
       case ICondCommand(cond: Expr, cs) =>
         val stmtlist = cs.foldLeft(List[BStatement]())((l, c) => {
@@ -973,7 +973,7 @@ object BluespecGeneration {
       case _: InternalCommand => None
       case COutput(_) => None
       case CPrint(_) => None
-      case CRecv(_, _, _) => throw UnexpectedCommand(cmd)
+      case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
@@ -1164,11 +1164,11 @@ object BluespecGeneration {
         Some(BIf(BIsValid(translator.toBSVVar(specIdVar)),
           List(BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))), List()))
       case CCheckSpec(isBlocking) if !isBlocking => None
-      case CAssign(_, _, _) => None
+      case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
       case _: InternalCommand => throw UnexpectedCommand(cmd)
-      case CRecv(_, _, _) => throw UnexpectedCommand(cmd)
+      case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)

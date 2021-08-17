@@ -85,9 +85,9 @@ class PrettyPrinter(output: Option[File]) {
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
 
-      case Syntax.CAssign(lhs, rhs, typ) => ins + (if (typ.isDefined) printTypeToString(typ.get) + " " else "") +
+      case Syntax.CAssign(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
         printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
-      case Syntax.CRecv(lhs, rhs, typ) => ins + (if (typ.isDefined) printTypeToString(typ.get) + " " else "") +
+      case Syntax.CRecv(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
         printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"

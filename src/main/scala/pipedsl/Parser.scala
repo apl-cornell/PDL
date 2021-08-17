@@ -9,24 +9,26 @@ import scala.util.matching.Regex
 class Parser extends RegexParsers with PackratParsers {
   type P[T] = PackratParser[T]
 
-  var bitVarCount = 0
-  var namedTypeCount = 0
+  private var bitVarCount = 0
+  private var namedTypeCount = 0
 
   /*TODO: is this really the best way of doing this?*/
-  var finalFail :Option[ParseResult[Any]] = None
-
-  val debug = false
+  private var finalFail :Option[ParseResult[Any]] = None
+  /**
+   * set this to true to enable logging for shifts and reduces
+   */
+  private val debug = false
 
   /**
    * adds debugging info to a parser if [[debug]] is true
    */
-  def dlog[T](p: => P[T])(msg :String) :P[T] = if (debug) log(p)(msg) else p
+  private def dlog[T](p: => P[T])(msg :String) :P[T] = if (debug) log(p)(msg) else p
 
   /**
    * wrap this around a parser for its failures to be recorded in a way to be
    * reported to the user
    */
-  def failRecord[T](p: => P[T]) :P[T] = Parser {in =>
+  private def failRecord[T](p: => P[T]) :P[T] = Parser {in =>
     val r = p(in)
    r match {
      case Failure(msg, _) if msg != "Base Failure" =>
@@ -36,13 +38,13 @@ class Parser extends RegexParsers with PackratParsers {
    r
   }
 
-  def genBitVar() :TBitWidth =
+  private def genBitVar() :TBitWidth =
     {
       bitVarCount += 1
       TBitWidthVar(Id("__PARSER__BITWIDTH__" + bitVarCount))
     }
 
-  def genTypeVar() :TNamedType =
+  private def genTypeVar() :TNamedType =
     {
       namedTypeCount += 1
       TNamedType(Id("__PARSER__NAMED__" + namedTypeCount))
@@ -73,6 +75,9 @@ class Parser extends RegexParsers with PackratParsers {
     val e = EInt(n, base, if (bits.isDefined) bits.get else  -1)
     e.typ = bits match {
       case Some(b) => Some(TSizedInt(TBitWidthLen(b), SignFactory.ofBool(!isUnsigned)))
+      /*The reason we pick out unsigned here is so that one can specify a*/
+      /*constant as unsigned while still letting the inference figure out*/
+      /*the bitwidth*/
       case None if isUnsigned => Some(TSizedInt(genBitVar(), TUnsigned()))
       case _ => Some(genTypeVar())
     }
@@ -220,8 +225,8 @@ class Parser extends RegexParsers with PackratParsers {
 
   lazy val simpleCmd: P[Command] = positioned {
     speccall |
-    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r, t) } |
-      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r, t) } |
+    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
+      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
@@ -287,6 +292,9 @@ class Parser extends RegexParsers with PackratParsers {
   }
 
   lazy val conditional: P[Command] = positioned {
+    /*failRecord here since if there is a failure in the guard*/
+    /*we would like to see that. Without this it will be reported*/
+    /*in strange and magical places*/
     failRecord("if" ~> parens(expr) ~ block ~ ("else" ~> blockCmd).? ^^ {
       case cond ~ cons ~ alt => CIf(cond, cons, alt.getOrElse(CEmpty()))
     })
