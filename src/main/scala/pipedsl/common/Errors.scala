@@ -1,6 +1,6 @@
 package pipedsl.common
 
-import scala.util.parsing.input.Position
+import scala.util.parsing.input.{NoPosition, Position, Positional}
 import Syntax._
 import pipedsl.common.Locks.LockState
 
@@ -177,4 +177,22 @@ object Errors {
   case class MultipleCall(pos :Position, sure :Boolean) extends RuntimeException(
     withPos(if (sure) "A thread potentially has more than one output xor call!"
     else "The solver is confused. A thread may have more than one output xor call", pos))
+
+  case class TooManyPorts(pos :Position, found :Int) extends RuntimeException(
+    withPos(s"Too many ports! Found $found", pos)
+  )
+
+  case class UnificationError(t1: Type, t2: Type) extends RuntimeException(
+    withPos(s"Unable to unify type $t1 and type $t2", t1.pos)
+  )
+
+  case class TypeMeetError(t1 :Type, t2 :Type) extends RuntimeException(
+    withPos(s"Cannot generate meet of type $t1 and type $t2", if (t1.pos eq NoPosition) t2.pos else t1.pos)
+  )
+
+  case class LackOfConstraints(e :Positional) extends RuntimeException(
+    withPos(s"Not enough constraints provided to infer types. Found error at $e", e.pos)
+  )
+
+  case class IntWidthNotSpecified() extends RuntimeException
 }

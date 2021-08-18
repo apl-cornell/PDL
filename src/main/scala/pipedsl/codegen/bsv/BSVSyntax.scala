@@ -82,7 +82,7 @@ object BSVSyntax {
           (None, mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ)
         }
         getLockedMemType(mem, mtyp, lidSz, lidtyp, limpl, useTypeVars = false, None)
-      case TSizedInt(len, unsigned) => BSizedInt(unsigned, len)
+      case TSizedInt(len, sign) => BSizedInt(sign.unsigned(), len.getLen)
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
@@ -187,12 +187,12 @@ object BSVSyntax {
     //automatically determine an output type
     private def translateIntCast(from: TSizedInt, to:TSizedInt, e: Expr): BExpr = {
       val baseExpr = toExpr(e)
-      val needsExtend = from.len < to.len
-      val needsTruncate = to.len < from.len
-      val needsPack = from.unsigned != to.unsigned
+      val needsExtend = from.len.getLen < to.len.getLen
+      val needsTruncate = to.len.getLen < from.len.getLen
+      val needsPack = from.sign != to.sign
       val extended = if (needsExtend) {
         //If making a signed number, sign extend
-        BExtend(baseExpr, useSign = !to.unsigned)
+        BExtend(baseExpr, useSign = to.sign.signed())
       } else if (needsTruncate) {
         BTruncate(baseExpr)
       } else {
@@ -223,8 +223,8 @@ object BSVSyntax {
       case NumOp("$*",_) =>
         BBOp("*",toExpr(b.e1), toExpr(b.e2))
       case NumOp("*",_) => b.typ match {
-        case Some(TSizedInt(_, unsigned)) =>
-          val op = if (unsigned) { "unsignedMul" } else { "signedMul" }
+        case Some(TSizedInt(_, sign)) =>
+          val op = if (sign.unsigned()) { "unsignedMul" } else { "signedMul" }
           BBOp(op, toExpr(b.e1), toExpr(b.e2), isInfix = false)
         case None => throw MissingType(b.pos, "Missing Type on Multiply BinOp")
         case _ => throw UnexpectedType(b.pos, "Mul Op", "Sized Integers", b.typ.get)

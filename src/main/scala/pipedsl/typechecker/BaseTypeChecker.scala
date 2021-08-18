@@ -6,6 +6,7 @@ import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
 
 
 //  This checks the 'Normal stuff' with base types.
@@ -157,7 +158,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
     case CirMem(elemTyp, addrSize, numPorts) => {
-      if(numPorts > 2) throw new RuntimeException("Cannot have more than 2 ports on asynch memory")
+      if(numPorts > 2) throw TooManyPorts(c.pos, 2)
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       c.typ = Some(mtyp)
       (mtyp, tenv)
@@ -177,12 +178,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       (newtyp, tenv)
     }
     case CirRegFile(elemTyp, addrSize) => {
-      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, 5, 1)
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
     case CirLockRegFile(elemTyp, addrSize, lockimpl, params) => {
-      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, 5, 1)
+      val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       val idsz = params.headOption
       val ltyp = TLockedMemType(mtyp, idsz, lockimpl)
       c.typ = Some(ltyp)
@@ -313,8 +314,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           else {
             val (idxt, _) =  checkExpression(mem.evar.get, tenv, None)
             idxt match {
-              case TSizedInt(l, true) if l == memt.addrSize => tenv
-              case _ => throw UnexpectedType(mem.pos, "lock operation", "ubit<" + memt.addrSize + ">", idxt)
+              case TSizedInt(l, TUnsigned()) if l.getLen == memt.addrSize => tenv
+              case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
         }
@@ -435,7 +436,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   private def _checkE(e: Expr, tenv: Environment[Id, Type], defaultType: Option[Type]): (Type, Environment[Id, Type] ) = e match {
     case e1@EInt(_, _, bits) =>
       if (e1.typ.isDefined) { (e1.typ.get, tenv) }
-      else { (TSizedInt(bits, unsigned = false), tenv) }
+      else { (TSizedInt(TBitWidthLen(bits), TSigned()/*unsigned = false*/), tenv) }
     case EBool(v) => (TBool(), tenv)
     case EString(v) => (TString(), tenv)
     case EUop(op, e) => {
@@ -451,7 +452,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val (t2, env2) = checkExpression(e2, env1, None)
       op match {
         case BitOp("++", _) => (t1, t2) match {
-          case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
+          case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>
+            (TSizedInt(TBitWidthLen(l1.getLen + l2.getLen), u1), env2)
           case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
         }
         case BitOp("<<", _) => (t1, t2) match {
@@ -461,7 +463,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
         }
         case NumOp("*", _) => (t1, t2) match {
-          case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 => (TSizedInt(l1 + l2, u1), env2)
+          case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>
+            (TSizedInt(TBitWidthLen(l1.getLen + l2.getLen), u1), env2)
           case (_, _) => throw UnexpectedType(e.pos, "concat", "sized number", t1)
         }
         case _ => if (!areEqual(t1, t2)) { throw UnexpectedType(e2.pos, e2.toString, t1.toString(), t2) } else {
@@ -494,12 +497,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
-        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, true)) if l == s =>
+        case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, TUnsigned())) if l.getLen == s =>
           if (wm.isDefined) {
             val (wmt, _) = checkExpression(wm.get, tenv, None)
             wmt match {
               //TODO check that the mask size is correct (i.e., length of elemtype / 8)
-              case TSizedInt(lm, true) => ()
+              case TSizedInt(lm, TUnsigned()/*true*/) => ()
               case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
                 " to the number of bytes in the element type", wmt)
             }
@@ -512,7 +515,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val (ntyp, nenv) = checkExpression(num, tenv, None)
       val bitsLeft = math.abs(end - start) + 1
       ntyp.matchOrError(e.pos, "bit extract", "sized number") {
-        case TSizedInt(l, u) if l >= bitsLeft => (TSizedInt(bitsLeft, u), nenv)
+        case TSizedInt(l, u) if l.getLen >= bitsLeft => (TSizedInt(TBitWidthLen(bitsLeft), u), nenv)
         case _ => throw UnexpectedType(e.pos, "bit extract", "sized number larger than extract range", ntyp)
       }
     }
@@ -586,7 +589,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         id.typ = Some(t)
         (t, tenv)
       } else {
-        throw UnexpectedType(id.pos, "variable", "variable type set to new conflicting type", t)
+        throw UnexpectedType(id.pos, "variable", s"variable type set to new conflicting type : ${tenv(id)}", t)
       }
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
       case None => id.typ = defaultType; (defaultType.get, tenv.add(id, defaultType.get))

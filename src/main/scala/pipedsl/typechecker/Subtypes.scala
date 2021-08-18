@@ -42,8 +42,8 @@ object Subtypes {
     }
 
     def areEqual(t1: Type, t2: Type): Boolean =  (t1, t2) match {
-        case (TSizedInt(l1, u1), TBool()) => l1 == 1 && u1
-        case (TBool(), TSizedInt(l1, u1)) => l1 == 1 && u1
+        case (TSizedInt(l1, u1), TBool()) => l1.getLen == 1 && u1.unsigned()
+        case (TBool(), TSizedInt(l1, u1)) => l1.getLen == 1 && u1.unsigned()
         case (TSizedInt(l1, u1), TSizedInt(l2, u2)) => l1 == l2 && u1 == u2
         case (TMemType(e1, as1, r1, w1, rp1, wp1),
         TMemType(e2, as2, r2, w2, rp2, wp2))

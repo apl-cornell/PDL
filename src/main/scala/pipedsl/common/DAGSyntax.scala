@@ -276,7 +276,7 @@ object DAGSyntax {
     val defaultNum = conds.size
     val condVar = EVar(Id("__cond" + n.v))
     val intSize = log2(defaultNum)
-    condVar.typ = Some(TSizedInt(intSize, true))
+    condVar.typ = Some(TSizedInt(TBitWidthLen(intSize), TUnsigned()))
     condVar.id.typ = condVar.typ
     var eTernary = ETernary(conds(defaultNum - 1), EInt(defaultNum - 1, bits = intSize), EInt(defaultNum, bits = intSize))
     for(i <- defaultNum-2 to 0 by -1 ) {

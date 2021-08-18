@@ -1,7 +1,6 @@
 package pipedsl
 import scala.util.parsing.combinator._
 import common.Syntax._
-import common.Utilities._
 import common.Locks._
 import pipedsl.common.LockImplementation
 
@@ -9,6 +8,47 @@ import scala.util.matching.Regex
 
 class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   type P[T] = PackratParser[T]
+
+  private var bitVarCount = 0
+  private var namedTypeCount = 0
+
+  /*TODO: is this really the best way of doing this?*/
+  private var finalFail :Option[ParseResult[Any]] = None
+  /**
+   * set this to true to enable logging for shifts and reduces
+   */
+  private val debug = false
+
+  /**
+   * adds debugging info to a parser if [[debug]] is true
+   */
+  private def dlog[T](p: => P[T])(msg :String) :P[T] = if (debug) log(p)(msg) else p
+
+  /**
+   * wrap this around a parser for its failures to be recorded in a way to be
+   * reported to the user
+   */
+  private def failRecord[T](p: => P[T]) :P[T] = Parser {in =>
+    val r = p(in)
+   r match {
+     case Failure(msg, _) if msg != "Base Failure" =>
+       finalFail = Some(r)
+     case _ => ()
+   }
+   r
+  }
+
+  private def genBitVar() :TBitWidth =
+    {
+      bitVarCount += 1
+      TBitWidthVar(Id("__PARSER__BITWIDTH__" + bitVarCount))
+    }
+
+  private def genTypeVar() :TNamedType =
+    {
+      namedTypeCount += 1
+      TNamedType(Id("__PARSER__NAMED__" + namedTypeCount))
+    }
 
   // General parser combinators
   def braces[T](parser: P[T]): P[T] = "{" ~> parser <~ "}"
@@ -32,26 +72,34 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     "\"" ~> "[^\"]*".r <~ "\"" ^^ {n => EString(n)}
 
   private def toInt(n: Int, base: Int, bits: Option[Int], isUnsigned: Boolean): EInt = {
-    val e = EInt(n, base, if (bits.isDefined) bits.get else log2(n))
-    e.typ = Some(TSizedInt(e.bits, unsigned = isUnsigned))
+    val e = EInt(n, base, if (bits.isDefined) bits.get else  -1)
+    e.typ = bits match {
+      case Some(b) => Some(TSizedInt(TBitWidthLen(b), SignFactory.ofBool(!isUnsigned)))
+      /*The reason we pick out unsigned here is so that one can specify a*/
+      /*constant as unsigned while still letting the inference figure out*/
+      /*the bitwidth*/
+      case None if isUnsigned => Some(TSizedInt(genBitVar(), TUnsigned()))
+      case _ => Some(genTypeVar())
+    }
     e
   }
 
   // Atoms
-  lazy val dec: P[EInt] = "u".? ~ "-?[0-9]+".r ~ angular(posint).? ^^ {
+  lazy val dec: P[EInt] = positioned { "u".? ~ "-?[0-9]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(n.toInt, 10, bits, u.isDefined)
-  }
-  lazy val hex: P[EInt] = "u".? ~ "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ {
+  }}
+  lazy val hex: P[EInt] = positioned { "u".? ~ "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 16), 16, bits, u.isDefined)
-  }
-  lazy val octal: P[EInt] = "u".? ~ "0-?[0-7]+".r ~ angular(posint).? ^^ {
+  }}
+  lazy val octal: P[EInt] = positioned { "u".? ~ "0-?[0-7]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(1), 8), 8, bits, u.isDefined)
-  }
-  lazy val binary: P[EInt] = "u".? ~ "0b-?[0-1]+".r ~ angular(posint).? ^^ {
+  }}
+  lazy val binary: P[EInt] = positioned { "u".? ~ "0b-?[0-1]+".r ~ angular(posint).? ^^ {
     case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 2), 2, bits, u.isDefined)
-  }
+  }}
 
-  lazy val num: P[EInt] = dec | hex | octal | binary
+  lazy val num: P[EInt] = binary | hex | octal | dec ^^
+    { x: EInt => x.typ.get.setPos(x.pos); x }
 
   lazy val boolean: P[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
@@ -61,7 +109,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val variable: P[EVar] = positioned {
-    iden ^^ (id => EVar(id))
+    iden ^^ (id => { EVar(id)})
   }
 
   lazy val recAccess: P[Expr] = positioned {
@@ -80,16 +128,15 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     expr ~ braces(posint ~ ":" ~ posint) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
   }
 
-  lazy val ternary: P[Expr] = positioned {
-    parens(expr) ~ "?" ~ expr ~ ":" ~ expr ^^ { case c ~ _ ~ t ~ _ ~ v => ETernary(c, t, v) }
-  }
 
   lazy val cast: P[Expr] = positioned {
-    "cast" ~> parens(expr ~ "," ~ typ) ^^ {  case e ~ _ ~ t => ECast(t, e) }
+    "cast" ~> parens(expr ~ "," ~ typ) ^^ {  case e ~ _ ~ t =>  ECast(t, e) }
   }
 
   //UOps
   lazy val not: P[UOp] = positioned("!" ^^ { _ => NotOp() })
+
+  lazy val binv :P[UOp] = positioned("~" ^^ {_ => InvOp() } )
 
   lazy val mag: P[Expr] = positioned {
     "mag" ~> parens(expr) ^^ (e => EUop(MagOp(), e))
@@ -108,7 +155,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
 
   lazy val simpleAtom: P[Expr] = positioned {
     "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, None, args) } |
-      not ~ expr ^^ { case n ~ e => EUop(n, e) } |
+      not ~ simpleAtom ^^ { case n ~ e => EUop(n, e) } |
       neg |
       cast |
       mag |
@@ -116,16 +163,12 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       memAccess |
       bitAccess |
       recAccess |
-      ternary |
       recLiteral |
-      hex |
-      octal |
-      binary |
-      dec |
+      num |
       stringVal | 
       boolean ^^ (b => EBool(b)) |
       iden ~ parens(repsep(expr, ",")) ^^ { case f ~ args => EApp(f, args) } |
-      variable |
+      variable  |
       parens(expr)
   }
 
@@ -162,7 +205,11 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
 
 
   def parseOp(base: P[Expr], op: P[BOp]): P[Expr] = positioned {
-    chainl1[Expr](base, op ^^ (op => EBinop(op, _, _)))
+    chainl1[Expr](base, op ^^ (op => { EBinop(op, _, _)}))
+  }
+
+  lazy val ternary: P[Expr] = positioned {
+    parens(expr) ~ "?" ~ nontern ~ ":" ~ nontern ^^ { case c ~ _ ~ t ~ _ ~ v =>  ETernary(c, t, v) }
   }
 
   lazy val binMul: P[Expr] = parseOp(simpleAtom, mulOps)
@@ -175,15 +222,16 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val binAnd: P[Expr] = parseOp(binBOr, and)
   lazy val binOr: P[Expr] = parseOp(binAnd, or)
   lazy val binConcat: P[Expr] = parseOp(binOr, concat)
-  lazy val expr: Parser[Expr] = positioned(binConcat)
+  lazy val nontern: Parser[Expr] = positioned(binConcat)
+  lazy val expr :Parser[Expr] = ternary | nontern
+
+     
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
     speccall |
-    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r => n.typ = t; CAssign(n, r) } |
-      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t
-        CRecv(l, r)
-      } |
+    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
+      typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
@@ -192,10 +240,10 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       "reserve" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CLockOp(i, Reserved, t)} |
       "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired, None) } |
       "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None)} |
-      "print" ~> parens(repsep(expr, ",")) ^^ (e => CPrint(e)) |
+      "print" ~> parens(repsep(expr, ",")) ^^ (e => { CPrint(e)}) |
       "return" ~> expr ^^ (e => CReturn(e)) |
-      "output" ~> expr ^^ (e => COutput(e)) |
-      expr ^^ (e => CExpr(e)) 
+      "output" ~> expr ^^ (e => { COutput(e)}) |
+      expr ^^ (e => { CExpr(e)})
   }
   
   lazy val lockArg: P[LockArg] = positioned { 
@@ -252,24 +300,39 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val conditional: P[Command] = positioned {
-    "if" ~> parens(expr) ~ block ~ ("else" ~> blockCmd).? ^^ {
-      case cond ~ cons ~ alt => CIf(cond, cons, if (alt.isDefined) alt.get else CEmpty())
+    /*failRecord here since if there is a failure in the guard*/
+    /*we would like to see that. Without this it will be reported*/
+    /*in strange and magical places*/
+    failRecord("if" ~> parens(expr) ~ block ~ ("else" ~> blockCmd).? ^^ {
+      case cond ~ cons ~ alt => CIf(cond, cons, alt.getOrElse(CEmpty()))
+    })
+  }
+
+  lazy val parseEmpty: P[Command] =
+    {
+      "" ^^ {_ => CEmpty()}
     }
+
+  def printPos[T](p: => P[T])(tag :String) :P[T] = Parser {
+    in =>
+    println(tag + in.pos); p(in)
   }
 
   lazy val seqCmd: P[Command] = {
-    simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
       blockCmd ~ seqCmd ^^ { case c1 ~ c2 => CSeq(c1, c2) } |
-      simpleCmd <~ ";" | blockCmd | "" ^^ { _ => CEmpty() }
+      simpleCmd ~ ";" ~ seqCmd ^^ { case c1 ~ _ ~ c2 => CSeq(c1, c2) } |
+      simpleCmd <~ ";" | blockCmd
   }
 
-  lazy val cmd: P[Command] = positioned {
+  lazy val cmd: P[Command] = failRecord( positioned {
     seqCmd ~ "---" ~ cmd ^^ { case c1 ~ _ ~ c2 => CTBar(c1, c2) } |
-      seqCmd
-  }
+    "---" ~> cmd ^^ {c => CTBar(CEmpty(), c)} |
+    cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
+    seqCmd } )
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = false) } |
-  "uint" ~> angular(posint) ^^ { bits => TSizedInt(bits, unsigned = true) }
+
+  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TSigned() ) } |
+  "uint" ~> angular(posint) ^^ { bits =>  TSizedInt(TBitWidthLen(bits), TUnsigned() ) }
 
   lazy val latency: P[Latency.Latency] =
     "c" ^^ { _ => Latency.Combinational } |
@@ -277,7 +340,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     "a" ^^ { _ => Latency.Asynchronous }
 
   lazy val lat_and_ports: P[(Latency.Latency, Int)] =
-    latency ~ ((posint).?) ^^
+    latency ~ posint.? ^^
     {
       case lat ~ int => int match
       {
@@ -304,16 +367,15 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
           ((l1, i1), (l2, i2))
       } |
       "a" ~> intopt ^^
-      {
-        case n =>
-          val v :(Latency.Latency, Int) = (Latency.Asynchronous, n)
+        { n =>
+          val v: (Latency.Latency, Int) = (Latency.Asynchronous, n)
           (v, v)
-      }
+        }
 
   lazy val lockedMemory: P[Type] =
     sizedInt ~ brackets(posint) ~
       (angular(latsnports)
-      /*((latency ~ intopt) ~ ("," ~> (latency ~ intopt)))*/ ~ parens(iden).?).? ^^
+       ~ parens(iden).?).? ^^
       {
         case elem ~ size ~ lats =>
           if (lats.isDefined) {
@@ -337,14 +399,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       {
         case elem ~ size ~ ports ~ lock =>
           val mtyp = TMemType(elem, size, Latency.Asynchronous, Latency.Asynchronous, ports, ports)
-          lock match
-        {
-            case lk =>
-          //case Some(lk) =>
-            TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lk))
-//          case None =>
-//            TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
-        }
+          TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock))
 
       }
 
@@ -453,6 +508,16 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val prog: P[Prog] = positioned {
     extern.* ~ fdef.* ~ moddef.* ~ circuit ^^ {
       case e ~ f ~ p ~ c => Prog(e, f, p, c)
+    }
+  }
+
+
+  def parseCode(code :String) :Prog = {
+    val r = parseAll(prog, code)
+    r match {
+      case Success(program, _) => program
+      case x :Failure => throw new RuntimeException(finalFail.getOrElse(x).toString)
+      case x :Error => throw new RuntimeException(x.toString())
     }
   }
 }

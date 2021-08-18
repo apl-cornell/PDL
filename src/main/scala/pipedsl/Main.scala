@@ -3,6 +3,8 @@ package pipedsl
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.typesafe.scalalogging.Logger
+
+import scala.util.parsing.combinator._
 import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
@@ -10,7 +12,9 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
+import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
 import pipedsl.typechecker._
+
 
 object Main {
   val logger: Logger = Logger("main")
@@ -27,9 +31,9 @@ object Main {
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.memInit, config.port_warn, rfLockImpl = config.defaultRegLock)
+            config.debug, config.memInit, config.port_warn, config.autocast, rfLockImpl = config.defaultRegLock)
           case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn,
-            rfLockImpl = config.defaultRegLock)
+            config.autocast, rfLockImpl = config.defaultRegLock)
           case _ =>
         }
       }
@@ -43,11 +47,11 @@ object Main {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
     val p: Parser = new Parser(rflockImpl = rfLockImpl.getOrElse("RenameRF"))
-    val r = p.parseAll(p.prog, new String(Files.readAllBytes(inputFile.toPath)))
+    val prog = p.parseCode(new String(Files.readAllBytes(inputFile.toPath)))
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".parse"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
-    if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(r.get)
-    r.get
+    if (printOutput) new PrettyPrinter(Some(outputFile)).printProgram(prog)
+    prog
   }
   
   def interpret(maxIterations:Int, memoryInputs: Seq[String], inputFile: File, outDir: File,
@@ -59,7 +63,8 @@ object Main {
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
   
-  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean, rfLockImpl: Option[String] = None): (Prog, ProgInfo) = {
+  def runPasses(printOutput: Boolean, inputFile: File, outDir: File, port_warn :Boolean,
+      autocast: Boolean, rfLockImpl: Option[String] = None): (Prog, ProgInfo) = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
@@ -70,7 +75,8 @@ object Main {
     val pinfo = new ProgInfo(prog)
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
-      val canonProg = new CanonicalizePass().run(verifProg)
+      val canonProg1 = new CanonicalizePass().run(verifProg)
+      val canonProg = new TypeInference(autocast).checkProgram(canonProg1)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
@@ -139,8 +145,8 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-          memInit: Map[String, String],  portWarn: Boolean = false, rfLockImpl: Option[String] = None): Unit = {
-    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, portWarn, rfLockImpl = rfLockImpl)
+    memInit: Map[String, String],  portWarn: Boolean = false, autocast: Boolean, rfLockImpl: Option[String] = None): Unit = {
+    val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, portWarn, autocast, rfLockImpl = rfLockImpl)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
     //copies mem initialization to output directory

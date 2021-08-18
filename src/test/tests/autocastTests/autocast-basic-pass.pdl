@@ -1,0 +1,233 @@
+def helper1(a: int<32>, b:bool, c: String): int<32> {
+  d = a + 1<16>;
+  e = b && false;
+  if (e) {
+    f = c;
+  }
+  return d;
+}
+
+def helper2(a:bool, b: bool): bool {
+  c = a && b;
+  return c;
+}
+
+def ret_cast_test() :int<32>
+  {
+    b = 69<16>;
+    a = 15<12>;
+    return a + b;
+  }
+
+def ass_cast_test() :int<32>
+  {
+    a = 10<10>;
+    b = 5<10>;
+    int<32> c = a + b;
+    return c;
+  }
+
+def tern_cast_test(input :bool) :int<32>
+  {
+    a = 10<10>;
+    b = 1<30>;
+    d = ((input) ? (a) : (b));
+    return d;
+  }
+
+pipe app_cast()[]
+  {
+    s = "owgeu";
+    a = helper1(10<5>, true, s);
+    call app_cast();
+  }
+
+pipe phelper1(a: int<32>, b:bool, c: String)[]: int<32>
+{
+  d = a + 1<16>;
+  e = b && false;
+  if (e) {
+    f = c;
+  }
+  output(d);
+}
+
+
+pipe call_cast()[]
+  {
+    s = "owgeu";
+    a <- call phelper1(10<19>, true, s);
+    ---
+    call call_cast();
+  }
+
+pipe output_cast()[] :int<32>
+  { output(10<5>); }
+
+
+
+pipe recv_cast1(input :uint<32>)[rf :int<32>[32]]
+  {
+    start(rf);
+    reserve(rf[input], W);
+    end(rf);
+    ---
+    int<10> a = 4;
+    block(rf[input]);
+    rf[input] <- a;
+    ---
+    release(rf[input]);
+    call recv_cast1(input);
+  }
+
+pipe recv_cast2()[]
+  {
+    int<32> a <- 5<12>;
+    call recv_cast2();
+  }
+
+
+pipe test1(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  }
+  call test1(input);
+}
+
+pipe test2(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  } else {
+    d = b;
+  }
+  call test2(input);
+}
+
+pipe test3()[] {
+  a = true;
+  b = a;
+  c = a || b;
+  d = c || b;
+  if (c) {
+    e = 1<32>;
+  }
+  if (d) {
+    f = 1<32>;
+  }
+  call test3();
+}
+
+pipe test4()[] {
+  a = true;
+  b = false;
+  c = a == b;
+  d = 5<32>;
+  e = 6<32>;
+  f = e==d;
+  if (c) {
+
+  }
+  if (f) {
+
+  }
+  call test4();
+}
+
+pipe test5()[] {
+  a = 5<32>;
+  b = 6<32>;
+  c = a + b;
+  d = cast(c * b, int<32>);
+  e = c / d;
+  f = e % d;
+  g = e - f;
+  h = g > f;
+  i = g <= f;
+  j = h && i;
+  if (j) {
+
+  }
+  call test5();
+}
+
+
+pipe test6(input: int<32>)[rf: int<32>[32]] {
+  a = input;
+  b = true;
+  c = b;
+  if (c) {
+    d = a + 5<32>;  
+  } else {
+    d = b;
+  }
+  call test6(input);
+}
+
+pipe test7()[rf: uint<32>[32]] {
+  a = 1;
+  b = a;
+  start(rf);
+  acquire(rf[a], R);
+  c <- rf[a];
+  release(rf[a]);
+  end(rf);
+  ---
+  d = c == a;
+  e = d && d;
+  call test7();
+} 
+
+pipe test8()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = true;
+  c = false;
+  if (helper2(helper2(b, c),b)) {
+    d = a;
+  }
+  f = a;
+  s = "yES";
+  e = helper1(f, helper2(b, c), s);
+  if (e==f) {
+
+  }
+  call test8();
+}
+
+pipe test9()[rf: int<32>[32]] {
+  a = true || false;
+  b = a;
+  c = b ;
+  d = b && c;
+  e = (b) ? d : c;
+  if (!e) {
+
+  }
+  call test9();
+}
+
+pipe test10(a: bool, b: int<32>)[rf: int<32>[32]]: int<32> {
+  output(5<32>);
+}
+
+pipe test11()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = 10<32>;
+  c = a + b;
+  d = false;
+  e = true;
+  f = e || d;
+  g <- call test10(f, c);
+  ---
+  h = g == b;
+  call test11();
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

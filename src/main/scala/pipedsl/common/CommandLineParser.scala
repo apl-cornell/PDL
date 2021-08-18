@@ -18,6 +18,7 @@ object CommandLineParser {
     defaultRegLock: Option[String] = None,
     memInit: Map[String, String] = Map(),
     port_warn: Boolean = false,
+    autocast :Boolean = false,
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -41,6 +42,9 @@ object CommandLineParser {
         opt[Unit]('p', "portwarn")
           .action((_, c) => c.copy(port_warn = true))
           .text("Throw errors for port conflicts between stages"),
+        opt[Unit]('a', "autocast")
+          .action((_, c) => c.copy(autocast = true))
+          .text("Insert casts to allow for subtyping of integers"),
         opt[String]("addrLockModule")
           .text("The BSV Module to use for address locks")
           .action((s, c) => c.copy(defaultAddrLock = Some(s))),

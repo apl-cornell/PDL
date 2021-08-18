@@ -1,0 +1,18 @@
+pipe test10(a: bool, b: int<32>)[rf: int<32>[32]]: int<32> {
+  output(5<32>);
+}
+
+pipe test11()[rf: int<32>[32]] {
+  a = 5<32>;
+  b = 10<32>;
+  c = a + b;
+  d = false;
+  e = true;
+  f = e || d;
+  g = call test10(c, c);
+  h = g == b;
+}
+
+circuit {
+    r = memory(int<32>, 32);
+}

@@ -5,6 +5,10 @@ import Security._
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
+import pipedsl.typechecker.Subtypes
+
+
+
 
 
 object Syntax {
@@ -15,6 +19,7 @@ object Syntax {
     sealed trait TypeAnnotation {
       var typ: Option[Type] = None
     }
+
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
@@ -35,6 +40,14 @@ object Syntax {
     {
       var portNum :Option[Int] = None
     }
+  }
+
+  /**
+   * forces us to implement .copyMeta() for things that should have it
+   */
+  sealed trait HasCopyMeta
+  {
+    val copyMeta : HasCopyMeta => HasCopyMeta = x => x
   }
 
   object Latency extends Enumeration {
@@ -82,14 +95,20 @@ object Syntax {
 
   case class Id(v: String) extends Positional with TypeAnnotation {
     override def toString = s"$v"
+    def copyMeta(from :Id) :Id =
+      {
+        setPos(from.pos)
+        typ = from.typ
+        this
+      }
   }
 
-  sealed trait Type extends Positional with LabelAnnotation with SpeculativeAnnotation {
+  sealed trait Type extends Positional with LabelAnnotation with SpeculativeAnnotation with HasCopyMeta {
     override def toString: String = this match {
       case _: TVoid => "void"
       case _: TBool => "bool"
       case _: TString => "String"
-      case TSizedInt(l, un) => s"${if (un) "u" else ""}bit<$l>"
+      case TSizedInt(l, un) => s"${if (un.unsigned()) "u" else ""}bit<$l>"
       case TFun(args, ret) => s"${args.mkString("->")} -> ${ret}"
       case TRecType(n, _) => s"$n"
       case TMemType(elem, size, rLat, wLat, rPorts, wPorts) =>
@@ -100,18 +119,173 @@ object Syntax {
       case TRequestHandle(m, _) => s"${m}_Request"
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
-      case TObject(name, tparams, methods) => "TODO"
+      case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")"
+      case TBitWidthLen(len) => len.toString
+      case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")"
+      case TBitWidthVar(name) => "bitVar(" + name + ")"
+      case t :TSignedNess => t match
+      {
+        case TSigned() => "signed"
+        case TUnsigned() => "unsigned"
+        case TSignVar(name) => "sign(" + name + ")"
+      }
+      case TObject(name, tparams, methods) => "TODO"        
     }
+
+    /**
+     * function to copy metadata for types.
+     * TODO: can we make this happen whenever .copy() is called? that would be really cool
+     * if you want .copy() to work the way you might think it does you MUST do
+     * a.copy(...).copyMeta(a);
+     */
+    override val copyMeta: HasCopyMeta => Type =
+      {
+        case from :Type =>
+          setPos(from.pos)
+          lbl = from.lbl
+          maybeSpec = from.maybeSpec
+          this
+      }
+
+    /**
+     * operator to calculate some semblance of a meet of this and that
+     * hex code 2293 :)
+     */
+    def ⊓(that:Type) :Type = this match
+    {
+      case ness: TSignedNess => ness match
+      {
+        case TSignVar(id1) => that match
+        {
+          case TSignVar(id2) => if (id1.v != id2.v) throw TypeMeetError(this, that) else this
+          case _ => that
+        }
+        case TSigned() => if (that.isInstanceOf[TUnsigned]) throw TypeMeetError(this, that) else this
+        case TUnsigned() => if (that.isInstanceOf[TSigned]) throw TypeMeetError(this, that) else this
+        case _ => throw TypeMeetError(this, that)
+      }
+      case TSizedInt(len1, sign1) => that match
+      {
+        case TSizedInt(len2, sign2) =>
+          TSizedInt((len1 ⊓ len2).asInstanceOf[TBitWidth], (sign1 ⊓ sign2).asInstanceOf[TSignedNess])
+        case TNamedType(_) => this
+        case _ =>  throw TypeMeetError(this, that)
+      }
+      case TFun(args1, ret1) => that match {
+        case TFun(args2, ret2) =>
+          TFun(args1.zip(args2).map(t1t2 => t1t2._1 ⊓ t1t2._2), ret1 ⊓ ret2)
+        case _ => throw TypeMeetError(this, that)
+      }
+      case _ :TRecType => if (this == that) this else throw TypeMeetError(this, that)
+      case _ :TMemType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TModType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TLockedMemType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TRequestHandle =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case TNamedType(name) =>
+        that match {
+          case TNamedType(name2) => if (name.v == name2.v) this else throw TypeMeetError(this, that)
+          case _ => that
+        }
+      case TMaybe(btyp) => that match {
+        case TMaybe(btyp2) => TMaybe(btyp ⊓ btyp2)
+        case _ => throw TypeMeetError(this, that)
+      }
+      case width: TBitWidth => that match {
+        case w2 :TBitWidth => (width, w2) match {
+          case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(Math.max(l1, l2))
+          case (w1, w2) if w1 ==== w2 => w1
+          case _ => TBitWidthMax(width, w2)
+        }
+        case _ => throw TypeMeetError(this, that)
+      }
+      case _ => if (this.getClass == that.getClass) this else throw TypeMeetError(this, that)
+    }
+
+    /**
+     * operator for type equality. basically sugar for Subtypes.areEqual
+     * four equal signs instead of three so that JS users don't feel too welcome
+     */
+    def ====(that:Type) :Boolean = Subtypes.areEqual(this, that)
+
+    /**
+     * operator for type inequality
+     */
+    def =!=(that :Type) :Boolean = !(this ==== that)
+
+    /**
+     * operator to check subtypes. Again basically sugar
+     */
+    def <<=(that :Type) :Boolean = Subtypes.isSubtype(this, that)
+
+    /**
+     * operator to check supertypes. More sugar
+     */
+    def >>=(that :Type) :Boolean = Subtypes.isSubtype(that, this)
+
+    /**
+     * alias for ⊓ in case someone doesn't wanna type that
+     */
+    def meet(that :Type) :Type = ⊓(that)
   }
   // Types that can be upcast to Ints
   sealed trait IntType
-  case class TSizedInt(len: Int, unsigned: Boolean) extends Type with IntType
+  sealed trait TSignedNess extends Type
+  {
+    def signed() :Boolean = this match
+    {
+      case TSigned() => true
+      case TUnsigned() => false
+      case _ => false
+    }
+    def unsigned() :Boolean = this match {
+      case TSigned() => false
+      case TUnsigned() => true
+      case _ => false
+    }
+  }
+  object SignFactory
+  {
+    def ofBool(signed :Boolean) :TSignedNess =
+      {
+        if(signed) TSigned() else TUnsigned()
+      }
+  }
+  case class TSigned() extends TSignedNess
+  case class TUnsigned() extends TSignedNess
+  case class TSignVar(id :Id) extends TSignedNess
+  case class TSizedInt(len: TBitWidth, sign: TSignedNess) extends Type with IntType
+  {
+    override def setPos(newpos: Position): TSizedInt.this.type =
+      {
+        sign.setPos(newpos)
+        super.setPos(newpos)
+      }
+  }
   // Use case class instead of case object to get unique positions
   case class TString() extends Type
   case class TVoid() extends Type
   case class TBool() extends Type
   case class TFun(args: List[Type], ret: Type) extends Type
+  {
+    override def setPos(newpos: Position): TFun.this.type =
+      {
+        args.foreach(a => a.setPos(newpos))
+        ret.setPos(newpos)
+        super.setPos(newpos)
+      }
+  }
   case class TRecType(name: Id, fields: Map[Id, Type]) extends Type
+  {
+    override def setPos(newpos :Position) :TRecType.this.type =
+      {
+        fields.foreach(idtp => idtp._2.setPos(newpos))
+        super.setPos(newpos)
+      }
+  }
   case class TMemType(elem: Type,
                       addrSize: Int,
                       readLatency: Latency = Latency.Asynchronous,
@@ -124,6 +298,15 @@ object Syntax {
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
   case class TMaybe(btyp: Type) extends Type
+  sealed trait TBitWidth extends Type
+  {
+    def getLen :Int = this.matchOrError(this.pos, "bit width", "bit width len")
+    { case l : TBitWidthLen => l.len}
+  }
+  case class TBitWidthVar(name: Id) extends TBitWidth
+  case class TBitWidthLen(len: Int) extends TBitWidth
+  case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,TFun]) extends Type
 
   /**
@@ -158,6 +341,7 @@ object Syntax {
 
   def NegOp(): NumUOp = NumUOp("-")
   def NotOp(): BoolUOp = BoolUOp("!")
+  def InvOp(): BitUOp = BitUOp("~")
   def MagOp(): NumUOp = NumUOp("abs")
   def SignOp(): NumUOp = NumUOp("signum")
   def AndOp(e1: Expr,e2: Expr): EBinop = EBinop(BoolOp("&&", OpConstructor.and), e1,e2)
@@ -166,7 +350,7 @@ object Syntax {
 
   sealed trait BOp extends Positional {
     val op: String;
-    override def toString = this.op
+    override def toString: String = this.op
     def operate(v1: Any, v2: Any): Option[Any] = this match {
       case n: NumOp => Some(n.fun(v1.asInstanceOf[Number].intValue(),
         v2.asInstanceOf[Number].intValue()))
@@ -196,7 +380,7 @@ object Syntax {
   case class BitOp(op: String, fun: (Int, Int) => Int) extends BOp
 
   sealed trait Expr extends Positional with TypeAnnotation with PortAnnotation {
-    def isLVal = this match {
+    def isLVal: Boolean = this match {
       case _:EVar => true
       case _:EMemAccess => true
       case _ => false
@@ -204,6 +388,7 @@ object Syntax {
     def copyMeta(from: Expr): Expr = {
       setPos(from.pos)
       typ = from.typ
+      portNum = from.portNum
       this
     }
   }
@@ -230,9 +415,22 @@ object Syntax {
   case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr]) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
+  {
+    typ = Some(ctyp)
+  }
 
 
-  sealed trait Command extends Positional with SMTPredicate with PortAnnotation
+  sealed trait Command extends Positional with SMTPredicate with PortAnnotation with HasCopyMeta
+  {
+    override val copyMeta: HasCopyMeta => Command =
+      {
+        case from :Command =>
+        setPos(from.pos)
+        portNum = from.portNum
+        predicateCtx = from.predicateCtx
+        this
+      }
+  }
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
@@ -297,7 +495,17 @@ object Syntax {
     inputs: List[Param],
     modules: List[Param],
     ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation
+    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+    {
+      override val copyMeta: HasCopyMeta => ModuleDef =
+        {
+          case from :ModuleDef =>
+          maybeSpec = from.maybeSpec
+          isRecursive = from.isRecursive
+          pos = from.pos
+          this
+        }
+    }
 
   case class Param(name: Id, typ: Type) extends Positional
 
