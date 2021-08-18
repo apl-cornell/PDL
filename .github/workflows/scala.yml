@@ -37,7 +37,7 @@ jobs:
            sudo apt-get install iverilog
            git clone --recursive https://github.com/B-Lang-org/bsc
            pushd bsc
-           make install
+           make install-src
            popd
     - name: Build Libs
       env:
