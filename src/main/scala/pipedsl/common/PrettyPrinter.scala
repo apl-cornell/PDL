@@ -127,7 +127,7 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"
     case Syntax.ETernary(cond, tval, fval) => printExprToString(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
-    case Syntax.ECall(id, args) => "call " + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
+    case Syntax.ECall(id, name, args) => "call " + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.EVar(id) => id.v
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
@@ -139,7 +139,7 @@ class PrettyPrinter(output: Option[File]) {
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
       case CirLock(mem, impl, sz) => impl.toString + "(" + mem.v + ")" +
         "<" + sz.map(a => a.toString).mkString(",") + ">"
-      case CirNew(mod, mods) => "new " + mod.v +
+      case CirNew(mod, mods, _) => "new " + mod.v +
         "[" + mods.map(m => m.v).mkString(",") + "]"
       case CirCall(mod, args) => "call " + mod.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     }

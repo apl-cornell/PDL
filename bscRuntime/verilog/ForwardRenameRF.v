@@ -2,13 +2,12 @@
 `else
 `define BSV_ASSIGNMENT_DELAY
 `endif
-
 `ifdef BSV_RESET_VALUE
 `else
  `define BSV_RESET_VALUE 1
 `endif
 
-module RenameRF(CLK,
+module ForwardRenameRF(CLK,
 		RST,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //rename req
 		ADDR_1, NAME_OUT_1,         //read name 1
@@ -109,12 +108,19 @@ module RenameRF(CLK,
    assign NAME_OUT_1 = names[ADDR_1];
    assign NAME_OUT_2 = names[ADDR_2];
 
+   //Forward from either write port to read port
+   wire FWD11, FWD12, FWD21, FWD22;   
+   assign FWD11 = WE_1 & (NAME_IN_1 == NAME_1);
+   assign FWD21 = WE_2 & (NAME_IN_2 == NAME_1);
+   assign FWD12 = WE_1 & (NAME_IN_1 == NAME_2);
+   assign FWD22 = WE_2 & (NAME_IN_2 == NAME_2);
+   
    //Read data
-   assign D_OUT_1 = phys[NAME_1];
-   assign D_OUT_2 = phys[NAME_2];
+   assign D_OUT_1 = (FWD11) ? D_IN_1 : ((FWD21) ? D_IN_2 : phys[NAME_1]);
+   assign D_OUT_2 = (FWD12) ? D_IN_1 : ((FWD22) ? D_IN_2 : phys[NAME_2]);
    //Readiness of data
-   assign VALID_OUT_1 = !busy[VALID_NAME_1];
-   assign VALID_OUT_2 = !busy[VALID_NAME_2];   
+   assign VALID_OUT_1 = FWD11 | FWD21 | !busy[VALID_NAME_1];
+   assign VALID_OUT_2 = FWD12 | FWD22 | !busy[VALID_NAME_2];   
    
    //For freeing old name
    wire [name_width - 1 : 0]   oldName;

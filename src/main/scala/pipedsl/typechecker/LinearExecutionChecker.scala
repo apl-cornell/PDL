@@ -26,6 +26,9 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
 
   override def emptyEnv(): Environments.Environment[Id, Z3AST] = null
 
+  override def checkExt(e: ExternDef,
+    env: Environments.Environment[Id, Z3AST]): Environments.Environment[Id, Z3AST] = env
+
   /* functions do not have any out of order properties, so we don't need to */
   /* check them */
   override def checkFunc(f: FuncDef,
@@ -62,7 +65,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
           for (caseObj <- cases) checkCommand(caseObj.body)
           checkCommand(default)
         case COutput(_) => verifyRecursive(c.predicateCtx.get, c.pos)
-        case CVerify(_, args, _) =>
+        case CVerify(_, args, _, _) =>
           val pred = c.predicateCtx.get
           args.foreach(a => checkExpr(a, pred))
           verifyRecursive(c.predicateCtx.get, c.pos)
@@ -84,7 +87,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
     case EApp(_, args) =>
       args.foreach(e => checkExpr(e, predicate))
     case ECast(_, exp) => checkExpr(exp, predicate)
-    case ECall(mod, args) =>
+    case ECall(mod, name, args) =>
       args.foreach(a => checkExpr(a, predicate))
       if(mod == currentPipe)
         verifyRecursive(predicate, e.pos)

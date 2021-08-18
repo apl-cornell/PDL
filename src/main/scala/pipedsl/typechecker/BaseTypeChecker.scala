@@ -17,6 +17,18 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   
   override def emptyEnv(): Environment[Id,Type] = Environments.EmptyTypeEnv
 
+  //Add these named types to the env
+  override def checkExt(e: ExternDef, env: Environment[Id, Type]): Environment[Id, Type] = {
+    val ftyps = e.methods.foldLeft(Map[Id, TFun]())((ms, m) => {
+      val typList = m.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
+      val ftyp = TFun(typList, m.ret)
+      ms + (m.name -> ftyp)
+    })
+    val typ = TObject(e.name, e.typParams, ftyps)
+    e.typ = Some(typ)
+    env.add(e.name, typ)
+  }
+
   /**
    * This does the base type checking and well-fomedness checking for a given function with
    * an environment (that may have other function types defined already).
@@ -157,11 +169,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(ltyp)
       (ltyp, tenv)
     }
-    case CirLock(mem, lockimpl, _) => {
+    case CirLock(mem, lockimpl, idsz) => {
       val mtyp: TMemType = tenv(mem).
         matchOrError(mem.pos, "lock instantiation", "memory") { case c: TMemType => c }
       mem.typ = Some(mtyp)
-      val newtyp = TLockedMemType(mtyp, None, lockimpl)
+      val newtyp = TLockedMemType(mtyp, idsz.headOption, lockimpl)
       c.typ = Some(newtyp)
       (newtyp, tenv)
     }
@@ -177,7 +189,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(ltyp)
       (ltyp, tenv)
     }
-    case CirNew(mod, mods) => {
+    case CirNew(mod, mods, _) => {
       val mtyp = tenv(mod)
       mtyp match {
         case TModType(_, refs, _, _) => {
@@ -193,6 +205,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           (mtyp, tenv)
         }
+        case TObject(_, _, _) => (mtyp, tenv)
         case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
       }
     }
@@ -258,7 +271,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     }
     case CRecv(lhs, rhs) => {
       val (rTyp, renv) = checkExpression(rhs, tenv, None)
-      val (lTyp, lenv) = checkExpression(lhs, renv, None)
+      val (lTyp, lenv) = checkExpression(lhs, renv, Some(rTyp))
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "recv", lTyp, rTyp)
     }
@@ -308,7 +321,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
       }
     }
-    case CVerify(handle, args, preds) =>
+    case CVerify(handle, args, preds, upd) =>
+      //if there's an update clause check that stuff:
+      if (upd.isDefined) {
+        checkExpression(upd.get, tenv, None)
+      }
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -338,6 +355,40 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               }
           }
           tenv
+      }
+    case CUpdate(newHandle, handle, args, preds) =>
+      //TODO solve the fact that this is just verify copypasta-ed
+      //check that handle has been created via speccall and that arg types line up
+      val (htyp, _) = checkExpression(handle, tenv, None)
+      htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
+        case TRequestHandle(mod, RequestType.Speculation) =>
+          val mtyp = tenv(mod)
+          mtyp match {
+            case TModType(inputs, _, _, _) =>
+              if (inputs.length != args.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, args.length)
+              }
+              if (inputs.length != preds.length) {
+                throw ArgLengthMismatch(c.pos, inputs.length, preds.length)
+              }
+              inputs.zip(args).foreach {
+                case (expectedT, a) =>
+                  val (atyp, _) = checkExpression(a, tenv, None)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, a.toString, expectedT, atyp)
+                  }
+              }
+              inputs.zip(preds).foreach {
+                case (expectedT, p) =>
+                  val (atyp, _) = checkExpression(p, tenv, None)
+                  if (!isSubtype(atyp, expectedT)) {
+                    throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
+                  }
+              }
+          }
+          newHandle.typ = Some(htyp)
+          newHandle.id.typ = Some(htyp)
+          tenv.add(newHandle.id, htyp)
       }
     case CInvalidate(handle) =>
       val (htyp, _) = checkExpression(handle, tenv, None)
@@ -495,7 +546,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }
     }
-    case ECall(mod, args) => {
+    case ECall(mod, name, args) => {
       val mtyp = tenv(mod)
       mod.typ = Some(mtyp)
       mtyp match {
@@ -512,6 +563,23 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           (if (retType.isDefined) retType.get else TVoid(), tenv)
         }
+        case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) => {
+          val mtyp = methods(name.get)
+          val inputs = mtyp.args
+          val retType = mtyp.ret
+          //TODO refactor and pull into function since it is same as above
+          if (inputs.length != args.length) {
+            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+          }
+          inputs.zip(args).foreach {
+            case (expectedT, a) =>
+              val (atyp, aenv) = checkExpression(a, tenv, None)
+              if (!isSubtype(atyp, expectedT)) {
+                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+              }
+          }
+          (retType, tenv)
+        }
         case _ => throw UnexpectedType(mod.pos, "module name", "module type", mtyp)
       }
     }
@@ -524,7 +592,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedType(id.pos, "variable", s"variable type set to new conflicting type : ${tenv(id)}", t)
       }
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)
-      case None => id.typ = defaultType; (defaultType.get, tenv)
+      case None => id.typ = defaultType; (defaultType.get, tenv.add(id, defaultType.get))
     }
     case ECast(totyp, exp) =>
       val (etyp, tenv2) = checkExpression(exp, tenv, None)

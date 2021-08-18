@@ -70,6 +70,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
       val res = EMemAccess(mem, newArg, wm).setPos(em.pos)
       res.typ = em.typ
       res.memOpType = em.memOpType
+      res.portNum = em.portNum
       res
     case et@ETernary(cond, tval, fval) =>
       val ncond = modifyMemArg(cond, isLhs)
@@ -87,9 +88,9 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
       val newapp = EApp(f, newargs).setPos(ea.pos)
       newapp.typ = ea.typ
       newapp
-    case ec@ECall(p, args) =>
+    case ec@ECall(p, name, args) =>
       val newargs = args.foldLeft(List[Expr]())((args, a) => args :+ modifyMemArg(a, isLhs))
-      val newcall = ECall(p, newargs).setPos(ec.pos)
+      val newcall = ECall(p, name, newargs).setPos(ec.pos)
       newcall.typ = ec.typ
       newcall
     case eb@EBinop(o, e1, e2) =>
@@ -149,6 +150,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
         val newSend = IMemWrite(mem, newVar, data).setPos(im.pos)
+        newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         List(newAssn, newSend)
       case _ => List(c)
@@ -163,21 +165,25 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         val i = ICheckLockFree(c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
       case Reserved =>
         val i = IReserveLock(lockVar(c.mem), c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
       case Acquired =>
         val i = ICheckLockOwned(c.mem, lockVar(c.mem)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
       case Released =>
         val i = IReleaseLock(c.mem, lockVar(c.mem)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
+        i.portNum = c.portNum
         i
     }
 

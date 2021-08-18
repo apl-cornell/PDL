@@ -21,17 +21,30 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
 
   override def emptyEnv(): Environment[Id, Z3AST] = ConditionalEnv(ctx = ctx)
 
+  override def checkExt(e: ExternDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+
   //No Speculation in Functions
   override def checkFunc(f: FuncDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+
+  type Status = Int;
+  private val INIT = 0
+  private val STARTED = 1
+  private val RESOLVED = 2
 
   override def checkModule(m: ModuleDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
     if (m.maybeSpec) {
       val finalSpec = checkSpecOps(m.body, Unknown)
       if (finalSpec != NonSpeculative) throw UnresolvedSpeculation(m.pos)
-      val finalEnv = checkResolved(m.body, env)
+      val specIds = getSpecIds(m.body, Set())
+      val startEnv = specIds.foldLeft(env)((e, id) => {
+        if (e.get(id).isEmpty) {
+          e.add(id, makeEquals(id, state = INIT))
+        } else { e }
+      })
+      val finalEnv = checkResolved(m.body, startEnv)
       //check that all spechandles are definitely resolved
       finalEnv.getMappedKeys().foreach(k => {
-        checkResolved(k, finalEnv, ctx.mkTrue(), expected = true)
+        checkResolved(k, finalEnv, ctx.mkTrue(), expected = RESOLVED,INIT)
       })
     }
     env
@@ -82,8 +95,10 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CCheckSpec(isBlocking) => if (s != Unknown)  throw IllegalSpeculativeOperation(c.pos, Unknown.toString)
       if (isBlocking) { NonSpeculative }
       else { Speculative }
-    case CVerify(_, _, _) if s != NonSpeculative =>
+    case CVerify(_, _, _,_) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
+    case CUpdate(_, _, _, _) if s == Unknown =>
+      throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
     case CInvalidate(_) => s // can always invalidate speculation
     case COutput(_) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
@@ -97,6 +112,25 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case _ => s
   }
 
+  private def getSpecIds(c: Command, env: Set[Id] ): Set[Id] = c match {
+    case CSeq(c1, c2) => getSpecIds(c2, getSpecIds(c1, env))
+    case CTBar(c1, c2) => getSpecIds(c2, getSpecIds(c1, env))
+    case CIf(_, cons, alt) =>
+      getSpecIds(cons, env) ++ getSpecIds(alt, env)
+    case CSplit(cases, default) =>
+      cases.foldLeft[Set[Id]](getSpecIds(default, env))((menv, cobj) => {
+        getSpecIds(cobj.body, menv)
+      })
+    case CSpecCall(handle, _, _) =>
+      env + handle.id
+    case CVerify(handle, _, _, _) =>
+      env + handle.id
+    case CUpdate(nh, handle, _, _) =>
+      env + handle.id + nh.id
+    case CInvalidate(handle) =>
+      env + handle.id
+    case _ => env
+  }
   /**
    * This checks whether or not a parent that creates speculative events
    * actually resolves them later or not. And it must resolve them exactly once
@@ -118,26 +152,38 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         //merge logic lives in Environments (conjunction of branches)
         menv.intersect(checkResolved(cobj.body, env))
       })
-    case CSpecCall(handle, _, _) => env.add(handle.id,
-      mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, isResolved = false)))
-    case CVerify(handle, _, _) =>
-      checkResolved(handle.id, env, c.predicateCtx.get, expected = false)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, isResolved = true)))
+    case CSpecCall(handle, _, _) =>
+      checkResolved(handle.id, env, c.predicateCtx.get, expected = INIT)
+      env.add(handle.id,
+      mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = STARTED)))
+    case CVerify(handle, _, _, _) =>
+      checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
+      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
+    case CUpdate(nh, handle, _, _) =>
+      //"reolves" the current spec but starts a new one
+      checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
+      checkResolved(nh.id, env, c.predicateCtx.get, expected = INIT)
+      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED))).add(
+        nh.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(nh.id, state = STARTED))
+      )
     case CInvalidate(handle) =>
-      checkResolved(handle.id, env, c.predicateCtx.get, expected = false)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, isResolved = true)))
+      checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
+      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
     case _ => env
   }
 
   override def checkCircuit(c: Circuit, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
 
-  private def makeEquals(specId: Id, isResolved: Boolean): Z3BoolExpr = {
-    ctx.mkEq(ctx.mkBoolConst(specId.v), ctx.mkBool(isResolved))
+  private def makeEquals(specId: Id, state: Status): Z3BoolExpr = {
+    ctx.mkEq(ctx.mkIntConst(specId.v), ctx.mkInt(state))
   }
 
-  private def checkResolved(specId: Id, env: Environment[Id, Z3AST], preds: Z3BoolExpr, expected: Boolean): Unit = {
+  private def checkResolved(specId: Id, env: Environment[Id, Z3AST], preds: Z3BoolExpr, expected: Status*): Unit = {
     //Prove that the UNexpected, CAN'T happen
-    val expResolved = ctx.mkNot(makeEquals(specId, expected))
+    val expectedStates = expected.foldLeft(ctx.mkFalse())((ast, e) => {
+      ctx.mkOr(ast, makeEquals(specId, e))
+    })
+    val expResolved = ctx.mkNot(expectedStates)
     //Assume current context predicates
     solver.add(ctx.mkEq(preds, ctx.mkTrue()))
     //Assert current state of the speculation based on env and what we expect not to happen
@@ -147,7 +193,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     check match {
         //error! bad thing can happen
       case Z3Status.SATISFIABLE =>
-        if (expected) {
+        if (expected.contains(RESOLVED)) {
           throw UnresolvedSpeculation(specId.pos)
         } else {
           throw AlreadyResolvedSpeculation(specId.pos)

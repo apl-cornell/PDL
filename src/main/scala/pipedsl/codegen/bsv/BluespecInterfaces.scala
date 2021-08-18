@@ -2,8 +2,9 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
+import pipedsl.common.Syntax.TLockedMemType
 
-class BluespecInterfaces(val addrlockmod: Option[String]) {
+class BluespecInterfaces() {
 
   val topModTyp: BInterface = BInterface("TopMod")
 
@@ -93,45 +94,20 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val lockRegionType = "Reg"
   private val lockRegionModule = "mkReg"
   private val lockType = "Lock"
-  private val lockModuleName = "mkLock"
-  private val addrLockType = "AddrLock"
-  private val addrLockModuleName = if (addrlockmod.isDefined) addrlockmod.get else "mkFAAddrLock"
 
   def getLockRegionType: BInterface = {
     BInterface(lockRegionType, List(BVar("busy", BBool)))
   }
-
   //lock regions are, by default, available
   def getLockRegionModule: BModule = {
     BModule(lockRegionModule, List(BBoolLit(true)))
   }
-
-  def getLockType(ht: BSVType): BInterface = {
-    BInterface(lockType, List(BVar("idsize", ht)))
-  }
-
-  def getAddrLockType(ht: BSVType, elemtyp: BSVType, sz: Int = 4): BInterface = {
-    BInterface(addrLockType,
-      List(BVar("idsize", ht), BVar("addrtyp", elemtyp), BVar("numentries", BNumericType(sz))))
-  }
-
-  /**
-  def getLockModule(typ: BSVType): BModule = typ match {
-    case BInterface(lt, _) if lt == lockType => BModule(lockModuleName, List())
-    case BInterface(lt, _) if lt == addrLockType => BModule(addrLockModuleName, List())
-    case BInterface(lt, _) => BModule(lt, List())
-    case _ => throw UnexpectedBSVType("Expected a lock interface type")
-  }
-  **/
-
   def getStart(mod: BVar): BStatement = {
     BModAssign(mod, BBoolLit(false))
   }
-
   def getStop(mod: BVar): BStatement = {
     BModAssign(mod, BBoolLit(true))
   }
-
   //the lockstate is represented by a boolean:
   //true => available, false => busy
   def getCheckStart(mod: BVar): BExpr = {
@@ -229,11 +205,13 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
       case 2 => BMethodInvoke(mem, memAsync2PeekName2, List(handle))
     }
   }
-  def getCombRead(mem: BVar, addr: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memCombReadName, List(addr))
+  def getCombRead(mem: BVar, addr: BExpr, port: Option[Int]): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, memCombReadName + portString, List(addr))
   }
-  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr): BMethodInvoke = {
-    BMethodInvoke(mem, memCombWriteName, List(addr, data))
+  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr, port: Option[Int]): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, memCombWriteName + portString, List(addr, data))
   }
 //  def getMemReq(mem: BVar, writeMask: Option[BExpr], addr: BExpr, data: Option[BExpr]): BMethodInvoke = {
 //    val isWrite = data.isDefined
@@ -298,9 +276,8 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
   private val specModuleName = "mkSpecTable"
   private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
-  private val specCheckName = "check"
-  private val specNBCheckName = "nbcheck"
   private val specFreeName = "free"
+  private val specCheckName = "check"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
 
@@ -311,27 +288,27 @@ class BluespecInterfaces(val addrlockmod: Option[String]) {
 
   def getSpecTable: BModule = BModule(specModuleName, List())
 
-  def getSpecTableType(typ: BSVType): BInterface = {
-    BInterface(specModuleType, List(BVar("sidTyp", typ)))
+  def getSpecTableType(typ: BSVType, sz:Int): BInterface = {
+    BInterface(specModuleType, List(BVar("sidTyp", typ), BVar("bypassCnt", BNumericType(sz))))
   }
 
   def getSpecAlloc(st: BExpr): BExpr = {
     BMethodInvoke(st, specAllocName, List())
   }
-  def getSpecCheck(st: BVar, h: BExpr): BExpr = {
-    BMethodInvoke(st, specCheckName, List(h))
-  }
-  def getNBSpecCheck(st: BVar, h: BExpr): BExpr = {
-    BMethodInvoke(st, specNBCheckName, List(h))
-  }
+
   def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))
   }
-  def getSpecValidate(st: BVar, h: BExpr): BExpr = {
-    BMethodInvoke(st, specValidateName, List(h))
+
+  def getSpecCheck(st: BVar, h: BExpr, order: Int): BExpr = {
+    BMethodInvoke(st, specCheckName, List(h, BUnsizedInt(order)))
   }
-  def getSpecInvalidate(st: BVar, h: BExpr): BExpr = {
-    BMethodInvoke(st, specInvalidateName, List(h))
+
+  def getSpecValidate(st: BVar, h: BExpr, order: Int): BExpr = {
+    BMethodInvoke(st, specValidateName, List(h, BUnsizedInt(order)))
+  }
+  def getSpecInvalidate(st: BVar, h: BExpr, order: Int): BExpr = {
+    BMethodInvoke(st, specInvalidateName, List(h, BUnsizedInt(order)))
   }
 
   /**

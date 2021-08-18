@@ -4,7 +4,7 @@ import pipedsl.common.Errors
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, fopt_func, opt_func, typeMapFunc, typeMapModule}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, fopt_func, typeMapFunc, typeMapModule}
 import pipedsl.typechecker.Environments.{Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 
@@ -51,6 +51,8 @@ object TypeInferenceWrapper
    { case Some(value) => Some(subst_into_type(typevar, toType, value))
     case None => None
    }, name).setPos(inType.pos)
+   case TObject(_, _, _) => inType //TODO support these properly once we add polymorphism
+   case TRequestHandle(_, _) => inType //TODO do we ever need to sub into this?
    case t: TBitWidth => t match
    {
     case TBitWidthVar(name) => if (name == typevar) toType else inType
@@ -130,7 +132,17 @@ object TypeInferenceWrapper
 
     def checkProgram(p: Prog): Prog =
      {
-      val (funcEnvs, newFuncs) = p.fdefs.foldLeft[(Environment[Id, Type], List[FuncDef])]((TypeEnv(), List.empty[FuncDef]))((envNlst: (Environment[Id, Type], List[FuncDef]), f) =>
+      val extEnv = p.exts.foldLeft[Environment[Id, Type]](TypeEnv())((env, ext) => {
+       val ftyps = ext.methods.foldLeft(Map[Id, TFun]())((ms, m) => {
+        val typList = m.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
+        val ftyp = TFun(typList, m.ret)
+        ms + (m.name -> ftyp)
+       })
+       val typ = TObject(ext.name, ext.typParams, ftyps)
+       ext.typ = Some(typ)
+       env.add(ext.name, typ)
+      })
+      val (funcEnvs, newFuncs) = p.fdefs.foldLeft[(Environment[Id, Type], List[FuncDef])]((extEnv, List.empty[FuncDef]))((envNlst: (Environment[Id, Type], List[FuncDef]), f) =>
        {
         val env = envNlst._1
         val lst = envNlst._2
@@ -269,16 +281,20 @@ object TypeInferenceWrapper
       (cs.copy(cases = fixed_cases, default = fixed_def).copyMeta(cs), runningEnv, runningSub)
      case ce@CExpr(exp) => val (s, _, e, fixed) = infer(env, exp)
       val retS = compose_subst(sub, s)
-      (ce.copy(exp = fixed).copyMeta(ce), e.apply_subst_typeenv(retS), retS) /*TODO is this right? I don't know. Maybe someone else does :)*/
+      (ce.copy(exp = fixed).copyMeta(ce), e.apply_subst_typeenv(retS), retS)
      case CCheckSpec(_) => (c, env, sub)
      case _: CVerify => (c, env, sub)
+     case _: CUpdate => (c, env, sub)
      case CInvalidate(_) => (c, env, sub)
      case ct@CTBar(c1, c2) => val (fixed1, e, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e, s)
       (ct.copy(c1 = fixed1, c2 = fixed2).copyMeta(ct), e2, s2)
      case CPrint(_) => (c, env, sub)
-     case _: CSpecCall => (c, env, sub)
-     case co@COutput(exp) => val (s, t, e, fixed) = infer(env, exp)
+     case CSpecCall(h,_,_) => //TODO maybe wrong?
+      //add spec handle type to env
+      (c, env.add(h.id, h.typ.get).asInstanceOf[TypeEnv], sub)
+     case co@COutput(exp) =>
+      val (s, t, e, fixed) = infer(env, exp)
       val tempSub = compose_subst(sub, s)
       val tNew = apply_subst_typ(tempSub, t)
       val modT = env(currentDef)
@@ -364,6 +380,7 @@ object TypeInferenceWrapper
        case (_: TVoid, _: TVoid) => (List(), false)
        case (_: TSigned, _: TSigned) => (List(), false)
        case (_: TUnsigned, _: TUnsigned) => (List(), false)
+       case (_: TObject, _: TObject) => (List(), false) //TODO change once we support polymorphism
        case (TBool(), TSizedInt(len, u)) if len.getLen == 1 && u.unsigned() => (List(), false)
        case (TSizedInt(len, u), TBool()) if len.getLen == 1 && u.unsigned() => (List(), false)
        case (TSizedInt(len1, signed1), TSizedInt(len2, signed2)) => val (s1, c1) = unify(len1, len2, binop)
@@ -446,13 +463,14 @@ object TypeInferenceWrapper
       val ltyp = TLockedMemType(mtyp, idsz, impl)
       c.typ = Some(ltyp)
       (ltyp, tenv, c)
-     case CirNew(mod, mods) => val mtyp = tenv(mod)
+     case CirNew(mod, mods, _) => val mtyp = tenv(mod)
       mtyp match
       {
        case TModType(_, refs, _, _) => if (refs.length != mods.length) throw ArgLengthMismatch(c.pos, mods.length, refs.length)
         refs.zip(mods).foreach
         { case (reftyp, mname) => if (!isSubtype(tenv(mname), reftyp)) throw UnexpectedSubtype(mname.pos, mname.toString, reftyp, tenv(mname)) }
         (mtyp, tenv, c)
+       case _: TObject => (mtyp, tenv, c)
        case x => throw UnexpectedType(c.pos, c.toString, "Module Type", x)
       }
      case cc@CirCall(mod, inits) => val mtyp = tenv(mod)
@@ -492,6 +510,8 @@ object TypeInferenceWrapper
      case TBitWidthMax(b1, b2) => occursIn(name, b1) || occursIn(name, b2)
      case TBitWidthLen(_) => false
      case _: TSignedNess => false
+     case _: TObject => false //TODO need?
+     case _: TRequestHandle => false //TODO need?
     }
 
     private def apply_subst_substs(subst: Subst, inSubst: Subst): Subst = inSubst.foldLeft[Subst](List())((s, c) => s :+ ((c._1, apply_subst_typ(subst, c._2))))
@@ -656,33 +676,17 @@ object TypeInferenceWrapper
         val retEnv = runningEnv.apply_subst_typeenv(retSubst)
         val retTyp = apply_subst_typ(retSubst, retType)
         (retSubst, retTyp, retEnv, ap.copy(args = fixed_arg_list).copyMeta(ap))
-       case ca@ECall(mod, args) => if (!env(mod).isInstanceOf[TModType]) throw UnexpectedType(e.pos, "Module Call", "TModType", env(mod))
+       case ca@ECall(mod, name, args) if name.isEmpty =>
+        if (!env(mod).isInstanceOf[TModType]) throw UnexpectedType(e.pos, "Module Call", "TModType", env(mod))
         val expectedType = getArrowModType(env(mod).asInstanceOf[TModType])
-        val retType = generateTypeVar()
-        var runningEnv: TypeEnv = env
-        var runningSubst: Subst = List()
-        var typeList: List[Type] = List()
-        var argList: List[Expr] = List()
-        for (a <- args)
-         {
-          val (sub, typ, env1, fixed_a) = infer(runningEnv, a)
-          runningSubst = compose_subst(runningSubst, sub)
-          typeList = typeList :+ typ
-          argList = argList :+ fixed_a
-          runningEnv = env1
-         }
-        typeList = typeList.map(t => apply_subst_typ(runningSubst, t))
-        val (subst, cast) = unify(TFun(typeList, retType), expectedType)
-        val fixed_arg_list = if (cast)
-         {
-          argList.zip(expectedType.args).map(argtp => ECast(argtp._2, argtp._1))
-         } else argList
-        val retSubst = compose_subst(runningSubst, subst)
-        val retEnv = runningEnv.apply_subst_typeenv(retSubst)
-        val retTyp = apply_subst_typ(retSubst, retType)
-        (retSubst, retTyp, retEnv, ca.copy(args = fixed_arg_list).copyMeta(ca))
+        substIntoCall(expectedType, ca, args, env)
+       case ca@ECall(mod, method, args) if method.isDefined =>
+        if (!env(mod).isInstanceOf[TObject]) throw UnexpectedType(e.pos, "Object Call", "TObject", env(mod))
+        val expectedType = env(mod).asInstanceOf[TObject].methods(method.get)
+        substIntoCall(expectedType, ca, args, env)
        case EVar(id) => (List(), env(id), env, e)
-       case ECast(ctyp, exp) => /*TODO this is wrong probably*/ val (s, t, env1, _) = infer(env, exp)
+       case ECast(ctyp, exp) =>
+        val (s, t, env1, _) = infer(env, exp)
         val newT = apply_subst_typ(s, t)
         if (!canCast(ctyp, newT)) throw Errors.IllegalCast(e.pos, ctyp, newT)
         (s, ctyp, env1, e)
@@ -751,5 +755,29 @@ object TypeInferenceWrapper
      {
       TFun(List(TSizedInt(TBitWidthLen(t.addrSize), sign = TUnsigned())), t.elem)
      }
+
+    private def substIntoCall(expectedType: TFun, ca: ECall, args: List[Expr], env: TypeEnv) = {
+     val retType = generateTypeVar()
+     var runningEnv: TypeEnv = env
+     var runningSubst: Subst = List()
+     var typeList: List[Type] = List()
+     var argList: List[Expr] = List()
+     for (a <- args) {
+      val (sub, typ, env1, fixed_a) = infer(runningEnv, a)
+      runningSubst = compose_subst(runningSubst, sub)
+      typeList = typeList :+ typ
+      argList = argList :+ fixed_a
+      runningEnv = env1
+     }
+     typeList = typeList.map(t => apply_subst_typ(runningSubst, t))
+     val (subst, cast) = unify(TFun(typeList, retType), expectedType)
+     val fixed_arg_list = if (cast) {
+      argList.zip(expectedType.args).map(argtp => ECast(argtp._2, argtp._1))
+     } else argList
+     val retSubst = compose_subst(runningSubst, subst)
+     val retEnv = runningEnv.apply_subst_typeenv(retSubst)
+     val retTyp = apply_subst_typ(retSubst, retType)
+     (retSubst, retTyp, retEnv, ca.copy(args = fixed_arg_list).copyMeta(ca))
+    }
    }
  }

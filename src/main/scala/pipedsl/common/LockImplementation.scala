@@ -2,7 +2,8 @@ package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
-import pipedsl.common.Syntax.Latency.Combinational
+import pipedsl.common.Syntax.Annotations.PortAnnotation
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
 
 
@@ -12,7 +13,10 @@ object LockImplementation {
 
   private val lqueue = new LockQueue()
   private val falqueue = new FALockQueue()
+  private val bypassQueue = new BypassQueue()
+  private val bypassRF = new BypassRF()
   private val rename = new RenameRegfile()
+  private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
 
   /**
@@ -25,7 +29,10 @@ object LockImplementation {
   private val implMap: Map[String, LockInterface] = Map(
     lqueue.shortName -> lqueue,
     falqueue.shortName -> falqueue,
+    bypassQueue.shortName -> bypassQueue,
+    bypassRF.shortName -> bypassRF,
     rename.shortName -> rename,
+    forwardRename.shortName -> forwardRename,
     lsq.shortName -> lsq
   )
   /**
@@ -104,19 +111,6 @@ object LockImplementation {
     def isCompatible(mtyp: TMemType): Boolean
 
     /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     * @param mem The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
-
-    /**
      * Returns the lock granularity supported by this implementation
      * (which indicates whether or not
      * addreses are specified in its operations).
@@ -134,6 +128,8 @@ object LockImplementation {
      */
     def getReadArgs(addr: Expr, lock: Expr): Expr
 
+    def addReadPort: Boolean = false
+
     /**
      * Each lock implementation may require any non-empty subset
      * of the address and the lock handle to serve read and write
@@ -144,6 +140,8 @@ object LockImplementation {
      *         (excluding the data).
      */
     def getWriteArgs(addr: Expr, lock: Expr): Expr
+
+    def addWritePort: Boolean = false
 
     def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo]
 
@@ -211,21 +209,6 @@ object LockImplementation {
     //no possible conflicts since all ops are mergeable if conflicting
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
     override def isCompatible(mtyp: TMemType): Boolean = true
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
 
     override def granularity: LockGranularity = General
     //TODO placing the interface name (lock.) here is weird but OK i guess
@@ -309,6 +292,165 @@ object LockImplementation {
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
   }
 
+  private class BypassQueue extends LockInterface {
+
+    private val defaultNumLocks = 4
+    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
+      val rescmd = getReserveWrite(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      if (rescmd.isDefined && relcmd.isDefined) {
+        return false //cannot RES(W) & REL in same cycle. must ACTUALLY do the reserve
+      } else {
+        return true
+      }
+    }
+
+    /**
+     * Merges the given set of commands which are meant to occur in
+     * a single stage. This is only intended to accept LOCK modifying commands
+     * (nothing else). If other commands are included in the list, they may not be returned in the result.
+     *
+     * @param mem  The memory (or memory location) whose ops we are merging
+     * @param lops The operations to merge
+     * @return The list of merged operations
+     */
+    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
+      //For READS
+      //res + rel -> checkfree
+      //res + checkowned -> res + checkfree
+      //else same
+      val rescmd = getReserveRead(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      val checkownedCmd = getCheckOwnedCommand(mem, lops)
+      if (rescmd.isDefined && relcmd.isDefined) {
+        val check = ICheckLockFree(mem)
+        check.memOpType = rescmd.get.memOpType
+        List(check)
+      } else if (rescmd.isDefined && checkownedCmd.isDefined) {
+        val check = ICheckLockFree(mem)
+        check.memOpType = rescmd.get.memOpType
+        List(rescmd.get, check)
+      } else {
+        lops
+      }
+    }
+
+    override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
+      mtyp.writeLatency != Asynchronous
+
+    override def granularity: LockGranularity = Specific
+
+    override def getReadArgs(addr: Expr, lock: Expr): Expr = addr
+
+    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = l.memOpType match {
+      case Some(LockWrite) => Some(MethodInfo("canWrite", doesModify = false, List(l.mem.evar.get)))
+      case Some(LockRead)  => Some(MethodInfo("canRead", doesModify = false, List(l.mem.evar.get)))
+      case None => throw new RuntimeException("Bad lock info")//TODO better exception
+    }
+
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
+      Some(MethodInfo("owns", doesModify = false, List(extractHandle(l.handle))))
+    }
+
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+      Some(MethodInfo("reserve", doesModify = true, List(l.mem.evar.get)))
+    }
+
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+      Some(MethodInfo("canRes", doesModify = false, List(l.mem.evar.get)))
+    }
+
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
+      Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.handle))))
+    }
+
+    override def getTypeArgs(szParams: List[Int]): List[Int] =
+      List(szParams.headOption.getOrElse(defaultNumLocks))
+    override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
+
+    override def shortName: String = "BypassQueue"
+
+    override def getModuleName(m: TMemType): String = "BypassLockCombMem"
+}
+
+  /**
+   * This implementation is a bypassing register file with separate cycle reserves and reads
+   * (unlike the Bypass Queue which requires them to be concurrent)
+   */
+  private class BypassRF extends LockInterface {
+
+    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
+      val rescmd = getReserveWrite(mem, lops)
+      val resRd  = getReserveRead(mem, lops)
+      val relcmd = getReleaseCommand(mem, lops)
+      if ((resRd.isDefined || rescmd.isDefined) && relcmd.isDefined) {
+        return false //cannot RES(R/W) & REL in same cycle. must ACTUALLY do the reserve
+      } else {
+        return true
+      }
+    }
+
+    /**
+     * Merges the given set of commands which are meant to occur in
+     * a single stage. This is only intended to accept LOCK modifying commands
+     * (nothing else). If other commands are included in the list, they may not be returned in the result.
+     *
+     * @param mem  The memory (or memory location) whose ops we are merging
+     * @param lops The operations to merge
+     * @return The list of merged operations
+     */
+    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
+      lops
+    }
+
+    override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
+      mtyp.writeLatency != Asynchronous
+
+    override def granularity: LockGranularity = Specific
+
+    private def getPortString(l: PortAnnotation): String = if (l.portNum.isDefined) l.portNum.get.toString else ""
+
+    //TODO pass no read arg and add port number to reads (probably somewhere else)
+    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
+
+    override def addReadPort: Boolean = true
+
+    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
+
+    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
+
+    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) => Some(MethodInfo("owns" + getPortString(l), doesModify = false, List()))
+      case Some(LockWrite) => None
+      case None => None //TODO throw error
+    }
+
+    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) =>
+        Some(MethodInfo("reserveRead" + getPortString(l), doesModify = true, List(l.mem.evar.get)))
+      case Some(LockWrite) =>  Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
+      case None => None //TODO throw error
+    }
+
+    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
+
+    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
+      case Some(LockRead) =>  Some(MethodInfo("freeRead" + getPortString(l), doesModify = true, List()))
+      case Some(LockWrite) =>  Some(MethodInfo("freeWrite", doesModify = true, List(extractHandle(l.handle))))
+      case None => None //TODO throw error
+    }
+
+    override def getTypeArgs(szParams: List[Int]): List[Int] = List()
+    override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] =
+      List(Utilities.exp2(m.addrSize))
+
+    override def shortName: String = "BypassRF"
+
+    override def getModuleName(m: TMemType): String = "BypassRF"
+  }
+
   /**
    * This represents a renaming register file.
    * Reserve statements either translate to _reading a name_ (R) or _allocating a new name_ (W).
@@ -346,21 +488,6 @@ object LockImplementation {
       //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
       mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
     }
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
 
     override def granularity:LockGranularity = Specific
 
@@ -415,7 +542,12 @@ object LockImplementation {
       val pregs = if (szParams.isEmpty) aregs * 2 else szParams.head
       List(Utilities.exp2(m.addrSize), pregs)
     }
-}
+  }
+
+  private class ForwardingRegfile extends RenameRegfile {
+    override def shortName: String = "ForwardRenameRF"
+    override def getModuleInstName(m: TMemType): String =  "mk" + shortName
+  }
 
   /**
    * This represents a front to asynchronously responding memories,
@@ -459,21 +591,6 @@ object LockImplementation {
       mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
     }
     override def toString: String = "LSQ"
-
-    /**
-     * Given a list of commands, return the
-     * same list with the port information annotated.
-     * Each type of operation supported by this lock implementation,
-     * that is in this list will be assigned a different port number.
-     * If this implementation doesn't support that many ports, it will throw an exception.
-     *
-     * @param mem  The memory/lock we're assigning ports for.
-     * @param lops The operations to annotate
-     * @return The annoated list of operations, iteration order should be preserved
-     *         and non-lock commands should be left unannotated.
-     */
-    override def assignPorts(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = lops
-    //TODO implement for real
 
     override def granularity: LockGranularity = Specific
 

@@ -29,11 +29,10 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
     case s: IfStage =>
       s.condStages.foreach(stg => stg.foreach(t => simplifyIfs(t)))
       s.defaultStages.foreach(f => simplifyIfs(f))
-      //Check if the branches are combinational
       val isBranchesComb = s.condStages.forall(stg => stg.head.outEdges.exists(e => e.to == s.joinStage))
       val isDefaultComb = s.defaultStages.head.outEdges.exists(e => e.to == s.joinStage)
       //Merge in the first true and false stages since that delay is artificial
-      mergeStages(s, s.condStages.map(stg => stg.head) :+ s.defaultStages.head)
+      mergeStages(s, s.condStages.map(stg => stg.head) :+ s.defaultStages.head, false)
       //Update IF stage metadata
       s.condStages = s.condStages.map(stg => stg.tail)
       s.defaultStages= s.defaultStages.tail
@@ -45,12 +44,21 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         val newOutEdge = PipelineEdge(None, None, s, s.joinStage, joinStgInputs)
         s.removeEdgesTo(s.joinStage)
         s.addEdge(newOutEdge)
-        mergeStages(s, List(s.joinStage))
+        mergeStages(s, List(s.joinStage), false)
+      } else {
+        //merge join stage into its successor, as long as its successor isn't another If stage
+        //and that stage ALSO only has one predecessor
+        if (s.joinStage.succs.size == 1 && s.joinStage.succs.exists(p => p match {
+          case _: IfStage => false
+          case nstg => nstg.preds.size == 1
+        })) {
+          mergeStages(s.joinStage, List(s.joinStage.succs.head), false);
+        }
       }
       //there must only be one by construction
       val priorstg = s.inEdges.head.from
       //merge this into the prior stage since that delay was added unnecessarily
-      mergeStages(priorstg, List(s))
+      mergeStages(priorstg, List(s), false)
     case _ =>
   }
 
@@ -115,22 +123,37 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
    * This modifies both of the stages in place.
    * @param target The earlier stage, which is being merged into and modified.
    * @param srcs The later stages, which are being removed from the stage graph.
+   * @param isForward If this is true, target is the _later_ stage and srcs are the earlier ones.
    */
-  private def mergeStages(target: PStage, srcs: Iterable[PStage]): Unit = {
+  private def mergeStages(target: PStage, srcs: Iterable[PStage], isForward: Boolean): Unit = {
     var newstmts = List[Command]()
     val lockids = srcs.foldLeft(Set[LockArg]())((ids, s) => {
       ids ++ getLockIds(s.getCmds)
     })
     srcs.foreach(src => {
-      if (src.inEdges.exists(e => e.from != target) ||
-        !src.inEdges.exists(e => e.from == target)) {
+      val hasIncorrectEdges = if (isForward) {
+        (s: PStage) => s.outEdges.exists(e => e.to != target) ||
+          !s.outEdges.exists(e => e.to == target)
+      } else {
+        (s: PStage) => s.inEdges.exists(e => e.from != target) ||
+          !s.inEdges.exists(e => e.from == target)
+      }
+      if (hasIncorrectEdges(src)) {
         throw new RuntimeException(s"Cannot merge ${src.name.v} since it has inputs other than ${target.name.v}")
       }
-      val existingedges = target.outEdges.filter(e => e.to == src)
+      val existingedges = if (isForward) {
+        target.inEdges.filter(e => e.from == src)
+      } else {
+        target.outEdges.filter(e => e.to == src)
+      }
       if (existingedges.size > 1) {
         throw new RuntimeException(s"Cannot merge ${src.name.v} into ${target.name.v} since they have multiple edges")
       }
-      val cond = existingedges.head.condSend
+      val cond = if (isForward) {
+        existingedges.head.condRecv
+      } else {
+        existingedges.head.condSend
+      }
       //merge in the commands
       var receivingStmts = List[Command]()
       if (cond.isDefined) {
@@ -141,31 +164,59 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         val flattenedCmds = flattenCondStmts(cond.get, src.getCmds ++ noops)
         val (recvstmts, normalstmts) = splitReceivingStmts(flattenedCmds)
         newstmts = newstmts ++ normalstmts
+        if (isForward) {
+          //when going forward, we don't treat these two separately
+          newstmts = recvstmts ++ newstmts
+        }
         receivingStmts = recvstmts
       } else {
         val (recvstmts, normalstmts) = splitReceivingStmts(src.getCmds)
         newstmts = newstmts ++ normalstmts
+        if (isForward) {
+          //when going forward, we don't treat these two separately
+          newstmts = recvstmts ++ newstmts
+        }
         receivingStmts = recvstmts
       }
-      //merge in the output edge from src with target as the new from stage
-      //use the old condsend to src as the new condsend
-      target.removeEdgesTo(src)
-      val outedges = src.outEdges
-      val outdests = outedges.foldLeft(Set[PStage]())((s, e) => s + e.to)
-      outdests.foreach(dest => {
-        src.removeEdgesTo(dest)
-      })
-      outedges.foreach(e => {
-        // also move recv stmts into each of the successors
-        // merge conditional receive from the edge into the recv statements
-        val nstmts = if (e.condRecv.isDefined) {
-         flattenCondStmts(e.condRecv.get, receivingStmts)
+      //reconnect edges from other side of src to target directly
+      //use the old condition to/from src as the new condition
+      if (isForward) {
+        src.removeEdgesTo(target)
+      } else {
+        target.removeEdgesTo(src)
+      }
+      val connEdges = if (isForward) src.inEdges else src.outEdges
+      val connDests = connEdges.foldLeft(Set[PStage]())(
+        if (isForward) {
+          (s, e) => s + e.from
         } else {
-          receivingStmts
+          (s, e) => s + e.to
         }
-        e.to.addCmds(nstmts)
-        //also add necessary values to this edge
-        val newedge = PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values ++ getUsedVars(nstmts))
+      )
+      connDests.foreach(dest => {
+        if (isForward) {
+          dest.removeEdgesTo(src)
+        } else {
+          src.removeEdgesTo(dest)
+        }
+      })
+      // done removing edges
+      connEdges.foreach(e => {
+        if (!isForward) {
+          //only in this case we need to propagate receiving statements forward instead of back
+          val nstmts = if (e.condRecv.isDefined) {
+            flattenCondStmts(e.condRecv.get, receivingStmts)
+          } else {
+            receivingStmts
+          }
+          e.to.addCmds(nstmts)
+        } // in else case, we're already moving receiving statements forward by merging with target
+        val newedge = if (isForward) {
+          PipelineEdge(e.condSend, andExpr(cond, e.condRecv), e.from, target, e.values)
+        } else {
+          //in this case we need to add new values to the edge based on the receiving statments we moved
+          PipelineEdge(andExpr(cond, e.condSend), e.condRecv, target, e.to, e.values ++ getUsedVars(receivingStmts))
+        }
         target.addEdge(newedge)
       })
     })
