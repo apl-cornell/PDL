@@ -5,7 +5,7 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
 
 
@@ -19,10 +19,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
 
   //Add these named types to the env
   override def checkExt(e: ExternDef, env: Environment[Id, Type]): Environment[Id, Type] = {
-    val ftyps = e.methods.foldLeft(Map[Id, TFun]())((ms, m) => {
+    val ftyps = e.methods.foldLeft(Map[Id, (TFun, Latency)]())((ms, m) => {
       val typList = m.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
       val ftyp = TFun(typList, m.ret)
-      ms + (m.name -> ftyp)
+      ms + (m.name -> (ftyp, m.lat))
     })
     val typ = TObject(e.name, e.typParams, ftyps)
     e.typ = Some(typ)
@@ -564,7 +564,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           (if (retType.isDefined) retType.get else TVoid(), tenv)
         }
         case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) => {
-          val mtyp = methods(name.get)
+          val mtyp = methods(name.get)._1
           val inputs = mtyp.args
           val retType = mtyp.ret
           //TODO refactor and pull into function since it is same as above

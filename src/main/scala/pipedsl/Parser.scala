@@ -3,6 +3,7 @@ import scala.util.parsing.combinator._
 import common.Syntax._
 import common.Locks._
 import pipedsl.common.LockImplementation
+import pipedsl.common.Syntax.Latency.Latency
 
 import scala.util.matching.Regex
 
@@ -418,9 +419,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     Param(i, t)
   }
 
-  lazy val methodDef: P[FuncDef] = positioned {
-    "method" ~> iden ~ parens(repsep(param, ",")) ~ ":" ~ typ <~ ";" ^^ {
-      case i ~ ps ~ _ ~ t => FuncDef(i, ps, t, CEmpty())
+  lazy val methodDef: P[MethodDef] = positioned {
+    "method" ~> iden ~ angular(latency).? ~ parens(repsep(param, ",")) ~ ":" ~ typ <~ ";" ^^ {
+      case i ~ lat ~ ps ~ _ ~ t => MethodDef(i, ps, t, CEmpty(), lat.getOrElse(Latency.Combinational))
     }
   }
 

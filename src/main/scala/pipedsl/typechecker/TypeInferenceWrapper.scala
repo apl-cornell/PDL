@@ -2,7 +2,7 @@ package pipedsl.typechecker
 
 import pipedsl.common.Errors
 import pipedsl.common.Errors._
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, fopt_func, typeMapFunc, typeMapModule}
 import pipedsl.typechecker.Environments.{Environment, TypeEnv}
@@ -133,10 +133,10 @@ object TypeInferenceWrapper
     def checkProgram(p: Prog): Prog =
      {
       val extEnv = p.exts.foldLeft[Environment[Id, Type]](TypeEnv())((env, ext) => {
-       val ftyps = ext.methods.foldLeft(Map[Id, TFun]())((ms, m) => {
+       val ftyps = ext.methods.foldLeft(Map[Id, (TFun, Latency)]())((ms, m) => {
         val typList = m.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
         val ftyp = TFun(typList, m.ret)
-        ms + (m.name -> ftyp)
+        ms + (m.name -> (ftyp, m.lat))
        })
        val typ = TObject(ext.name, ext.typParams, ftyps)
        ext.typ = Some(typ)
@@ -682,7 +682,7 @@ object TypeInferenceWrapper
         substIntoCall(expectedType, ca, args, env)
        case ca@ECall(mod, method, args) if method.isDefined =>
         if (!env(mod).isInstanceOf[TObject]) throw UnexpectedType(e.pos, "Object Call", "TObject", env(mod))
-        val expectedType = env(mod).asInstanceOf[TObject].methods(method.get)
+        val expectedType = env(mod).asInstanceOf[TObject].methods(method.get)._1
         substIntoCall(expectedType, ca, args, env)
        case EVar(id) => (List(), env(id), env, e)
        case ECast(ctyp, exp) =>

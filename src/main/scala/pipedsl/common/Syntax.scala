@@ -307,7 +307,7 @@ object Syntax {
   case class TBitWidthLen(len: Int) extends TBitWidth
   case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
-  case class TObject(name: Id, typParams: List[Type], methods: Map[Id,TFun]) extends Type
+  case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
   /**
    * Define common helper methods implicit classes.
@@ -490,6 +490,14 @@ object Syntax {
     ret: Type,
     body: Command) extends Definition
 
+  case class MethodDef(
+                      name :Id,
+                      args :List[Param],
+                      ret :Type,
+                      body :Command,
+                      lat :Latency
+                      ) extends Definition
+
   case class ModuleDef(
     name: Id,
     inputs: List[Param],
@@ -509,7 +517,7 @@ object Syntax {
 
   case class Param(name: Id, typ: Type) extends Positional
 
-  case class ExternDef(name: Id, typParams: List[Type], methods: List[FuncDef]) extends Definition with TypeAnnotation
+  case class ExternDef(name: Id, typParams: List[Type], methods: List[MethodDef]) extends Definition with TypeAnnotation
 
   case class Prog(exts: List[ExternDef],
     fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional
