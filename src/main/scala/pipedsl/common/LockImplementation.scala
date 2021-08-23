@@ -197,8 +197,8 @@ object LockImplementation {
         Id("blk_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_read")  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_write") -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("rel_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
         Id("atom_r")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("atom_w")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational)))
 
@@ -232,7 +232,7 @@ object LockImplementation {
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.handle))))
+      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.inHandle))))
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -286,8 +286,8 @@ object LockImplementation {
         Id("blk_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_read")  -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_write") -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("rel_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
         Id("atom_r")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("atom_w")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational)))
 
@@ -305,7 +305,7 @@ object LockImplementation {
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.handle), l.mem.evar.get)))
+      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.inHandle), l.mem.evar.get)))
     }
 
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -384,7 +384,7 @@ object LockImplementation {
     }
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("owns", doesModify = false, List(extractHandle(l.handle))))
+      Some(MethodInfo("owns", doesModify = false, List(extractHandle(l.inHandle))))
     }
 
     override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -531,7 +531,7 @@ object LockImplementation {
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.handle))))
+      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.inHandle))))
       case Some(LockWrite) => None
       case None => None //TODO should be an exception
     }
@@ -636,7 +636,7 @@ object LockImplementation {
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
     override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.handle))))
+      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.inHandle))))
       case Some(LockWrite) => None
       case None => None //TODO should be an exception
     }
@@ -715,7 +715,7 @@ object LockImplementation {
   }
   private def getCheckOwnedCommand(mem: LockArg, cs: Iterable[Command]): Option[ICheckLockOwned] = {
     cs.find {
-      case ICheckLockOwned(l,_) if mem == l => true
+      case ICheckLockOwned(l,_, _) if mem == l => true
       case _ => false
     }.asInstanceOf[Option[ICheckLockOwned]]
   }

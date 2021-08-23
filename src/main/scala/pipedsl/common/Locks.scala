@@ -14,6 +14,12 @@ object Locks {
   sealed abstract class LockState(val name: String, val order: Int)
     extends Ordered[LockState] with TypeAnnotation {
     override def compare(that: LockState): Int = this.order compare that.order
+    def -- :LockState = this match
+    {
+      case Reserved => Free
+      case Acquired => Reserved
+      case Released => Acquired
+    }
   }
 
   def join(l1: LockState, l2: LockState): LockState = {

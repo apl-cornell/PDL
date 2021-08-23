@@ -454,6 +454,18 @@ object Syntax {
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType], args :List[Expr], ret :Option[EVar]) extends Command with LockInfoAnnotation
+  {
+    override val copyMeta: HasCopyMeta => CLockOp =
+      {
+        case from :CLockOp =>
+          setPos(from.pos)
+          portNum = from.portNum
+          predicateCtx = from.predicateCtx
+          lockType = from.lockType
+          granularity = from.granularity
+        this
+      }
+  }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
 
@@ -475,7 +487,7 @@ object Syntax {
 
   case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
-  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
+  case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
   case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation

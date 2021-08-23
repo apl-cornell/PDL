@@ -2,11 +2,13 @@ package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.UnexpectedCommand
-import pipedsl.common.Locks._
-import pipedsl.common.LockImplementation
+import pipedsl.common.Locks.{Free, Reserved, _}
+import pipedsl.common.{LockImplementation, Locks}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, updateListMap}
-import pipedsl.passes.Passes.StagePass
+import pipedsl.common.Utilities.{flattenStageList, mkOr, updateListMap}
+import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass, StagePass}
+
+import scala.+:
 
 
 /**
@@ -20,17 +22,45 @@ import pipedsl.passes.Passes.StagePass
  * s.t. implementations that feed the memory accesses through the lock API have the information
  * they need to generate code.
  */
-object LockOpTranslationPass extends StagePass[List[PStage]] {
+object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] with ModulePass[ModuleDef]{
 
 
-  private def lockVar(l: LockArg): EVar = {
-    val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "")
+  private def lockVar(l: LockArg, op :LockedMemState.LockedMemState): EVar = {
+    val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "") + (op match
+    {
+      case LockedMemState.Free => "fr"
+      case LockedMemState.Reserved => "rs"
+      case LockedMemState.Acquired => "aq"
+      case LockedMemState.Operated => "op"
+      case LockedMemState.Released => "rl"
+    })
+    //val other = op --
     val res = EVar(Id(lockname))
     res.typ = Some(TMaybe(TRequestHandle(l.id, RequestType.Lock)))
     res.id.typ = res.typ
     res
   }
 
+  object LockedMemState extends Enumeration
+  {
+    type LockedMemState = Value
+    val Free, Reserved, Acquired, Operated, Released = Value
+    def -- :LockedMemState = this match {
+      case Reserved => Free
+      case Acquired => Reserved
+      case Operated => Acquired
+      case Released => Operated
+    }
+  }
+  private def lk_st_2_mem_st(st :LockState) = st match
+  {
+    case Locks.Free => LockedMemState.Free
+    case Locks.Reserved => LockedMemState.Reserved
+    case Locks.Acquired => LockedMemState.Acquired
+    case Locks.Released => LockedMemState.Released
+  }
+
+  /*
   override def run(stgs: List[PStage]): List[PStage] = {
     flattenStageList(stgs).foreach(s => {
       eliminateLockRegions(s)
@@ -38,6 +68,35 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
     })
     stgs
   }
+*/ override def run(p: Prog): Prog =
+    {
+      p.copy(moddefs = p.moddefs.map(run))
+    }
+
+  override def run(m: ModuleDef): ModuleDef =
+    {
+      m.copy(body = run(m.body))
+    }
+
+  override def run(c: Command): Command = c match
+  {
+    case CSeq(c1, c2) => CSeq(run(c1), run(c2)).copyMeta(c)
+    case CTBar(c1, c2) => CSeq(run(c1), run(c2)).copyMeta(c)
+    case CIf(cond, cons, alt) => CIf(modifyMemArg(cond, isLhs = false), run(cons), run(alt)).copyMeta(c)
+    case CAssign(lhs, rhs) => CAssign(lhs, modifyMemArg(rhs, isLhs = false)).copyMeta(c)
+    case CRecv(lhs, rhs) => CRecv(modifyMemArg(lhs, isLhs = true), modifyMemArg(rhs, isLhs = false)).copyMeta(c)
+    case CSpecCall(handle, pipe, args) => CSpecCall(handle, pipe, args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
+    case CVerify(handle, args, preds, update) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall])).copyMeta(c)
+    case CUpdate(newHandle, handle, args, preds) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds).copyMeta(c)
+    case CPrint(args) => CPrint(args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
+    case COutput(exp) =>  COutput(modifyMemArg(exp, isLhs = false)).copyMeta(c)
+    case CReturn(exp) => CReturn(modifyMemArg(exp, isLhs = false)).copyMeta(c)
+    case CExpr(exp) => CExpr(modifyMemArg(exp, isLhs = false)).copyMeta(c)
+    case c :CLockOp => translateOp(c)
+    case CSplit(cases, default) => CSplit(cases.map(cobj => CaseObj(cond = modifyMemArg(cobj.cond, isLhs = false), body = run(cobj.body))), run(default)).copyMeta(c)
+    case other => other
+  }
+
 
   /**
    * Replace the existing lock ops where necessary.
@@ -47,7 +106,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
    *
    * @param stg - The stage to modify
    */
-  private def translateLockOps(stg: PStage): Unit = {
+  /*private def translateLockOps(stg: PStage): Unit = {
     val (lockCmds, notlockCmds) = stg.getCmds.partition { case _: CLockOp => true; case _ => false }
     val lockmap = lockCmds.foldLeft(Map[LockArg, List[Command]]())((m, lc) => lc match {
       case c@CLockOp(mem, _, _, _, _) => updateListMap(m, mem, translateOp(c))
@@ -55,19 +114,20 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
     })
     val newlockcmds = lockmap.keys.foldLeft(List[Command]())((cs, lid) => {
       val lockImpl = LockImplementation.getLockImpl(lid)
-      cs ++ lockImpl.mergeLockOps(lid, lockmap(lid))
+      cs ++ lockmap(lid)//lockImpl.mergeLockOps(lid, lockmap(lid))
     })
-    val modNotLockCmds = notlockCmds.foldLeft(List[Command]())((lc, c) => lc ++ modifyMemOpsArgs(c))
+    val modNotLockCmds = notlockCmds.foldLeft[Command](CEmpty())((lc, c) => CSeq(lc, modifyMemOpsArgs(c)))
     stg.setCmds(modNotLockCmds ++ newlockcmds)
-  }
+  }*/
 
   private def modifyMemArg(e: Expr, isLhs: Boolean): Expr = e match {
     //no translation needed here since locks aren't address specific
     case em@EMemAccess(_, _, _, _, _) if em.granularity == General => em
     //SimplifyRecvPass ensures that the index expression is always a variable
     case em@EMemAccess(mem, idx@EVar(_), wm, inHandle, outHandle) if em.granularity == Specific =>
+      val l_arg = LockArg(mem, Some(idx))
       val newArg: Expr = modifyMemAddrArg(isLhs, mem, idx)
-      val res = EMemAccess(mem, newArg, wm, inHandle, outHandle).setPos(em.pos)
+      val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated))).setPos(em.pos)
       res.typ = em.typ
       res.memOpType = em.memOpType
       res.portNum = em.portNum
@@ -108,7 +168,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   private def modifyMemAddrArg(isWrite: Boolean, mem: Id, idx: EVar): Expr = {
     val larg = LockArg(mem, Some(idx))
-    val lock = EFromMaybe(lockVar(larg)).setPos(larg.pos)
+    val lock = EFromMaybe(lockVar(larg, LockedMemState.Operated)).setPos(larg.pos)
     lock.typ = lock.ex.typ.get.matchOrError(lock.ex.pos, "Extract Lock Handle", "Maybe(Handle)") {
       case TMaybe(t) => Some(t)
     }
@@ -117,19 +177,19 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
     newArg
   }
 
-  private def modifyMemOpsArgs(c: Command): List[Command] = {
+  private def modifyMemOpsArgs(c: Command): Command = {
     c match {
       //SimplifyRecvPass ensures that rhs is always a MemAccess xor a complex expression w/o memaccesses
       case CAssign(lhs, rhs) =>
         val nrhs = modifyMemArg(rhs, isLhs = false)
-        List(CAssign(lhs, nrhs).setPos(c.pos))
+        CAssign(lhs, nrhs).setPos(c.pos)
       case CRecv(lhs, rhs) =>
         val nlhs = modifyMemArg(lhs, isLhs = true)
         val nrhs = modifyMemArg(rhs, isLhs = false)
-        List(CRecv(nlhs, nrhs).setPos(c.pos))
+        CRecv(nlhs, nrhs).setPos(c.pos)
       //lhs should not contain _any_ memaccesses thanks to the ConvertAsyncPass (but adding this doesn't hurt)
-      case CExpr(exp) => List(CExpr(modifyMemArg(exp, isLhs = false)).setPos(c.pos))
-      case im@IMemSend(_, _, _, _, _) if im.granularity == General => List(im)
+      case CExpr(exp) => CExpr(modifyMemArg(exp, isLhs = false)).setPos(c.pos)
+      case im@IMemSend(_, _, _, _, _) if im.granularity == General => im
       case im@IMemSend(h, writeMask, mem, d, addr) if im.granularity == Specific =>
         val newAddr = modifyMemAddrArg(im.isWrite, mem, addr)
         //TODO find cleaner WAY than this
@@ -141,8 +201,8 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         val newSend = IMemSend(h, writeMask, mem, d, newVar).setPos(im.pos)
         newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
-        List(newAssn, newSend)
-      case im@IMemWrite(_, _, _) if im.granularity == General => List(im)
+        CSeq(newAssn, newSend)
+      case im@IMemWrite(_, _, _) if im.granularity == General => im
       case im@IMemWrite(mem, addr, data) if im.granularity == Specific =>
         val newAddr = modifyMemAddrArg(isWrite = true, mem, addr)
         //TODO find cleaner WAY than this
@@ -152,40 +212,51 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
         val newSend = IMemWrite(mem, newVar, data).setPos(im.pos)
         newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
-        List(newAssn, newSend)
-      case _ => List(c)
+        CSeq(newAssn, newSend)
+      case _ => c
     }
   }
 
   private def translateOp(c: CLockOp): Command = {
+    c.op match
+    {
+      case Locks.Free =>
+        c
+      case Locks.Reserved =>
+        c.copy(ret = Some(lockVar(c.mem, LockedMemState.Reserved))).copyMeta(c)
+      case Locks.Acquired =>
+        c.copy(ret = Some(lockVar(c.mem, LockedMemState.Acquired)), args = lockVar(c.mem, LockedMemState.Reserved) :: c.args )
+      case Locks.Released =>
+        c.copy(args = lockVar(c.mem, LockedMemState.Operated) :: c.args)
+    }
 
-  //TODO make this cleaner lol
+  /*//TODO make this cleaner lol
     c.op match {
-      case Free =>
+      case Locks.Free =>
         val i = ICheckLockFree(c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
         i
-      case Reserved =>
-        val i = IReserveLock(lockVar(c.mem), c.mem).setPos(c.pos)
+      case Locks.Reserved =>
+        val i = IReserveLock(lockVar(c.mem, LockedMemState.Reserved), c.mem).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
         i
-      case Acquired =>
-        val i = ICheckLockOwned(c.mem, lockVar(c.mem)).setPos(c.pos)
+      case Locks.Acquired =>
+        val i = ICheckLockOwned(c.mem, lockVar(c.mem, LockedMemState.Reserved), lockVar(c.mem, LockedMemState.Acquired)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
         i
-      case Released =>
-        val i = IReleaseLock(c.mem, lockVar(c.mem)).setPos(c.pos)
+      case Locks.Released =>
+        val i = IReleaseLock(c.mem, lockVar(c.mem, LockedMemState.Operated)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
         i
-    }
+    }*/
 
   }
 

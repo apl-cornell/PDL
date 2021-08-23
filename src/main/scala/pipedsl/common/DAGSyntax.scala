@@ -247,7 +247,7 @@ object DAGSyntax {
 
   private def getLockId(c: Command): LockArg = c match {
     case ICheckLockFree(l) => l
-    case ICheckLockOwned(l, _) => l
+    case ICheckLockOwned(l, _, _) => l
     case IReserveLock(_, l) => l
     case IReleaseLock(l, _) => l
     case ILockNoOp(l) => l

@@ -45,3 +45,4 @@
 ## other random stuff
  - m o r e  operators! (good distinction between the full precision ones and the
    normal ones. Also unary ops such as inversion, and folding operations)
+ - release that does something should have sequential latency

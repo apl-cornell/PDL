@@ -92,9 +92,11 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
-      case Syntax.CLockOp(mem, op, t, _, _) => ins + op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" +
-        printExprToString(mem.evar.get) + "]" else "") + (if (t.isDefined) "," + (if (t.get == LockRead) "R" else "W") else "") + ");"
-
+      case Syntax.CLockOp(mem, op, t, args, ret) =>
+        ins + (ret match {case Some(r) => r.id.v + " = " case None => ""}) +
+           op.name + "(" + mem.id.v + (if (mem.evar.isDefined) "[" +
+        printExprToString(mem.evar.get) + "]" else "") + (if (t.isDefined) "," + (if (t.get == LockRead) "R" else "W") else "") +
+          args.foldLeft("")((str, arg) => str + ", " + printExprToString(arg))+ ");"
       case Syntax.CLockStart(mod) => ins + "start(" + mod.v + ");"
       case Syntax.CLockEnd(mod) => ins + "end(" + mod.v + ");"
       case Syntax.CPrint(args) => ins + "print(" +
@@ -122,8 +124,9 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EBinop(op, e1, e2) => "(" + printExprToString(e1) + " " + op.op + " " + printExprToString(e2) + ")"
     case Syntax.ERecAccess(rec, fieldName) => printExprToString(rec) + "." + fieldName
     case Syntax.ERecLiteral(fields) => "{" + fields.keySet.map(i => i.v + printExprToString(fields(i))).mkString(",") + "}"
-    case Syntax.EMemAccess(mem, index, m, _, _) => mem.v + "[" + printExprToString(index) +
-      (if (m.isDefined) "," + printExprToString(m.get) else "") +"]"
+    case Syntax.EMemAccess(mem, index, m, inHandle, outHandle) => mem.v + "[" + printExprToString(index) +
+      (if (m.isDefined) "," + printExprToString(m.get) else "") +"]" + "<" +
+      inHandle.map(ev => ev.id.v).getOrElse("") + ", " + outHandle.map(ev => ev.id.v).getOrElse("") + ">"
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"
     case Syntax.ETernary(cond, tval, fval) => printExprToString(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"

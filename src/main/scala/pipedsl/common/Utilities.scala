@@ -167,7 +167,7 @@ object Utilities {
     }
     case IAssignLock(_, src, default) => getUsedVars(src) ++
       (if (default.isDefined) getUsedVars(default.get) else Set())
-    case ICheckLockOwned(larg, handle) => Set(handle.id) ++ (larg.evar match {
+    case ICheckLockOwned(larg, inHandle, outHandle) => Set(inHandle.id) ++ (larg.evar match {
       case Some(value) => Set(value.id)
       case None => Set()
     })

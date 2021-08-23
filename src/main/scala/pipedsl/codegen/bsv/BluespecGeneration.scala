@@ -647,7 +647,7 @@ object BluespecGeneration {
           } else {
             l
           }
-        case cl@ICheckLockOwned(mem, _) =>
+        case cl@ICheckLockOwned(mem, _, _) =>
           val methodInfo = LockImplementation.getLockImpl(mem).getCheckOwnsInfo(cl)
           if (methodInfo.isDefined) {
             l :+ translateMethod(modParams(mem.id), methodInfo.get)
