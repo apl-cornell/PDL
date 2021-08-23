@@ -82,16 +82,16 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       val lhsLat = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
         //TODO rewrite to reduce code maybe?
-        case (EVar(id), EMemAccess(_, _, _)) => (vars, nextVars + id)
+        case (EVar(id), EMemAccess(_, _, _, _, _)) => (vars, nextVars + id)
         case (EVar(id), ECall(_,_,_)) => (vars, nextVars + id)
         case (EVar(id), _) => (vars, nextVars + id)
-        case (EMemAccess(_,_, _), EMemAccess(_,_, _)) =>
+        case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
           throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
         case _ => (vars, nextVars)
       }
     case CLockStart(_) => (vars, nextVars)
     case CLockEnd(_) => (vars, nextVars)
-    case CLockOp(mem, _, _) =>
+    case CLockOp(mem, _, _, _, _) =>
       if (mem.evar.isDefined) {
         checkExpr(mem.evar.get, vars, isRhs = true)
       }
@@ -169,7 +169,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case Combinational => Combinational
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
-    case EMemAccess(m, index, wm) => m.typ.get match {
+    case EMemAccess(m, index, wm, _, _) => m.typ.get match {
       case TLockedMemType(TMemType(_, _, rLat, wLat, _, _),_,_) =>
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)

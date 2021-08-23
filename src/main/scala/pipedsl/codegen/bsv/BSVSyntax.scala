@@ -146,7 +146,7 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index, _) =>
+      case EMemAccess(mem, index, _, _, _) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.addReadPort) e.portNum else None
           case _ => None

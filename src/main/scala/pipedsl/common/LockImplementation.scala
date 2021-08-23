@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Annotations.PortAnnotation
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
 import pipedsl.common.Syntax._
 
 
@@ -81,6 +81,7 @@ object LockImplementation {
           if(Math.max(m.readPorts, m.writePorts) < 2) asyncSuffix
           else asyncSuffix + "2"
         }
+    val objectType :TObject
 
 
     /**
@@ -187,6 +188,20 @@ object LockImplementation {
    */
   private class LockQueue extends LockInterface {
 
+//    TODO: add type parameters to this to implement polymorphism and probably also the name
+    override val objectType: TObject = TObject(Id("QueueLock"), List(),
+      Map(
+        Id("res_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("res_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("blk_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("blk_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("lk_read")  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("lk_write") -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("atom_r")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("atom_w")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational)))
+
     override def shortName: String = "Queue"
 
     override def getModuleName(m: TMemType): String = "QueueLock" + getSuffix(m)
@@ -260,6 +275,22 @@ object LockImplementation {
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
+    //    TODO: add type parameters to this to implement polymorphism and probably also the name
+    private val addrType = TSizedInt(TBitWidthLen(32), TUnsigned())
+    private val dataType = TSizedInt(TBitWidthLen(32), TSigned())
+    override val objectType: TObject =
+      TObject(Id("FAQueue"), List(), Map(
+        Id("res_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("res_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("blk_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("blk_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("lk_read")  -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("lk_write") -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("atom_r")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("atom_w")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational)))
+
 
     private val defaultNumLocks = 4
 
@@ -293,6 +324,8 @@ object LockImplementation {
   }
 
   private class BypassQueue extends LockInterface {
+    //TODO Implement
+    override val objectType: TObject = TObject(Id("BypassRF"), List(), Map())
 
     private val defaultNumLocks = 4
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
@@ -380,6 +413,8 @@ object LockImplementation {
    * (unlike the Bypass Queue which requires them to be concurrent)
    */
   private class BypassRF extends LockInterface {
+    //TODO Implement
+    override val objectType: TObject = TObject(Id("BypassRF"), List(), Map())
 
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
       val rescmd = getReserveWrite(mem, lops)
@@ -457,6 +492,8 @@ object LockImplementation {
    *
    */
   private class RenameRegfile extends LockInterface {
+    //TODO Implement
+    override val objectType: TObject = TObject(Id("BypassRF"), List(), Map())
 
     override def shortName: String = "RenameRF"
 
@@ -555,6 +592,8 @@ object LockImplementation {
    * It includes a LoadStoreQueue which forwards data to avoid extra memory accesses.
    */
   private class LoadStoreQueue extends LockInterface {
+    //TODO Implement
+    override val objectType: TObject = TObject(Id("BypassRF"), List(), Map())
 
     override def shortName: String = "LSQ"
     override def getModuleName(m: TMemType): String = "LSQ"

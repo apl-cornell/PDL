@@ -148,17 +148,17 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
         tenv.intersect(fenv) //real merge logic lives inside Envrionments.Z3AST
       case CAssign(_, rhs) => checkExpr(rhs, env, c.predicateCtx.get)
       case CRecv(lhs, rhs) => (lhs, rhs) match {
-        case (EMemAccess(mem, expr, _), _) =>
+        case (EMemAccess(mem, expr, _, _, _), _) =>
           /*this is a write*/
           checkDisjoint(mem, c.predicateCtx.get)
           checkAcquired(mem, expr, env, c.predicateCtx.get)
-        case (_, EMemAccess(mem, expr, _)) =>
+        case (_, EMemAccess(mem, expr, _, _, _)) =>
           checkAcquired(mem, expr, env, c.predicateCtx.get)
         case (_, ECall(mod, name, args)) =>
           args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
         case _ => throw UnexpectedCase(c.pos)
       }
-      case c@CLockOp(mem, op, _) =>
+      case c@CLockOp(mem, op, _, _, _) =>
         checkReadWriteOrder(c)
         val expectedLockState = op match {
           case Locks.Free => throw new IllegalStateException() // TODO: is this right?
@@ -190,7 +190,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
     case EBinop(_, e1, e2) =>
       val env1 = checkExpr(e1, env, predicates)
       checkExpr(e2, env1, predicates)
-    case EMemAccess(mem, index, _) => checkAcquired(mem, index, env, predicates)
+    case EMemAccess(mem, index, _, _, _) => checkAcquired(mem, index, env, predicates)
     case ETernary(cond, tval, fval) =>
       val env1 = checkExpr(cond, env, predicates)
       val env2 = checkExpr(tval, env1, predicates)

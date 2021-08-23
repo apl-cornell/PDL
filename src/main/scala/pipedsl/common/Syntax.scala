@@ -16,7 +16,7 @@ object Syntax {
    * Annotations added by the various passes of the type checker.
    */
   object Annotations {
-    sealed trait TypeAnnotation {
+    trait TypeAnnotation {
       var typ: Option[Type] = None
     }
 
@@ -294,6 +294,8 @@ object Syntax {
                       writePorts: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
+  case class TReqHandle(tp :Type, rtyp :RequestType) extends Type
+  //TODO merge these two together
   case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
@@ -408,7 +410,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None) extends Expr with LockInfoAnnotation
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle :Option[EVar], outHandle :Option[EVar]) extends Expr with LockInfoAnnotation
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
@@ -451,7 +453,7 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
-  case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
+  case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType], args :List[Expr], ret :Option[EVar]) extends Command with LockInfoAnnotation
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
 

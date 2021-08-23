@@ -304,10 +304,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       {
         case _: TLockedMemType => tenv
       }
-    case CLockOp(mem, _, _) => {
+    case CLockOp(mem, _, _, _, _) =>
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
       {
-        case t: TLockedMemType => {
+        case t: TLockedMemType =>
           val memt = t.mem
           mem.id.typ = Some(t)
           if(mem.evar.isEmpty) tenv
@@ -318,9 +318,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
-        }
       }
-    }
     case CVerify(handle, args, preds, upd) =>
       //if there's an update clause check that stuff:
       if (upd.isDefined) {
@@ -492,7 +490,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ftyps = fields map { case (n, e) => (n, checkExpression(e, tenv, None)._1) }
       (TRecType(Id("anon"), ftyps) , tenv)//TODO these are wrong, maybe just remove these
     }
-    case EMemAccess(mem, index, wm) => {
+    case EMemAccess(mem, index, wm, _, _) =>
       val memt = tenv(mem)
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
@@ -510,7 +508,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
-    }
     case EBitExtract(num, start, end) => {
       val (ntyp, nenv) = checkExpression(num, tenv, None)
       val bitsLeft = math.abs(end - start) + 1

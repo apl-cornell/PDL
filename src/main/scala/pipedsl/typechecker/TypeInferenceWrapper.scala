@@ -203,7 +203,7 @@ object TypeInferenceWrapper
      * Transforms the argument env by subbing in the returned substitution and adding any relevatn variables */
     def checkCommand(c: Command, env: TypeEnv, sub: Subst): (Command, TypeEnv, Subst) = c match
     {
-     case CLockOp(mem, _, _) => env(mem.id) match
+     case CLockOp(mem, _, _, _, _) => env(mem.id) match
      {
       case tm: TMemType => mem.evar match
       {
@@ -619,7 +619,7 @@ object TypeInferenceWrapper
         val bFixed = b.copy(e1 = moreFixed1, e2 = moreFixed2).copyMeta(b)
         bFixed.typ = Some(finalRetTyp)
         (finalRetSubst, finalRetTyp, env2.apply_subst_typeenv(finalRetSubst), bFixed)
-       case m@EMemAccess(mem, index, _) => if (!(env(mem).isInstanceOf[TMemType] || env(mem).isInstanceOf[TLockedMemType])) throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env(mem))
+       case m@EMemAccess(mem, index, _, _, _) => if (!(env(mem).isInstanceOf[TMemType] || env(mem).isInstanceOf[TLockedMemType])) throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env(mem))
         val retType = generateTypeVar()
         val (s, t, env1, fixed_idx) = infer(env, index)
         val tTemp = apply_subst_typ(s, t)

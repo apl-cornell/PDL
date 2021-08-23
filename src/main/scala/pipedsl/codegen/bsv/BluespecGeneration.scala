@@ -981,7 +981,7 @@ object BluespecGeneration {
       case CUpdate(_, _, _, _) => None
       case CLockStart(_) => None
       case CLockEnd(_) => None
-      case CLockOp(_, _, _) => None
+      case CLockOp(_, _, _, _, _) => None
       case CSpecCall(_, _, _) => None
       case CVerify(_, _, _, _) => None
       case CInvalidate(_) => None
@@ -1225,7 +1225,7 @@ object BluespecGeneration {
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
-      case CLockOp(_, _, _) => throw UnexpectedCommand(cmd)
+      case _ :CLockOp => throw UnexpectedCommand(cmd)
     }
 
     private def getRecvCmds(cmds: Iterable[Command]): List[BStatement] = {

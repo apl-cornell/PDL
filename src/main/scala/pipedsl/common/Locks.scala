@@ -3,6 +3,7 @@ package pipedsl.common
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
+import pipedsl.common.Syntax.Annotations.TypeAnnotation
 import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, EVar, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id, LockArg}
 import pipedsl.common.Utilities.updateSetMap
 
@@ -10,7 +11,8 @@ import scala.util.parsing.input.Position
 
 object Locks {
 
-  sealed abstract class LockState(val name: String, val order: Int) extends Ordered[LockState] {
+  sealed abstract class LockState(val name: String, val order: Int)
+    extends Ordered[LockState] with TypeAnnotation {
     override def compare(that: LockState): Int = this.order compare that.order
   }
 
@@ -79,7 +81,7 @@ object Locks {
   def transferLockStates(node: PStage, instates: Map[LockArg, LockState]): Map[LockArg, LockState] = {
     var newMap = instates
     node.getCmds.foreach {
-      case CLockOp(mem, op, _) => newMap = newMap.updated(mem, op)
+      case CLockOp(mem, op, _, _, _) => newMap = newMap.updated(mem, op)
       case _ => ()
     }
     newMap

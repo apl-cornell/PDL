@@ -50,7 +50,7 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
   private def translateLockOps(stg: PStage): Unit = {
     val (lockCmds, notlockCmds) = stg.getCmds.partition { case _: CLockOp => true; case _ => false }
     val lockmap = lockCmds.foldLeft(Map[LockArg, List[Command]]())((m, lc) => lc match {
-      case c@CLockOp(mem, _, _) => updateListMap(m, mem, translateOp(c))
+      case c@CLockOp(mem, _, _, _, _) => updateListMap(m, mem, translateOp(c))
       case _ => throw UnexpectedCommand(lc)
     })
     val newlockcmds = lockmap.keys.foldLeft(List[Command]())((cs, lid) => {
@@ -63,11 +63,11 @@ object LockOpTranslationPass extends StagePass[List[PStage]] {
 
   private def modifyMemArg(e: Expr, isLhs: Boolean): Expr = e match {
     //no translation needed here since locks aren't address specific
-    case em@EMemAccess(_, _, _) if em.granularity == General => em
+    case em@EMemAccess(_, _, _, _, _) if em.granularity == General => em
     //SimplifyRecvPass ensures that the index expression is always a variable
-    case em@EMemAccess(mem, idx@EVar(_), wm) if em.granularity == Specific =>
+    case em@EMemAccess(mem, idx@EVar(_), wm, inHandle, outHandle) if em.granularity == Specific =>
       val newArg: Expr = modifyMemAddrArg(isLhs, mem, idx)
-      val res = EMemAccess(mem, newArg, wm).setPos(em.pos)
+      val res = EMemAccess(mem, newArg, wm, inHandle, outHandle).setPos(em.pos)
       res.typ = em.typ
       res.memOpType = em.memOpType
       res.portNum = em.portNum

@@ -50,7 +50,7 @@ class LockWellformedChecker() {
     case CSplit(cases, default) =>
       val s1 = cases.foldLeft[Set[LockArg]](lockArgs)((s, c) => checkCommand(c.body, s))
       checkCommand(default, s1)
-    case c@CLockOp(mem, _, _) =>
+    case c@CLockOp(mem, _, _, _, _) =>
       if (getLockGranularityMap.contains(mem.id) && !getLockGranularityMap(mem.id).equals(getLockGranularity(mem)))
         throw MalformedLockTypes("Memory modules can only have location specific locks or general locks, but not both")
       else updateLockGranularityMap(mem.id, getLockGranularity(mem))

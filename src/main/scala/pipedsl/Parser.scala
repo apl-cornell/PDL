@@ -122,7 +122,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   // int<32> w;
   // m[a, 0b1100] <- w;
   lazy val memAccess: P[Expr] = positioned {
-    iden ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ (i ~ n) => EMemAccess(m, i, n) }
+    iden ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ (i ~ n) => EMemAccess(m, i, n, None, None) }
   }
 
   lazy val bitAccess: P[Expr] = positioned {
@@ -237,10 +237,10 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
-      "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t), CLockOp(i, Acquired, t)) } |
-      "reserve" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CLockOp(i, Reserved, t)} |
-      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired, None) } |
-      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None)} |
+      "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t, List(), None), CLockOp(i, Acquired, t, List(), None)) } |
+      "reserve" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CLockOp(i, Reserved, t, List(), None)} |
+      "block" ~> parens(lockArg) ^^ { i => CLockOp(i, Acquired, None, List(), None) } |
+      "release" ~> parens(lockArg) ^^ { i => CLockOp(i, Released, None, List(), None)} |
       "print" ~> parens(repsep(expr, ",")) ^^ (e => { CPrint(e)}) |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => { COutput(e)}) |

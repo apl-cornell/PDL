@@ -107,7 +107,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         CSeq(nasgn, CExpr(nexp).setPos(c.pos)).setPos(c.pos)
       case CLockStart(_) => c
       case CLockEnd(_) => c
-      case CLockOp(_, _, _) => c
+      case CLockOp(_, _, _, _, _) => c
       case CEmpty() => c
       case _: InternalCommand => c
     }
@@ -143,11 +143,11 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case EBinop(op, e1, e2) => val (ne1, nc1) = extractCastVars(e1)
         val (ne2, nc2) = extractCastVars(e2)
         (EBinop(op, ne1, ne2).setPos(e.pos), CSeq(nc1, nc2).setPos(nc1.pos))
-      case EMemAccess(mem, index, Some(mask)) => val (ne, nc) = extractCastVars(index)
+      case EMemAccess(mem, index, Some(mask), inHandle, outHandle) => val (ne, nc) = extractCastVars(index)
         val (nm, ncm) = extractCastVars(mask)
-        (EMemAccess(mem, ne, Some(nm)).setPos(e.pos), CSeq(nc, ncm).setPos(e.pos))
-      case EMemAccess(mem, index, None) => val (ne, nc) = extractCastVars(index)
-        (EMemAccess(mem, ne, None).setPos(e.pos), nc)
+        (EMemAccess(mem, ne, Some(nm), inHandle, outHandle).setPos(e.pos), CSeq(nc, ncm).setPos(e.pos))
+      case EMemAccess(mem, index, None, inHandle, outHandle) => val (ne, nc) = extractCastVars(index)
+        (EMemAccess(mem, ne, None, inHandle, outHandle).setPos(e.pos), nc)
       case EBitExtract(num, start, end) => val (ne, nc) = extractCastVars(num)
         (EBitExtract(ne, start, end).setPos(e.pos), nc)
       case ETernary(cond, tval, fval) => val (ncond, nc) = extractCastVars(cond)
