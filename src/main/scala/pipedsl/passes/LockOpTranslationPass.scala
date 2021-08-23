@@ -81,7 +81,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
   override def run(c: Command): Command = c match
   {
     case CSeq(c1, c2) => CSeq(run(c1), run(c2)).copyMeta(c)
-    case CTBar(c1, c2) => CSeq(run(c1), run(c2)).copyMeta(c)
+    case CTBar(c1, c2) => CTBar(run(c1), run(c2)).copyMeta(c)
     case CIf(cond, cons, alt) => CIf(modifyMemArg(cond, isLhs = false), run(cons), run(alt)).copyMeta(c)
     case CAssign(lhs, rhs) => CAssign(lhs, modifyMemArg(rhs, isLhs = false)).copyMeta(c)
     case CRecv(lhs, rhs) => CRecv(modifyMemArg(lhs, isLhs = true), modifyMemArg(rhs, isLhs = false)).copyMeta(c)
