@@ -229,7 +229,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
-    speccall |
+    speccall | checkPoint |
     typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
@@ -261,7 +261,16 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     block | conditional | split
   }
 
-  //TODO better syntax for these
+  lazy val checkPoint: P[Command] = positioned {
+    iden ~ "<-" ~ "checkpoint" ~ parens(iden) ^^ {
+      case cid ~ _ ~ _ ~ lid => {
+        val handleVar = EVar(cid)
+        handleVar.typ = Some(TRequestHandle(lid, RequestType.Checkpoint))
+        cid.typ = handleVar.typ
+        CCheckpoint(handleVar, lid)
+      }
+    }
+  }
   lazy val check: P[Command] = positioned {
     "spec_barrier()" ^^ { _ => CCheckSpec(true) } |
     "spec_check()" ^^ { _ => CCheckSpec(false) }

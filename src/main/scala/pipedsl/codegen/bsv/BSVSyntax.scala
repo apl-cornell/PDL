@@ -114,6 +114,7 @@ object BSVSyntax {
       case TFun(_, _) => throw new RuntimeException
       //TODO better error
       case TRecType(_, _) => throw new RuntimeException
+      case _ => throw UnexpectedType(t.pos, "type annotation", "Not Supported in BSV", t)
     }
 
     def toBSVVar(v: BVar): BVar = {

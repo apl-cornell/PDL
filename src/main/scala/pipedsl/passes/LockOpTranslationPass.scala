@@ -14,7 +14,7 @@ import pipedsl.passes.Passes.StagePass
  * into the operational realization of lock operations. Specifically,
  * this involves generating variables to represent the lock state information
  * held by the Thread. Reserve statements will produce these 'handles' which
- * must be passed to future operations like 'block' and 'release'
+ * must be passed to future operations like 'block' and 'release'.
  *
  * This additionally annotates memory accesses with the appropriate lock handle variable,
  * s.t. implementations that feed the memory accesses through the lock API have the information

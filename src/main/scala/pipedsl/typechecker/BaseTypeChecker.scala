@@ -292,6 +292,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               }
           }
         }
+        case _ => throw UnexpectedType(c.pos, "SpecCall Mod", "Module Type", mtyp)
       }
       //add spec handle type to env
       tenv.add(h.id, h.typ.get)
@@ -353,6 +354,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                     throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
                   }
               }
+            case _ =>  throw UnexpectedType(c.pos, "Spec Verify", "Module Type", mtyp)
           }
           tenv
       }
@@ -385,6 +387,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                     throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
                   }
               }
+            case _ =>  throw UnexpectedType(c.pos, "Spec Update", "Module Type", mtyp)
           }
           newHandle.typ = Some(htyp)
           newHandle.id.typ = Some(htyp)
@@ -458,9 +461,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
         case BitOp("<<", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "shift left", "sized number", t1)
         }
         case BitOp(">>", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "shift right", "sized number", t1)
         }
         case NumOp("*", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>

@@ -105,6 +105,7 @@ object Utilities {
     case IAssignLock(handle, _, _) => Set(handle.id)
     case CSpecCall(handle, _, _) => Set(handle.id)
     case CUpdate(newHandle, _, _, _) => Set(newHandle.id)
+    case CCheckpoint(handle, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -173,6 +174,7 @@ object Utilities {
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
+    case CCheckpoint(_, _) => Set()
     case CVerify(handle, args, preds, upd) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
       preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
@@ -474,6 +476,7 @@ object Utilities {
                 case defined => defined
               }
               case Some(_) => TSigned()
+              case None => TSigned() //TODO error
             }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
           case _ => throw LackOfConstraints(e1)

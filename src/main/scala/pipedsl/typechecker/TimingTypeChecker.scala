@@ -164,6 +164,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         case (Combinational, Combinational) => Combinational
         case (Combinational, _) => throw UnexpectedAsyncReference(e2.pos, e2.toString)
         case (_, Combinational) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
+        case (_,_) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
       }
     case ERecAccess(rec, _) => checkExpr(rec, vars, isRhs) match {
       case Combinational => Combinational

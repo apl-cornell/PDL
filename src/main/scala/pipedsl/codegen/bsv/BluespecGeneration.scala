@@ -115,7 +115,7 @@ object BluespecGeneration {
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
       case CirConnect(name, c) => c match {
         case CirLock(mem, impl, _) if memMap.contains(mem) =>
-          if(is_dp(mem.typ.get))
+          if(isDualPorted(mem.typ.get))
             {Map(
                 name.copy(name.v + "1") -> BVar(name.v + impl.getClientName + "1", translator.toClientType(mem.typ.get)),
                 name.copy(name.v + "2") -> BVar(name.v + impl.getClientName + "2", translator.toClientType(mem.typ.get)))}
@@ -215,9 +215,10 @@ object BluespecGeneration {
       case _ => (List(), List(), List())
     }
 
-    private val is_dp :Type => Boolean = {
+    private val isDualPorted :Type => Boolean = {
       case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
+      case _ => false
     }
 
     private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] =
@@ -1000,6 +1001,7 @@ object BluespecGeneration {
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
+      case CCheckpoint(_,_) => throw UnexpectedCommand(cmd)
     }
 
     //Helper to accumulate geteffectdecl results into a single list
