@@ -242,7 +242,7 @@ object LockImplementation {
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.handle))))
+      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.inHandle))))
     }
 
     /**
@@ -317,7 +317,7 @@ object LockImplementation {
     }
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.handle), l.mem.evar.get)))
+      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.inHandle), l.mem.evar.get)))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
@@ -396,7 +396,7 @@ object LockImplementation {
     }
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.handle))))
+      Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.inHandle))))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] =
@@ -473,7 +473,7 @@ object LockImplementation {
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
       case Some(LockRead) =>  Some(MethodInfo("freeRead" + getPortString(l), doesModify = true, List()))
-      case Some(LockWrite) =>  Some(MethodInfo("freeWrite", doesModify = true, List(extractHandle(l.handle))))
+      case Some(LockWrite) =>  Some(MethodInfo("freeWrite", doesModify = true, List(extractHandle(l.inHandle))))
       case None => None //TODO throw error
     }
 
@@ -546,7 +546,7 @@ object LockImplementation {
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
       case Some(LockRead) => None
-      case Some(LockWrite) => Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.handle))))
+      case Some(LockWrite) => Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.inHandle))))
       case None => None //TODO should be an exception
     }
 
@@ -650,8 +650,8 @@ object LockImplementation {
     override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
 
     override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("commitRead", doesModify = true, List(extractHandle(l.handle))))
-      case Some(LockWrite) => Some(MethodInfo("commitWrite", doesModify = true, List(extractHandle(l.handle))))
+      case Some(LockRead) => Some(MethodInfo("commitRead", doesModify = true, List(extractHandle(l.inHandle))))
+      case Some(LockWrite) => Some(MethodInfo("commitWrite", doesModify = true, List(extractHandle(l.inHandle))))
       case None => None //TODO should be an exception
     }
 
@@ -721,14 +721,14 @@ object LockImplementation {
   }
   private def hasMemoryWrite(mem: LockArg, cs: Iterable[Command]): Boolean = {
     cs.exists {
-      case IMemWrite(mid, addr,_) if largMatches(mem, mid, addr) => true
-      case s@IMemSend(_, writeMask, mid, _, addr) if s.isWrite  && largMatches(mem, mid, addr) => true
+      case IMemWrite(mid, addr,_, _, _) if largMatches(mem, mid, addr) => true
+      case s@IMemSend(_, writeMask, mid, _, addr, _, _) if s.isWrite  && largMatches(mem, mid, addr) => true
       case _ => false
     }
   }
   private def hasAsyncMemoryRead(mem: LockArg, cs: Iterable[Command]): Boolean = {
     cs.exists {
-      case s@IMemSend(_, _, mid,_, addr) if !s.isWrite && largMatches(mem, mid, addr)=> true
+      case s@IMemSend(_, _, mid,_, addr, _, _) if !s.isWrite && largMatches(mem, mid, addr)=> true
       case _ => false
     }
   }

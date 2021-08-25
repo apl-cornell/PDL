@@ -478,19 +478,19 @@ object Syntax {
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   //TODO Clean up what actually needs the lock info annotation
-  case class IMemSend(handle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar)
+  case class IMemSend(memHandle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar, lInHandle: EVar, lOutHandle: EVar)
     extends InternalCommand with LockInfoAnnotation {
     def isWrite: Boolean = data.isDefined
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately
 
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar, inHandle: EVar, outHandle: EVar) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
-  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
+  case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
-  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IReleaseLock(mem: LockArg, inHandle: EVar) extends InternalCommand with LockInfoAnnotation
   //needed for internal compiler passes to track branches with explicitly no lockstate change
   case class ILockNoOp(mem: LockArg) extends InternalCommand
 

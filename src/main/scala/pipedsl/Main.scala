@@ -77,8 +77,8 @@ object Main {
       val verifProg = AddVerifyValuesPass.run(prog)
       val canonProg2 = new CanonicalizePass().run(verifProg)
       val canonProg1 = new TypeInference(autocast).checkProgram(canonProg2)
-      val canonProg = LockOpTranslationPass.run(canonProg1)
-      new PrettyPrinter(None).printProgram(canonProg)
+      val canonProg = canonProg1//LockOpTranslationPass.run(canonProg1)
+      //new PrettyPrinter(None).printProgram(canonProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       TimingTypeChecker.check(nprog, Some(basetypes))
@@ -103,12 +103,14 @@ object Main {
       linChecker.check(recvProg, None)
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
+      val lock_prog = LockOpTranslationPass.run(recvProg)
+      //new PrettyPrinter(None).printProgram(lock_prog)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")
         writer.close()
       }
-      (recvProg, pinfo)
+      (lock_prog, pinfo)
     } catch {
       case t: Throwable => {
         //If fails, print the error to the file

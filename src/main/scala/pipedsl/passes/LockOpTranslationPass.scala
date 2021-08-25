@@ -28,11 +28,11 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
   private def lockVar(l: LockArg, op :LockedMemState.LockedMemState): EVar = {
     val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "") + (op match
     {
-      case LockedMemState.Free => "fr"
-      case LockedMemState.Reserved => "rs"
-      case LockedMemState.Acquired => "aq"
-      case LockedMemState.Operated => "op"
-      case LockedMemState.Released => "rl"
+      case LockedMemState.Free     => "_fr"
+      case LockedMemState.Reserved => "_rs"
+      case LockedMemState.Acquired => "_aq"
+      case LockedMemState.Operated => "_op"
+      case LockedMemState.Released => "_rl"
     })
     //val other = op --
     val res = EVar(Id(lockname))
@@ -122,11 +122,11 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
 
   private def modifyMemArg(e: Expr, isLhs: Boolean): Expr = e match {
     //no translation needed here since locks aren't address specific
-    case em@EMemAccess(_, _, _, _, _) if em.granularity == General => em
+    //case em@EMemAccess(_, _, _, _, _) if em.granularity == General => println("dumbass"); em
     //SimplifyRecvPass ensures that the index expression is always a variable
-    case em@EMemAccess(mem, idx@EVar(_), wm, inHandle, outHandle) if em.granularity == Specific =>
+    case em@EMemAccess(mem, idx@EVar(_), wm, inHandle, outHandle) /*if em.granularity == Specific*/ =>
       val l_arg = LockArg(mem, Some(idx))
-      val newArg: Expr = modifyMemAddrArg(isLhs, mem, idx)
+      val newArg: Expr = idx//modifyMemAddrArg(isLhs, mem, idx)
       val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated))).setPos(em.pos)
       res.typ = em.typ
       res.memOpType = em.memOpType
@@ -189,7 +189,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         CRecv(nlhs, nrhs).setPos(c.pos)
       //lhs should not contain _any_ memaccesses thanks to the ConvertAsyncPass (but adding this doesn't hurt)
       case CExpr(exp) => CExpr(modifyMemArg(exp, isLhs = false)).setPos(c.pos)
-      case im@IMemSend(_, _, _, _, _) if im.granularity == General => im
+    /*  case im :IMemSend if im.granularity == General => im
       case im@IMemSend(h, writeMask, mem, d, addr) if im.granularity == Specific =>
         val newAddr = modifyMemAddrArg(im.isWrite, mem, addr)
         //TODO find cleaner WAY than this
@@ -198,7 +198,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         ).setPos(im.pos)
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
-        val newSend = IMemSend(h, writeMask, mem, d, newVar).setPos(im.pos)
+        val newSend = IMemSend(h, writeMask, mem, d, newVar, , ).setPos(im.pos)
         newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         CSeq(newAssn, newSend)
@@ -209,16 +209,17 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         val newVar = EVar(Id("_tmp_" + mem.v + "_" + addr.id.v + "_lock_var_W")).setPos(im.pos)
         newVar.typ = newAddr.typ
         newVar.id.typ = newVar.typ
-        val newSend = IMemWrite(mem, newVar, data).setPos(im.pos)
+        val newSend = IMemWrite(mem, newVar, data, , ).setPos(im.pos)
         newSend.portNum = im.portNum
         val newAssn = CAssign(newVar, newAddr).setPos(im.pos)
         CSeq(newAssn, newSend)
+    */
       case _ => c
     }
   }
 
   private def translateOp(c: CLockOp): Command = {
-    c.op match
+  /*  c.op match
     {
       case Locks.Free =>
         c
@@ -228,9 +229,9 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         c.copy(ret = Some(lockVar(c.mem, LockedMemState.Acquired)), args = lockVar(c.mem, LockedMemState.Reserved) :: c.args )
       case Locks.Released =>
         c.copy(args = lockVar(c.mem, LockedMemState.Operated) :: c.args)
-    }
+    }*/
 
-  /*//TODO make this cleaner lol
+  //TODO make this cleaner lol
     c.op match {
       case Locks.Free =>
         val i = ICheckLockFree(c.mem).setPos(c.pos)
@@ -245,18 +246,20 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         i.portNum = c.portNum
         i
       case Locks.Acquired =>
-        val i = ICheckLockOwned(c.mem, lockVar(c.mem, LockedMemState.Reserved), lockVar(c.mem, LockedMemState.Acquired)).setPos(c.pos)
+        val i = ICheckLockOwned(c.mem,
+          inHandle = lockVar(c.mem, LockedMemState.Reserved),
+          outHandle = lockVar(c.mem, LockedMemState.Acquired)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
         i
       case Locks.Released =>
-        val i = IReleaseLock(c.mem, lockVar(c.mem, LockedMemState.Operated)).setPos(c.pos)
+        val i = IReleaseLock(c.mem, inHandle = lockVar(c.mem, LockedMemState.Operated)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
         i
-    }*/
+    }
 
   }
 

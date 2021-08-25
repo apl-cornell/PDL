@@ -102,7 +102,8 @@ object Utilities {
     }
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
-    case IMemSend(handle, _, _, _, _) => Set(handle.id)
+    case IMemSend(handle, _, _, _, _, _, outHandle) => Set(handle.id, outHandle.id)
+    case i :IMemWrite => Set(i.outHandle.id)
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
@@ -148,17 +149,17 @@ object Utilities {
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
-    case IMemSend(_, writeMask, _, data, addr) =>
+    case IMemSend(_, writeMask, _, data, addr, inHandle, _) =>
       val dataSet = if (data.isDefined) {
-        Set(data.get.id, addr.id)
-      } else Set(addr.id)
+        Set(data.get.id, addr.id, inHandle.id)
+      } else Set(addr.id, inHandle.id)
       dataSet ++ (if (writeMask.isDefined) {
         getUsedVars(writeMask.get)
       } else {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data) => Set(addr.id, data.id)
+    case IMemWrite(_, addr, data, inHandle, _) => Set(addr.id, data.id, inHandle.id)
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {
