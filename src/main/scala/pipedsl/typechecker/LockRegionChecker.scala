@@ -27,6 +27,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
   override def checkModule(m: ModuleDef, env: Environment[Id, LockState]): Environment[Id, LockState] = {
     val nenv = m.modules.foldLeft[Environment[Id, LockState]](env)( (e, m) => m.typ match {
       case TLockedMemType(_, _, _) => e.add(m.name, Free)
+      case TMemType(_, _, _,_ ,_ ,_) => e.add(m.name, Free)
         //TODO eventually do need locks here
       case TModType(_, _, _, _) => e  //no locks for modules , but they're an expected type
       case TObject(_, _, _) => e //no locks here either
@@ -64,8 +65,8 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       lt.intersect(lf) //real merge logic lives inside Envrionments.LockState
     case CSplit(cases, default) =>
       val caseEnvList = (default :: cases.map(c => c.body)).map(c => checkLockRegions(c, env))
-      for (i <- 0 to caseEnvList.size-1) {
-        for (j <- 0 to caseEnvList.size-1) {
+      for (i <- caseEnvList.indices) {
+        for (j <- caseEnvList.indices) {
           if (i != j) {
             val l1 = caseEnvList(i)
             val l2 = caseEnvList(j)
@@ -91,9 +92,35 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }
       env
+    case CAssign(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
+    case CRecv(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case Syntax.CEmpty() => env
     case _ => env
   }
+
+  //Check that unlocked memory accesses happen _inside_ lock regions for unlocked memories
+  private def checkMemAccess(e: Expr, env: Environment[Id, LockState]): Unit = e match {
+    case EIsValid(ex) => checkMemAccess(ex, env)
+    case EFromMaybe(ex) => checkMemAccess(ex, env)
+    case EToMaybe(ex) => checkMemAccess(ex, env)
+    case EUop(_, ex) => checkMemAccess(ex, env)
+    case EBinop(_, e1, e2) => checkMemAccess(e1, env); checkMemAccess(e2, env)
+    case EMemAccess(mem, _, _) =>
+      mem.typ.get match {
+        case TMemType(_,_,_,_,_,_) => //only check _unlocked_ memories
+          if (env(mem) != Acquired) {
+            throw InvalidLockState(mem.pos, mem.v, env(mem), Acquired)
+          }
+        case _ => ()
+      }
+    case EBitExtract(num, _, _) => checkMemAccess(num, env)
+    case ETernary(cond, tval, fval) => checkMemAccess(cond, env); checkMemAccess(tval, env); checkMemAccess(fval, env)
+    case EApp(_, args) => args.foreach(a => checkMemAccess(a, env))
+    case ECall(_, _, args) => args.foreach(a => checkMemAccess(a, env))
+    case ECast(_, exp) => checkMemAccess(exp, env)
+    case _ => ()
+  }
+
 
   override def checkCircuit(c: Circuit, env: Environment[Id, LockState]): Environment[Id, LockState] = env
 }

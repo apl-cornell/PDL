@@ -26,6 +26,8 @@ import scala.collection.mutable
  * - Checks: That all read locks are released before any write locks
  * When checking a lock state, it checks whether it is possible for the lock state to NOT be the expected. If it is
  * possible, the type checking fails.
+ *
+ * Don't check mem accesses for Unlocked Memories => these are only allowed inside lock regions and are checked there.
  */
 //TODO: Make error case classes
 class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: Map[Id, Map[Id, LockGranularity]], val ctx: Z3Context)
@@ -150,11 +152,19 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       case CRecv(lhs, rhs) => (lhs, rhs) match {
         case (EMemAccess(mem, expr, _), _) =>
           /*this is a write*/
-          checkDisjoint(mem, c.predicateCtx.get)
-          checkAcquired(mem, expr, env, c.predicateCtx.get)
+          if (isLockedMemoy(mem)) {
+            checkDisjoint(mem, c.predicateCtx.get)
+            checkAcquired(mem, expr, env, c.predicateCtx.get)
+          } else {
+            env
+          }
         case (_, EMemAccess(mem, expr, _)) =>
-          checkAcquired(mem, expr, env, c.predicateCtx.get)
-        case (_, ECall(mod, name, args)) =>
+          if (isLockedMemoy(mem)) {
+            checkAcquired(mem, expr, env, c.predicateCtx.get)
+          } else {
+            env
+          }
+        case (_, ECall(_, _, args)) =>
           args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
         case _ => throw UnexpectedCase(c.pos)
       }
@@ -190,16 +200,18 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
     case EBinop(_, e1, e2) =>
       val env1 = checkExpr(e1, env, predicates)
       checkExpr(e2, env1, predicates)
-    case EMemAccess(mem, index, _) => checkAcquired(mem, index, env, predicates)
+    case EMemAccess(mem, index, _) if isLockedMemoy(mem) => checkAcquired(mem, index, env, predicates)
     case ETernary(cond, tval, fval) =>
       val env1 = checkExpr(cond, env, predicates)
       val env2 = checkExpr(tval, env1, predicates)
       checkExpr(fval, env2, predicates)
     case EApp(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
-    case ECall(_, name, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
+    case ECall(_, _, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
     case ECast(_, exp) => checkExpr(exp, env, predicates)
     case _ => env
   }
+
+  private def isLockedMemoy(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
 
   override def checkCircuit(c: Circuit, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
 

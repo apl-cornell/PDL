@@ -387,12 +387,12 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
             val mtyp = TMemType(elem, size, rlat, wlat, rPorts, wPorts)
             if (lock.isDefined)
               TLockedMemType(mtyp, None, LockImplementation.getLockImpl(lock.get))
-            else
-              TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+            else //no more default lock type!
+              mtyp
           } else {
             val mtyp = TMemType(elem, size,  Latency.Asynchronous,
               Latency.Asynchronous, 1, 1)
-            TLockedMemType(mtyp, None, LockImplementation.getDefaultLockImpl)
+            mtyp //no more default lock type!
           }
       } |
       sizedInt ~ brackets(posint) ~ angular("a:" ~> posint) ~ parens(iden) ^^
