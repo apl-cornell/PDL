@@ -1,4 +1,4 @@
-pipe ex4(in: bool)[rf: int<32>[5]] :bool{
+pipe ex4(in: bool)[rf: int<32>[5]<a,a>(Queue)] :bool{
     start(rf);
     uint<5> addr = u1<5>;
     reserve(rf[addr],R);

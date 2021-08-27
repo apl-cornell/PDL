@@ -1,5 +1,5 @@
 //Expected Success
-pipe test1(input: uint<32>)[rf: int<32>[5]<c2, s>] {
+pipe test1(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
@@ -7,14 +7,15 @@ pipe test1(input: uint<32>)[rf: int<32>[5]<c2, s>] {
     int<32> arg1 <- rf[rs1]; 
     acquire(rf[rs2],R);
     int<32> arg2 <- rf[rs2]; 
-    release(rf[rs1]);
-    release(rf[rs2]);
     end(rf);
+    ---
+    release(rf[rs1]);
+    release(rf[rs2]);    
     call test1(input);
 } 
 
 //Expected Success
-pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>] {
+pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
@@ -26,31 +27,14 @@ pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>] {
     acquire(rf[rs2],R);
     int<32> arg2 <- rf[rs2];
     end(rf);
+    ---
     release(rf[rs2]);
     call test2(input);
 }
 
-//Expected success
-pipe test4(input: uint<32>)[rf: int<32>[5]<c2, s>, dmem: int<32>[32]<a, a>] {
-    uint<5> rs1 = input{0:4};
-    uint<5> rs2 = input{5:9};
-    if (input{0:0} == u1) {
-        start(rf);
-        acquire(rf[rs1],R);
-        release(rf[rs1]);
-        acquire(rf[rs2],R);
-        release(rf[rs2]);
-        end(rf);
-    }
-    call test4(input);
-    start(dmem);
-    acquire(dmem);
-    end(dmem);
-    release(dmem);
-}
 
 //Expected Success
-pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c2, s>] {
+pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c2, s>(Queue)] {
     bool a = true;
     bool b = false;
     uint<5> rs1 = input{0:4};
@@ -62,13 +46,14 @@ pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c
             acquire(rf[rs1],R);
         }
     }
+    end(rf);
+    ---
     if (randomBool == a) {
         if (randomBool2 == b){
             release(rf[rs1]);
         }
     }
     release(rf[rs2]);
-    end(rf);
     call test5(input, randomBool2, randomBool);
 }
 circuit {

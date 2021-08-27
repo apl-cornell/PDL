@@ -439,7 +439,7 @@ object BluespecGeneration {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
         imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib),
-          BImport(verilogLib), BImport(specLib), funcImport) ++
+          BImport(verilogLib), BImport(specLib), BImport(combLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
@@ -687,7 +687,7 @@ object BluespecGeneration {
     private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, isLockedMem(mem))
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, translator.isLockedMem(mem))
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case ICondCommand(cond, cs) =>
@@ -969,7 +969,7 @@ object BluespecGeneration {
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
-          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum.get, isLockedMem(mem))
+          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum.get, translator.isLockedMem(mem))
         ))
         case None => None
       }
@@ -1086,18 +1086,18 @@ object BluespecGeneration {
       case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar) => Some(
         BInvokeAssign(translator.toVar(handle),
           bsInts.getMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
-            data.map(e => translator.toExpr(e)), cmd.portNum.get, isLockedMem(mem))
+            data.map(e => translator.toExpr(e)), cmd.portNum.get, translator.isLockedMem(mem))
       ))
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get, isLockedMem(mem))))
+        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get, translator.isLockedMem(mem))))
       case IMemWrite(mem, addr, data) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.addWritePort) cmd.portNum else None
           case _ => None
         }
         Some(BExprStmt(
-          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)
+          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum, translator.isLockedMem(mem))
         ))
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
@@ -1247,7 +1247,8 @@ object BluespecGeneration {
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, isLockedMem(mem))))
+        Some(BExprStmt(
+          bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, translator.isLockedMem(mem))))
       case IRecv(_, sender, _) =>
         Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
       case _ => None
@@ -1261,10 +1262,6 @@ object BluespecGeneration {
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
 
-    private def isLockedMem(mem: Id): Boolean =  mem.typ.get match {
-      case _:TMemType => false
-      case _ => true
-    }
   }
 
 }

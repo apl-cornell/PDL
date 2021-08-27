@@ -1,4 +1,4 @@
-pipe test3(input: uint<32>)[rf: int<32>[5]<a2>] {
+pipe test3(input: uint<32>)[rf: int<32>[5]<a2>(Queue)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     bool a = rs1 == rs2;
@@ -10,6 +10,7 @@ pipe test3(input: uint<32>)[rf: int<32>[5]<a2>] {
     acquire(rf[rs1],R);
     acquire(rf[rs2],R);
     end(rf);
+    ---
     split {
         case: (a) {
             if(c) {
