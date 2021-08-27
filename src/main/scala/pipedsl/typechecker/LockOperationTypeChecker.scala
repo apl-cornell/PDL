@@ -25,9 +25,10 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
     memLockOpAnnotationMap = memLockOpAnnotationMap.updated(currentMod, getLockAnnotationMap + (lid -> lt))
   }
 
-  private def getLockGranularityMap: Map[Id, LockGranularity] = {
-    memGranularityMap(currentMod)
+  private def getLockGranularity(mem: Id): LockGranularity = {
+    memGranularityMap(currentMod).getOrElse(mem, General)
   }
+
 
   /**
    * Checks if the program has correct lock types
@@ -78,7 +79,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
           case Some(LockRead) => throw IllegalMemoryAccessOperation(c.pos)
           case _ =>
-            e.granularity = getLockGranularityMap(mem)
+            e.granularity = getLockGranularity(mem)
             e.memOpType = Some(LockWrite)
         }
       case (_, e@EMemAccess(mem, index, _)) =>
@@ -86,7 +87,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
           case Some(LockWrite) => throw IllegalMemoryAccessOperation(c.pos)
           case _ =>
             e.memOpType = Some(LockRead)
-            e.granularity = getLockGranularityMap(mem)
+            e.granularity = getLockGranularity(mem)
         }
       case (_, ECall(_, _, _)) =>
       case _ => throw UnexpectedCase(c.pos)
@@ -103,7 +104,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
     case e@EMemAccess(mem, index, _) =>
       //Only want to cast  to variable if it is specific, otherwise previous
       //typechecking pass would have errored out
-      if (getLockGranularityMap(mem) == General) {
+      if (getLockGranularity(mem) == General) {
         e.memOpType = Some(LockRead)
         e.granularity = General
       } else {

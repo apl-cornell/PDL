@@ -1,5 +1,5 @@
 // Expected Success
-pipe test2(input: int<32>)[rf: int<32>[5]] {
+pipe test2(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     if (input{0:0} == 1) {
         acquire(rf);
@@ -9,7 +9,7 @@ pipe test2(input: int<32>)[rf: int<32>[5]] {
     call test2(input);
 }
 //Expected Success
-pipe test4(input: int<32>)[rf: int<32>[5]] {
+pipe test4(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     if (input{0:0} == 1) {
         acquire(rf);
@@ -25,7 +25,7 @@ pipe test4(input: int<32>)[rf: int<32>[5]] {
     call test4(input);
 }
 //Expected Success
-pipe test5(input: int<32>)[rf: int<32>[5]] {
+pipe test5(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
 
     start(rf);
     acquire(rf);
@@ -40,7 +40,7 @@ pipe test5(input: int<32>)[rf: int<32>[5]] {
     call test5(input);
 }
 //Expected success since reserve is before branch
-pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
+pipe test8(input: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     start(rf);
     if (input{0:0} == 1) {
         ---
@@ -58,7 +58,7 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>] {
     end(rf);
 }
 //Expected success
-pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
+pipe test9(input: int<32>)[rf: int<32>[5]<c2,s>(Queue), dmem: int<32>[32]<a,a>(Queue)] {
     start(dmem);
     start(rf);
     if (input{0:0} == 1) {
@@ -72,7 +72,7 @@ pipe test9(input: int<32>)[rf: int<32>[5], dmem: int<32>[32]] {
     call test9(input);
 }
 //Expected Success
-pipe test15(input: int<32>)[rf: int<32>[5]] {
+pipe test15(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     bool a = true;
     start(rf);
     if (a) {
@@ -86,7 +86,7 @@ pipe test15(input: int<32>)[rf: int<32>[5]] {
 }
 
 //Expected Success
-pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
     bool a = true;
     bool b = false;
     start(rf);
@@ -106,7 +106,7 @@ pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
 
 
 //ExpectedSuccess
-pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     split {
         case: randomBool {
@@ -129,7 +129,7 @@ pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
 }
 
 //ExpectedSuccess
-pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     split {
         case: randomBool {

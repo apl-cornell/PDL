@@ -1,0 +1,17 @@
+//Expected Fail
+pipe unlock(input: int<32>)[rf: int<32>[5]<c,s>] {
+    spec_check();
+    s <- speccall unlock(input + 1<32>);
+    ---
+    start(rf);
+    int<32> x = rf[u0<5>] + input;
+    rf[u1<5>] <- x; //no speculative write
+    end(rf);
+    ---
+    spec_barrier();
+    verify(s, input);
+}
+
+circuit {
+    r = memory(int<32>, 5);
+}

@@ -1,4 +1,4 @@
-pipe ex4(inarg: int<32>)[rf: int<32>[5]] :int<32> {
+pipe ex4(inarg: int<32>)[rf: int<32>[5]<a,a>(Queue)] :int<32> {
 
     start(rf);
     uint<5> a1 = u0<5>;

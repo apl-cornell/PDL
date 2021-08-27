@@ -2,9 +2,7 @@ pipe cpu(pc: int<8>)[rf: int<32>[5]<c4,s>(FAQueue), imem: int<32>[8]<a,a>]: bool
      spec_check(); //nonblocking check
      start(imem);
      uint<8> pcaddr = cast(pc, uint<8>);
-     acquire(imem[pcaddr], R);
      int<32> insn <- imem[pcaddr];
-     release(imem[pcaddr]);
      end(imem);
      s <- speccall cpu(pc + 1<8>);
      ---
@@ -60,7 +58,6 @@ circuit {
    rename = regfile(int<32>, 5);
    r = FAQueue(rename);
    ti = memory(int<32>, 8);
-   i = Queue(ti);
-   t = new cpu[r,i];
+   t = new cpu[r,ti];
    call t(0<8>);
 }

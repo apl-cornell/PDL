@@ -24,8 +24,8 @@ object BluespecGeneration {
   private val verilogLib = "VerilogLibs"
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
-    debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
-    memInit:Map[String, String] = Map()) {
+                                 debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
+                                 memInit:Map[String, String] = Map()) {
 
 
     val funcModule: String = funcmodname
@@ -86,7 +86,7 @@ object BluespecGeneration {
         val (stmts1, env1) = instantiateModules(c1, env)
         val (stmts2, env2) = instantiateModules(c2, env1)
         (stmts1 ++ stmts2, env2)
-      case CirConnect(name, c) if isModule(c) =>
+      case CirConnect(name, c) =>
         val initFile = memInit.get(name.v)
         val (modtyp, mod) = cirExprToModule(c, env, initFile)
         val modvar = BVar(name.v, modtyp)
@@ -98,11 +98,18 @@ object BluespecGeneration {
         val (stmts1, env1) = instantiateMems(c1, env)
         val (stmts2, env2) = instantiateMems(c2, env1)
         (stmts1 ++ stmts2, env2)
-      case CirConnect(name, c) if isAsyncMem(c) =>
+      case CirConnect(name, cm) =>
+        val (elemTyp, addrSize, numPorts) = cm match {
+          case CirMem(elemTyp, addrSize, numPorts) => (elemTyp, addrSize, numPorts)
+          case CirLockMem(elemTyp, addrSize, _, _, numPorts) => (elemTyp, addrSize, numPorts)
+          case _ => return (List(), env)
+        }
         val initFile = memInit.get(name.v)
-        val (modtyp, mod) = cirExprToModule(c, env, initFile)
-        val modvar = BVar(name.v, modtyp)
-        (List(BModInst(modvar, mod)), env + (name -> modvar))
+        val bElemTyp = translator.toType(elemTyp)
+        val memtyp = bsInts.getMemPort( translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp, numPorts)
+        val memMod = bsInts.getMem(memtyp, initFile)
+        val modvar = BVar(name.v, memtyp)
+        (List(BModInst(modvar, memMod)), env + (name -> modvar))
       case _ => (List(), env)
     }
     //returns a map from variable names to bsv vars that represent all modules which
@@ -114,13 +121,26 @@ object BluespecGeneration {
         t1 ++ t2
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
       case CirConnect(name, c) => c match {
-        case CirLock(mem, impl, _) if memMap.contains(mem) =>
-          if(is_dp(mem.typ.get))
-            {Map(
-                name.copy(name.v + "1") -> BVar(name.v + impl.getClientName + "1", translator.toClientType(mem.typ.get)),
-                name.copy(name.v + "2") -> BVar(name.v + impl.getClientName + "2", translator.toClientType(mem.typ.get)))}
+        case CirLockMem(elemTyp,addrSize,_,_,numPorts) if memMap.contains(name) => //TODO less copying
+          val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
+            Latency.Asynchronous, numPorts, numPorts)
+          if(is_dp(name.typ.get)) {
+            Map(
+              name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(mtyp)),
+              name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(mtyp))
+            )
+          }
           else
-            Map(name -> BVar(name.v + impl.getClientName, translator.toClientType(mem.typ.get)))
+            Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(mtyp)))
+        case CirMem(_, _, _)  if memMap.contains(name) =>
+          if(is_dp(name.typ.get)) {
+            Map(
+              name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(name.typ.get)),
+              name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(name.typ.get))
+            )
+          }
+          else
+            Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(name.typ.get)))
         case _ => Map()
       }
       case _ => Map()
@@ -149,7 +169,9 @@ object BluespecGeneration {
         val lockMemTyp = translator.toType(c.typ.get)
         val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
           Latency.Asynchronous, numPorts, numPorts)
-        (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
+        val modInstName = impl.getModuleInstName(mtyp)
+        val largs = getLockModArgs(mtyp, impl, szParams)
+        (lockMemTyp, BModule(modInstName, largs))
       case CirRegFile(elemTyp, addrSize) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,
@@ -220,28 +242,28 @@ object BluespecGeneration {
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
     }
 
-    private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] =
-      {
+    private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] = {
       c match {
-      case CirSeq(c1, c2) =>
-        makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
-      case CirConnect(name, CirLock(mem, _, _)) if memMap.contains(mem) =>
-        val leftArg = intMap.get(name)
-        val rightArg = memMap(mem)
-        leftArg match
-        {
-          case Some(value) =>
-            List(bsInts.makeConnection(value, rightArg, 0))
-          case None =>
-            val left1 = intMap(name.copy(name.v + "1"))
-            val left2 = intMap(name.copy(name.v + "2"))
-          List(
-            bsInts.makeConnection(left1, rightArg, 1),
-            bsInts.makeConnection(left2, rightArg, 2))
+        case CirSeq(c1, c2) =>
+          makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
+        case CirConnect(mem, rhs) if memMap.contains(mem) => rhs match {
+          case CirMem(_, _, _) | CirLockMem(_, _, _, _, _) =>
+            val leftArg = intMap.get(mem)
+            val rightArg = memMap(mem)
+            leftArg match {
+              case Some(value) =>
+                List(bsInts.makeConnection(value, rightArg, 0))
+              case None =>
+                val left1 = intMap(mem.copy(mem.v + "1"))
+                val left2 = intMap(mem.copy(mem.v + "2"))
+                List(
+                  bsInts.makeConnection(left1, rightArg, 1),
+                  bsInts.makeConnection(left2, rightArg, 2))
+            }
+          case _ => List()
         }
       case _ => List()
-    }
-      }
+    }}
 
     //Get the body of the top level circuit and the list of modules it instantiates
     private val (mstmts, memMap) = instantiateMems(prog.circ, Map())
@@ -256,9 +278,6 @@ object BluespecGeneration {
 
       //Assigns the internal modules to their external facing interfaces, exposing only clients as necessary
       val assignInts = finalArgMap.values.foldLeft(List[BStatement]())((l, a) => a.typ match {
-       // case BInterface(name, _) if name == "Client" =>
-       //   val clientName = ".mem.bram_client"
-        //  l :+ BIntAssign(bsInts.toIntVar(a), BVar(a.name + clientName, a.typ))
         case _ => l :+ BIntAssign(bsInts.toIntVar(a), a)
       })
 
@@ -440,7 +459,7 @@ object BluespecGeneration {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
         imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib),
-          BImport(verilogLib), BImport(specLib), funcImport) ++
+          BImport(verilogLib), BImport(specLib), BImport(combLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
@@ -688,7 +707,7 @@ object BluespecGeneration {
     private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum.get)
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, translator.isLockedMem(mem))
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case ICondCommand(cond, cs) =>
@@ -970,7 +989,7 @@ object BluespecGeneration {
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
-          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum.get)
+          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum.get, translator.isLockedMem(mem))
         ))
         case None => None
       }
@@ -1087,18 +1106,18 @@ object BluespecGeneration {
       case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar) => Some(
         BInvokeAssign(translator.toVar(handle),
           bsInts.getMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
-            data.map(e => translator.toExpr(e)), cmd.portNum.get)
+            data.map(e => translator.toExpr(e)), cmd.portNum.get, translator.isLockedMem(mem))
       ))
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get)))
+        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get, translator.isLockedMem(mem))))
       case IMemWrite(mem, addr, data) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.addWritePort) cmd.portNum else None
           case _ => None
         }
         Some(BExprStmt(
-          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)
+          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum, translator.isLockedMem(mem))
         ))
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
@@ -1248,7 +1267,8 @@ object BluespecGeneration {
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum.get)))
+        Some(BExprStmt(
+          bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, translator.isLockedMem(mem))))
       case IRecv(_, sender, _) =>
         Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
       case _ => None
@@ -1262,20 +1282,6 @@ object BluespecGeneration {
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
 
-    //0 == earliest (default)
-    //1 == next (has update)
-    //2 == next (has speccall)
-    private def getSpecOrder(cs: Iterable[Command]): Int = {
-      var result = 0
-      cs.foreach {
-        case ICondCommand(_, ics) =>
-          result = math.max(result, getSpecOrder(ics))
-        case CUpdate(_, _, _, _) => result = 1
-        case CSpecCall(_, _, _) => result = 2
-        case _ => ()
-      }
-      result
-    }
   }
 
 }

@@ -37,6 +37,11 @@ object BSVSyntax {
 
     private var variablePrefix = ""
 
+    def isLockedMem(mem: Id): Boolean =  mem.typ.get match {
+      case _:TMemType => false
+      case _ => true
+    }
+
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
     //TODO it would be nice not to need two type translation methods
@@ -151,7 +156,7 @@ object BSVSyntax {
           case memType: TLockedMemType => if (memType.limpl.addReadPort) e.portNum else None
           case _ => None
         }
-        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index),portNum)
+        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index),portNum, isLockedMem(mem))
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toExpr(ex))
       case EInvalid => BInvalid

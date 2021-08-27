@@ -298,10 +298,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     }
     case CLockStart(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
+        case _: TMemType => tenv
         case _: TLockedMemType => tenv
       }
     case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
+        case _: TMemType => tenv
         case _: TLockedMemType => tenv
       }
     case CLockOp(mem, _, _) => {
@@ -497,6 +499,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
       (memt, idxt) match {
+        case (TMemType(e, s, _, _, _, _), TSizedInt(l, TUnsigned())) if l.getLen == s =>
+          if (wm.isDefined) {
+            val (wmt, _) = checkExpression(wm.get, tenv, None)
+            wmt match {
+              //TODO check that the mask size is correct (i.e., length of elemtype / 8)
+              case TSizedInt(lm, TUnsigned()/*true*/) => ()
+              case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
+                " to the number of bytes in the element type", wmt)
+            }
+          }
+          (e, env1)
         case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, TUnsigned())) if l.getLen == s =>
           if (wm.isDefined) {
             val (wmt, _) = checkExpression(wm.get, tenv, None)
