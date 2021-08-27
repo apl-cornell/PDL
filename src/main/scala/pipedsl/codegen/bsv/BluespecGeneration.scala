@@ -98,7 +98,12 @@ object BluespecGeneration {
         val (stmts1, env1) = instantiateMems(c1, env)
         val (stmts2, env2) = instantiateMems(c2, env1)
         (stmts1 ++ stmts2, env2)
-      case CirConnect(name, CirMem(elemTyp, addrSize, numPorts)) =>
+      case CirConnect(name, cm) =>
+        val (elemTyp, addrSize, numPorts) = cm match {
+          case CirMem(elemTyp, addrSize, numPorts) => (elemTyp, addrSize, numPorts)
+          case CirLockMem(elemTyp, addrSize, _, _, numPorts) => (elemTyp, addrSize, numPorts)
+          case _ => return (List(), env)
+        }
         val initFile = memInit.get(name.v)
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getMemPort( translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp, numPorts)
@@ -116,7 +121,18 @@ object BluespecGeneration {
         t1 ++ t2
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
       case CirConnect(name, c) => c match {
-        case CirMem(_, _, _) if memMap.contains(name) =>
+        case CirLockMem(elemTyp,addrSize,_,_,numPorts) if memMap.contains(name) => //TODO less copying
+          val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
+            Latency.Asynchronous, numPorts, numPorts)
+          if(is_dp(name.typ.get)) {
+            Map(
+              name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(mtyp)),
+              name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(mtyp))
+            )
+          }
+          else
+            Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(mtyp)))
+        case CirMem(_, _, _)  if memMap.contains(name) =>
           if(is_dp(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(name.typ.get)),
@@ -153,7 +169,9 @@ object BluespecGeneration {
         val lockMemTyp = translator.toType(c.typ.get)
         val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
           Latency.Asynchronous, numPorts, numPorts)
-        (lockMemTyp, getLockedMemModule(mtyp, impl, szParams, initFile))
+        val modInstName = impl.getModuleInstName(mtyp)
+        val largs = getLockModArgs(mtyp, impl, szParams)
+        (lockMemTyp, BModule(modInstName, largs))
       case CirRegFile(elemTyp, addrSize) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,
@@ -226,21 +244,23 @@ object BluespecGeneration {
 
     private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] = {
       c match {
-      case CirSeq(c1, c2) =>
-        makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
-      case CirConnect(mem, CirMem(_, _, _)) if memMap.contains(mem) =>
-        val leftArg = intMap.get(mem)
-        val rightArg = memMap(mem)
-        leftArg match
-        {
-          case Some(value) =>
-            List(bsInts.makeConnection(value, rightArg, 0))
-          case None =>
-            val left1 = intMap(mem.copy(mem.v + "1"))
-            val left2 = intMap(mem.copy(mem.v + "2"))
-          List(
-            bsInts.makeConnection(left1, rightArg, 1),
-            bsInts.makeConnection(left2, rightArg, 2))
+        case CirSeq(c1, c2) =>
+          makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
+        case CirConnect(mem, rhs) if memMap.contains(mem) => rhs match {
+          case CirMem(_, _, _) | CirLockMem(_, _, _, _, _) =>
+            val leftArg = intMap.get(mem)
+            val rightArg = memMap(mem)
+            leftArg match {
+              case Some(value) =>
+                List(bsInts.makeConnection(value, rightArg, 0))
+              case None =>
+                val left1 = intMap(mem.copy(mem.v + "1"))
+                val left2 = intMap(mem.copy(mem.v + "2"))
+                List(
+                  bsInts.makeConnection(left1, rightArg, 1),
+                  bsInts.makeConnection(left2, rightArg, 2))
+            }
+          case _ => List()
         }
       case _ => List()
     }}

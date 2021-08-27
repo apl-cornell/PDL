@@ -477,6 +477,13 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     }
   }
 
+  lazy val clockmem: P[CirExpr] = positioned {
+    ("memlock" ~> iden) ~ parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {
+      case i ~ (elem ~ _ ~ addr ~ szs) =>
+        CirLockMem(elem, addr, LockImplementation.getLockImpl(i), szs.getOrElse(List()), 1) //TODO pass num ports as parameter
+    }
+  }
+
   lazy val clock: P[CirExpr] = positioned {
     iden ~ parens(iden) ~ angular(repsep(posint,",")).? ^^ {
       case lid ~ mem ~ szs => CirLock(mem, LockImplementation.getLockImpl(lid), szs.getOrElse(List()))
@@ -484,7 +491,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf | clockrf | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | cmem | crf | clockrf | clockmem | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cexpr: P[Circuit] = positioned {

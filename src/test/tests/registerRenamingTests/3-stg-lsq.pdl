@@ -27,8 +27,7 @@ pipe test(pc: uint<32>)[rf: int<32>[5]<a,a>(LSQ)]: bool {
 }
 
 circuit {
-   m = memory(int<32>, 5);
-   lq = LSQ(m);
+   lq = memlock LSQ(int<32>, 5);
    t = new test[lq];
    call t(u1<32>);
 }
