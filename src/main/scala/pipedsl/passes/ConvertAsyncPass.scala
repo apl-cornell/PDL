@@ -62,6 +62,23 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         (send, recv)
       //Mem Write
       case (e@EMemAccess(mem, index@EVar(_), wm), data@EVar(_)) => mem.typ.get match {
+        case TMemType(_, _, _, Latency.Asynchronous, _, _) =>
+          val handle = freshMessage(mem)
+          val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
+          val recv = IMemRecv(mem, handle, None)
+          send.memOpType = e.memOpType
+          send.granularity = e.granularity
+          send.portNum = c.portNum
+          recv.memOpType = e.memOpType
+          recv.granularity = e.granularity
+          recv.portNum = c.portNum
+          (send, recv)
+        case TMemType(_, _, _, _, _, _) =>
+          val write = IMemWrite(mem, index, data).setPos(e.pos)
+          write.memOpType = e.memOpType
+          write.granularity = e.granularity
+          write.portNum = c.portNum
+          (write, CEmpty())
         case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous, _, _),_, _) =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
