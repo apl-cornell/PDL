@@ -170,6 +170,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
     case EMemAccess(m, index, wm, _, _) => m.typ.get match {
+      case TMemType(_, _, rLat, wLat, _, _) =>
+        val memLat = if (isRhs) { rLat } else { wLat }
+        val indexExpr = checkExpr(index, vars, isRhs)
+        if (wm.isDefined) {
+          checkExpr(wm.get, vars, isRhs) match {
+            case Combinational => ()
+            case _ => throw UnexpectedAsyncReference(wm.get.pos, wm.get.toString)
+          }
+        }
+        indexExpr match {
+          case Combinational => memLat
+          case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
+        }
       case TLockedMemType(TMemType(_, _, rLat, wLat, _, _),_,_) =>
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)
@@ -183,7 +196,6 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           case Combinational => memLat
           case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
         }
-
       case _ => throw UnexpectedType(m.pos, m.v, "Mem Type", m.typ.get)
     }
     case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs) match {

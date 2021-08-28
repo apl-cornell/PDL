@@ -1,5 +1,5 @@
 //Expected Success
-pipe test6(input: int<32>)[rf: int<32>[5]<c,s>] {
+pipe test6(input: int<32>)[rf: int<32>[5]<c,s>(Queue)] {
     start(rf);
     reserve(rf);
     end(rf);

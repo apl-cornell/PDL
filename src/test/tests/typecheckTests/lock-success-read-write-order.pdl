@@ -1,5 +1,5 @@
 //Expected Success
-pipe test3(input: uint<32>)[rf: int<32>[5], m:int<32>[5]] {
+pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(Queue), m:int<32>[5]<c2,s>(Queue)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
@@ -18,7 +18,7 @@ pipe test3(input: uint<32>)[rf: int<32>[5], m:int<32>[5]] {
 }
 
 //Tests that modules are analyzed separately
-pipe test4(input: uint<32>)[rf: int<32>[5], m:int<32>[5]] :bool {
+pipe test4(input: uint<32>)[rf: int<32>[5]<c2,s>(Queue), m:int<32>[5]<c2,s>(Queue)] :bool {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);

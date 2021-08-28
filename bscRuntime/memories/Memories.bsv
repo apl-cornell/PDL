@@ -31,6 +31,8 @@ export LSQ(..);
 export mkRegFile;
 export mkBramPort;
 export mkBramPort2;
+export mkAsyncMem;
+export mkAsyncMem2;
 export mkQueueLockCombMem;
 export mkQueueLockAsyncMem;
 export mkQueueLockAsyncMem2;
@@ -479,10 +481,9 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    interface lock = l;
 endmodule
    
-module mkQueueLockAsyncMem(QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
+module mkQueueLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem();
    QueueLock#(LockId#(d)) l <- mkQueueLock();
       
    interface lock = l;
@@ -490,10 +491,9 @@ module mkQueueLockAsyncMem(QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, L
    
 endmodule
 
-module mkFAAddrLockAsyncMem(AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
+module mkFAAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
    
-   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem();
    AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
    
    interface mem = amem;
@@ -501,10 +501,9 @@ module mkFAAddrLockAsyncMem(AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, L
    
 endmodule
 
-module mkDMAddrLockAsyncMem(AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
+module mkDMAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem();
    AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
    
    interface mem = amem;
@@ -513,10 +512,9 @@ module mkDMAddrLockAsyncMem(AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, L
 endmodule
 
 
-module mkQueueLockAsyncMem2(QueueLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
+module mkQueueLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, QueueLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem2#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem2();
    QueueLock#(LockId#(d)) l <- mkQueueLock();
    
    interface lock = l;
@@ -524,10 +522,9 @@ module mkQueueLockAsyncMem2(QueueLockAsyncMem2#(addr, elem, MemId#(inflight), n,
    
 endmodule
 
-module mkFAAddrLockAsyncMem2(AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
+module mkFAAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
    
-   AsyncMem2#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem2();
    AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
    
    interface mem = amem;
@@ -535,10 +532,9 @@ module mkFAAddrLockAsyncMem2(AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n,
    
 endmodule
 
-module mkDMAddrLockAsyncMem2(AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
+module mkDMAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
    
-   AsyncMem2#(addr, elem, MemId#(inflight), n) amem <- mkAsyncMem2();
    AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
    
    interface mem = amem;

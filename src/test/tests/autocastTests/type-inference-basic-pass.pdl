@@ -95,7 +95,7 @@ pipe test6(input: int<32>)[rf: int<32>[32]] {
   call test6(input);
 }
 
-pipe test7()[rf: uint<32>[32]] {
+pipe test7()[rf: uint<32>[32]<a,a>(Queue)] {
   a = 1;
   b = a;
   start(rf);
