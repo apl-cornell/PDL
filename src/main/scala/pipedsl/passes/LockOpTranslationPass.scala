@@ -128,6 +128,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
       val l_arg = LockArg(mem, Some(idx))
       val newArg: Expr = idx//modifyMemAddrArg(isLhs, mem, idx)
       val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated))).setPos(em.pos)
+      println(res)
       res.typ = em.typ
       res.memOpType = em.memOpType
       res.portNum = em.portNum

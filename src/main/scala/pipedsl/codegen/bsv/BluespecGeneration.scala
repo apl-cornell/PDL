@@ -1095,14 +1095,15 @@ object BluespecGeneration {
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get)))
-      case IMemWrite(mem, addr, data, _, _) =>
+      case IMemWrite(mem, addr, data, inHandle, outHandle) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.addWritePort) cmd.portNum else None
           case _ => None
         }
-        Some(BExprStmt(
-          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)
-        ))
+        println(cmd)
+        Some(BStmtSeq(List(BExprStmt(
+          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)),
+          BAssign(translator.toVar(outHandle), translator.toVar(inHandle)))))
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
         if (receiver == mod.name) {
