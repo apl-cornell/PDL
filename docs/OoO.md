@@ -25,6 +25,8 @@ specifically for use in the Issue priority function (discussed in the next secti
 id <- rob_start(); //establish intended seq order. Must be in an in-order stage
 ... //out-of-order issue can happen in here
 --- rob_order(id); //re-establish in-order execution
+...
+rob_free(id); //free the entry in the ROB, must happen after an rob_order. Separated only to make difference betweeen check and modification explicit.
 ```
 
 The ROB implementation is _very_ simple; it just needs to be a circular buffer
@@ -80,10 +82,53 @@ that is only recoverable (i.e., can become re-ordered) via the ROB API.
 
 ## Speculation
 
-Speculation imposes more restrictions. TODO
+Speculation imposes more restrictions than the above.
+Specifically, our Issue Queues and Re-Order buffers need to be able to
+be rolled back, based on particular checkpoints.
+
+### Re-Order Buffer
+
+The reorder buffer is always ordered and thus has a natural checkpoint mechanism.
+When threads _verify_ speculation, if it was _mispredicted_, it will need to kill _all younger threads_,
+and the ROB will need to be reset to (essentially) empty. More particularly, it rollsback
+until the _verifying_ thread is at the head of the ROB.
+
+Restriction Summary:
+
+- `verify` must take place before a thread has released its ROB entry (or before allocating one)
+- Threads must issue a `spec_check` before allocating or releasing an ROB entry.
+
+### Issue Queues
+
+Like with `block` statements, any `spec_barrier` statements inside
+of an out-of-order region could cause deadlock problems.
+If the instruction that's going to _resolve_ speculation for another is scheduled behind
+one that is blocking on it, we'll have a deadlock.
+
+The question is: how do we deal with this? More specifically, how do we imagine architectures
+resolving branch instructions?
+
+Ideas:
+1. Treat the `spec_barrier()` as another ready bit in the issue queue, s.t. branches issue in-order.
+2. Compute on branches out-of-order, wait for instruction retirement to issue verification.
+
+The latter is automatically supportable, so if we allow the former then we should be good.
+The only difference between speculation checks and blocks is that the thread may be killed in some
+scenarios, so when the speculation result is in we need to decide whether to issue or kill based on the result
+(other blocking checks cannot result in killed threads).
+
+### Killing Speculative Threads
+
+For _lock_ operations, we will require that any potentially modifying instructions (reserve, read/write)
+are guarded by a `spec_check` so that they don't update lock state after misspeculating.
+This does not depend on ordering in any way and will work for instructions that are issued OoO.
+
+However, we will also need to be able to purge misspeculated instructions from the issue queue as
+they are now potentially blocking on essentially invalid reservation handles and may deadlock.
+It is unclear how we should specify this logic, if it should be customizable, etc.
 
 
-## Outstanding Issues
+## Other Outstanding Issues
 
 Memory operations in typical ISAs are still hard to support efficiently with this API.
 In particular, something like the instruction:
