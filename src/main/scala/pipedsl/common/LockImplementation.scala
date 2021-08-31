@@ -195,7 +195,7 @@ object LockImplementation {
         Id("blk")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_operate")  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("rel")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("atom")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational))
+        Id("atom")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational)))
 
     override def shortName: String = "Queue"
 

@@ -82,7 +82,9 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       val lhsLat = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
         //TODO rewrite to reduce code maybe?
-        case (EVar(id), EMemAccess(_, _, _, _, _)) => (vars, nextVars + id)
+        case (EVar(id), EMemAccess(mem, index, wmask, inHandle, outHandle)) =>
+          checkExpr(inHandle.get, vars)
+          (vars, nextVars + id)
         case (EVar(id), ECall(_,_,_)) => (vars, nextVars + id)
         case (EVar(id), _) => (vars, nextVars + id)
         case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
@@ -158,7 +160,23 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         case Some(LockWrite) => "res_w"
         case None => "res"
       })
-      println(s"TYPE: ${LockImplementation.getLockImpl(mem).objectType.methods}")
+      LockImplementation.getLockImpl(mem).objectType.methods(method_name)._2 match {
+        case Combinational => (vars + outHandle.id, nextVars)
+        case _ => (vars, nextVars + outHandle.id)
+      }
+    case i@ICheckLockOwned(mem, inHandle, outHandle) =>
+      checkExpr(inHandle, vars)
+      val method_name = Id(i.memOpType match
+      { case Some(LockRead) => "blk_r"
+        case Some(LockWrite) => "blk_w"
+        case None => "blk"
+      })
+      LockImplementation.getLockImpl(mem).objectType.methods(method_name)._2 match {
+        case Combinational => (vars + outHandle.id, nextVars)
+        case _ => (vars, nextVars + outHandle.id)
+      }
+    case i@IReleaseLock(mem, inHandle) =>
+      checkExpr(inHandle, vars)
       (vars, nextVars)
 
     case _ => throw UnexpectedCommand(c)
