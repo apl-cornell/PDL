@@ -81,7 +81,7 @@ object Main {
       //new PrettyPrinter(None).printProgram(canonProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
-      TimingTypeChecker.check(nprog, Some(basetypes))
+      //TimingTypeChecker.check(nprog, Some(basetypes))
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockRegionChecker.check(recvProg, None)
@@ -104,7 +104,7 @@ object Main {
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
       val lock_prog = LockOpTranslationPass.run(recvProg)
-      //new PrettyPrinter(None).printProgram(lock_prog)
+      TimingTypeChecker.check(lock_prog, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")

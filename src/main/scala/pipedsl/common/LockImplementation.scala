@@ -191,16 +191,11 @@ object LockImplementation {
 //    TODO: add type parameters to this to implement polymorphism and probably also the name
     override val objectType: TObject = TObject(Id("QueueLock"), List(),
       Map(
-        Id("res_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("res_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("blk_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("blk_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("lk_read")  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("lk_write") -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_r")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("rel_w")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("atom_r")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("atom_w")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational)))
+        Id("res")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("blk")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("lk_operate")  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id("rel")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("atom")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational))
 
     override def shortName: String = "Queue"
 

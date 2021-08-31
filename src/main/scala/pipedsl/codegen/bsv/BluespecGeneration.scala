@@ -1106,7 +1106,7 @@ object BluespecGeneration {
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
       case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar, lInHandle, lOutHandle) => Some(
         BStmtSeq(List(
-          BAssign(translator.toVar(lOutHandle), translator.toVar(lInHandle)),
+          //BAssign(translator.toVar(lOutHandle), translator.toVar(lInHandle)),
           BInvokeAssign(translator.toVar(handle),
             bsInts.getMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
               data.map(e => translator.toExpr(e)), cmd.portNum.get, translator.isLockedMem(mem)))

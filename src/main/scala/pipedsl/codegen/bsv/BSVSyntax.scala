@@ -94,10 +94,12 @@ object BSVSyntax {
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TMaybe(btyp) => BMaybe(toType(btyp))
       case TRequestHandle(n, rtyp) => rtyp match {
-        case pipedsl.common.Syntax.RequestType.Lock =>
+        case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType]=>
           //These are passed in the modmap rather than the handle map
-          modmap(n)
-        case pipedsl.common.Syntax.RequestType.Module =>
+            modmap(n)
+        //TODO allow this to be specified somewhere
+        case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
+        case _ => //pipedsl.common.Syntax.RequestType.Module =>
           val modtyp = toType(n.typ.get)
           if (handleMap.contains(modtyp)) {
             handleMap(modtyp)
@@ -110,8 +112,6 @@ object BSVSyntax {
               case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
             }
           }
-          //TODO allow this to be specified somewhere
-        case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
       }
       case TVoid() => BVoid
       case TNamedType(name) => BTypeParam(name.v, List(PBits("_sz" + name.v)))

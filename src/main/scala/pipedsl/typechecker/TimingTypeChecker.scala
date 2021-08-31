@@ -2,8 +2,8 @@ package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
 import TypeChecker.TypeChecks
-import pipedsl.common.Errors.{UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedType}
-import pipedsl.common.Syntax
+import pipedsl.common.Errors.{MissingType, UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedType}
+import pipedsl.common.{LockImplementation, Syntax}
 import Environments.Environment
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency}
 
@@ -151,6 +151,16 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(a, vars)
       })
       (vars, nextVars)
+    case i@IReserveLock(outHandle, mem) =>
+      val method_name = Id(i.memOpType match
+      {
+        case Some(LockRead) => "res_r"
+        case Some(LockWrite) => "res_w"
+        case None => "res"
+      })
+      println(s"TYPE: ${LockImplementation.getLockImpl(mem).objectType.methods}")
+      (vars, nextVars)
+
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -214,12 +224,20 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Combinational
-    case ECall(_, name, args) =>
+    case ECall(mod, name, args) =>
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       //TODO methods are hacked
-      if (name.isDefined) { Combinational } else { Asynchronous }
+      name match
+      {
+        case Some(nm) => mod.typ match {
+          case Some(TObject(_, _, methods)) => methods(nm)._2
+          case Some(a) => throw UnexpectedType(e.pos, "Method call", "Object type", a)
+          case None => throw MissingType(e.pos, "Method call")
+        }
+        case None => Asynchronous
+      }
     case EVar(id) => if(!vars(id) && isRhs) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)
     case _ => Combinational

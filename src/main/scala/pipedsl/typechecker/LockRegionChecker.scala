@@ -105,7 +105,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case EToMaybe(ex) => checkMemAccess(ex, env)
     case EUop(_, ex) => checkMemAccess(ex, env)
     case EBinop(_, e1, e2) => checkMemAccess(e1, env); checkMemAccess(e2, env)
-    case EMemAccess(mem, _, _) =>
+    case EMemAccess(mem, _, _, _, _) =>
       mem.typ.get match {
         case TMemType(_,_,_,_,_,_) => //only check _unlocked_ memories
           if (env(mem) != Acquired) {

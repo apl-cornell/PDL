@@ -117,6 +117,7 @@ object Syntax {
         if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
+      case TReqHandle(tp, _) => s"${tp}_Request"
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
       case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")"
