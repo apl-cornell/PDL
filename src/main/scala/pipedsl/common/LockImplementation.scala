@@ -69,6 +69,20 @@ object LockImplementation {
     }
   }
 
+  def getLockImpl(m :EMemAccess) :LockInterface =
+    {
+      val mem = m.mem
+      mem.typ match
+      {
+        case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory")
+        {
+          case TLockedMemType(_, _, limpl) => limpl
+          case _ :TModType => getDefaultLockImpl
+        }
+        case None => throw MissingType(mem.pos, mem.v)
+      }
+    }
+
   sealed trait LockInterface {
 
     //Convenience method to generate module names

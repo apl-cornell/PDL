@@ -3,8 +3,9 @@ package pipedsl.typechecker
 import pipedsl.common.Syntax._
 import TypeChecker.TypeChecks
 import pipedsl.common.Errors.{MissingType, UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedType}
-import pipedsl.common.{LockImplementation, Syntax}
+import pipedsl.common.{LockImplementation, Locks, Syntax}
 import Environments.Environment
+import pipedsl.common.Locks.General
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency}
 
 /**
@@ -82,13 +83,31 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       val lhsLat = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
         //TODO rewrite to reduce code maybe?
-        case (EVar(id), EMemAccess(mem, index, wmask, inHandle, outHandle)) =>
+        case (EVar(id), e@EMemAccess(mem, index, wmask, inHandle, outHandle)) =>
           checkExpr(inHandle.get, vars)
-          (vars, nextVars + id)
+          val method_name = Id(e.granularity match
+          { case Locks.Specific => "lk_read"
+            case Locks.General => "lk_operate"
+          })
+          LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match {
+            case Combinational => (vars + outHandle.get.id, nextVars + id)
+            case _ => (vars, nextVars + id + outHandle.get.id)
+          }
         case (EVar(id), ECall(_,_,_)) => (vars, nextVars + id)
         case (EVar(id), _) => (vars, nextVars + id)
         case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
           throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
+        case (e@EMemAccess(_, _, _, inHandle, outHandle), _) =>
+          checkExpr(inHandle.get, vars)
+          val method_name = Id(e.granularity match
+          { case Locks.Specific => "lk_write"
+            case Locks.General => "lk_operate"
+          })
+          LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match
+          {
+            case Combinational => (vars + outHandle.get.id, nextVars)
+            case _ => (vars, nextVars + outHandle.get.id)
+          }
         case _ => (vars, nextVars)
       }
     case CLockStart(_) => (vars, nextVars)
@@ -197,7 +216,13 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case Combinational => Combinational
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
-    case EMemAccess(m, index, wm, _, _) => m.typ.get match {
+    case e@EMemAccess(m, index, wm, inHandle, outHandle) =>
+      val method_name = Id(
+        if(e.granularity == General) "lk_operate"
+        else if(isRhs) "lk_read"
+        else "lk_write")
+      println(e)
+      m.typ.get match {
       case TMemType(_, _, rLat, wLat, _, _) =>
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)
@@ -231,8 +256,11 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case _ => throw UnexpectedAsyncReference(num.pos, num.toString)
     }
     case ETernary(cond, tval, fval) =>
-      (checkExpr(cond, vars, isRhs), checkExpr(tval, vars, isRhs), checkExpr(fval, vars, isRhs)) match {
-        case (Combinational, Combinational, Combinational) => Combinational
+      (checkExpr(cond, vars, isRhs),
+        checkExpr(tval, vars, isRhs),
+        checkExpr(fval, vars, isRhs)) match {
+        case (Combinational, Combinational, Combinational) =>
+          Combinational
         case (_, Combinational, Combinational) => throw UnexpectedAsyncReference(cond.pos, cond.toString)
         case (_, _, Combinational) => throw UnexpectedAsyncReference(tval.pos, tval.toString)
         case _ => throw UnexpectedAsyncReference(fval.pos, fval.toString)

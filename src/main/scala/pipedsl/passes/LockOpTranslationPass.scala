@@ -125,7 +125,10 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     //case em@EMemAccess(_, _, _, _, _) if em.granularity == General => println("dumbass"); em
     //SimplifyRecvPass ensures that the index expression is always a variable
     case em@EMemAccess(mem, idx@EVar(_), wm, inHandle, outHandle) /*if em.granularity == Specific*/ =>
-      val l_arg = LockArg(mem, Some(idx))
+      val l_arg = LockArg(mem, em.granularity match
+      { case Locks.Specific => Some(idx)
+        case Locks.General => None
+      })
       val newArg: Expr = idx//modifyMemAddrArg(isLhs, mem, idx)
       val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated))).setPos(em.pos)
       res.typ = em.typ
