@@ -19,7 +19,6 @@ object Syntax {
     trait TypeAnnotation {
       var typ: Option[Type] = None
     }
-
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
@@ -411,7 +410,19 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle :Option[EVar], outHandle :Option[EVar]) extends Expr with LockInfoAnnotation
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle :Option[EVar], outHandle :Option[EVar]) extends Expr with LockInfoAnnotation with HasCopyMeta
+  {
+    override val copyMeta: HasCopyMeta => EMemAccess =
+      {
+        case from :EMemAccess =>
+        setPos(from.pos)
+        portNum = from.portNum
+        memOpType = from.memOpType
+        granularity = from.granularity
+        typ = from.typ
+        this
+      }
+  }
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr

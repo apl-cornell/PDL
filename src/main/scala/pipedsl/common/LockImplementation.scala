@@ -289,14 +289,14 @@ object LockImplementation {
     private val dataType = TSizedInt(TBitWidthLen(32), TSigned())
     override val objectType: TObject =
       TObject(Id("FAQueue"), List(), Map(
-        Id("res_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("res_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("res_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational), // SEQ
+        Id("res_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational), //SEQ
         Id("blk_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("blk_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_read")  -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("lk_write") -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("rel_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id("rel_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential), //SEQ
+        Id("rel_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential), // SEQ
         Id("atom_r")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
         Id("atom_w")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational)))
 
