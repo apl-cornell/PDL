@@ -1,6 +1,7 @@
 package Locks;
 
 import FIFOF :: *;
+import Ehr :: *;
 import Vector :: *;
 import ConfigReg :: *;
 export LockId(..);
@@ -19,6 +20,16 @@ interface QueueLock#(type id);
    method Action rel(id i);
    method Bool isEmpty();
    method Bool canRes();
+endinterface
+
+interface CheckpointQueueLock#(type id, type cid);
+   method ActionValue#(id) res();
+   method Bool owns(id i);
+   method Action rel(id i);
+   method Bool isEmpty();
+   method Bool canRes();
+   method ActionValue#(cid) checkpoint();
+   method Action rollback(cid id);
 endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
@@ -67,6 +78,62 @@ module mkQueueLock(QueueLock#(LockId#(d)));
       cnt <= cnt + 1;
       return nextId;
    endmethod
+      
+endmodule
+
+module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
+
+   Ehr#(2, LockId#(d)) nextId <- mkEhr(0);
+   Reg#(LockId#(d)) owner <- mkReg(0);
+   Reg#(Bool) empty <- mkReg(True);
+   
+   RWire#(Bool) doRes <- mkRWire();
+   RWire#(Bool) doRel <- mkRWire();
+   
+   //for when you're doing not rollback
+   rule updateEmpty;
+      let res = fromMaybe(False, doRes.wget());
+      let rel = fromMaybe(False, doRel.wget());
+      if (res && !rel) empty <= False;
+      if (!res && rel) empty <= (owner + 1) == nextId[1];
+   endrule
+   
+   method Bool isEmpty();
+      return empty;
+   endmethod
+   
+   method Bool canRes();
+      return empty || nextId[0] != owner;
+   endmethod
+   
+   //Returns True if thread `tid` already owns the lock
+   method Bool owns(LockId#(d) tid);
+      return owner == tid;
+   endmethod
+	       
+   //Releases the lock, assume `tid` owns it
+   method Action rel(LockId#(d) tid);
+      owner <= owner + 1; //assign next owner
+      doRel.wset(True);   
+   endmethod
+   
+   //Reserves the lock and returns the associated id
+   method ActionValue#(LockId#(d)) res();
+      nextId[0] <= nextId[0] + 1;
+      doRes.wset(True);
+      return nextId[0];
+   endmethod
+   
+   method ActionValue#(LockId#(d)) checkpoint();
+      //return point after this cycle's reservations
+      return nextId[1];
+   endmethod
+   
+   method Action rollback(LockId#(d) i);
+      //conflicts with other update rules - cannot res/rel and rollback
+      nextId[0] <= i;
+      empty <= i == owner; //if i is Owner, then this is actually empty after rollback
+   endmethod   
    
 endmodule
 
