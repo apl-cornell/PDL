@@ -311,6 +311,8 @@ object Syntax {
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
+  def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+
   /**
    * Define common helper methods implicit classes.
    */

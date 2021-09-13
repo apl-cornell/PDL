@@ -54,7 +54,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         val _ = checkExpr(rhs, vars)
         val _ = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
-          case (EVar(id), e@EMemAccess(_, _, _, inHandle, outHandle)) =>
+            //don't need to check handles for unlocked mems
+          case (EVar(id), e@EMemAccess(mem, _, _, inHandle, outHandle)) if isLockedMemory(mem) =>
             checkExpr(inHandle.get, vars)
             LockImplementation.getAccess(LockImplementation.getLockImpl(e), Some(LockRead)).get._2 match {
               case Combinational if isRecv => (vars + outHandle.get.id, nextVars + id)
@@ -63,11 +64,22 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
               case _ if !isRecv => (vars + id, nextVars + outHandle.get.id)
             }
           case (EVar(id), ECall(_,_,_)) if isRecv => (vars, nextVars + id)
-          case (EVar(_), _ :ECall) => throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
+          case (EVar(id), ECall(mod, Some(method), args)) =>
+            args.foreach(a => checkExpr(a, vars))
+            mod.typ.get match {
+              case TObject(_, _, methods) => methods(method)._2 match {
+                case Combinational => (vars + id, nextVars)
+                case _ => throw UnexpectedAsyncReference(rhs.pos, "Noncombinational method called in assign.")
+              }
+              case t@_ => throw UnexpectedType(mod.pos, "External Call", "Object Type", t)
+            }
+          case (EVar(_), ECall(_, None, _)) => //this is calling another PDL pipeline, not allowed in assign
+            throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
           case (EVar(id), _) => if (isRecv) { (vars, nextVars + id) } else { (vars + id, nextVars) }
           case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
             throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
-          case (e@EMemAccess(_, _, _, inHandle, outHandle), _) =>
+          //don't need to check handles for unlocked mems
+          case (e@EMemAccess(mem, _, _, inHandle, outHandle), _) if isLockedMemory(mem) =>
             checkExpr(inHandle.get, vars)
             LockImplementation.getAccess(LockImplementation.getLockImpl(e), Some(LockWrite)).get._2 match
             {
@@ -77,7 +89,6 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           case _ => (vars, nextVars)
         }
       }
-
     c match {
       case CSeq(c1, c2) =>
         val (v2, nv2) = checkCommand(c1, vars, nextVars)
@@ -261,7 +272,9 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         }
         case None => Asynchronous
       }
-    case EVar(id) => if(!vars(id) && isRhs) { throw UnavailableArgUse(e.pos, id.toString)} else { Combinational }
+    case EVar(id) => if(!vars(id) && isRhs) {
+      throw UnavailableArgUse(e.pos, id.toString) }
+      else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)
     case _ => Combinational
   }
