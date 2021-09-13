@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Annotations.PortAnnotation
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
 
 
@@ -18,6 +18,66 @@ object LockImplementation {
   private val rename = new RenameRegfile()
   private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
+
+  //Lock Object Method Names
+  private val resName = "res"
+  private val resReadName = resName + "_r"
+  private val resWriteName = resName + "_w"
+
+  private val blockName = "owns"
+  private val blockReadName = blockName + "_r"
+  private val blockWriteName = blockName + "_w"
+
+  private val accessName = "access"
+  private val readName = accessName + "_r"
+  private val writeName = accessName + "_w"
+
+  private val releaseName = "rel"
+  private val releaseReadName = releaseName + "_r"
+  private val releaseWriteName = releaseName + "_w"
+
+  private val atomicReadName = "atom_r"
+  private val atomicWriteName = "atom_w"
+
+  def getReserve(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+    case Locks.Specific =>
+      val method = Id(op match {
+        case Some(Syntax.LockRead) => resReadName
+        case Some(Syntax.LockWrite) => resWriteName
+      })
+      l.objectType.methods.get(method)
+    case Locks.General => l.objectType.methods.get(Id(resName))
+  }
+
+  def getBlock(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+    case Locks.Specific =>
+      val method = Id(op match {
+        case Some(Syntax.LockRead) => blockReadName
+        case Some(Syntax.LockWrite) => blockWriteName
+      })
+      l.objectType.methods.get(method)
+    case Locks.General => l.objectType.methods.get(Id(blockName))
+  }
+
+  def getAccess(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+    case Locks.Specific =>
+      val method = Id(op match {
+      case Some(Syntax.LockRead) => readName
+      case Some(Syntax.LockWrite) => writeName
+    })
+      l.objectType.methods.get(method)
+    case Locks.General => l.objectType.methods.get(Id(accessName))
+  }
+
+  def getRelease(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+    case Locks.Specific =>
+      val method = Id(op match {
+        case Some(Syntax.LockRead) => releaseReadName
+        case Some(Syntax.LockWrite) => releaseWriteName
+      })
+      l.objectType.methods.get(method)
+    case Locks.General => l.objectType.methods.get(Id(releaseName))
+  }
 
   /**
    * This is used when the lock implementation for a memory is left unspecified:
@@ -205,11 +265,12 @@ object LockImplementation {
 //    TODO: add type parameters to this to implement polymorphism and probably also the name
     override val objectType: TObject = TObject(Id("QueueLock"), List(),
       Map(
-        Id("res")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("blk")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("lk_operate")  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel")    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
-        Id("atom")   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational)))
+        Id(resName)    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id(blockName)    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(accessName)  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(releaseName)    -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Sequential),
+        Id(atomicReadName)   -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(atomicWriteName)  -> (TFun(List(), TReqHandle(objectType, RequestType.Lock)), Combinational)))
 
     override def shortName: String = "Queue"
 
@@ -289,16 +350,16 @@ object LockImplementation {
     private val dataType = TSizedInt(TBitWidthLen(32), TSigned())
     override val objectType: TObject =
       TObject(Id("FAQueue"), List(), Map(
-        Id("res_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational), // SEQ
-        Id("res_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational), //SEQ
-        Id("blk_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("blk_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("lk_read")  -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("lk_write") -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("rel_r")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential), //SEQ
-        Id("rel_w")    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential), // SEQ
-        Id("atom_r")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
-        Id("atom_w")   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational)))
+        Id(resReadName)    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational), // SEQ
+        Id(resWriteName)    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational), //SEQ
+        Id(blockReadName)    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(blockWriteName)    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(readName)  -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(writeName) -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(releaseReadName)    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential), //SEQ
+        Id(releaseWriteName)    -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Sequential), // SEQ
+        Id(atomicReadName)   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational),
+        Id(atomicWriteName)   -> (TFun(List(addrType), TReqHandle(objectType, RequestType.Lock)), Combinational)))
 
 
     private val defaultNumLocks = 4

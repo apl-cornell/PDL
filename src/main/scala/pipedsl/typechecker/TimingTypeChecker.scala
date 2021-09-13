@@ -49,47 +49,27 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
    * @return The updated sets of available variables
    */
   def checkCommand(c: Command, vars: Available, nextVars: Available): (Available, Available) = {
-    def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean) =
+    def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean): (Available, Available) =
       {
-        val rhsLat = checkExpr(rhs, vars)
-        val lhsLat = checkExpr(lhs, vars, isRhs = false)
+        val _ = checkExpr(rhs, vars)
+        val _ = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
-          //TODO rewrite to reduce code maybe?
-          case (EVar(id), e@EMemAccess(mem, index, wmask, inHandle, outHandle)) =>
+          case (EVar(id), e@EMemAccess(_, _, _, inHandle, outHandle)) =>
             checkExpr(inHandle.get, vars)
-            println(s"read: $e :: ${e.granularity}")
-            val method_name = Id(e.granularity match
-            { case Locks.Specific => "lk_read"
-              case Locks.General => "lk_operate"
-            })
-            println(method_name)
-            LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match {
+            LockImplementation.getAccess(LockImplementation.getLockImpl(e), Some(LockRead)).get._2 match {
               case Combinational if isRecv => (vars + outHandle.get.id, nextVars + id)
               case Combinational if !isRecv => (vars + outHandle.get.id + id, nextVars)
               case _ if isRecv => (vars, nextVars + id + outHandle.get.id)
               case _ if !isRecv => (vars + id, nextVars + outHandle.get.id)
             }
-          case (EVar(id), ECall(_,_,_)) if isRecv =>
-            println(s"call to set $id"); (vars, nextVars + id)
+          case (EVar(id), ECall(_,_,_)) if isRecv => (vars, nextVars + id)
           case (EVar(_), _ :ECall) => throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
-          case (EVar(id), _) => if (isRecv) {
-            println(c)
-            (vars, nextVars + id)
-          }
-          else
-            {
-              println(c)
-              (vars + id, nextVars)
-            }
+          case (EVar(id), _) => if (isRecv) { (vars, nextVars + id) } else { (vars + id, nextVars) }
           case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
             throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
           case (e@EMemAccess(_, _, _, inHandle, outHandle), _) =>
             checkExpr(inHandle.get, vars)
-            val method_name = Id(e.granularity match
-            { case Locks.Specific => "lk_write"
-              case Locks.General => "lk_operate"
-            })
-            LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match
+            LockImplementation.getAccess(LockImplementation.getLockImpl(e), Some(LockWrite)).get._2 match
             {
               case Combinational => (vars + outHandle.get.id, nextVars)
               case _ => (vars, nextVars + outHandle.get.id)
@@ -122,7 +102,6 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         }
         val (vt, nvt) = checkCommand(cons, vars, nextVars)
         val (vf, nvf) = checkCommand(alt, vars, nextVars)
-        println(s"IF: $cond\ntrue: $vt, $nvt\nfalse: $vf, $nvf")
         val this_cycle_intersect = vt.intersect(vf)
         (this_cycle_intersect, (nvt.union(vt)).intersect(nvf.union(vf)).removedAll(this_cycle_intersect))//nvt.intersect(nvf))
       case CAssign(lhs, rhs) =>
@@ -194,31 +173,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         })
         (vars, nextVars)
       case i@IReserveLock(outHandle, mem) =>
-        val method_name = Id(i.memOpType match
-        {
-          case Some(LockRead) => "res_r"
-          case Some(LockWrite) => "res_w"
-          case None => "res"
-        })
-        LockImplementation.getLockImpl(mem).objectType.methods(method_name)._2 match {
+        LockImplementation.getReserve(LockImplementation.getLockImpl(mem), i.memOpType).get._2 match {
           case Combinational => (vars + outHandle.id, nextVars)
           case _ => (vars, nextVars + outHandle.id)
         }
       case i@ICheckLockOwned(mem, inHandle, outHandle) =>
         checkExpr(inHandle, vars)
-        val method_name = Id(i.memOpType match
-        { case Some(LockRead) => "blk_r"
-          case Some(LockWrite) => "blk_w"
-          case None => "blk"
-        })
-        LockImplementation.getLockImpl(mem).objectType.methods(method_name)._2 match {
+        LockImplementation.getBlock(LockImplementation.getLockImpl(mem), i.memOpType).get._2 match {
           case Combinational => (vars + outHandle.id, nextVars)
           case _ => (vars, nextVars + outHandle.id)
         }
-      case i@IReleaseLock(mem, inHandle) =>
+      case IReleaseLock(_, inHandle) => //timing of release doesn't really matter, result can't be used
         checkExpr(inHandle, vars)
         (vars, nextVars)
-
       case _ => throw UnexpectedCommand(c)
     }
   }
@@ -238,34 +205,27 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case Combinational => Combinational
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
-    case e@EMemAccess(m, index, wm, inHandle, outHandle) =>
+    case EMemAccess(m, index, wm, inHandle, outHandle) =>
+      def checkMemRead(rLat: Latency, wLat: Latency): Latency = {
+        val memLat = if (isRhs) { rLat } else { wLat }
+        val indexExpr = checkExpr(index, vars, isRhs)
+        if (wm.isDefined) {
+          checkExpr(wm.get, vars, isRhs) match {
+            case Combinational => ()
+            case _ => throw UnexpectedAsyncReference(wm.get.pos, wm.get.toString)
+          }
+        }
+        indexExpr match {
+          case Combinational => memLat
+          case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
+        }
+      }
       m.typ.get match {
       case TMemType(_, _, rLat, wLat, _, _) =>
-        val memLat = if (isRhs) { rLat } else { wLat }
-        val indexExpr = checkExpr(index, vars, isRhs)
-        if (wm.isDefined) {
-          checkExpr(wm.get, vars, isRhs) match {
-            case Combinational => ()
-            case _ => throw UnexpectedAsyncReference(wm.get.pos, wm.get.toString)
-          }
-        }
-        indexExpr match {
-          case Combinational => memLat
-          case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
-        }
+        checkMemRead(rLat, wLat)
       case TLockedMemType(TMemType(_, _, rLat, wLat, _, _),_,_) =>
-        val memLat = if (isRhs) { rLat } else { wLat }
-        val indexExpr = checkExpr(index, vars, isRhs)
-        if (wm.isDefined) {
-          checkExpr(wm.get, vars, isRhs) match {
-            case Combinational => ()
-            case _ => throw UnexpectedAsyncReference(wm.get.pos, wm.get.toString)
-          }
-        }
-        indexExpr match {
-          case Combinational => memLat
-          case _ => throw UnexpectedAsyncReference(index.pos, index.toString)
-        }
+        //TODO also check and set lock handle latency - i think we need this for statements like: x = rf[rs1] + 3;
+        checkMemRead(rLat, wLat)
       case _ => throw UnexpectedType(m.pos, m.v, "Mem Type", m.typ.get)
     }
     case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs) match {
