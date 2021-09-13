@@ -122,22 +122,24 @@ object BluespecGeneration {
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
       case CirConnect(name, c) => c match {
         case CirLockMem(elemTyp,addrSize,_,_,numPorts) if memMap.contains(name) => //TODO less copying
-          val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
-            Latency.Asynchronous, numPorts, numPorts)
-          if(is_dp(name.typ.get)) {
+          val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous, numPorts, numPorts)
+          if(isDualPorted(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(mtyp)),
               name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(mtyp))
             )
           }
-          else
+          else {
             Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(mtyp)))
+          }
         case CirMem(_, _, _)  if memMap.contains(name) =>
-          if(is_dp(name.typ.get)) {
+          if(isDualPorted(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(name.typ.get)),
               name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(name.typ.get))
             )
+          } else {
+            Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(name.typ.get)))
           }
         case _ => Map()
       }
@@ -235,7 +237,7 @@ object BluespecGeneration {
       case _ => (List(), List(), List())
     }
 
-    private val isDualPorted :Type => Boolean = {
+    private def isDualPorted(t: Type): Boolean = t match {
       case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
       case _ => false
