@@ -105,6 +105,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         CSeq(nasgn, CReturn(nexp).setPos(c.pos)).setPos(c.pos)
       case CExpr(exp) => val (nexp, nasgn) = extractCastVars(exp)
         CSeq(nasgn, CExpr(nexp).setPos(c.pos)).setPos(c.pos)
+      case CCheckpoint(_,_) => c
       case CLockStart(_) => c
       case CLockEnd(_) => c
       case CLockOp(_, _, _) => c

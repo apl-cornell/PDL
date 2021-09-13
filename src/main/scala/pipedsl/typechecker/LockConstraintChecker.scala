@@ -250,10 +250,12 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
     val expectedName = ls match {
       case Released => lockReleaseMode
       case Reserved => lockReserveMode
+      case _ => assert(false); lockReleaseMode //TODO throw good exception
     }
     val assertion = ls match {
       case Released => ctx.mkAnd((SMTReleaseModeListMap(mem) + topLevelReleaseModeMap(mem)).toSeq: _*)
       case Reserved => ctx.mkAnd((SMTReserveModeListMap(mem) + topLevelReserveModeMap(mem)).toSeq: _*)
+      case _ => assert(false); lockReleaseMode //TODO throw good exception
     }
     solver.add(mkAnd(ctx, assertion, ctx.mkEq(expectedName, ctx.mkInt(WRITE))))
     //If satisfiable, this means that the lock mode is in the wrong state.
@@ -286,7 +288,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
   }
 
   private def constructVarName(mem: LockArg): String = {
-    mem.id + (if (mem.evar.isDefined) "[" + mem.evar.get.id.v + "]" else "")
+    mem.id.v + (if (mem.evar.isDefined) "[" + mem.evar.get.id.v + "]" else "")
   }
 
   private def checkAcquired(mem: Id, expr: Expr, env: Environment[LockArg, Z3AST], predicates: Z3BoolExpr): Environment[LockArg, Z3AST] = {

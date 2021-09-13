@@ -139,8 +139,6 @@ object BluespecGeneration {
               name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(name.typ.get))
             )
           }
-          else
-            Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(name.typ.get)))
         case _ => Map()
       }
       case _ => Map()
@@ -237,9 +235,10 @@ object BluespecGeneration {
       case _ => (List(), List(), List())
     }
 
-    private val is_dp :Type => Boolean = {
+    private val isDualPorted :Type => Boolean = {
       case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
+      case _ => false
     }
 
     private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] = {
@@ -1019,6 +1018,7 @@ object BluespecGeneration {
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
+      case CCheckpoint(_,_) => throw UnexpectedCommand(cmd)
     }
 
     //Helper to accumulate geteffectdecl results into a single list

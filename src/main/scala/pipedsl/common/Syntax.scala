@@ -70,7 +70,7 @@ object Syntax {
 
   object RequestType extends Enumeration {
     type RequestType = Value
-    val Lock, Module, Speculation = Value
+    val Lock, Module, Speculation, Checkpoint = Value
   }
 
   import RequestType._
@@ -145,6 +145,7 @@ object Syntax {
           lbl = from.lbl
           maybeSpec = from.maybeSpec
           this
+        case _ => this
       }
 
     /**
@@ -429,6 +430,7 @@ object Syntax {
         portNum = from.portNum
         predicateCtx = from.predicateCtx
         this
+        case _ => this
       }
   }
   case class CSeq(c1: Command, c2: Command) extends Command
@@ -452,6 +454,7 @@ object Syntax {
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
+  case class CCheckpoint(handle: EVar, lock: Id) extends Command
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
 
@@ -504,6 +507,7 @@ object Syntax {
           isRecursive = from.isRecursive
           pos = from.pos
           this
+          case _ => this
         }
     }
 
