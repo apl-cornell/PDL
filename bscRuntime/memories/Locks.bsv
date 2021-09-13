@@ -88,14 +88,13 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
    Reg#(Bool) empty <- mkReg(True);
    
    RWire#(Bool) doRes <- mkRWire();
-   RWire#(Bool) doRel <- mkRWire();
+   RWire#(LockId#(d)) doRel <- mkRWire();
    
    //for when you're doing not rollback
    rule updateEmpty;
       let res = fromMaybe(False, doRes.wget());
-      let rel = fromMaybe(False, doRel.wget());
-      if (res && !rel) empty <= False;
-      if (!res && rel) empty <= (owner + 1) == nextId[1];
+      if (res &&& doRel.wget() matches tagged Invalid) empty <= False;
+      if (!res &&& doRel.wget() matches tagged Valid.nextOwner) empty <= nextOwner == nextId[1];
    endrule
    
    method Bool isEmpty();
@@ -114,7 +113,7 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
    //Releases the lock, assume `tid` owns it
    method Action rel(LockId#(d) tid);
       owner <= owner + 1; //assign next owner
-      doRel.wset(True);   
+      doRel.wset(owner + 1);
    endmethod
    
    //Reserves the lock and returns the associated id
