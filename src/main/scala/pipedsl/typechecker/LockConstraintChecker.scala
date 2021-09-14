@@ -148,18 +148,18 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           ctx)
         //Merge the two envs
         tenv.intersect(fenv) //real merge logic lives inside Envrionments.Z3AST
-      case CAssign(_, rhs) => checkExpr(rhs, env, c.predicateCtx.get)
-      case CRecv(lhs, rhs) => (lhs, rhs) match {
+      case CAssign(_, rhs, _) => checkExpr(rhs, env, c.predicateCtx.get)
+      case CRecv(lhs, rhs, isAtomic) => (lhs, rhs) match {
         case (EMemAccess(mem, expr, _, _, _), _) =>
           /*this is a write*/
-          if (isLockedMemory(mem)) {
+          if (isLockedMemory(mem) && !isAtomic) {
             checkDisjoint(mem, c.predicateCtx.get)
             checkAcquired(mem, expr, env, c.predicateCtx.get)
           } else {
             env
           }
         case (_, EMemAccess(mem, expr, _, _, _)) =>
-          if (isLockedMemory(mem)) {
+          if (isLockedMemory(mem) && !isAtomic) {
             checkAcquired(mem, expr, env, c.predicateCtx.get)
           } else {
             env

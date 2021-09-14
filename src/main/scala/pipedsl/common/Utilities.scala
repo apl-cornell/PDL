@@ -56,8 +56,8 @@ object Utilities {
         v ++ getUsedVars(c.cond) ++ getAllVarNames(c.body)
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
-    case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
-    case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CAssign(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CRecv(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _, args, ret) =>
@@ -92,18 +92,22 @@ object Utilities {
         v ++ getWrittenVars(c.body)
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
-    case CAssign(lhs, _) => lhs match {
+    case CAssign(lhs, _, _) => lhs match {
       case EVar(id) => Set(id);
       case _ => Set()
     }
-    case CRecv(lhs, _) => lhs match {
+    case CRecv(lhs, _, _) => lhs match {
       case EVar(id) => Set(id);
       case _ => Set()
     }
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
-    case IMemSend(handle, _, _, _, _, _, outHandle) => Set(handle.id, outHandle.id)
-    case i :IMemWrite => Set(i.outHandle.id)
+    case IMemSend(handle, _, _, _, _, _, outHandle) => outHandle match
+    {
+      case Some(vl) => Set(handle.id, vl.id)
+      case None => Set(handle.id)
+    }
+    case i :IMemWrite => i.outHandle.map(vl => Set(vl.id)).getOrElse(Set())
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
@@ -134,8 +138,8 @@ object Utilities {
       })
     case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
-    case CAssign(_, rhs) => getUsedVars(rhs)
-    case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
+    case CAssign(_, rhs, _) => getUsedVars(rhs)
+    case CRecv(lhs, rhs, _) => getUsedVars(rhs) ++ (lhs match {
       case e: EMemAccess => getUsedVars(e)
       case _ => Set()
     })
@@ -151,15 +155,15 @@ object Utilities {
     case ICheck(specId, value) => getUsedVars(value) + specId
     case IMemSend(_, writeMask, _, data, addr, inHandle, _) =>
       val dataSet = if (data.isDefined) {
-        Set(data.get.id, addr.id, inHandle.id)
-      } else Set(addr.id, inHandle.id)
+        Set(data.get.id, addr.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
+      } else Set(addr.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
       dataSet ++ (if (writeMask.isDefined) {
         getUsedVars(writeMask.get)
       } else {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data, inHandle, _) => Set(addr.id, data.id, inHandle.id)
+    case IMemWrite(_, addr, data, inHandle, _) => Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {
@@ -568,9 +572,9 @@ object Utilities {
           c.copy(cond = typeMapExpr(cond, f_opt),
             cons = typeMapCmd(cons, f_opt),
             alt = typeMapCmd(alt, f_opt)).copyMeta(c)
-        case c@CAssign(lhs, rhs) =>
+        case c@CAssign(lhs, rhs, _) =>
           c.copy(lhs = typeMapEVar(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
-        case c@CRecv(lhs, rhs) =>
+        case c@CRecv(lhs, rhs, _) =>
           c.copy(lhs = typeMapExpr(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
         case c@CSpecCall(handle, pipe, args) =>
           c.copy(handle = typeMapEVar(handle, f_opt),

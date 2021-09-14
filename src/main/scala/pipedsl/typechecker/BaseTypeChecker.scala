@@ -131,11 +131,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ast = checkModuleBodyWellFormed(cons, assignees)
       val asf = checkModuleBodyWellFormed(alt, assignees)
       ast ++ asf
-    case CRecv(lhs@EVar(id), _) =>
+    case CRecv(lhs@EVar(id), _, _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
       }
-    case CAssign(lhs@EVar(id), _) =>
+    case CAssign(lhs@EVar(id), _, _) =>
       if (assignees(id)) { throw UnexpectedAssignment(lhs.pos, id) } else {
         assignees + id
     }
@@ -263,13 +263,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val efalse = checkCommand(alt, cenv)
       etrue.intersect(efalse)
     }
-    case CAssign(lhs, rhs) => {
+    case CAssign(lhs, rhs, _) => {
       val (rTyp, renv) = checkExpression(rhs, tenv, None)
       val (lTyp, lenv) = checkExpression(lhs, renv, Some(rTyp))
       if (isSubtype(rTyp, lTyp)) lenv
       else throw UnexpectedSubtype(rhs.pos, "assignment", lTyp, rTyp)
     }
-    case CRecv(lhs, rhs) => {
+    case CRecv(lhs, rhs, _) => {
       val (rTyp, renv) = checkExpression(rhs, tenv, None)
       val (lTyp, lenv) = checkExpression(lhs, renv, Some(rTyp))
       if (isSubtype(rTyp, lTyp)) lenv

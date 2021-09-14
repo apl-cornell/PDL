@@ -49,51 +49,70 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
    * @return The updated sets of available variables
    */
   def checkCommand(c: Command, vars: Available, nextVars: Available): (Available, Available) = {
-    def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean) =
+    def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean, isAtomic :Boolean)  :(Available, Available) =
       {
         val rhsLat = checkExpr(rhs, vars)
         val lhsLat = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
           //TODO rewrite to reduce code maybe?
-          case (EVar(id), e@EMemAccess(mem, index, wmask, inHandle, outHandle)) =>
-            checkExpr(inHandle.get, vars)
-            println(s"read: $e :: ${e.granularity}")
+          case (EVar(id), e@EMemAccess(mem, index, wmask, inHandle, outHandle)) => inHandle match
+          {
+            case Some(inH) => checkExpr(inH, vars)
+            case None =>
+          }
             val method_name = Id(e.granularity match
             { case Locks.Specific => "lk_read"
               case Locks.General => "lk_operate"
             })
-            println(method_name)
-            LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match {
-              case Combinational if isRecv => (vars + outHandle.get.id, nextVars + id)
-              case Combinational if !isRecv => (vars + outHandle.get.id + id, nextVars)
-              case _ if isRecv => (vars, nextVars + id + outHandle.get.id)
-              case _ if !isRecv => (vars + id, nextVars + outHandle.get.id)
+            val outHset :Available = outHandle match
+            {
+              case Some(eVar) => Set(eVar.id)
+              case None => Set()
             }
+            if(isAtomic)
+              {
+                if(isRecv) {
+                  (vars, nextVars + id)
+                }
+                else (vars + id, nextVars)
+              } else
+              {
+                LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match {
+                  case Combinational if isRecv => (vars.union(outHset), nextVars + id)
+                  case Combinational if !isRecv => (vars.union(outHset) + id, nextVars)
+                  case _ if isRecv => (vars, outHset.union(nextVars + id))
+                  case _ if !isRecv => (vars + id, nextVars.union(outHset))
+                }
+              }
           case (EVar(id), ECall(_,_,_)) if isRecv =>
-            println(s"call to set $id"); (vars, nextVars + id)
+            (vars, nextVars + id)
           case (EVar(_), _ :ECall) => throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
           case (EVar(id), _) => if (isRecv) {
-            println(c)
             (vars, nextVars + id)
           }
           else
             {
-              println(c)
               (vars + id, nextVars)
             }
           case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
             throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
           case (e@EMemAccess(_, _, _, inHandle, outHandle), _) =>
-            checkExpr(inHandle.get, vars)
-            val method_name = Id(e.granularity match
-            { case Locks.Specific => "lk_write"
-              case Locks.General => "lk_operate"
-            })
-            LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match
-            {
-              case Combinational => (vars + outHandle.get.id, nextVars)
-              case _ => (vars, nextVars + outHandle.get.id)
-            }
+            if(isAtomic)
+              {
+                (vars, nextVars)
+              } else
+              {
+                checkExpr(inHandle.get, vars)
+                val method_name = Id(e.granularity match
+                { case Locks.Specific => "lk_write"
+                  case Locks.General => "lk_operate"
+                })
+                LockImplementation.getLockImpl(e).objectType.methods(method_name)._2 match
+                {
+                  case Combinational => (vars + outHandle.get.id, nextVars)
+                  case _ => (vars, nextVars + outHandle.get.id)
+                }
+              }
           case _ => (vars, nextVars)
         }
       }
@@ -107,13 +126,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkCommand(c2, v2 ++ nv2, NoneAvailable)
       case CSplit(cases, default) =>
         var (endv, endnv) = checkCommand(default, vars, nextVars)
+        endnv = endnv.union(endv)
+        var (cur_lock, next_lock) = (endv.filter(id => id.v.startsWith("_lock_id")),
+          endnv.filter(id => id.v.startsWith("_lock_id")))
+        //TODO if something is in both cur_lock and next_lock remove it from cur_lock
         for (c <- cases) {
           if(checkExpr(c.cond, vars) != Latency.Combinational) {
             throw UnexpectedAsyncReference(c.cond.pos, c.cond.toString)
           }
           val (v2, nv2) = checkCommand(c.body, vars, nextVars)
+          cur_lock = cur_lock.union(v2.filter(id => id.v.startsWith("_lock_id")))
+          next_lock = next_lock.union(nv2.filter(id => id.v.startsWith("_lock_id")))
           endv = endv.intersect(v2)
-          endnv = endnv.intersect(nv2)
+          endnv = endnv.intersect(nv2.union(v2))
         }
         (endv, endnv)
       case CIf(cond, cons, alt) =>
@@ -122,15 +147,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         }
         val (vt, nvt) = checkCommand(cons, vars, nextVars)
         val (vf, nvf) = checkCommand(alt, vars, nextVars)
-        println(s"IF: $cond\ntrue: $vt, $nvt\nfalse: $vf, $nvf")
         val this_cycle_intersect = vt.intersect(vf)
-        (this_cycle_intersect, (nvt.union(vt)).intersect(nvf.union(vf)).removedAll(this_cycle_intersect))//nvt.intersect(nvf))
-      case CAssign(lhs, rhs) =>
+        val cur_lock_handles = vt.filter(id => id.v.startsWith("_lock_id")).union(
+          vf.filter(id => id.v.startsWith("_lock_id")))
+        val next_lock_handles = nvt.filter(id => id.v.startsWith("_lock_id")).union(
+          nvf.filter(id => id.v.startsWith("_lock_id")))
+        (this_cycle_intersect.union(cur_lock_handles),
+          nvt.union(vt).intersect(nvf.union(vf)).removedAll(this_cycle_intersect).union(next_lock_handles))
+      case CAssign(lhs, rhs, isAtomic) =>
         if (checkExpr(rhs, vars) != Latency.Combinational) {
           throw UnexpectedAsyncReference(rhs.pos, rhs.toString)
         }
-        check_recv_or_asn(lhs, rhs, isRecv = false)
-      case CRecv(lhs, rhs) => check_recv_or_asn(lhs, rhs, isRecv = true)
+        check_recv_or_asn(lhs, rhs, isRecv = false, isAtomic)
+      case CRecv(lhs, rhs, isAtomic) => check_recv_or_asn(lhs, rhs, isRecv = true, isAtomic)
       case CLockStart(_) => (vars, nextVars)
       case CLockEnd(_) => (vars, nextVars)
       case CLockOp(mem, _, _, _, _) =>

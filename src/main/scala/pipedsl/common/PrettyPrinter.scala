@@ -85,10 +85,10 @@ class PrettyPrinter(output: Option[File]) {
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
 
-      case Syntax.CAssign(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
-        printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
-      case Syntax.CRecv(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
-        printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
+      case Syntax.CAssign(lhs, rhs, isAtomic) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
+        printExprToString(lhs) + (if(isAtomic) " := " else " = ") + printExprToString(rhs) + ";"
+      case Syntax.CRecv(lhs, rhs, isAtomic) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
+        printExprToString(lhs) + (if (isAtomic) " <a- " else " <- ") + printExprToString(rhs) + ";"
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"

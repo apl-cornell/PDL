@@ -92,14 +92,14 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }
       env
-    case CAssign(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
-    case CRecv(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
+    case CAssign(lhs, rhs, _) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
+    case CRecv(lhs, rhs, _) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case Syntax.CEmpty() => env
     case _ => env
   }
 
   //Check that unlocked memory accesses happen _inside_ lock regions for unlocked memories
-  private def checkMemAccess(e: Expr, env: Environment[Id, LockState]): Unit = e match {
+  private def checkMemAccess(e: Expr, env: Environment[Id, LockState], isAtomic :Boolean = false): Unit = e match {
     case EIsValid(ex) => checkMemAccess(ex, env)
     case EFromMaybe(ex) => checkMemAccess(ex, env)
     case EToMaybe(ex) => checkMemAccess(ex, env)
@@ -110,6 +110,12 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         case TMemType(_,_,_,_,_,_) => //only check _unlocked_ memories
           if (env(mem) != Acquired) {
             throw InvalidLockState(mem.pos, mem.v, env(mem), Acquired)
+          }
+        case _ if isAtomic => //also check atomic operations
+          {
+            if(env(mem) != Acquired) {
+              throw InvalidLockState(mem.pos, mem.v, env(mem), Acquired)
+            }
           }
         case _ => ()
       }
