@@ -233,8 +233,6 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     speccall |
     typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
-      typ.? ~ lhs ~ "<a-" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t; CRecv(l, r, isAtomic = true) } |
-      typ.? ~ variable ~ ":=" ~ expr ^^ { case t ~ l ~ _ ~ r => l.typ = t; CAssign(l, r, isAtomic = true) }|
       check |
       resolveSpec |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |

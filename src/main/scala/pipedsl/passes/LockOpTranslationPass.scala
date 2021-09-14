@@ -84,9 +84,9 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     case CSeq(c1, c2) => CSeq(run(c1), run(c2)).copyMeta(c)
     case CTBar(c1, c2) => CTBar(run(c1), run(c2)).copyMeta(c)
     case CIf(cond, cons, alt) => CIf(modifyMemArg(cond, isLhs = false), run(cons), run(alt)).copyMeta(c)
-    case CAssign(lhs, rhs, isAtomic) => CAssign(lhs, modifyMemArg(rhs, isLhs = false, isAtomic), isAtomic).copyMeta(c)
+    case CAssign(lhs, rhs, isAtomic) => CAssign(lhs, modifyMemArg(rhs, isLhs = false, isAtomic)).copyMeta(c)
     case CRecv(lhs, rhs, isAtomic) =>
-      CRecv(modifyMemArg(lhs, isLhs = true, isAtomic), modifyMemArg(rhs, isLhs = false, isAtomic), isAtomic).copyMeta(c)
+      CRecv(modifyMemArg(lhs, isLhs = true, isAtomic), modifyMemArg(rhs, isLhs = false, isAtomic)).copyMeta(c)
     case CSpecCall(handle, pipe, args) => CSpecCall(handle, pipe, args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
     case CVerify(handle, args, preds, update) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall])).copyMeta(c)
     case CUpdate(newHandle, handle, args, preds) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds).copyMeta(c)

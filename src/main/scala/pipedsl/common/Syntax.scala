@@ -311,6 +311,8 @@ object Syntax {
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
+  def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+
   /**
    * Define common helper methods implicit classes.
    */
@@ -448,10 +450,10 @@ object Syntax {
   case class CSeq(c1: Command, c2: Command) extends Command
   case class CTBar(c1: Command, c2: Command) extends Command
   case class CIf(cond: Expr, cons: Command, alt: Command) extends Command
-  case class CAssign(lhs: EVar, rhs: Expr, isAtomic :Boolean = false) extends Command{
+  case class CAssign(lhs: EVar, rhs: Expr) extends Command{
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
-  case class CRecv(lhs: Expr, rhs: Expr, isAtomic :Boolean = false) extends Command {
+  case class CRecv(lhs: Expr, rhs: Expr) extends Command {
     if (!lhs.isLVal) throw UnexpectedLVal(lhs, "assignment")
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
