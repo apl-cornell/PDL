@@ -2,6 +2,7 @@ package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.LockImplementation
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
@@ -36,11 +37,6 @@ object BSVSyntax {
     val handleMap: Map[BSVType, BSVType] = Map()) extends Translator[BSVType, BExpr, BVar, BFuncDef] {
 
     private var variablePrefix = ""
-
-    def isLockedMem(mem: Id): Boolean =  mem.typ.get match {
-      case _:TMemType => false
-      case _ => true
-    }
 
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
@@ -151,12 +147,19 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index, _, _, _) =>
+      case EMemAccess(mem, index, _, inHandle, _) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.addReadPort) e.portNum else None
           case _ => None
         }
-        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index),portNum, isLockedMem(mem))
+        if (isLockedMemory(mem)) {
+          //use the lock implementation's read method
+          val mi = LockImplementation.getReadInfo(mem, index, inHandle, portNum).get
+          BMethodInvoke(BVar(mem.v, toType(mem.typ.get)), mi.name, mi.usesArgs.map(a => toExpr(a)))
+        } else {
+          //use the unlocked method
+          bsints.getUnlockedCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index), portNum)
+        }
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toExpr(ex))
       case EInvalid => BInvalid

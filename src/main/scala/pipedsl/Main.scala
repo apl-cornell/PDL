@@ -104,7 +104,7 @@ object Main {
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
       val lock_prog = LockOpTranslationPass.run(recvProg)
-      TimingTypeChecker.check(lock_prog, Some(basetypes))
+      //TimingTypeChecker.check(lock_prog, Some(basetypes))
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")

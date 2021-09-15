@@ -218,13 +218,13 @@ class BluespecInterfaces() {
     }
   }
 
-  def getCombRead(mem: BVar, addr: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+  def getUnlockedCombRead(mem: BVar, addr: BExpr, port: Option[Int]): BMethodInvoke = {
     val portString = if (port.isDefined) port.get.toString else ""
-    BMethodInvoke(mem, (if (isLocked) memCombReadName else memCombReadNameUnlocked) + portString, List(addr))
+    BMethodInvoke(mem, memCombReadNameUnlocked + portString, List(addr))
   }
-  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+  def getUnlockedCombWrite(mem: BVar, addr: BExpr, data: BExpr, port: Option[Int]): BMethodInvoke = {
     val portString = if (port.isDefined) port.get.toString else ""
-    BMethodInvoke(mem, (if (isLocked) memCombWriteName else memCombWriteNameUnlocked) + portString, List(addr, data))
+    BMethodInvoke(mem, memCombWriteNameUnlocked + portString, List(addr, data))
   }
 
   def getMemPeek(mem: BVar, handle: BExpr, port: Int, isLocked: Boolean): BMethodInvoke = {

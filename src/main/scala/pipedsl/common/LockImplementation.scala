@@ -19,7 +19,15 @@ object LockImplementation {
   private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
 
+  //Stand-in Type Variables for Address, Data and Lock Handle
+  private val addrType = TNamedType(Id("addr"))
+  private val dataType = TNamedType(Id("data"))
+  private val handleType = TNamedType(Id("handle"))
   //Lock Object Method Names
+  private val canResName = "canRes"
+  private val canResReadName = canResName + "_r"
+  private val canResWriteName = canResName + "_w"
+
   private val resName = "res"
   private val resReadName = resName + "_r"
   private val resWriteName = resName + "_w"
@@ -28,58 +36,178 @@ object LockImplementation {
   private val blockReadName = blockName + "_r"
   private val blockWriteName = blockName + "_w"
 
-  private val accessName = "access"
-  private val readName = accessName + "_r"
-  private val writeName = accessName + "_w"
+  private val accessName = "req"
+  private val readName = "read"
+  private val writeName = "write"
 
   private val releaseName = "rel"
   private val releaseReadName = releaseName + "_r"
   private val releaseWriteName = releaseName + "_w"
 
+  private val canAtomicName = "canAtom"
   private val atomicReadName = "atom_r"
   private val atomicWriteName = "atom_w"
 
-  def getReserve(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+  private def toPortString(port: Option[Int]): String = port match {
+    case Some(value) => value.toString
+    case None => ""
+  }
+
+  //TODO meta program all this stuff so it takes up so much less space
+  ////Methods for typechecking info
+  private def getCanReserveName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
     case Locks.Specific =>
-      val method = Id(op match {
+      Id(op match {
+        case Some(Syntax.LockRead) => canResReadName
+        case Some(Syntax.LockWrite) => canResWriteName
+        case None => canResName
+      })
+    case Locks.General => Id(canResName)
+  }
+
+  def getCanReserve(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getCanReserveName(l, op))
+  }
+
+  private def getReserveName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
+    case Locks.Specific =>
+      Id(op match {
         case Some(Syntax.LockRead) => resReadName
         case Some(Syntax.LockWrite) => resWriteName
-        case None => return None
+        case None => resName
       })
-      l.getType.methods.get(method)
-    case Locks.General => l.getType.methods.get(Id(resName))
+    case Locks.General => Id(resName)
   }
 
-  def getBlock(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+  def getReserve(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getReserveName(l, op))
+  }
+
+  private def getBlockName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
     case Locks.Specific =>
-      val method = Id(op match {
+      Id(op match {
         case Some(Syntax.LockRead) => blockReadName
         case Some(Syntax.LockWrite) => blockWriteName
+        case None => blockName
       })
-      l.getType.methods.get(method)
-    case Locks.General => l.getType.methods.get(Id(blockName))
+    case Locks.General => Id(blockName)
   }
 
-  def getAccess(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
-    case Locks.Specific =>
-      val method = Id(op match {
-      case Some(Syntax.LockRead) => readName
-      case Some(Syntax.LockWrite) => writeName
-    })
-      l.getType.methods.get(method)
-    case Locks.General => l.getType.methods.get(Id(accessName))
+  def getBlock(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getBlockName(l, op))
   }
 
-  def getRelease(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = l.granularity match {
+  private def getAccessName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
     case Locks.Specific =>
-      val method = Id(op match {
+      Id(op match {
+        case Some(Syntax.LockRead) => readName
+        case Some(Syntax.LockWrite) => writeName
+        case None => accessName
+      })
+    case Locks.General => Id(accessName)
+  }
+
+  def getAccess(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getAccessName(l, op))
+  }
+
+  private def getReleaseName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
+    case Locks.Specific =>
+      Id(op match {
         case Some(Syntax.LockRead) => releaseReadName
         case Some(Syntax.LockWrite) => releaseWriteName
+        case None => releaseName
       })
-      l.getType.methods.get(method)
-    case Locks.General => l.getType.methods.get(Id(releaseName))
+    case Locks.General => Id(releaseName)
   }
 
+  def getRelease(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getReleaseName(l, op))
+  }
+
+  //-------Methods for translation info--------------------------\\
+  def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+    val interface = getLockImpl(l.mem)
+    getCanReserve(interface, l.memOpType) match {
+      case Some((funTyp, latency)) =>
+        val args = getArgs(funTyp, l.mem.evar)
+        val methodName = getCanReserveName(interface, l.memOpType).v + toPortString(l.portNum)
+        Some(MethodInfo(methodName, latency != Combinational, args))
+      case None => None
+    }
+  }
+
+  def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
+    val interface = getLockImpl(l.mem)
+    getReserve(interface, l.memOpType) match {
+      case Some((funTyp, latency)) =>
+        val args = getArgs(funTyp, l.mem.evar)
+        val methodName = getReserveName(interface, l.memOpType).v + toPortString(l.portNum)
+        Some(MethodInfo(methodName, latency != Combinational, args))
+      case None => None
+    }
+  }
+
+  def getBlockInfo(l: ICheckLockOwned): Option[MethodInfo] = {
+    val interface = getLockImpl(l.mem)
+    getBlock(interface, l.memOpType) match {
+      case Some((funTyp, latency)) =>
+        val args = getArgs(funTyp, l.mem.evar, Some(l.inHandle))
+        val methodName = getBlockName(interface, l.memOpType).v + toPortString(l.portNum)
+        Some(MethodInfo(methodName, latency != Combinational, args))
+      case None => None
+    }
+  }
+
+  def getReadInfo(mem: Id, addr: Expr, inHandle: Option[Expr], portNum: Option[Int]): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getAccess(interface, Some(LockRead)) match {
+      case Some((funTyp, latency)) =>
+        val args = getArgs(funTyp, Some(addr), inHandle)
+        val methodName = getAccessName(interface, Some(LockRead)).v + toPortString(portNum)
+        Some(MethodInfo(methodName, latency != Combinational, args))
+      case None => None
+    }
+  }
+
+  def getWriteInfo(mem: Id, addr: Expr, inHandle: Expr, data: Expr, portNum: Option[Int]): Option[MethodInfo] = {
+      val interface = getLockImplFromMemTyp(mem)
+      val (funTyp, latency) = getAccess(interface, Some(LockWrite)).get
+      val args = getArgs(funTyp, Some(addr), Some(inHandle), Some(data))
+      val methodName = getAccessName(interface, Some(LockWrite)).v + toPortString(portNum)
+      Some(MethodInfo(methodName, latency != Combinational, args))
+  }
+
+  def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
+    val interface = getLockImpl(l.mem)
+    getRelease(interface, l.memOpType) match {
+      case Some((funTyp, latency)) =>
+        val args = getArgs(funTyp, l.mem.evar , Some(l.inHandle))
+        val methodName = getReleaseName(interface, l.memOpType).v + toPortString(l.portNum)
+        Some(MethodInfo(methodName, latency != Combinational, args))
+      case None => None
+    }
+  }
+
+  private def extractHandle(h: Expr): Expr = {
+    val e = EFromMaybe(h).setPos(h.pos)
+    e.typ = h.typ.get.matchOrError(h.pos, "Lock Handle", "Maybe type") {
+      case TMaybe(t) => Some(t)
+    }
+    e
+  }
+  private def getArgs(fun: TFun, addr: Option[Expr] = None,
+              handle: Option[Expr] = None, data: Option[Expr] = None): List[Expr] = {
+    fun.args.foldLeft(List[Expr]())((l, argTyp) => {
+      argTyp match {
+          //TODO throw better exception if missing arg
+        case t: TNamedType if t == dataType => l :+ data.get
+        case t: TNamedType if t == addrType => l :+ addr.get
+        case t: TNamedType if t == handleType => l :+ extractHandle(handle.get)
+        case _ => l //should be unreachable TODO throw badly formatted type
+      }
+    })
+  }
   /**
    * This is used when the lock implementation for a memory is left unspecified:
    * therefore it must be compatible with any kind of memory.
@@ -130,19 +258,19 @@ object LockImplementation {
     }
   }
 
-  def getLockImpl(m :EMemAccess): LockInterface =
+  private def getLockImplFromMemTyp(mem: Id): LockInterface = {
+    mem.typ match
     {
-      val mem = m.mem
-      mem.typ match
+      case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory")
       {
-        case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory")
-        {
-          case TLockedMemType(_, _, limpl) => limpl
-          case _ :TModType => getDefaultLockImpl
-        }
-        case None => throw MissingType(mem.pos, mem.v)
+        case TLockedMemType(_, _, limpl) => limpl
+        case _ :TModType => getDefaultLockImpl
       }
+      case None => throw MissingType(mem.pos, mem.v)
     }
+  }
+
+  def getLockImpl(m :EMemAccess): LockInterface = getLockImplFromMemTyp(m.mem)
 
   sealed trait LockInterface {
 
@@ -156,7 +284,13 @@ object LockImplementation {
       }
 
     /**
+     * The type that describes the functionality exposed by the
+     * lock object. Locks have a TObject type, which exposes a number of methods.
+     * These method types are used primarily by code generation to correctly generate
+     * "calls" (i.e. interface attachments) to locks.
      *
+     * These types also come with a latency which is used by the TimingTypeChecker to
+     * ensure that they are called in a way that is synthesizable.
      * @return
      */
     def getType: TObject
@@ -267,16 +401,16 @@ object LockImplementation {
   private class LockQueue extends LockInterface {
 
     private val queueLockName = Id("QueueLock")
-    private val lqueueType = TNamedType(queueLockName)
-    //TODO: add type parameters to this to implement polymorphism and probably also the name
     override def getType: TObject = TObject(queueLockName, List(),
       Map(
-        Id(resName)    -> (TFun(List(), TReqHandle(lqueueType, RequestType.Lock)), Sequential),
-        Id(blockName)    -> (TFun(List(), TReqHandle(lqueueType, RequestType.Lock)), Combinational),
-        Id(accessName)  -> (TFun(List(), TReqHandle(lqueueType, RequestType.Lock)), Combinational),
-        Id(releaseName)    -> (TFun(List(), TReqHandle(lqueueType, RequestType.Lock)), Sequential),
-        Id(atomicReadName)   -> (TFun(List(), TReqHandle(lqueueType, RequestType.Lock)), Combinational),
-        Id(atomicWriteName)  -> (TFun(List(), TReqHandle(lqueueType, RequestType.Lock)), Combinational)))
+        Id(resName)    -> (TFun(List(), handleType), Sequential),
+        Id(blockName)    -> (TFun(List(handleType), TBool()), Combinational),
+        Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
+        Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Sequential),
+        Id(releaseName)    -> (TFun(List(addrType), TVoid()), Sequential),
+        Id(canAtomicName) -> (TFun(List(), TBool()), Combinational),
+        Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
+        Id(atomicWriteName)  -> (TFun(List(addrType, dataType), TVoid()), Sequential)))
 
     override def shortName: String = "Queue"
 
@@ -295,7 +429,8 @@ object LockImplementation {
         List(rescmd.get, ICheckLockFree(mem))
       } else {
         lops
-      }
+      } //TODO delete this whole thing
+      lops
     }
     //no possible conflicts since all ops are mergeable if conflicting
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
@@ -493,22 +628,15 @@ object LockImplementation {
   private class BypassRF extends LockInterface {
     //TODO Implement proper named types/polymorphism
     private val lockName = Id("BypassRF")
-    private val lockType = TNamedType(lockName)
-    private val addrType = TSizedInt(TBitWidthLen(32), TUnsigned())
-    private val dataType = TSizedInt(TBitWidthLen(32), TSigned())
     override def getType: TObject = TObject(lockName, List(),
       Map(
-        Id(resReadName)    -> (TFun(List(addrType), TReqHandle(lockType, RequestType.Lock)), Sequential),
-        Id(resWriteName)    -> (TFun(List(addrType), TReqHandle(lockType, RequestType.Lock)), Sequential),
-        Id(blockReadName)    -> (TFun(List(), TReqHandle(lockType, RequestType.Lock)), Combinational),
-        Id(blockWriteName)    -> (TFun(List(), TReqHandle(lockType, RequestType.Lock)), Combinational),
-        Id(readName)  -> (TFun(List(TReqHandle(lockType, RequestType.Lock)),
-          TReqHandle(lockType, RequestType.Lock)), Combinational),
-        Id(writeName) -> (TFun(List(TReqHandle(lockType, RequestType.Lock), dataType),
-          TReqHandle(lockType, RequestType.Lock)), Sequential),
-        Id(releaseReadName)    -> (TFun(List(), TReqHandle(lockType, RequestType.Lock)), Sequential),
-        Id(releaseWriteName)   -> (TFun(List(TReqHandle(lockType, RequestType.Lock)),
-          TReqHandle(lockType, RequestType.Lock)), Sequential)))
+        Id(resReadName)    -> (TFun(List(addrType), handleType), Sequential),
+        Id(resWriteName)    -> (TFun(List(addrType), handleType), Sequential),
+        Id(blockReadName)    -> (TFun(List(), TBool()), Combinational),
+        Id(readName)  -> (TFun(List(handleType), dataType), Combinational),
+        Id(writeName) -> (TFun(List(handleType, dataType), TVoid()), Sequential),
+        Id(releaseReadName)    -> (TFun(List(), TVoid()), Sequential),
+        Id(releaseWriteName)   -> (TFun(List(handleType), TVoid()), Sequential)))
 
     override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
       val rescmd = getReserveWrite(mem, lops)
@@ -826,86 +954,4 @@ object LockImplementation {
       case _ => false
     }
   }
-
-  /*
-   *  Locks:
-   *    reserve(R)
-   *    reserve(W)
-   *    block(lock)
-   *    read(R_lock)
-   *    write(W_lock)
-   *    release(lock)
-   *
-   *  General Memories (no address):
-   * 
-   *   isEmpty(); (lock free)
-   *   reserve();
-   *   owns(id);
-   *   write(id);
-   *   read(id);
-   *   release(id);
-   *
-   *  Combinational Memories:
-   * 
-   *   readName(addr); (R)
-   *   allocName(addr); (W)
-   *   isValid(name); (R/W)
-   *   read(name); (R)
-   *   write(name); (W)
-   *   commit(name); (R/W)
-   *   
-   *  Asynchronous Memories:
-   *
-   *   reserveRead(addr); (R)
-   *   reserveWrite(addr); (RW)
-   *   isValid(name); (R/W)
-   *   read(name); (R)
-   *   write(name); (W)
-   *   commitRead(name); (R)
-   *   commitWrite(name); (W)
-   */
-
- ////////////////////////////////////////
-
-  /*
-   *  In general, we need to be able to translate between
-   *  lock operations and the low-level implementation interfaces.
-   * 
-   * Functionality we need for this:
-   * 
-   *  (1) checkConflicts
-   * 
-   *  Given a set of lock operations which are scheduled for
-   *  a given stage, return True is schedulable, else False.
-   *  e.g., A renaming registerfile can 'reserve(R), block, read, and free'
-   *  in a single-cycle. 
-   *  On the other hand, they cannot support same-cycle 'reserve(W)', and 'free'.
-   * 
-   *  --- Ideally checkConflicts is implemented automatically given some kind of schedule.
-   *      Since there is a strict ordering that each thread will use to call these methods,
-   *      we can specify it simply as a list of sets. Each set represents non-conflicting operations.
-   *
-   *  (2) mergeOps
-   *
-   *  Given a set of lock operations scheduled for a given stage, return the
-   *  merged set of operations. It is convenient to specify this separately from
-   *  conflicts since it can be assumed that anything "not merged" is translated
-   *  obviously.
-   *  
-   *  E.g., the General Lock Memory (w/o addresses) merges "reserve, read + free"
-   *  into "isEmpty, read"
-   * 
-   *  (3) assignPorts
-   *  
-   *  Given a set of _translated_ operations, assign port numbers to each one
-   *  or return ERROR if the implementation doesn't support the necessary number of ports.
-   * 
-   *  E.g., the Renaming Register file supports 2 readNames()
-   *  per cycle. If there are 2 readNames() w/ different arguments, they will be assigned
-   *  different ports; if there are >2, then an error is returned.
-   * 
-   */
-
-
-
 }

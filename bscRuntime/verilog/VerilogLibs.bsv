@@ -24,14 +24,14 @@ interface RenameRF#(type addr, type elem, type name);
 endinterface
 
 interface BypassRF#(type addr, type elem, type id);
-   method ActionValue#(id) reserveWrite(addr a);
-   method ActionValue#(id) reserveRead1(addr a);
-   method ActionValue#(id) reserveRead2(addr a);
-   method Bool owns1();
-   method Bool owns2();
-   method Action freeRead1();
-   method Action freeRead2();
-   method Action freeWrite(id i);      
+   method ActionValue#(id) res_w1(addr a);
+   method ActionValue#(id) res_r1(addr a);
+   method ActionValue#(id) res_r2(addr a);
+   method Bool owns_r1();
+   method Bool owns_r2();
+   method Action rel_r1();
+   method Action rel_r2();
+   method Action rel_w1(id i);      
    method elem read1(id a);
    method elem read2(id a);
    method Action write(id i, elem b);
@@ -129,32 +129,32 @@ module mkBypassRF#(Integer regnum, Bool init, String fileInit)(BypassRF#(addr, e
    default_clock clk(CLK, (*unused*) clk_gate);
    default_reset rst (RST);
    
-   method NAME_OUT reserveWrite(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-   method RNAME_OUT_1 reserveRead1(ADDR_1) enable(RRESE_1) ready (RRES_READY_1);
-   method RNAME_OUT_2 reserveRead2(ADDR_2) enable(RRESE_2) ready (RRES_READY_2);
-   method VALID_OUT_1 owns1();
-   method VALID_OUT_2 owns2();
+   method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+   method RNAME_OUT_1 res_r1(ADDR_1) enable(RRESE_1) ready (RRES_READY_1);
+   method RNAME_OUT_2 res_r2(ADDR_2) enable(RRESE_2) ready (RRES_READY_2);
+   method VALID_OUT_1 owns_r1();
+   method VALID_OUT_2 owns_r2();
    method write[2](NAME_IN, D_IN) enable (WE);   
    method D_OUT_1 read1(RD_NAME_1);
    method D_OUT_2 read2(RD_NAME_2);
-   method freeRead1() enable (FE_1);
-   method freeRead2() enable (FE_2);
-   method freeWrite(W_F) enable (WFE) ready (F_READY);
+   method rel_r1() enable (FE_1);
+   method rel_r2() enable (FE_2);
+   method rel_w1(W_F) enable (WFE) ready (F_READY);
    
-      schedule (reserveWrite) C (reserveWrite);
-      schedule (reserveWrite) CF (reserveRead1, reserveRead2, owns1, owns2, freeRead1, freeRead2, read1, read2, write, freeWrite);
-      schedule (reserveRead1) C (reserveRead1);
-      schedule (reserveRead2) C (reserveRead2);
-      schedule (reserveRead1) CF (reserveRead2);
-      schedule (owns1, owns2, read1, read2, freeRead1, freeRead2) SBR (reserveRead1, reserveRead2);
-      schedule (read1, read2) CF (owns1, owns2, read1, read2, freeRead1, freeRead2, freeWrite);
-      schedule (owns1, owns2) CF (owns1, owns2, freeRead1, freeRead2, freeWrite);
-      schedule (write) SBR (reserveRead1, reserveRead2, read1, read2, owns1, owns2);
-      schedule (write) CF (freeRead1, freeRead2, write);
-      schedule (freeWrite) SBR (write);
-      schedule (freeWrite) C (freeWrite);
-      schedule (freeWrite) CF (reserveRead1, reserveRead2, freeRead1, freeRead2);
-      schedule (freeRead1, freeRead2) CF (freeRead1, freeRead2);
+      schedule (res_w1) C (res_w1);
+      schedule (res_w1) CF (res_r1, res_r2, owns_r1, owns_r2, rel_r1, rel_r2, read1, read2, write, rel_w1);
+      schedule (res_r1) C (res_r1);
+      schedule (res_r2) C (res_r2);
+      schedule (res_r1) CF (res_r2);
+      schedule (owns_r1, owns_r2, read1, read2, rel_r1, rel_r2) SBR (res_r1, res_r2);
+      schedule (read1, read2) CF (owns_r1, owns_r2, read1, read2, rel_r1, rel_r2, rel_w1);
+      schedule (owns_r1, owns_r2) CF (owns_r1, owns_r2, rel_r1, rel_r2, rel_w1);
+      schedule (write) SBR (res_r1, res_r2, read1, read2, owns_r1, owns_r2);
+      schedule (write) CF (rel_r1, rel_r2, write);
+      schedule (rel_w1) SBR (write);
+      schedule (rel_w1) C (rel_w1);
+      schedule (rel_w1) CF (res_r1, res_r2, rel_r1, rel_r2);
+      schedule (rel_r1, rel_r2) CF (rel_r1, rel_r2);
 
 endmodule
    
