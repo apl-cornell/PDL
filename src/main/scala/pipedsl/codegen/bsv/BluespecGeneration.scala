@@ -1126,12 +1126,16 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
-      case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar, _, _) => Some(
-        BStmtSeq(List(
-          BInvokeAssign(translator.toVar(handle),
-            bsInts.getMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
-              data.map(e => translator.toExpr(e)), cmd.portNum.get, isLockedMemory(mem)))
-      )))
+      case im@IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar, inLockHandle, _) =>
+        val reqInvoke = if (isLockedMemory(mem)) {
+          val methodInfo = LockImplementation.getRequestInfo(mem, addr, inLockHandle, data, im.portNum).get
+          bsInts.getMemReq(modParams(mem), im.isWrite, translator.toExpr(wMask),
+            translator.toExpr(data), methodInfo.usesArgs.map(a => translator.toExpr(a)), methodInfo.name)
+        } else {
+          bsInts.getUnlockedMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
+            data.map(e => translator.toExpr(e)), cmd.portNum.get)
+        }
+        Some(BInvokeAssign(translator.toVar(handle), reqInvoke))
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get, isLockedMemory(mem))))

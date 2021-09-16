@@ -142,11 +142,11 @@ endinterface
 interface LSQ#(type addr, type elem, type name, numeric type nsz);
    interface AsyncMem#(name, elem, name, nsz) mem;
    interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client;
-   method ActionValue#(name) reserveRead(addr a);
-   method ActionValue#(name) reserveWrite(addr a);
-   method Bool isValid(name n);
-   method Action commitRead(name n);
-   method Action commitWrite(name n);
+   method ActionValue#(name) res_r1(addr a);
+   method ActionValue#(name) res_w1(addr a);
+   method Bool owns_r1(name n);
+   method Action rel_r1(name n);
+   method Action rel_w1(name n);
 endinterface
 
 
@@ -702,7 +702,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       ldQData[idx][2] <= tagged Valid fromMem;
    endrule
       
-   method ActionValue#(MemId#(inflight)) reserveRead(addr a) if (okToLd);
+   method ActionValue#(MemId#(inflight)) res_r1(addr a) if (okToLd);
       Maybe#(MemId#(inflight)) matchStr = getMatchingStore(a);
       Maybe#(StReq#(elem, Bit#(n))) rreq = tagged Invalid;
       Maybe#(elem) data = tagged Invalid;
@@ -727,7 +727,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       return ldHead;
    endmethod
    
-   method ActionValue#(MemId#(inflight)) reserveWrite(addr a) if (okToSt);
+   method ActionValue#(MemId#(inflight)) res_w1(addr a) if (okToSt);
       //Using index [0] means these are the first writes -- [1] reads can combinationally observe these writes
       stQValid[stHead][0] <= True;
       stQAddr[stHead] <= a;
@@ -739,7 +739,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
 
 
    //checks if it's safe to read data associated w/ ldq entry
-   method Bool isValid(MemId#(inflight) n);
+   method Bool owns_r1(MemId#(inflight) n);
       //TODO we could maybe ignore the ldQValid[n] check
       //this should only be called on valid entries
       return ldQValid[n][0] && isValid(ldQData[n][0]); //read early (0) so can't observe written values -> will need to wait until next cycle
@@ -748,14 +748,14 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
 
    //Load may or may not ever have been issued to main mem
    //write _after_ all others
-   method Action commitRead(MemId#(inflight) n);
+   method Action rel_r1(MemId#(inflight) n);
       ldQValid[n][1] <= False;
       ldQStr[n][2] <= tagged Invalid;
       ldQIssued[n][0] <= False;
    endmethod
    
    //Only Issue stores after committing
-   method Action commitWrite(MemId#(inflight) n);
+   method Action rel_w1(MemId#(inflight) n);
       stQValid[n][1] <= False;
       elem data = unpack(0);
       Bit#(n) wmask = '0;

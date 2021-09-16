@@ -233,14 +233,22 @@ class BluespecInterfaces() {
       case 2 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2PeekName2, List(handle))
     }
   }
-  def getMemReq(mem: BVar, writeMask: Option[BExpr],
-                 addr: BExpr, data: Option[BExpr], port: Int, isLocked: Boolean): BMethodInvoke = {
+
+  def getMemReq(mem: BVar, isWrite: Boolean, writeMask: Option[BExpr], data: Option[BExpr],
+                addrArgs: List[BExpr], methodName: String): BMethodInvoke = {
+    val mask = toMask(isWrite, writeMask)
+    val dataArg = data.getOrElse(BDontCare)
+    BMethodInvoke(mem, memAsync + methodName, addrArgs :+ dataArg :+ mask)
+  }
+
+  def getUnlockedMemReq(mem: BVar, writeMask: Option[BExpr],
+                        addr: BExpr, data: Option[BExpr], port: Int): BMethodInvoke = {
     val isWrite = data.isDefined
     val mask = toMask(isWrite, writeMask)
     port match {
-      case 1 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2ReqName1, List(addr, data
+      case 1 => BMethodInvoke(mem, memAsync2ReqName1, List(addr, data
         .getOrElse(BDontCare), mask))
-      case 2 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2ReqName2, List(addr, data
+      case 2 => BMethodInvoke(mem, memAsync2ReqName2, List(addr, data
         .getOrElse(BDontCare), mask))
     }
   }

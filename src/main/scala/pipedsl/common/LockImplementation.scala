@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Annotations.PortAnnotation
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
+import pipedsl.common.Syntax.Latency.{Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
 
 
@@ -36,7 +36,7 @@ object LockImplementation {
   private val blockReadName = blockName + "_r"
   private val blockWriteName = blockName + "_w"
 
-  private val accessName = "req"
+  private val accessName = "req" //name used for synchronous (non-sequential/combinational) memories
   private val readName = "read"
   private val writeName = "write"
 
@@ -178,6 +178,15 @@ object LockImplementation {
       Some(MethodInfo(methodName, latency != Combinational, args))
   }
 
+  def getRequestInfo(mem: Id, addr: Expr, inHandle: Expr,
+                     data: Option[Expr], portNum: Option[Int]): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    val (funTyp, _) = getAccess(interface, None).get
+    val args = getArgs(funTyp, Some(addr), Some(inHandle), data)
+    val methodName = getAccessName(interface, None).v + toPortString(portNum)
+    Some(MethodInfo(methodName, doesModify = true, args))
+  }
+
   def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
     val interface = getLockImpl(l.mem)
     getRelease(interface, l.memOpType) match {
@@ -208,6 +217,8 @@ object LockImplementation {
       }
     })
   }
+  //--------------------END TRANSLATION HELPERS------------------------------\\
+
   /**
    * This is used when the lock implementation for a memory is left unspecified:
    * therefore it must be compatible with any kind of memory.
@@ -272,16 +283,21 @@ object LockImplementation {
 
   def getLockImpl(m :EMemAccess): LockInterface = getLockImplFromMemTyp(m.mem)
 
+  //---------BEGIN LOCK DEFINITIONS-----------\\
+
   sealed trait LockInterface {
 
     //Convenience method to generate module names
     protected val combSuffix = "CombMem"
     protected val asyncSuffix = "AsyncMem"
-    protected def getSuffix(m: TMemType): String = if (m.readLatency == Combinational) combSuffix
-    else {
+    protected def getSuffix(m: TMemType): String = {
+      if (m.readLatency == Combinational) {
+        combSuffix
+      } else {
         if (Math.max(m.readPorts, m.writePorts) < 2) asyncSuffix
         else asyncSuffix + "2"
       }
+    }
 
     /**
      * The type that describes the functionality exposed by the
@@ -295,34 +311,6 @@ object LockImplementation {
      */
     def getType: TObject
 
-
-    /**
-     * Determines whether or not this lock type can support the given list of
-     * commands in a given stage
-     * @param mem The memory (or memory location) to consider for conflicts
-     * @param lops The set of operations to consider for conflicts
-     * @return true if no conflicts, false if conflicts
-     */
-    def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean
-
-    /**
-     * Merges the given set of commands which are meant to occur in
-     * a single stage. This is only intended to accept LOCK modifying commands
-     * (nothing else). If other commands are included in the list, they may not be returned in the result.
-     * @param mem The memory (or memory location) whose ops we are merging
-     * @param lops The operations to merge
-     * @return The list of merged operations
-     */
-    def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command]
-
-    /**
-     * This returns true iff this lock implementation
-     * is compatible with the given memory type.
-     * @param mtyp The memory type
-     * @return true iff this lock can be backed by a memory of the given type
-     */
-    def isCompatible(mtyp: TMemType): Boolean
-
     /**
      * Returns the lock granularity supported by this implementation
      * (which indicates whether or not
@@ -331,28 +319,7 @@ object LockImplementation {
      */
     def granularity: LockGranularity
 
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return The expression argument needed to complete a read
-     */
-    def getReadArgs(addr: Expr, lock: Expr): Expr
-
     def addReadPort: Boolean = false
-
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return The expression arguments needed to complete a write
-     *         (excluding the data).
-     */
-    def getWriteArgs(addr: Expr, lock: Expr): Expr
 
     def addWritePort: Boolean = false
 
@@ -405,8 +372,9 @@ object LockImplementation {
       Map(
         Id(resName)    -> (TFun(List(), handleType), Sequential),
         Id(blockName)    -> (TFun(List(handleType), TBool()), Combinational),
+        Id(accessName) -> (TFun(List(addrType), TVoid()), Combinational),
         Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
-        Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Sequential),
+        Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
         Id(releaseName)    -> (TFun(List(addrType), TVoid()), Sequential),
         Id(canAtomicName) -> (TFun(List(), TBool()), Combinational),
         Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
@@ -415,26 +383,6 @@ object LockImplementation {
     override def shortName: String = "Queue"
 
     override def getModuleName(m: TMemType): String = queueLockName.v + getSuffix(m)
-
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //res + rel -> checkfree
-      //res + checkowned -> res + checkfree
-      //else same
-      val rescmd = getReserveCommand(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val checkownedCmd = getCheckOwnedCommand(mem, lops)
-      if (rescmd.isDefined && relcmd.isDefined) {
-        List(ICheckLockFree(mem))
-      } else if (rescmd.isDefined && checkownedCmd.isDefined) {
-        List(rescmd.get, ICheckLockFree(mem))
-      } else {
-        lops
-      } //TODO delete this whole thing
-      lops
-    }
-    //no possible conflicts since all ops are mergeable if conflicting
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = false
-    override def isCompatible(mtyp: TMemType): Boolean = true
 
     override def granularity: LockGranularity = General
     //TODO placing the interface name (lock.) here is weird but OK i guess
@@ -456,29 +404,6 @@ object LockImplementation {
       Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.inHandle))))
     }
 
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     *
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return An iterable (e.g., List) of the expression arguments needed to complete a read
-     */
-    override def getReadArgs(addr: Expr, lock: Expr): Expr = addr
-
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     *
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return An iterable (e.g., List) of the expression arguments needed to complete a write
-     *         (excluding the data).
-     */
-    override def getWriteArgs(addr: Expr, lock: Expr): Expr = addr
-
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
   }
@@ -486,23 +411,22 @@ object LockImplementation {
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
-    //TODO: add type parameters to this to implement polymorphism and probably also the name
     private val lockName = Id("FAQueue")
     private val queueType = TNamedType(lockName)
-    private val addrType = TSizedInt(TBitWidthLen(32), TUnsigned())
-    private val dataType = TSizedInt(TBitWidthLen(32), TSigned())
     override def getType: TObject =
       TObject(lockName, List(), Map(
-        Id(resReadName)    -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational), // SEQ
-        Id(resWriteName)    -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational), //SEQ
-        Id(blockReadName)    -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational),
-        Id(blockWriteName)    -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational),
-        Id(readName)  -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational),
-        Id(writeName) -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational),
-        Id(releaseReadName)    -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Sequential), //SEQ
-        Id(releaseWriteName)    -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Sequential), // SEQ
-        Id(atomicReadName)   -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational),
-        Id(atomicWriteName)   -> (TFun(List(addrType), TReqHandle(queueType, RequestType.Lock)), Combinational)))
+        Id(resReadName)    -> (TFun(List(addrType), handleType), Sequential),
+        Id(resWriteName)    -> (TFun(List(addrType), handleType), Sequential),
+        Id(blockReadName)    -> (TFun(List(handleType, addrType), TBool()), Combinational),
+        Id(blockWriteName)    ->  (TFun(List(handleType, addrType), TBool()), Combinational),
+        Id(accessName) -> (TFun(List(addrType), TVoid()), Combinational),
+        Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
+        Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
+        Id(releaseReadName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
+        Id(releaseWriteName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
+        Id(canAtomicName)    -> (TFun(List(addrType), TBool()), Combinational),
+        Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
+        Id(atomicWriteName)   -> (TFun(List(addrType, dataType), TVoid()), Combinational)))
 
 
     private val defaultNumLocks = 4
@@ -536,59 +460,25 @@ object LockImplementation {
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
   }
 
+  /**
+   * This implementation _only_ supports atomic reads (i.e., no reserving read locks)
+   * and does not support atomic writes.
+   */
   private class BypassQueue extends LockInterface {
-    //    TODO: add type parameters to this to implement polymorphism and probably also the name
-    override def getType: TObject = TObject(Id("BypassQueue"), List(), Map())
+
+    override def getType: TObject = TObject(Id("BypassQueue"), List(), Map(
+      Id(canResName) -> (TFun(List(addrType), TBool()), Combinational),
+      Id(resWriteName) -> (TFun(List(addrType), handleType), Sequential),
+      Id(blockWriteName) -> (TFun(List(handleType), TBool()), Combinational),
+      Id(writeName) -> (TFun(List(handleType, dataType), TVoid()), Combinational),
+      Id(releaseWriteName) -> (TFun(List(handleType), TVoid()), Sequential),
+      Id(canAtomicName) -> (TFun(List(addrType), TBool()), Combinational),
+      Id(atomicReadName) -> (TFun(List(addrType), dataType), Combinational)
+    ))
 
     private val defaultNumLocks = 4
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
-      val rescmd = getReserveWrite(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      if (rescmd.isDefined && relcmd.isDefined) {
-        return false //cannot RES(W) & REL in same cycle. must ACTUALLY do the reserve
-      } else {
-        return true
-      }
-    }
-
-    /**
-     * Merges the given set of commands which are meant to occur in
-     * a single stage. This is only intended to accept LOCK modifying commands
-     * (nothing else). If other commands are included in the list, they may not be returned in the result.
-     *
-     * @param mem  The memory (or memory location) whose ops we are merging
-     * @param lops The operations to merge
-     * @return The list of merged operations
-     */
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //For READS
-      //res + rel -> checkfree
-      //res + checkowned -> res + checkfree
-      //else same
-      val rescmd = getReserveRead(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val checkownedCmd = getCheckOwnedCommand(mem, lops)
-      if (rescmd.isDefined && relcmd.isDefined) {
-        val check = ICheckLockFree(mem)
-        check.memOpType = rescmd.get.memOpType
-        List(check)
-      } else if (rescmd.isDefined && checkownedCmd.isDefined) {
-        val check = ICheckLockFree(mem)
-        check.memOpType = rescmd.get.memOpType
-        List(rescmd.get, check)
-      } else {
-        lops
-      }
-    }
-
-    override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
-      mtyp.writeLatency != Asynchronous
 
     override def granularity: LockGranularity = Specific
-
-    override def getReadArgs(addr: Expr, lock: Expr): Expr = addr
-
-    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = l.memOpType match {
       case Some(LockWrite) => Some(MethodInfo("canWrite", doesModify = false, List(l.mem.evar.get)))
@@ -626,7 +516,6 @@ object LockImplementation {
    * (unlike the Bypass Queue which requires them to be concurrent)
    */
   private class BypassRF extends LockInterface {
-    //TODO Implement proper named types/polymorphism
     private val lockName = Id("BypassRF")
     override def getType: TObject = TObject(lockName, List(),
       Map(
@@ -638,43 +527,12 @@ object LockImplementation {
         Id(releaseReadName)    -> (TFun(List(), TVoid()), Sequential),
         Id(releaseWriteName)   -> (TFun(List(handleType), TVoid()), Sequential)))
 
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
-      val rescmd = getReserveWrite(mem, lops)
-      val resRd  = getReserveRead(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      if ((resRd.isDefined || rescmd.isDefined) && relcmd.isDefined) {
-        return false //cannot RES(R/W) & REL in same cycle. must ACTUALLY do the reserve
-      } else {
-        return true
-      }
-    }
-
-    /**
-     * Merges the given set of commands which are meant to occur in
-     * a single stage. This is only intended to accept LOCK modifying commands
-     * (nothing else). If other commands are included in the list, they may not be returned in the result.
-     *
-     * @param mem  The memory (or memory location) whose ops we are merging
-     * @param lops The operations to merge
-     * @return The list of merged operations
-     */
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      lops
-    }
-
-    override def isCompatible(mtyp: TMemType): Boolean = mtyp.readLatency == Combinational &&
-      mtyp.writeLatency != Asynchronous
 
     override def granularity: LockGranularity = Specific
 
     private def getPortString(l: PortAnnotation): String = if (l.portNum.isDefined) l.portNum.get.toString else ""
 
-    //TODO pass no read arg and add port number to reads (probably somewhere else)
-    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
-
     override def addReadPort: Boolean = true
-
-    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
@@ -714,39 +572,19 @@ object LockImplementation {
    *
    */
   private class RenameRegfile extends LockInterface {
-    //TODO Implement
-    override def getType: TObject = TObject(Id("RenameRF"), List(), Map())
+
+    override def getType: TObject = TObject(Id("RenameRF"), List(), Map(
+      Id(resReadName) -> (TFun(List(addrType), handleType), Combinational),
+      Id(resWriteName) -> (TFun(List(addrType), handleType), Sequential),
+      Id(blockReadName) -> (TFun(List(handleType), TBool()), Combinational),
+      Id(readName) -> (TFun(List(handleType), dataType), Combinational),
+      Id(writeName) -> (TFun(List(handleType, dataType), TVoid()), Combinational),
+      Id(releaseWriteName) -> (TFun(List(handleType), TVoid()), Sequential)
+    ))
 
     override def shortName: String = "RenameRF"
 
     override def getModuleName(m: TMemType): String = "RenameRF"
-
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //This modules doesn't support any "merging")
-      lops
-    }
-
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
-      //base ops: reserve, checkowned, release
-      //conflicts: reserve(W) + write(W), or reserve(W) + release(W) ,or write(W) + release(W)
-      //TODO does checkowned(R/W) conflict w/ anyting? I don't think so
-      val rescmd = getReserveWrite(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val memWrite = hasMemoryWrite(mem, lops)
-      //conflicts
-      if (rescmd.isDefined && relcmd.isDefined ||
-          rescmd.isDefined && memWrite ||
-          memWrite && relcmd.isDefined) {
-        false
-        //no conflicts
-      } else {
-        true
-      }
-    }
-    override def isCompatible(mtyp: TMemType): Boolean = {
-      //only compatible if we have the 'regfile' timing behaviors of "combinational read" and "sequential write"
-      mtyp.readLatency == Latency.Combinational && mtyp.writeLatency == Latency.Sequential
-    }
 
     override def granularity:LockGranularity = Specific
 
@@ -772,29 +610,6 @@ object LockImplementation {
       case None => None //TODO should be an exception
     }
 
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     *
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return An iterable (e.g., List) of the expression arguments needed to complete a read
-     */
-    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
-
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     *
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return An iterable (e.g., List) of the expression arguments needed to complete a write
-     *         (excluding the data).
-     */
-    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
-
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = {
       //TODO make default more configurable
       val aregs = Utilities.exp2(m.addrSize)
@@ -814,43 +629,19 @@ object LockImplementation {
    * It includes a LoadStoreQueue which forwards data to avoid extra memory accesses.
    */
   private class LoadStoreQueue extends LockInterface {
-    //TODO Implement
-    override def getType: TObject = TObject(Id("LSQ"), List(), Map())
+
+    override def getType: TObject = TObject(Id("LSQ"), List(), Map(
+      Id(resReadName) -> (TFun(List(addrType), handleType), Sequential),
+      Id(resWriteName) -> (TFun(List(addrType), handleType), Sequential),
+      Id(blockReadName) -> (TFun(List(handleType), TBool()), Combinational),
+      Id(accessName) -> (TFun(List(handleType), TVoid()), Combinational),
+      Id(releaseReadName) -> (TFun(List(handleType), TVoid()), Sequential),
+      Id(releaseWriteName) -> (TFun(List(handleType), TVoid()), Sequential)
+    ))
 
     override def shortName: String = "LSQ"
     override def getModuleName(m: TMemType): String = "LSQ"
 
-    override def mergeLockOps(mem: LockArg, lops: Iterable[Command]): Iterable[Command] = {
-      //don't need to do any merging! (no optimizations for releasing in the same cycle as acquiring)
-      lops
-    }
-    override def checkConflicts(mem: LockArg, lops: Iterable[Command]): Boolean = {
-      //base ops: reserve, checkowned, release
-      //conflicts are the same as renaming register file:
-      //res(W) + write, res(W) + rel(W), write + rel(W)
-      //but also has conflicts;
-      //res(R) + read, res(R/W) + checkowned
-      val reswrite = getReserveWrite(mem, lops)
-      val resRead = getReserveRead(mem, lops)
-      val relcmd = getReleaseCommand(mem, lops)
-      val memWrite = hasMemoryWrite(mem, lops)
-      val asyncMemRead = hasAsyncMemoryRead(mem, lops)
-      val check = getCheckOwnedCommand(mem, lops)
-      //conflicts
-      if ((reswrite.isDefined && relcmd.isDefined) ||
-        (reswrite.isDefined && memWrite) ||
-        (memWrite && relcmd.isDefined) ||
-        (resRead.isDefined && asyncMemRead) ||
-        ((resRead.isDefined || reswrite.isDefined) && check.isDefined)) {
-        false
-      } else {
-        //no conflicts
-        true
-      }
-    }
-    override def isCompatible(mtyp: TMemType): Boolean = {
-      mtyp.readLatency == Latency.Asynchronous && mtyp.writeLatency == Latency.Asynchronous
-    }
     override def toString: String = "LSQ"
 
     override def granularity: LockGranularity = Specific
@@ -877,81 +668,10 @@ object LockImplementation {
       case None => None //TODO should be an exception
     }
 
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     *
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return An iterable (e.g., List) of the expression arguments needed to complete a read
-     */
-    override def getReadArgs(addr: Expr, lock: Expr): Expr = lock
-
-    /**
-     * Each lock implementation may require any non-empty subset
-     * of the address and the lock handle to serve read and write
-     * requests.
-     *
-     * @param addr The expression representing the request address
-     * @param lock The expression representing the lock held at this point.
-     * @return An iterable (e.g., List) of the expression arguments needed to complete a write
-     *         (excluding the data).
-     */
-    override def getWriteArgs(addr: Expr, lock: Expr): Expr = lock
-
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
     override def useUniqueLockId(): Boolean = false
 
     override def getClientName: String = ".bram_client"
-}
-
-  //The following are internal helper functions
-  private def largMatches(mem: LockArg, mid: Id, addr: EVar): Boolean = {
-    mem.id == mid && (mem.evar.isEmpty || mem.evar.get == addr)
-  }
-  private def getReserveCommand(mem: LockArg, cs: Iterable[Command]): Option[IReserveLock] = {
-    cs.find {
-      case IReserveLock(_,l) if l == mem => true
-      case _ => false
-    }.asInstanceOf[Option[IReserveLock]]
-  }
-  private def getReserveWrite(mem: LockArg, cs: Iterable[Command]): Option[IReserveLock] = {
-    cs.find {
-      case r@IReserveLock(_,l) if l == mem && r.memOpType.contains(LockWrite) => true
-      case _ => false
-    }.asInstanceOf[Option[IReserveLock]]
-  }
-  private def getReserveRead(mem: LockArg, cs: Iterable[Command]): Option[IReserveLock] = {
-    cs.find {
-      case r@IReserveLock(_,l) if l == mem && r.memOpType.contains(LockRead) => true
-      case _ => false
-    }.asInstanceOf[Option[IReserveLock]]
-  }
-  private def getReleaseCommand(mem: LockArg, cs: Iterable[Command]): Option[IReleaseLock] = {
-    cs.find {
-      case IReleaseLock(l,_) if l == mem => true
-      case _ => false
-    }.asInstanceOf[Option[IReleaseLock]]
-  }
-  private def getCheckOwnedCommand(mem: LockArg, cs: Iterable[Command]): Option[ICheckLockOwned] = {
-    cs.find {
-      case ICheckLockOwned(l,_, _) if mem == l => true
-      case _ => false
-    }.asInstanceOf[Option[ICheckLockOwned]]
-  }
-  private def hasMemoryWrite(mem: LockArg, cs: Iterable[Command]): Boolean = {
-    cs.exists {
-      case IMemWrite(mid, addr,_, _, _) if largMatches(mem, mid, addr) => true
-      case s@IMemSend(_, writeMask, mid, _, addr, _, _) if s.isWrite  && largMatches(mem, mid, addr) => true
-      case _ => false
-    }
-  }
-  private def hasAsyncMemoryRead(mem: LockArg, cs: Iterable[Command]): Boolean = {
-    cs.exists {
-      case s@IMemSend(_, _, mid,_, addr, _, _) if !s.isWrite && largMatches(mem, mid, addr)=> true
-      case _ => false
-    }
   }
 }
