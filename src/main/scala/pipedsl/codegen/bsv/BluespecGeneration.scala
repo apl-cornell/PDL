@@ -1142,7 +1142,7 @@ object BluespecGeneration {
         Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))))
       case IMemWrite(mem, addr, data, lHandle, _) =>
         val portNum = mem.typ.get match {
-          case memType: TLockedMemType => if (memType.limpl.addWritePort) cmd.portNum else None
+          case memType: TLockedMemType => if (memType.limpl.usesWritePortNum) cmd.portNum else None
           case _ => None //In the future we may allow unlocked mems with port annotations
         }
         Some(BExprStmt(

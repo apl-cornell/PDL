@@ -23,10 +23,10 @@ endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
    method Bool isEmpty(addr loc);
-   method Bool canRes(addr loc);
-   method Bool owns(id tid, addr loc);
-   method Action rel(id tid, addr loc);
-   method ActionValue#(id) res(addr loc);
+   method Bool canRes1(addr loc);
+   method Bool owns1(id tid, addr loc);
+   method Action rel1(id tid, addr loc);
+   method ActionValue#(id) res1(addr loc);
 endinterface
 
 module mkQueueLock(QueueLock#(LockId#(d)));
@@ -124,7 +124,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
    endfunction   
 
    //true if lock is associated w/ addr or there is a location free
-   method Bool canRes(addr loc);
+   method Bool canRes1(addr loc);
       let lockAddr = getLock(loc);
       if (lockAddr matches tagged Valid.l) return True;
       else return isFreeLock();
@@ -139,7 +139,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
            return isFreeLock();
    endmethod
 
-   method Bool owns(LockId#(d) tid, addr loc);
+   method Bool owns1(LockId#(d) tid, addr loc);
       Maybe#(QueueLock#(LockId#(d))) addrLock = getLock(loc);
       Bool hasFree = isFreeLock();
       if (addrLock matches tagged Valid.lock)
@@ -153,7 +153,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	    return hasFree;
    endmethod
       
-   method Action rel(LockId#(d) tid, addr loc);
+   method Action rel1(LockId#(d) tid, addr loc);
       Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
 	 begin
@@ -164,7 +164,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       //else no lock is associated with loc, do nothing
    endmethod
    
-   method ActionValue#(LockId#(d)) res(addr loc);
+   method ActionValue#(LockId#(d)) res1(addr loc);
       Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
 	 begin
@@ -196,19 +196,19 @@ module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(add
       return lockVec[loc].isEmpty();
    endmethod
 
-   method Bool owns(LockId#(d) tid, addr loc);
+   method Bool owns1(LockId#(d) tid, addr loc);
       return lockVec[loc].owns(tid);
    endmethod
    
-   method Bool canRes(addr loc);
+   method Bool canRes1(addr loc);
       return True;
    endmethod
    
-   method Action rel(LockId#(d) tid, addr loc);
+   method Action rel1(LockId#(d) tid, addr loc);
       lockVec[loc].rel(tid);
    endmethod
    
-   method ActionValue#(LockId#(d)) res(addr loc);
+   method ActionValue#(LockId#(d)) res1(addr loc);
       let id <- lockVec[loc].res();
       return id;
    endmethod

@@ -14,12 +14,15 @@ export mkNBFIFOF;
 export mkBHT;
 
 interface RenameRF#(type addr, type elem, type name);
-   method name readName(addr a); //get name to read data later
-   method Bool isValid(name n);  //check if safe to read
+   method name res_r1(addr a); //get name to read data later
+   method Bool owns_r1(name n);  //check if safe to read  
+   method name res_r2(addr a); //get name to read data later
+   method Bool owns_r2(name n);  //check if safe to read
    method elem read(name a);    //do the read
-   method ActionValue#(name) allocName(addr a); //allocate a new name to be written
+   method ActionValue#(name) res_w1(addr a); //allocate a new name to be written
+   method Action rel_w1(name a); //indicate old name for a can be "freed"
    method Action write(name a, elem b); //write data given allocated name
-   method Action commit(name a); //indicate old name for a can be "freed"
+
    // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
 endinterface
 
@@ -55,23 +58,25 @@ import "BVI" RenameRF =
     default_clock clk(CLK, (*unused*) clk_gate);
     default_reset rst (RST);
     
-    method NAME_OUT readName[2] (ADDR);
-    method VALID_OUT isValid[2] (VALID_NAME);
+    method NAME_OUT_1 res_r1 (ADDR_1);
+    method VALID_OUT_1 owns_r1 (VALID_NAME_1);
+    method NAME_OUT_2 res_r2 (ADDR_2);
+    method VALID_OUT_2 owns_r2 (VALID_NAME_2);
     method D_OUT read[2] (NAME);
-    method NAME_OUT allocName(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-    method write[2] (NAME_IN, D_IN) enable(WE);
-    method commit(NAME_F) enable(FE);
+    method write[2] (NAME_IN, D_IN) enable(WE);    
+    method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+    method rel_w1(NAME_F) enable(FE);
     
-       schedule (readName) CF (readName);
-       schedule (readName) CF (isValid, read, allocName, write, commit);
-       schedule (isValid) CF (isValid);
-       schedule (isValid) CF (read, allocName, write, commit);
+       schedule (res_r1, res_r2) CF (res_r1, res_r2);
+       schedule (res_r1, res_r2) CF (owns_r1,owns_r2, read, res_w1, write, rel_w1);
+       schedule (owns_r1,owns_r2) CF (owns_r1,owns_r2);
+       schedule (owns_r1,owns_r2) CF (read, res_w1, write, rel_w1);
        schedule (read) CF (read);
-       schedule (read) CF (allocName, write, commit);
-       schedule (allocName) C (allocName);
-       schedule (allocName) CF (write, commit);
-       schedule (write) CF (write, commit);
-       schedule (commit) C (commit);
+       schedule (read) CF (res_w1, write, rel_w1);
+       schedule (res_w1) C (res_w1);
+       schedule (res_w1) CF (write, rel_w1);
+       schedule (write) CF (write, rel_w1);
+       schedule (rel_w1) C (rel_w1);
     
  endmodule
 
@@ -93,23 +98,25 @@ import "BVI" ForwardRenameRF =
     default_clock clk(CLK, (*unused*) clk_gate);
     default_reset rst (RST);
     
-    method NAME_OUT readName[2] (ADDR);
-    method VALID_OUT isValid[2] (VALID_NAME);
+    method NAME_OUT_1 res_r1 (ADDR_1);
+    method VALID_OUT_1 owns_r1 (VALID_NAME_1);
+    method NAME_OUT_2 res_r2 (ADDR_2);
+    method VALID_OUT_2 owns_r2 (VALID_NAME_2);    
     method D_OUT read[2] (NAME);
-    method NAME_OUT allocName(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-    method write[2] (NAME_IN, D_IN) enable(WE);
-    method commit(NAME_F) enable(FE);
+    method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+    method rel_w1(NAME_F) enable(FE);
+    method write[2] (NAME_IN, D_IN) enable(WE);    
     
-       schedule (readName) CF (readName);
-       schedule (readName) CF (isValid, read, allocName, write, commit);
-       schedule (isValid) CF (isValid);
-       schedule (isValid) CF (read, allocName, write, commit);
+       schedule (res_r1,res_r2) CF (res_r1,res_r2);
+       schedule (res_r1,res_r2) CF (owns_r1, owns_r2, read, res_w1, write, rel_w1);
+       schedule (owns_r1, owns_r2) CF (owns_r1, owns_r2);
+       schedule (owns_r1, owns_r2) CF (read, res_w1, write, rel_w1);
        schedule (read) CF (read);
-       schedule (read) CF (allocName, write, commit);
-       schedule (allocName) C (allocName);
-       schedule (allocName) CF (write, commit);
-       schedule (write) CF (write, commit);
-       schedule (commit) C (commit);
+       schedule (read) CF (res_w1, write, rel_w1);
+       schedule (res_w1) C (res_w1);
+       schedule (res_w1) CF (write, rel_w1);
+       schedule (write) CF (write, rel_w1);
+       schedule (rel_w1) C (rel_w1);
     
  endmodule
 

@@ -66,11 +66,12 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
         updateLockAnnotationMap(mem, lockType.get)
       } else if (c.granularity == Specific) {
         if (!getLockAnnotationMap.contains(mem)) {
-          throw MalformedLockTypes("Address specific locks must have an associated lock type")
+          //throw MalformedLockTypes("Address specific locks must have an associated lock type")
+        } else {
+          c.lockType = getLockAnnotationMap.get(mem)
+          c.memOpType = getLockAnnotationMap.get(mem)
+          mem.memOpType = c.memOpType
         }
-        c.lockType = getLockAnnotationMap.get(mem)
-        c.memOpType = getLockAnnotationMap.get(mem)
-        mem.memOpType = c.memOpType
       }
       //general locks stay as none
     case c@CRecv(lhs, rhs) => (lhs, rhs) match {

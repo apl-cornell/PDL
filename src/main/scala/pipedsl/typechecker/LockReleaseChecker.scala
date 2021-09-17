@@ -54,7 +54,7 @@ object LockReleaseChecker {
       caseRelList.foldLeft[Set[Id]](caseRelList(0))((env1, env2) => env1.union(env2)) ++ released
     }
       //only keep track of specific locks
-    case c@CLockOp(mem, op, _, _, _) if c.granularity == Specific && c.lockType.get == LockWrite => op match {
+    case c@CLockOp(mem, op, _, _, _) if c.granularity == Specific => op match {
       case Released => released + mem.id
       case _ => released
     }

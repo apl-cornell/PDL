@@ -2,7 +2,6 @@ package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
-import pipedsl.common.Syntax.Annotations.PortAnnotation
 import pipedsl.common.Syntax.Latency.{Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
 
@@ -126,12 +125,14 @@ object LockImplementation {
   }
 
   //-------Methods for translation info--------------------------\\
+  private val lockIntStr = "lock."
   def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
     val interface = getLockImpl(l.mem)
     getCanReserve(interface, l.memOpType) match {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar)
-        val methodName = getCanReserveName(interface, l.memOpType).v + toPortString(l.portNum)
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          getCanReserveName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
     }
@@ -142,7 +143,8 @@ object LockImplementation {
     getReserve(interface, l.memOpType) match {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar)
-        val methodName = getReserveName(interface, l.memOpType).v + toPortString(l.portNum)
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          getReserveName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
     }
@@ -153,7 +155,8 @@ object LockImplementation {
     getBlock(interface, l.memOpType) match {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar, Some(l.inHandle))
-        val methodName = getBlockName(interface, l.memOpType).v + toPortString(l.portNum)
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          getBlockName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
     }
@@ -192,7 +195,8 @@ object LockImplementation {
     getRelease(interface, l.memOpType) match {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar , Some(l.inHandle))
-        val methodName = getReleaseName(interface, l.memOpType).v + toPortString(l.portNum)
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          getReleaseName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
     }
@@ -319,19 +323,11 @@ object LockImplementation {
      */
     def granularity: LockGranularity
 
-    def addReadPort: Boolean = false
+    def usesReadPortNum: Boolean = false
 
-    def addWritePort: Boolean = false
+    def usesWritePortNum: Boolean = false
 
     def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo]
-
-    def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo]
-
-    def getReserveInfo(l: IReserveLock): Option[MethodInfo]
-
-    def getCanReserveInfo(l: IReserveLock): Option[MethodInfo]
-
-    def getReleaseInfo(l: IReleaseLock): Option[MethodInfo]
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int]
 
@@ -348,14 +344,8 @@ object LockImplementation {
 
     def getClientName: String = ".mem.bram_client"
 
-    //TODO put this somewhere like Syntax
-    protected def extractHandle(h: EVar): Expr = {
-      val e = EFromMaybe(h).setPos(h.pos)
-      e.typ = h.typ.get.matchOrError(h.pos, "Lock Handle", "Maybe type") {
-        case TMaybe(t) => Some(t)
-      }
-      e
-    }
+    def hasLockSubInterface: Boolean = true
+
   }
 
   /**
@@ -390,20 +380,6 @@ object LockImplementation {
       Some(MethodInfo("lock.isEmpty", doesModify = false, List()))
     }
 
-    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.inHandle))))
-    }
-
-    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.res", doesModify = true, List()))
-    }
-
-    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
-
-    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.inHandle))))
-    }
-
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
   }
@@ -412,18 +388,15 @@ object LockImplementation {
   //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
     private val lockName = Id("FAQueue")
-    private val queueType = TNamedType(lockName)
     override def getType: TObject =
       TObject(lockName, List(), Map(
-        Id(resReadName)    -> (TFun(List(addrType), handleType), Sequential),
-        Id(resWriteName)    -> (TFun(List(addrType), handleType), Sequential),
-        Id(blockReadName)    -> (TFun(List(handleType, addrType), TBool()), Combinational),
-        Id(blockWriteName)    ->  (TFun(List(handleType, addrType), TBool()), Combinational),
+        Id(canResName) -> (TFun(List(addrType), TBool()), Combinational),
+        Id(resName)    -> (TFun(List(addrType), handleType), Sequential),
+        Id(blockName)    -> (TFun(List(handleType, addrType), TBool()), Combinational),
         Id(accessName) -> (TFun(List(addrType), TVoid()), Combinational),
         Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
         Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
-        Id(releaseReadName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
-        Id(releaseWriteName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
+        Id(releaseName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
         Id(canAtomicName)    -> (TFun(List(addrType), TBool()), Combinational),
         Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
         Id(atomicWriteName)   -> (TFun(List(addrType, dataType), TVoid()), Combinational)))
@@ -439,22 +412,6 @@ object LockImplementation {
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
       Some(MethodInfo("lock.isEmpty", doesModify = false, List(l.mem.evar.get)))
-    }
-
-    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("lock.owns", doesModify = false, List(extractHandle(l.inHandle), l.mem.evar.get)))
-    }
-
-    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.canRes", doesModify = false, List(l.mem.evar.get)))
-    }
-
-    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.res", doesModify = true, List(l.mem.evar.get)))
-    }
-
-    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("lock.rel", doesModify = true, List(extractHandle(l.inHandle), l.mem.evar.get)))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
@@ -480,26 +437,12 @@ object LockImplementation {
 
     override def granularity: LockGranularity = Specific
 
+    override def hasLockSubInterface: Boolean = false
+
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = l.memOpType match {
       case Some(LockWrite) => Some(MethodInfo("canWrite", doesModify = false, List(l.mem.evar.get)))
       case Some(LockRead)  => Some(MethodInfo("canRead", doesModify = false, List(l.mem.evar.get)))
       case None => throw new RuntimeException("Bad lock info")//TODO better exception
-    }
-
-    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = {
-      Some(MethodInfo("owns", doesModify = false, List(extractHandle(l.inHandle))))
-    }
-
-    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("reserve", doesModify = true, List(l.mem.evar.get)))
-    }
-
-    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
-      Some(MethodInfo("canRes", doesModify = false, List(l.mem.evar.get)))
-    }
-
-    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = {
-      Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.inHandle))))
     }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] =
@@ -530,32 +473,11 @@ object LockImplementation {
 
     override def granularity: LockGranularity = Specific
 
-    private def getPortString(l: PortAnnotation): String = if (l.portNum.isDefined) l.portNum.get.toString else ""
+    override def usesReadPortNum: Boolean = true
 
-    override def addReadPort: Boolean = true
+    override def hasLockSubInterface: Boolean = false
 
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
-
-    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("owns" + getPortString(l), doesModify = false, List()))
-      case Some(LockWrite) => None
-      case None => None //TODO throw error
-    }
-
-    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) =>
-        Some(MethodInfo("reserveRead" + getPortString(l), doesModify = true, List(l.mem.evar.get)))
-      case Some(LockWrite) =>  Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
-      case None => None //TODO throw error
-    }
-
-    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
-
-    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) =>  Some(MethodInfo("freeRead" + getPortString(l), doesModify = true, List()))
-      case Some(LockWrite) =>  Some(MethodInfo("freeWrite", doesModify = true, List(extractHandle(l.inHandle))))
-      case None => None //TODO throw error
-    }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] = List()
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] =
@@ -588,27 +510,9 @@ object LockImplementation {
 
     override def granularity:LockGranularity = Specific
 
+    override def hasLockSubInterface: Boolean = false
+
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
-
-    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.inHandle))))
-      case Some(LockWrite) => None
-      case None => None //TODO should be an exception
-    }
-
-    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("readName", doesModify = false, List(l.mem.evar.get)))
-      case Some(LockWrite) => Some(MethodInfo("allocName", doesModify = true, List(l.mem.evar.get)))
-      case None => None //TODO should be an exception
-    }
-
-    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
-
-    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => None
-      case Some(LockWrite) => Some(MethodInfo("commit", doesModify = true, List(extractHandle(l.inHandle))))
-      case None => None //TODO should be an exception
-    }
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = {
       //TODO make default more configurable
@@ -646,27 +550,9 @@ object LockImplementation {
 
     override def granularity: LockGranularity = Specific
 
+    override def hasLockSubInterface: Boolean = false
+
     override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
-
-    override def getCheckOwnsInfo(l: ICheckLockOwned): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("isValid", doesModify = false, List(extractHandle(l.inHandle))))
-      case Some(LockWrite) => None
-      case None => None //TODO should be an exception
-    }
-
-    override def getReserveInfo(l: IReserveLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("reserveRead", doesModify = true, List(l.mem.evar.get)))
-      case Some(LockWrite) => Some(MethodInfo("reserveWrite", doesModify = true, List(l.mem.evar.get)))
-      case None => None //TODO should be an exception
-    }
-
-    override def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = None
-
-    override def getReleaseInfo(l: IReleaseLock): Option[MethodInfo] = l.memOpType match {
-      case Some(LockRead) => Some(MethodInfo("commitRead", doesModify = true, List(extractHandle(l.inHandle))))
-      case Some(LockWrite) => Some(MethodInfo("commitWrite", doesModify = true, List(extractHandle(l.inHandle))))
-      case None => None //TODO should be an exception
-    }
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 

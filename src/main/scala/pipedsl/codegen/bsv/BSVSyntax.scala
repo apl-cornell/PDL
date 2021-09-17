@@ -149,7 +149,7 @@ object BSVSyntax {
       case ERecLiteral(_) => throw UnexpectedExpr(e)
       case EMemAccess(mem, index, _, inHandle, _) =>
         val portNum = mem.typ.get match {
-          case memType: TLockedMemType => if (memType.limpl.addReadPort) e.portNum else None
+          case memType: TLockedMemType => if (memType.limpl.usesReadPortNum) e.portNum else None
           case _ => None
         }
         if (isLockedMemory(mem)) {
