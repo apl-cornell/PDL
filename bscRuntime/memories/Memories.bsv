@@ -71,18 +71,18 @@ interface BramPort2#(type addr, type elem, type mid, numeric type nsz);
 endinterface
 
 interface AsyncMem#(type addr, type elem, type mid, numeric type nsz);
-   method ActionValue#(mid) req(addr a, elem b, Bit#(nsz) wmask);
-   method elem peekResp(mid a);
-   method Bool checkRespId(mid a);
-   method Action resp(mid a);
+   method ActionValue#(mid) req1(addr a, elem b, Bit#(nsz) wmask);
+   method elem peekResp1(mid a);
+   method Bool checkRespId1(mid a);
+   method Action resp1(mid a);
    interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client;
 endinterface
 
 interface AsyncMem2#(type addr, type elem, type mid, numeric type nsz);
-   method ActionValue#(mid) req(addr a, elem b, Bit#(nsz) wmask);
-   method elem peekResp(mid a);
-   method Bool checkRespId(mid a);
-   method Action resp(mid a);
+   method ActionValue#(mid) req1(addr a, elem b, Bit#(nsz) wmask);
+   method elem peekResp1(mid a);
+   method Bool checkRespId1(mid a);
+   method Action resp1(mid a);
    interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client1;
    
    method ActionValue#(mid) req2(addr a, elem b, Bit#(nsz) wmask);
@@ -293,23 +293,23 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
       valid[freeEntry][1] <= False;
    endrule
    
-   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest);
+   method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest);
       toMem <= tuple3(wmask, a, b);
       head <= head + 1;
       nextData <= tagged Valid head;
       return head;
    endmethod
       
-   method elem peekResp(MemId#(inflight) a);
+   method elem peekResp1(MemId#(inflight) a);
       return outData[a][1];
    endmethod
       
-   method Bool checkRespId(MemId#(inflight) a);
+   method Bool checkRespId1(MemId#(inflight) a);
       return valid[a][1] == True;
    endmethod
       
    //Make this invisible to other ops this cycle but happen at any time
-   method Action resp(MemId#(inflight) a);
+   method Action resp1(MemId#(inflight) a);
       freeEntry <= a;
    endmethod
    
@@ -366,22 +366,22 @@ module mkAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) _unused_)
       valid2[idx] <= True;
    endrule
    
-   method ActionValue#(MemId#(inflight)) req(addr a, elem b, Bit#(n) wmask) if (okToRequest1);
+   method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest1);
       toMem1 <= tuple3(wmask, a, b);
       head1 <= head1 + 1;
       nextData1 <= tagged Valid head1;
       return head1;
    endmethod
    
-   method elem peekResp(MemId#(inflight) a);
+   method elem peekResp1(MemId#(inflight) a);
       return outData1[a];
    endmethod
    
-   method Bool checkRespId(MemId#(inflight) a);
+   method Bool checkRespId1(MemId#(inflight) a);
       return valid1[a] == True;
    endmethod
    
-   method Action resp(MemId#(inflight) a);
+   method Action resp1(MemId#(inflight) a);
       valid1[a] <= False;
    endmethod
    
@@ -768,21 +768,21 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
    endmethod
 
    interface AsyncMem mem;
-      method ActionValue#(MemId#(inflight)) req(MemId#(inflight) a, elem b, Bit#(n) wmask);
+      method ActionValue#(MemId#(inflight)) req1(MemId#(inflight) a, elem b, Bit#(n) wmask);
 	 write(a, b, wmask);
 	 return a;
       endmethod
 
-      method elem peekResp(MemId#(inflight) i);
+      method elem peekResp1(MemId#(inflight) i);
 	 return read(i);
       endmethod
 
       //Dummy methods needed to fit interface
-      method Bool checkRespId(MemId#(inflight) i);
+      method Bool checkRespId1(MemId#(inflight) i);
 	 return True;
       endmethod
 
-      method Action resp(MemId#(inflight) i);
+      method Action resp1(MemId#(inflight) i);
       endmethod
 
    endinterface

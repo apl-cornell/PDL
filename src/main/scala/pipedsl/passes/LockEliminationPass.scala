@@ -1,18 +1,18 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.PStage
+import pipedsl.common.DAGSyntax.{IfStage, PStage}
 import pipedsl.common.Locks.eliminateLockRegions
 import pipedsl.common.Syntax.{Command, ICondCommand, ILockNoOp}
+import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
 
 object LockEliminationPass extends StagePass[List[PStage]] {
 
   override def run(stgs: List[PStage]): List[PStage] = {
-    stgs.foreach(s => {
-      //yes this is supposed to run in both passes
+    flattenStageList(stgs).foreach { s =>
       eliminateLockRegions(s)
       removeNops(s)
-    })
+    }
     stgs
   }
 

@@ -81,7 +81,6 @@ object Main {
       //new PrettyPrinter(None).printProgram(canonProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
-      //TimingTypeChecker.check(nprog, Some(basetypes))
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockRegionChecker.check(recvProg, None)
@@ -131,17 +130,17 @@ object Main {
     stageInfo map { case (n, stgs) =>
       //Change Recv statements into send + recv pairs
       new ConvertAsyncPass(n).run(stgs)
-      //Convert lock ops into ops that track explicit handles
-      //LockOpTranslationPass.run(stgs)
       //Add in extra conditionals to ensure address locks are not double acquired
       //TODO fix this pass -- currently no examples NEED it and thus we're OK.
       //we will need it to support more flexible versions of the lock libraries (multiple stateful modifications per cycle)
       //RemoveReentrantPass.run(stgs)
       //Must be done after all passes that introduce new variables
       AddEdgeValuePass.run(stgs)
+      //remove unnecessary lock regions
+      LockEliminationPass.run(stgs)
       //This pass produces a new stage list (not modifying in place)
       val newstgs = CollapseStagesPass.run(stgs)
-      //clean up lock ops that need to be merged at this point
+      //we may be able to remove some more regions now that we've merged
       LockEliminationPass.run(newstgs)
       if (printStgGraph) new PrettyPrinter(None).printStageGraph(n.v, newstgs)
       n -> newstgs

@@ -240,6 +240,7 @@ object BluespecGeneration {
     private val is_dp :Type => Boolean = {
       case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
+      case _ => false
     }
 
     private def makeConnections(c: Circuit, memMap: Map[Id, BVar], intMap: Map[Id, BVar]): List[BStatement] = {
@@ -708,7 +709,7 @@ object BluespecGeneration {
     private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, isLockedMemory(mem))
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem))
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case ICondCommand(cond, cs) =>
@@ -1000,7 +1001,7 @@ object BluespecGeneration {
       case IMemWrite(_, _, _, inH, outH) => Some(BAssign(translator.toVar(outH), translator.toExpr(inH)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
-          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum.get, isLockedMemory(mem))
+          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))
         ))
         case None => None
       }
@@ -1133,12 +1134,12 @@ object BluespecGeneration {
             translator.toExpr(data), methodInfo.usesArgs.map(a => translator.toExpr(a)), methodInfo.name)
         } else {
           bsInts.getUnlockedMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
-            data.map(e => translator.toExpr(e)), cmd.portNum.get)
+            data.map(e => translator.toExpr(e)), cmd.portNum)
         }
         Some(BInvokeAssign(translator.toVar(handle), reqInvoke))
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get, isLockedMemory(mem))))
+        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))))
       case IMemWrite(mem, addr, data, lHandle, _) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.addWritePort) cmd.portNum else None
@@ -1292,7 +1293,7 @@ object BluespecGeneration {
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(
-          bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, isLockedMemory(mem))))
+          bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem))))
       case IRecv(_, sender, _) =>
         Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
       case _ => None
