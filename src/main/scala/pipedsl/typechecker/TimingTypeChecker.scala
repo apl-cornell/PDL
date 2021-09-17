@@ -3,10 +3,10 @@ package pipedsl.typechecker
 import pipedsl.common.Syntax._
 import TypeChecker.TypeChecks
 import pipedsl.common.Errors.{MissingType, UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedType}
-import pipedsl.common.{LockImplementation, Locks, Syntax}
+import pipedsl.common.{LockImplementation, Syntax}
 import Environments.Environment
-import pipedsl.common.Locks.General
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency}
+import pipedsl.common.Utilities.is_handle_var
 
 /**
  * - Checks that variables set by receive statements
@@ -49,15 +49,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
    * @return The updated sets of available variables
    */
   def checkCommand(c: Command, vars: Available, nextVars: Available): (Available, Available) = {
-    def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean, isAtomic :Boolean)  :(Available, Available) =
+    def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean)  :(Available, Available) =
       {
         val _ = checkExpr(rhs, vars)
         val _ = checkExpr(lhs, vars, isRhs = false)
         (lhs, rhs) match {
 
             //don't need to check handles for unlocked mems
-          case (EVar(id), e@EMemAccess(mem, _, _, inHandle, outHandle)) if isLockedMemory(mem) =>
-            checkExpr(inHandle.get, vars)
+          case (EVar(id), e@EMemAccess(mem, _, _, inHandle, outHandle, isAtomic)) if isLockedMemory(mem) =>
+            inHandle match
+            {
+              case Some(in) => checkExpr(in, vars)
+              case None => ()
+            }
              val outHset :Available = outHandle match {
                case Some(evar) => Set(evar.id)
                case None => Set()
@@ -87,10 +91,10 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           case (EVar(_), ECall(_, None, _)) => //this is calling another PDL pipeline, not allowed in assign
             throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
           case (EVar(id), _) => if (isRecv) { (vars, nextVars + id) } else { (vars + id, nextVars) }
-          case (EMemAccess(_,_, _, _, _), EMemAccess(_,_, _, _, _)) =>
+          case (_ :EMemAccess, _ :EMemAccess) =>
             throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
           //don't need to check handles for unlocked mems nor atomic
-          case (e@EMemAccess(mem, _, _, inHandle, outHandle), _) if isLockedMemory(mem) && !isAtomic=>
+          case (e@EMemAccess(mem, _, _, inHandle, outHandle, false), _) if isLockedMemory(mem) =>
             checkExpr(inHandle.get, vars)
             LockImplementation.getAccess(LockImplementation.getLockImpl(e), Some(LockWrite)).get._2 match
             {
@@ -110,20 +114,20 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case CSplit(cases, default) =>
         var (endv, endnv) = checkCommand(default, vars, nextVars)
         endnv = endnv.union(endv)
-        var (cur_lock, next_lock) = (endv.filter(id => id.v.startsWith("_lock_id")),
-          endnv.filter(id => id.v.startsWith("_lock_id")))
-        //TODO if something is in both cur_lock and next_lock remove it from cur_lock
+        var (cur_lock, next_lock) = (endv.filter(is_handle_var),
+          endnv.filter(is_handle_var))
         for (c <- cases) {
           if(checkExpr(c.cond, vars) != Latency.Combinational) {
             throw UnexpectedAsyncReference(c.cond.pos, c.cond.toString)
           }
           val (v2, nv2) = checkCommand(c.body, vars, nextVars)
-          cur_lock = cur_lock.union(v2.filter(id => id.v.startsWith("_lock_id")))
-          next_lock = next_lock.union(nv2.filter(id => id.v.startsWith("_lock_id")))
+          cur_lock = cur_lock.union(v2.filter(is_handle_var))
+          next_lock = next_lock.union(nv2.filter(is_handle_var))
           endv = endv.intersect(v2)
           endnv = endnv.intersect(nv2.union(v2))
         }
-        (endv, endnv)
+        cur_lock = cur_lock.diff(next_lock)
+        (endv.union(cur_lock), endnv.union(next_lock))
       case CIf(cond, cons, alt) =>
         if(checkExpr(cond, vars) != Latency.Combinational) {
           throw UnexpectedAsyncReference(cond.pos, cond.toString)
@@ -131,18 +135,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         val (vt, nvt) = checkCommand(cons, vars, nextVars)
         val (vf, nvf) = checkCommand(alt, vars, nextVars)
         val this_cycle_intersect = vt.intersect(vf)
-        val cur_lock_handles = vt.filter(id => id.v.startsWith("_lock_id")).union(
-          vf.filter(id => id.v.startsWith("_lock_id")))
-        val next_lock_handles = nvt.filter(id => id.v.startsWith("_lock_id")).union(
-          nvf.filter(id => id.v.startsWith("_lock_id")))
+        var cur_lock_handles = vt.filter(is_handle_var).union(
+          vf.filter(is_handle_var))
+        val next_lock_handles = nvt.filter(is_handle_var).union(
+          nvf.filter(is_handle_var))
+        cur_lock_handles = cur_lock_handles.diff(next_lock_handles)
         (this_cycle_intersect.union(cur_lock_handles),
           nvt.union(vt).intersect(nvf.union(vf)).removedAll(this_cycle_intersect).union(next_lock_handles))
-      case CAssign(lhs, rhs, isAtomic) =>
+      case CAssign(lhs, rhs) =>
         if (checkExpr(rhs, vars) != Latency.Combinational) {
           throw UnexpectedAsyncReference(rhs.pos, rhs.toString)
         }
-        check_recv_or_asn(lhs, rhs, isRecv = false, isAtomic)
-      case CRecv(lhs, rhs, isAtomic) => check_recv_or_asn(lhs, rhs, isRecv = true, isAtomic)
+        check_recv_or_asn(lhs, rhs, isRecv = false)
+      case CRecv(lhs, rhs) => check_recv_or_asn(lhs, rhs, isRecv = true)
       case CLockStart(_) => (vars, nextVars)
       case CLockEnd(_) => (vars, nextVars)
       case CLockOp(mem, _, _, _, _) =>
@@ -238,7 +243,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       case Combinational => Combinational
       case _ => throw UnexpectedAsyncReference(rec.pos, rec.toString)
     }
-    case EMemAccess(m, index, wm, inHandle, outHandle) =>
+    case EMemAccess(m, index, wm, inHandle, outHandle, isAtomic) =>
       def checkMemRead(rLat: Latency, wLat: Latency): Latency = {
         val memLat = if (isRhs) { rLat } else { wLat }
         val indexExpr = checkExpr(index, vars, isRhs)

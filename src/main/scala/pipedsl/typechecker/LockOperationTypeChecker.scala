@@ -73,8 +73,8 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
         mem.memOpType = c.memOpType
       }
       //general locks stay as none
-    case c@CRecv(lhs, rhs, _) => (lhs, rhs) match {
-      case (e@EMemAccess(mem, index, _, _, _), _) =>
+    case c@CRecv(lhs, rhs) => (lhs, rhs) match {
+      case (e@EMemAccess(mem, index, _, _, _, _), _) =>
         //check if it exists and is lock read, otherwise is ok. If it is None, it means it is general
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
           case Some(LockRead) => throw IllegalMemoryAccessOperation(c.pos)
@@ -82,18 +82,17 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
             e.granularity = getLockGranularity(mem)
             e.memOpType = Some(LockWrite)
         }
-      case (_, e@EMemAccess(mem, index, _, _, _)) =>
+      case (_, e@EMemAccess(mem, index, _, _, _, _)) =>
         getLockAnnotationMap.get(LockArg(mem, Some(index.asInstanceOf[EVar]))) match {
           case Some(LockWrite) => throw IllegalMemoryAccessOperation(c.pos)
           case _ =>
-            println(s"Setting granularity of $e to ${getLockGranularity(mem)}")
             e.memOpType = Some(LockRead)
             e.granularity = getLockGranularity(mem)
         }
       case (_, ECall(_, _, _)) =>
       case _ => throw UnexpectedCase(c.pos)
     }
-    case CAssign(_, rhs, _) => checkExpr(rhs)
+    case CAssign(_, rhs) => checkExpr(rhs)
     case _ =>
   }
 
@@ -102,7 +101,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
     case EBinop(_, e1, e2) =>
       checkExpr(e1)
       checkExpr(e2)
-    case em@EMemAccess(mem, index, _, _, _) =>
+    case em@EMemAccess(mem, index, _, _, _, _) =>
       //Only want to cast  to variable if it is specific, otherwise previous
       //typechecking pass would have errored out
       if (getLockGranularity(mem) == General) {

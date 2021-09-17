@@ -56,8 +56,8 @@ object Utilities {
         v ++ getUsedVars(c.cond) ++ getAllVarNames(c.body)
       })
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getAllVarNames(cons) ++ getAllVarNames(alt)
-    case CAssign(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
-    case CRecv(lhs, rhs, _) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CAssign(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
     case CLockOp(mem, _, _, args, ret) =>
@@ -92,11 +92,11 @@ object Utilities {
         v ++ getWrittenVars(c.body)
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
-    case CAssign(lhs, _, _) => lhs match {
+    case CAssign(lhs, _) => lhs match {
       case EVar(id) => Set(id);
       case _ => Set()
     }
-    case CRecv(lhs, _, _) => lhs match {
+    case CRecv(lhs, _) => lhs match {
       case EVar(id) => Set(id);
       case _ => Set()
     }
@@ -138,8 +138,8 @@ object Utilities {
       })
     case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a))
     case CIf(cond, cons, alt) => getUsedVars(cond) ++ getUsedVars(cons) ++ getUsedVars(alt)
-    case CAssign(_, rhs, _) => getUsedVars(rhs)
-    case CRecv(lhs, rhs, _) => getUsedVars(rhs) ++ (lhs match {
+    case CAssign(_, rhs) => getUsedVars(rhs)
+    case CRecv(lhs, rhs) => getUsedVars(rhs) ++ (lhs match {
       case e: EMemAccess => getUsedVars(e)
       case _ => Set()
     })
@@ -208,7 +208,7 @@ object Utilities {
     case EUop(_, ex) => getUsedVars(ex)
     case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, _) => getUsedVars(rec)
-    case EMemAccess(_, index, mask, inHandle, _) =>
+    case EMemAccess(_, index, mask, inHandle, _, _) =>
       getUsedVars(index)  ++ //memories aren't variables, they're externally defined
       (inHandle match {case Some(e) => getUsedVars(e) case None => Set()}) ++
       (if (mask.isDefined) getUsedVars(mask.get) else Set())
@@ -512,11 +512,8 @@ object Utilities {
           e.copy(fieldName = typeMapId(fieldName, f_opt), rec = typeMapExpr(rec, f_opt)).copyMeta(e)
         case e@ERecLiteral(fields) =>
           e.copy(fields = fields.map(idex => typeMapId(idex._1, f_opt) -> typeMapExpr(idex._2, f_opt))).copyMeta(e)
-        case e@EMemAccess(mem, index, wmask, inHandle, outHandle) =>
-          e.copy(mem = typeMapId(mem, f_opt), index = typeMapExpr(index, f_opt),
-            wmask = opt_func(typeMapExpr(_, f_opt))(wmask),
-            inHandle = inHandle.map(typeMapEVar(_, f_opt)),
-            outHandle = inHandle.map(typeMapEVar(_, f_opt))).copyMeta(e)
+        case e@EMemAccess(mem, index, wmask, inHandle, outHandle, isAtomic) =>
+          e.copy(mem = typeMapId(mem, f_opt), index = typeMapExpr(index, f_opt), wmask = opt_func(typeMapExpr(_, f_opt))(wmask), inHandle = inHandle.map(typeMapEVar(_, f_opt)), outHandle = inHandle.map(typeMapEVar(_, f_opt)), isAtomic).copyMeta(e)
         case e@EBitExtract(num, _, _) => e.copy(num = typeMapExpr(num, f_opt)).copyMeta(e)
         case e@ETernary(cond, tval, fval) =>
           e.copy(cond = typeMapExpr(cond, f_opt),
@@ -572,9 +569,9 @@ object Utilities {
           c.copy(cond = typeMapExpr(cond, f_opt),
             cons = typeMapCmd(cons, f_opt),
             alt = typeMapCmd(alt, f_opt)).copyMeta(c)
-        case c@CAssign(lhs, rhs, _) =>
+        case c@CAssign(lhs, rhs) =>
           c.copy(lhs = typeMapEVar(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
-        case c@CRecv(lhs, rhs, _) =>
+        case c@CRecv(lhs, rhs) =>
           c.copy(lhs = typeMapExpr(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
         case c@CSpecCall(handle, pipe, args) =>
           c.copy(handle = typeMapEVar(handle, f_opt),
@@ -647,5 +644,9 @@ object Utilities {
     ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
 
   val (defaultReadPorts, defaultWritePorts) = (5, 2)
+
+  val lock_handle_prefix = "_lock_id_"
+  val is_handle_var :Id => Boolean =
+    { id: Id => id.v.startsWith(lock_handle_prefix) }
 
 }

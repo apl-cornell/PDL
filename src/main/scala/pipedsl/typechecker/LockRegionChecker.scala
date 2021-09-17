@@ -92,8 +92,8 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
       }
       env
-    case CAssign(lhs, rhs, _) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
-    case CRecv(lhs, rhs, _) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
+    case CAssign(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
+    case CRecv(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case Syntax.CEmpty() => env
     case _ => env
   }
@@ -105,7 +105,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case EToMaybe(ex) => checkMemAccess(ex, env)
     case EUop(_, ex) => checkMemAccess(ex, env)
     case EBinop(_, e1, e2) => checkMemAccess(e1, env); checkMemAccess(e2, env)
-    case EMemAccess(mem, _, _, _, _) =>
+    case EMemAccess(mem, _, _, _, _, _) =>
       mem.typ.get match {
         case TMemType(_,_,_,_,_,_) => //only check _unlocked_ memories
           if (env(mem) != Acquired) {

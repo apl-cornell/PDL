@@ -122,7 +122,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   // int<32> w;
   // m[a, 0b1100] <- w;
   lazy val memAccess: P[Expr] = positioned {
-    iden ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ (i ~ n) => EMemAccess(m, i, n, None, None) }
+    iden ~ angular("atomic" | "a").? ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ a ~ (i ~ n) => EMemAccess(m, i, n, None, None, a.isDefined) }
   }
 
   lazy val bitAccess: P[Expr] = positioned {

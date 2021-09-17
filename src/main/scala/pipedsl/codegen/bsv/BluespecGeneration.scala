@@ -1067,7 +1067,7 @@ object BluespecGeneration {
         }))
       case IMemSend(memHandle, _, _, _, _, _, lOutHandle) =>
         List(BDecl(translator.toVar(memHandle), None),
-          BDecl(translator.toVar(lOutHandle), None))
+          BDecl(translator.toVar(lOutHandle).get, None))
       case ICheckLockOwned(_, _, outHandle) =>
         List(BDecl(translator.toVar(outHandle), None))
       case CSpecCall(handle, _, _) =>
@@ -1122,7 +1122,7 @@ object BluespecGeneration {
         println(cmd)
         Some(BStmtSeq(List(BExprStmt(
           bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum, translator.isLockedMem(mem))),
-          BAssign(translator.toVar(outHandle), translator.toVar(inHandle)))))
+          BAssign(translator.toVar(outHandle).get, translator.toVar(inHandle).get))))
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
         if (receiver == mod.name) {

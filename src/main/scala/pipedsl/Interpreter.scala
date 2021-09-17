@@ -102,7 +102,7 @@ class Interpreter(val maxIterations: Int) {
                 interp_command(fbr, env)
             }
         }
-        case CAssign(lhs, rhs, _) => {
+        case CAssign(lhs, rhs) => {
             val rval = interp_expr(rhs, env)
             lhs match {
                 case EVar(id) => {
@@ -114,7 +114,7 @@ class Interpreter(val maxIterations: Int) {
                 case _ => throw Errors.UnexpectedExpr(lhs)
             }
         }
-        case CRecv(lhs, rhs, _) => {
+        case CRecv(lhs, rhs) => {
             val rval = interp_expr(rhs, env)
             lhs match {
                 case EVar(id) => {
@@ -125,7 +125,7 @@ class Interpreter(val maxIterations: Int) {
                         }
                     }
                 }
-                case EMemAccess(mem, index, m, _, _) => {
+                case EMemAccess(mem, index, m, _, _, _) => {
                     //TODO use mask properly
                     val memArray = memoryEnv(mem)
                     val idx = interp_expr(index, env)

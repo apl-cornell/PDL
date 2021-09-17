@@ -412,7 +412,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle :Option[EVar], outHandle :Option[EVar]) extends Expr with LockInfoAnnotation with HasCopyMeta
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends Expr with LockInfoAnnotation with HasCopyMeta
   {
     override val copyMeta: HasCopyMeta => EMemAccess =
       {

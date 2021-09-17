@@ -85,10 +85,10 @@ class PrettyPrinter(output: Option[File]) {
           printCmdToString(cons, indent + 4) + "\n" + ins + "} else {\n" +
           printCmdToString(alt, indent + 4) + "\n" + ins + "}"
 
-      case Syntax.CAssign(lhs, rhs, isAtomic) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
-        printExprToString(lhs) + (if(isAtomic) " := " else " = ") + printExprToString(rhs) + ";"
-      case Syntax.CRecv(lhs, rhs, isAtomic) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
-        printExprToString(lhs) + (if (isAtomic) " <a- " else " <- ") + printExprToString(rhs) + ";"
+      case Syntax.CAssign(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
+        printExprToString(lhs) + " = " + printExprToString(rhs) + ";"
+      case Syntax.CRecv(lhs, rhs) => ins + (if (lhs.typ.isDefined) printTypeToString(lhs.typ.get) + " " else "") +
+        printExprToString(lhs) + " <- " + printExprToString(rhs) + ";"
       case Syntax.COutput(exp) => ins + "output " + printExprToString(exp) + ";"
       case Syntax.CReturn(exp) => ins + "return " + printExprToString(exp) + ";"
       case Syntax.CExpr(exp) => ins + printExprToString(exp) + ";"
@@ -124,7 +124,8 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EBinop(op, e1, e2) => "(" + printExprToString(e1) + " " + op.op + " " + printExprToString(e2) + ")"
     case Syntax.ERecAccess(rec, fieldName) => printExprToString(rec) + "." + fieldName
     case Syntax.ERecLiteral(fields) => "{" + fields.keySet.map(i => i.v + printExprToString(fields(i))).mkString(",") + "}"
-    case Syntax.EMemAccess(mem, index, m, inHandle, outHandle) => mem.v + "[" + printExprToString(index) +
+    case Syntax.EMemAccess(mem, index, m, inHandle, outHandle, isAtomic) =>
+      mem.v + (if(isAtomic) "<atomic>" else "")  + "[" + printExprToString(index) +
       (if (m.isDefined) "," + printExprToString(m.get) else "") +"]" + "<" +
       inHandle.map(ev => ev.id.v).getOrElse("") + ", " + outHandle.map(ev => ev.id.v).getOrElse("") + ">"
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"

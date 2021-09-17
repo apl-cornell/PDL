@@ -49,7 +49,9 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
 
     (c.lhs, c.rhs) match {
         //Mem Read
-      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_), _, inHandle, outHandle)) =>
+      //TODO maybe we can use the isAtomic variable rather than just passing the
+      // options and hoping they are correct lol
+      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_), _, inHandle, outHandle, _)) =>
         val handle = freshMessage(mem)
         val send = IMemSend(handle, writeMask = None, mem, None, index, inHandle, outHandle)
         val recv = IMemRecv(mem, handle, Some(lhs))
@@ -61,7 +63,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         recv.portNum = c.portNum
         (send, recv)
       //Mem Write
-      case (e@EMemAccess(mem, index@EVar(_), wm, inHandle, outHandle), data@EVar(_)) => mem.typ.get match {
+      case (e@EMemAccess(mem, index@EVar(_), wm, inHandle, outHandle, _), data@EVar(_)) => mem.typ.get match {
         case TMemType(_, _, _, Latency.Asynchronous, _, _) =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, writeMask = wm, mem, Some(data), index, inHandle, outHandle)
