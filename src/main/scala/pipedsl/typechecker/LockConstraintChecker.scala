@@ -200,7 +200,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
     case EBinop(_, e1, e2) =>
       val env1 = checkExpr(e1, env, predicates)
       checkExpr(e2, env1, predicates)
-    case EMemAccess(mem, index, _, _, _, _) if isLockedMemory(mem) => checkAcquired(mem, index, env, predicates)
+    case EMemAccess(mem, index, _, _, _, isAtomic) if isLockedMemory(mem) && !isAtomic =>
+      checkAcquired(mem, index, env, predicates)
     case ETernary(cond, tval, fval) =>
       val env1 = checkExpr(cond, env, predicates)
       val env2 = checkExpr(tval, env1, predicates)

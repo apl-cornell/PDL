@@ -1,6 +1,7 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
+import pipedsl.common.LockImplementation.{getArgs, getLockImplFromMemTyp}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Latency.{Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
@@ -44,8 +45,12 @@ object LockImplementation {
   private val releaseWriteName = releaseName + "_w"
 
   private val canAtomicName = "canAtom"
+  private val canAtomicReadName = canAtomicName + "_r"
+  private val canAtomicWriteName = canAtomicName + "_w"
+
   private val atomicReadName = "atom_r"
   private val atomicWriteName = "atom_w"
+  private val atomicAccessName = "atom_req"
 
   private def toPortString(port: Option[Int]): String = port match {
     case Some(value) => value.toString
@@ -82,32 +87,32 @@ object LockImplementation {
     l.getType.methods.get(getReserveName(l, op))
   }
 
-  private def getBlockName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
+  private def getBlockName(l:  LockInterface, op: Option[LockType], isAtomic: Boolean = false): Id = l.granularity match {
     case Locks.Specific =>
       Id(op match {
-        case Some(Syntax.LockRead) => blockReadName
-        case Some(Syntax.LockWrite) => blockWriteName
-        case None => blockName
+        case Some(Syntax.LockRead) => if (isAtomic) canAtomicReadName else blockReadName
+        case Some(Syntax.LockWrite) => if (isAtomic) canAtomicWriteName else blockWriteName
+        case None => if (isAtomic) canAtomicName else blockName
       })
-    case Locks.General => Id(blockName)
+    case Locks.General => Id(if (isAtomic) canAtomicName else blockName)
   }
 
-  def getBlock(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
-    l.getType.methods.get(getBlockName(l, op))
+  def getBlock(l: LockInterface, op: Option[LockType], isAtomic: Boolean = false): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getBlockName(l, op, isAtomic))
   }
 
-  private def getAccessName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
+  private def getAccessName(l:  LockInterface, op: Option[LockType], isAtomic: Boolean = false): Id = l.granularity match {
     case Locks.Specific =>
       Id(op match {
-        case Some(Syntax.LockRead) => readName
-        case Some(Syntax.LockWrite) => writeName
-        case None => accessName
+        case Some(Syntax.LockRead) => if (isAtomic) atomicReadName else readName
+        case Some(Syntax.LockWrite) => if (isAtomic) atomicWriteName else writeName
+        case None => if (isAtomic) atomicAccessName else accessName
       })
-    case Locks.General => Id(accessName)
+    case Locks.General => Id(if (isAtomic) atomicAccessName else accessName)
   }
 
-  def getAccess(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
-    l.getType.methods.get(getAccessName(l, op))
+  def getAccess(l: LockInterface, op: Option[LockType], isAtomic: Boolean = false): Option[(TFun, Latency)] = {
+    l.getType.methods.get(getAccessName(l, op, isAtomic))
   }
 
   private def getReleaseName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
@@ -162,31 +167,64 @@ object LockImplementation {
     }
   }
 
-  def getReadInfo(mem: Id, addr: Expr, inHandle: Option[Expr], portNum: Option[Int]): Option[MethodInfo] = {
+  def getCanAtomicRead(mem: Id, addr: Expr, portNum: Option[Int]): Option[MethodInfo] = {
     val interface = getLockImplFromMemTyp(mem)
-    getAccess(interface, Some(LockRead)) match {
+    getBlock(interface, Some(LockRead), isAtomic = true) match {
+      case Some((funTyp, _)) =>
+        val args = getArgs(funTyp, Some(addr), None, None)
+        val methodName = getBlockName(interface, Some(LockRead), isAtomic = true).v + toPortString(portNum)
+        Some(MethodInfo(methodName, doesModify = false, args))
+      case None => None
+    }
+  }
+
+  def getCanAtomicWrite(mem: Id, addr: Expr, data: Expr, portNum: Option[Int]): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getBlock(interface, Some(LockWrite), isAtomic = true) match {
+      case Some((funTyp, _)) =>
+        val args = getArgs(funTyp, Some(addr), Some(data), None)
+        val methodName = getBlockName(interface,  Some(LockWrite), isAtomic = true).v + toPortString(portNum)
+        Some(MethodInfo(methodName, doesModify = false, args))
+      case None => None
+    }
+  }
+
+  def getCanAtomicAccess(mem: Id, addr: Expr, data: Option[Expr], portNum: Option[Int]): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getBlock(interface, None, isAtomic = true) match {
+      case Some((funTyp, _)) =>
+        val args = getArgs(funTyp, Some(addr), data, None)
+        val methodName = getBlockName(interface, None, isAtomic = true).v + toPortString(portNum)
+        Some(MethodInfo(methodName, doesModify = false, args))
+      case None => None
+    }
+  }
+
+  def getReadInfo(mem: Id, addr: Expr, inHandle: Option[Expr], portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getAccess(interface, Some(LockRead), isAtomic) match {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, Some(addr), inHandle)
-        val methodName = getAccessName(interface, Some(LockRead)).v + toPortString(portNum)
+        val methodName = getAccessName(interface, Some(LockRead), isAtomic).v + toPortString(portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
     }
   }
 
-  def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, portNum: Option[Int]): Option[MethodInfo] = {
+  def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
       val interface = getLockImplFromMemTyp(mem)
-      val (funTyp, latency) = getAccess(interface, Some(LockWrite)).get
+      val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
       val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
-      val methodName = getAccessName(interface, Some(LockWrite)).v + toPortString(portNum)
+      val methodName = getAccessName(interface, Some(LockWrite), isAtomic).v + toPortString(portNum)
       Some(MethodInfo(methodName, latency != Combinational, args))
   }
 
   def getRequestInfo(mem: Id, addr: Expr, inHandle: Option[Expr],
-                     data: Option[Expr], portNum: Option[Int]): Option[MethodInfo] = {
+                     data: Option[Expr], portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
     val interface = getLockImplFromMemTyp(mem)
-    val (funTyp, _) = getAccess(interface, None).get
+    val (funTyp, _) = getAccess(interface, None, isAtomic).get
     val args = getArgs(funTyp, Some(addr), inHandle, data)
-    val methodName = getAccessName(interface, None).v + toPortString(portNum)
+    val methodName = getAccessName(interface, None, isAtomic).v + toPortString(portNum)
     Some(MethodInfo(methodName, doesModify = true, args))
   }
 
@@ -424,12 +462,12 @@ object LockImplementation {
   private class BypassQueue extends LockInterface {
 
     override def getType: TObject = TObject(Id("BypassQueue"), List(), Map(
-      Id(canResName) -> (TFun(List(addrType), TBool()), Combinational),
+      Id(canResWriteName) -> (TFun(List(addrType), TBool()), Combinational),
       Id(resWriteName) -> (TFun(List(addrType), handleType), Sequential),
       Id(blockWriteName) -> (TFun(List(handleType), TBool()), Combinational),
       Id(writeName) -> (TFun(List(handleType, dataType), TVoid()), Combinational),
       Id(releaseWriteName) -> (TFun(List(handleType), TVoid()), Sequential),
-      Id(canAtomicName) -> (TFun(List(addrType), TBool()), Combinational),
+      Id(canAtomicReadName) -> (TFun(List(addrType), TBool()), Combinational),
       Id(atomicReadName) -> (TFun(List(addrType), dataType), Combinational)
     ))
 

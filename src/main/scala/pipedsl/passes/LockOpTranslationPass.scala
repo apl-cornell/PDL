@@ -95,7 +95,11 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         case Locks.General => None
       })
       val newArg: Expr = idx
-      val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated)), isAtomic).setPos(em.pos)
+      val addHandles = isLockedMemory(mem) && !isAtomic
+      //only add handles if this is a locked memory and not atomic
+      val inHandle = if (addHandles) Some(lockVar(l_arg, LockedMemState.Acquired)) else None
+      val outHandle = if (addHandles) Some(lockVar(l_arg, LockedMemState.Operated)) else None
+      val res = EMemAccess(mem, newArg, wm, inHandle, outHandle, isAtomic).setPos(em.pos)
       res.copyMeta(em)
     case et@ETernary(cond, tval, fval) =>
       val ncond = modifyMemArg(cond, isLhs)

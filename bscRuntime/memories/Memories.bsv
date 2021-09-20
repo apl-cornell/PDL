@@ -117,13 +117,13 @@ interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
 endinterface
 
 interface BypassLockCombMem#(type addr, type elem, type id, numeric type size);  
-   method Bool canRead(addr a);
-   method Bool canWrite(addr a);
-   method Bool canRes(addr a);
-   method ActionValue#(id) reserve(addr a);
-   method Bool owns(id i);
-   method Action commit(id i);
-   method elem read(addr a);
+   method Bool canAtom_r1(addr a);
+   method Bool canAtom_r2(addr a);   
+   method Bool canRes_w1(addr a);
+   method ActionValue#(id) res_w1(addr a);
+   method Bool owns_w1(id i);
+   method Action rel_w1(id i);
+   method elem atom_r(addr a);
    method Action write(id a, elem b);
 endinterface
 
@@ -863,8 +863,19 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
       rf.upd(rfaddr, rfdata);
    endrule
    
-   //can read THIS CycLe
-   method Bool canRead(addr a);
+   //can read THIS Cycle
+   method Bool canAtom_r1(addr a);
+      Bool canGo = False;
+      let wdataEnt = getMatchingEntry(a);
+      if (wdataEnt matches tagged Valid.id)
+	 begin
+	    canGo = isValid(readBypassData(id));
+	 end
+      else canGo = True;
+      return canGo;
+   endmethod
+   //unnecessary second copy of the above. TODO parameterize this better
+   method Bool canAtom_r2(addr a);
       Bool canGo = False;
       let wdataEnt = getMatchingEntry(a);
       if (wdataEnt matches tagged Valid.id)
@@ -875,33 +886,28 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
       return canGo;
    endmethod
    
-   //can write This Cycle
-   method Bool canWrite(addr a);
-      return unowned;
-   endmethod
-   
-   method Bool canRes(addr a);
+   method Bool canRes_w1(addr a);
       return headFree;
    endmethod
    
-   method ActionValue#(LockId#(n)) reserve(addr a) if (headFree);
+   method ActionValue#(LockId#(n)) res_w1(addr a) if (headFree);
       head <= head + 1;
       resVec[head] <= tagged Valid a;
       dataVec[head] <= tagged Invalid;
       return head;
    endmethod   
    
-   method Bool owns(LockId#(n) id);
+   method Bool owns_w1(LockId#(n) id);
       return True;
    endmethod
    
-   method Action commit(LockId#(n) id);
+   method Action rel_w1(LockId#(n) id);
       resVec[id] <= tagged Invalid;
       owner <= owner + 1;
       toCommit <= id;
    endmethod
    
-   method elem read(addr a);
+   method elem atom_r(addr a);
       elem outdata = rf.sub(a);
       let wdataEnt = getMatchingEntry(a);
       if (wdataEnt matches tagged Valid.id) outdata = fromMaybe(?, readBypassData(id));

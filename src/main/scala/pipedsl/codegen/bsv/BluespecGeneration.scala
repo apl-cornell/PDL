@@ -6,7 +6,7 @@ import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, log2, annotateSpecTimings}
+import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2}
 
 import scala.collection.immutable.ListMap
 
@@ -206,8 +206,6 @@ object BluespecGeneration {
       BVar("reg" + b.name, bsInts.getRegType(b.typ))
     }
 
-    //TODO put in a good comment here that describes the return values
-
     /**
      * Given a circuit, generate the statements that are used in the TestBench
      * code to execute Call Statements and start execution
@@ -275,7 +273,6 @@ object BluespecGeneration {
     //Create a top level module that is synthesizable, takes no parameters
     //and instantiates all of the required memories and pipeline modules
     private val topLevelModule: BModuleDef = {
-
 
       //Assigns the internal modules to their external facing interfaces, exposing only clients as necessary
       val assignInts = finalArgMap.values.foldLeft(List[BStatement]())((l, a) => a.typ match {
@@ -675,6 +672,23 @@ object BluespecGeneration {
           } else {
             l
           }
+        case im@IMemWrite(mem, addr, data, _, _, isAtomic) if isAtomic =>
+          val methodInfo = LockImplementation.getCanAtomicWrite(mem, addr, data, im.portNum)
+          if (methodInfo.isDefined) {
+            l :+ translateMethod(modParams(mem), methodInfo.get)
+          } else {
+            l
+          }
+        case im@IMemSend(_, _, mem, data, addr, _, _, isAtomic) if isAtomic =>
+          val methodInfo = LockImplementation.getCanAtomicAccess(mem, addr, data, im.portNum)
+          if (methodInfo.isDefined) {
+            l :+ translateMethod(modParams(mem), methodInfo.get)
+          } else {
+            l
+          }
+        //these are just to find EMemAccesses that are also atomic
+        case CAssign(_, rhs) => l ++ getBlockConds(rhs)
+        case CRecv(_, rhs) => l ++ getBlockConds(rhs)
         case COutput(_) => if (mod.isRecursive) l :+ busyReg else l
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
@@ -706,6 +720,30 @@ object BluespecGeneration {
       })
     }
 
+    //only necessary to find atomic Reads and get their blocking conds
+    private def getBlockConds(e: Expr): List[BExpr] = e match {
+      case EIsValid(ex) => getBlockConds(ex)
+      case EFromMaybe(ex) => getBlockConds(ex)
+      case EToMaybe(ex) => getBlockConds(ex)
+      case EUop(_, ex) => getBlockConds(ex)
+      case EBinop(_, e1, e2) => getBlockConds(e1) ++ getBlockConds(e2)
+      case em@EMemAccess(mem, index, _, _, _, isAtomic) if isAtomic =>
+        val methodInfo = LockImplementation.getCanAtomicRead(mem, index, em.portNum)
+        if (methodInfo.isDefined) {
+          List(translateMethod(modParams(mem), methodInfo.get))
+        } else List()
+      case EBitExtract(num, _, _) => getBlockConds(num)
+        //can't appear in cond of ternary
+      case ETernary(_, tval, fval) => getBlockConds(tval) ++ getBlockConds(fval)
+      case EApp(_, args) => args.foldLeft(List[BExpr]())((l, a) => {
+        l ++ getBlockConds(a)
+      })
+      case ECall(_, _, args) => args.foldLeft(List[BExpr]())((l, a) => {
+        l ++ getBlockConds(a)
+      })
+      case ECast(_, exp) => getBlockConds(exp)
+      case _ => List()
+    }
     private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
@@ -952,8 +990,8 @@ object BluespecGeneration {
 
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
-      case IMemSend(_, _, _, _, _, _, outH) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
-      case IMemWrite(_, _, _, _, outH) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
+      case IMemSend(_, _, _, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
+      case IMemWrite(_, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
@@ -997,9 +1035,9 @@ object BluespecGeneration {
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
-      case IMemSend(_, _, _, _, _, inH, outH) if inH.isDefined && outH.isDefined =>
+      case IMemSend(_, _, _, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
         Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
-      case IMemWrite(_, _, _, inH, outH) if inH.isDefined && outH.isDefined =>
+      case IMemWrite(_, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
         Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
@@ -1093,7 +1131,7 @@ object BluespecGeneration {
           case Some(value) => Some(translator.toExpr(value))
           case None => None
         }))
-      case IMemSend(memHandle, _, _, _, _, _, _) =>
+      case IMemSend(memHandle, _, _, _, _, _, _, _) =>
         Some(BDecl(translator.toVar(memHandle), None))
       case CSpecCall(handle, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
@@ -1129,9 +1167,9 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
-      case im@IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar, inLockHandle, _) =>
+      case im@IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar, inLockHandle, _, isAtomic) =>
         val reqInvoke = if (isLockedMemory(mem)) {
-          val methodInfo = LockImplementation.getRequestInfo(mem, addr, inLockHandle, data, im.portNum).get
+          val methodInfo = LockImplementation.getRequestInfo(mem, addr, inLockHandle, data, im.portNum, isAtomic).get
           bsInts.getMemReq(modParams(mem), im.isWrite, translator.toExpr(wMask),
             translator.toExpr(data), methodInfo.usesArgs.map(a => translator.toExpr(a)), methodInfo.name)
         } else {
@@ -1142,7 +1180,7 @@ object BluespecGeneration {
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))))
-      case IMemWrite(mem, addr, data, lHandle, _) =>
+      case IMemWrite(mem, addr, data, lHandle, _, isAtomic) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.usesWritePortNum) cmd.portNum else None
           case _ => None //In the future we may allow unlocked mems with port annotations
@@ -1150,7 +1188,7 @@ object BluespecGeneration {
         Some(BExprStmt(
         if (isLockedMemory(mem)) {
           //ask lock for its translation
-          translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, portNum).get)
+          translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, portNum, isAtomic).get)
         } else {
           //use unlocked translation
           bsInts.getUnlockedCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)

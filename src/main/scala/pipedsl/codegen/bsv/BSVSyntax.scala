@@ -154,7 +154,7 @@ object BSVSyntax {
         }
         if (isLockedMemory(mem)) {
           //use the lock implementation's read method
-          val mi = LockImplementation.getReadInfo(mem, index, inHandle, portNum).get
+          val mi = LockImplementation.getReadInfo(mem, index, inHandle, portNum, isAtomic).get
           BMethodInvoke(BVar(mem.v, toType(mem.typ.get)), mi.name, mi.usesArgs.map(a => toExpr(a)))
         } else {
           //use the unlocked method
