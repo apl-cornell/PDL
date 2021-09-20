@@ -952,8 +952,8 @@ object BluespecGeneration {
 
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
-      case IMemSend(_, _, _, _, _, _, outH) => Some(BDecl(translator.toVar(outH), None))
-      case IMemWrite(_, _, _, _, outH) => Some(BDecl(translator.toVar(outH), None))
+      case IMemSend(_, _, _, _, _, _, outH) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
+      case IMemWrite(_, _, _, _, outH) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
@@ -997,8 +997,10 @@ object BluespecGeneration {
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
-      case IMemSend(_, _, _, _, _, inH, outH) => Some(BAssign(translator.toVar(outH), translator.toExpr(inH)))
-      case IMemWrite(_, _, _, inH, outH) => Some(BAssign(translator.toVar(outH), translator.toExpr(inH)))
+      case IMemSend(_, _, _, _, _, inH, outH) if inH.isDefined && outH.isDefined =>
+        Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
+      case IMemWrite(_, _, _, inH, outH) if inH.isDefined && outH.isDefined =>
+        Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
           bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))

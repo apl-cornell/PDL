@@ -1,14 +1,10 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Errors.UnexpectedCommand
-import pipedsl.common.Locks.{Free, Reserved, _}
-import pipedsl.common.{LockImplementation, Locks}
+import pipedsl.common.Locks._
+import pipedsl.common.Locks
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, mkOr, updateListMap}
-import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass, StagePass}
-
-import scala.+:
+import pipedsl.common.Utilities.lock_handle_prefix
+import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
 
 /**
@@ -26,7 +22,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
 
 
   private def lockVar(l: LockArg, op :LockedMemState.LockedMemState): EVar = {
-    val lockname = "_lock_id_" + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "") + (op match
+    val lockname = lock_handle_prefix + l.id.v + (if (l.evar.isDefined) "_" + l.evar.get.id.v else "") + (op match
     {
       case LockedMemState.Free     => "_fr"
       case LockedMemState.Reserved => "_rs"
@@ -78,7 +74,8 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     case CTBar(c1, c2) => CTBar(run(c1), run(c2)).copyMeta(c)
     case CIf(cond, cons, alt) => CIf(modifyMemArg(cond, isLhs = false), run(cons), run(alt)).copyMeta(c)
     case CAssign(lhs, rhs) => CAssign(lhs, modifyMemArg(rhs, isLhs = false)).copyMeta(c)
-    case CRecv(lhs, rhs) => CRecv(modifyMemArg(lhs, isLhs = true), modifyMemArg(rhs, isLhs = false)).copyMeta(c)
+    case CRecv(lhs, rhs) =>
+      CRecv(modifyMemArg(lhs, isLhs = true), modifyMemArg(rhs, isLhs = false)).copyMeta(c)
     case CSpecCall(handle, pipe, args) => CSpecCall(handle, pipe, args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
     case CVerify(handle, args, preds, update) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall])).copyMeta(c)
     case CUpdate(newHandle, handle, args, preds) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds).copyMeta(c)
@@ -92,13 +89,13 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
   }
 
   private def modifyMemArg(e: Expr, isLhs: Boolean): Expr = e match {
-    case em@EMemAccess(mem, idx@EVar(_), wm, _, _) =>
+    case em@EMemAccess(mem, idx@EVar(_), wm, _, _, isAtomic) =>
       val l_arg = LockArg(mem, em.granularity match
       { case Locks.Specific => Some(idx)
         case Locks.General => None
       })
       val newArg: Expr = idx
-      val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated))).setPos(em.pos)
+      val res = EMemAccess(mem, newArg, wm, Some(lockVar(l_arg, LockedMemState.Acquired)), Some(lockVar(l_arg, LockedMemState.Operated)), isAtomic).setPos(em.pos)
       res.copyMeta(em)
     case et@ETernary(cond, tval, fval) =>
       val ncond = modifyMemArg(cond, isLhs)

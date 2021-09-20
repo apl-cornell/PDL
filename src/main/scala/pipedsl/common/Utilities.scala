@@ -102,8 +102,12 @@ object Utilities {
     }
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
-    case IMemSend(handle, _, _, _, _, _, outHandle) => Set(handle.id, outHandle.id)
-    case i :IMemWrite => Set(i.outHandle.id)
+    case IMemSend(handle, _, _, _, _, _, outHandle) => outHandle match
+    {
+      case Some(vl) => Set(handle.id, vl.id)
+      case None => Set(handle.id)
+    }
+    case i :IMemWrite => i.outHandle.map(vl => Set(vl.id)).getOrElse(Set())
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
@@ -151,15 +155,15 @@ object Utilities {
     case ICheck(specId, value) => getUsedVars(value) + specId
     case IMemSend(_, writeMask, _, data, addr, inHandle, _) =>
       val dataSet = if (data.isDefined) {
-        Set(data.get.id, addr.id, inHandle.id)
-      } else Set(addr.id, inHandle.id)
+        Set(data.get.id, addr.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
+      } else Set(addr.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
       dataSet ++ (if (writeMask.isDefined) {
         getUsedVars(writeMask.get)
       } else {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data, inHandle, _) => Set(addr.id, data.id, inHandle.id)
+    case IMemWrite(_, addr, data, inHandle, _) => Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {
@@ -204,7 +208,7 @@ object Utilities {
     case EUop(_, ex) => getUsedVars(ex)
     case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, _) => getUsedVars(rec)
-    case EMemAccess(_, index, mask, inHandle, _) =>
+    case EMemAccess(_, index, mask, inHandle, _, _) =>
       getUsedVars(index)  ++ //memories aren't variables, they're externally defined
       (inHandle match {case Some(e) => getUsedVars(e) case None => Set()}) ++
       (if (mask.isDefined) getUsedVars(mask.get) else Set())
@@ -508,11 +512,10 @@ object Utilities {
           e.copy(fieldName = typeMapId(fieldName, f_opt), rec = typeMapExpr(rec, f_opt)).copyMeta(e)
         case e@ERecLiteral(fields) =>
           e.copy(fields = fields.map(idex => typeMapId(idex._1, f_opt) -> typeMapExpr(idex._2, f_opt))).copyMeta(e)
-        case e@EMemAccess(mem, index, wmask, inHandle, outHandle) =>
+        case e@EMemAccess(mem, index, wmask, inHandle, outHandle, isAtomic) =>
           e.copy(mem = typeMapId(mem, f_opt), index = typeMapExpr(index, f_opt),
-            wmask = opt_func(typeMapExpr(_, f_opt))(wmask),
-            inHandle = inHandle.map(typeMapEVar(_, f_opt)),
-            outHandle = inHandle.map(typeMapEVar(_, f_opt))).copyMeta(e)
+            wmask = opt_func(typeMapExpr(_, f_opt))(wmask), inHandle = inHandle.map(typeMapEVar(_, f_opt)),
+            outHandle = outHandle.map(typeMapEVar(_, f_opt)), isAtomic).copyMeta(e)
         case e@EBitExtract(num, _, _) => e.copy(num = typeMapExpr(num, f_opt)).copyMeta(e)
         case e@ETernary(cond, tval, fval) =>
           e.copy(cond = typeMapExpr(cond, f_opt),
@@ -643,5 +646,9 @@ object Utilities {
     ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
 
   val (defaultReadPorts, defaultWritePorts) = (5, 2)
+
+  val lock_handle_prefix = "_lock_id_"
+  val is_handle_var :Id => Boolean =
+    { id: Id => id.v.startsWith(lock_handle_prefix) }
 
 }

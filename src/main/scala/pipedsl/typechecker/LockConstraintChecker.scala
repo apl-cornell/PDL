@@ -150,16 +150,16 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
         tenv.intersect(fenv) //real merge logic lives inside Envrionments.Z3AST
       case CAssign(_, rhs) => checkExpr(rhs, env, c.predicateCtx.get)
       case CRecv(lhs, rhs) => (lhs, rhs) match {
-        case (EMemAccess(mem, expr, _, _, _), _) =>
+        case (EMemAccess(mem, expr, _, _, _, isAtomic), _) =>
           /*this is a write*/
-          if (isLockedMemory(mem)) {
+          if (isLockedMemory(mem) && !isAtomic) {
             checkDisjoint(mem, c.predicateCtx.get)
             checkAcquired(mem, expr, env, c.predicateCtx.get)
           } else {
             env
           }
-        case (_, EMemAccess(mem, expr, _, _, _)) =>
-          if (isLockedMemory(mem)) {
+        case (_, EMemAccess(mem, expr, _, _, _, isAtomic)) =>
+          if (isLockedMemory(mem) && !isAtomic) {
             checkAcquired(mem, expr, env, c.predicateCtx.get)
           } else {
             env
@@ -200,7 +200,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
     case EBinop(_, e1, e2) =>
       val env1 = checkExpr(e1, env, predicates)
       checkExpr(e2, env1, predicates)
-    case EMemAccess(mem, index, _, _, _) if isLockedMemory(mem) => checkAcquired(mem, index, env, predicates)
+    case EMemAccess(mem, index, _, _, _, _) if isLockedMemory(mem) => checkAcquired(mem, index, env, predicates)
     case ETernary(cond, tval, fval) =>
       val env1 = checkExpr(cond, env, predicates)
       val env2 = checkExpr(tval, env1, predicates)

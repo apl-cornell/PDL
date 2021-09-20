@@ -173,19 +173,19 @@ object LockImplementation {
     }
   }
 
-  def getWriteInfo(mem: Id, addr: Expr, inHandle: Expr, data: Expr, portNum: Option[Int]): Option[MethodInfo] = {
+  def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, portNum: Option[Int]): Option[MethodInfo] = {
       val interface = getLockImplFromMemTyp(mem)
       val (funTyp, latency) = getAccess(interface, Some(LockWrite)).get
-      val args = getArgs(funTyp, Some(addr), Some(inHandle), Some(data))
+      val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
       val methodName = getAccessName(interface, Some(LockWrite)).v + toPortString(portNum)
       Some(MethodInfo(methodName, latency != Combinational, args))
   }
 
-  def getRequestInfo(mem: Id, addr: Expr, inHandle: Expr,
+  def getRequestInfo(mem: Id, addr: Expr, inHandle: Option[Expr],
                      data: Option[Expr], portNum: Option[Int]): Option[MethodInfo] = {
     val interface = getLockImplFromMemTyp(mem)
     val (funTyp, _) = getAccess(interface, None).get
-    val args = getArgs(funTyp, Some(addr), Some(inHandle), data)
+    val args = getArgs(funTyp, Some(addr), inHandle, data)
     val methodName = getAccessName(interface, None).v + toPortString(portNum)
     Some(MethodInfo(methodName, doesModify = true, args))
   }

@@ -412,7 +412,7 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle :Option[EVar], outHandle :Option[EVar]) extends Expr with LockInfoAnnotation with HasCopyMeta
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends Expr with LockInfoAnnotation with HasCopyMeta
   {
     override val copyMeta: HasCopyMeta => EMemAccess =
       {
@@ -492,14 +492,14 @@ object Syntax {
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   //TODO Clean up what actually needs the lock info annotation
-  case class IMemSend(memHandle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar, lInHandle: EVar, lOutHandle: EVar)
+  case class IMemSend(memHandle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar, lInHandle: Option[EVar], lOutHandle: Option[EVar])
     extends InternalCommand with LockInfoAnnotation {
     def isWrite: Boolean = data.isDefined
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately
 
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar, inHandle: EVar, outHandle: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar, inHandle: Option[EVar], outHandle: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
