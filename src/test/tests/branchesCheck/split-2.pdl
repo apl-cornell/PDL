@@ -15,9 +15,10 @@ pipe test(inarg: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
             uint<5> addr = u3<5>;
         }
     }
-    acquire(rf[addr], W);
+    reserve(rf[addr], W);
     end(rf);
     ---
+    block(rf[addr]);
     rf[addr] <- 0<32>;
     release(rf[addr]);
     ---

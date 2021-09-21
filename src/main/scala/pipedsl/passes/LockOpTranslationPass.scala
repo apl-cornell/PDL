@@ -34,6 +34,8 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     val res = EVar(Id(lockname))
     res.typ = Some(TMaybe(TRequestHandle(l.id, RequestType.Lock)))
     res.id.typ = res.typ
+    res.pos = l.pos
+    res.id.pos = l.pos
     res
   }
 
