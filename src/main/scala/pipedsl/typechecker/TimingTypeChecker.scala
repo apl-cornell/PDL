@@ -326,6 +326,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       }
     case EVar(id) => if(!vars(id) && isRhs) {
       throw UnavailableArgUse(e.pos, id.toString) }
+      //TODO make this error message more clear about what's wrong when these are lock handle vars
       else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)
     case _ => Combinational
