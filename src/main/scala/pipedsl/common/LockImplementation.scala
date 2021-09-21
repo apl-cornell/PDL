@@ -1,7 +1,6 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
-import pipedsl.common.LockImplementation.{getArgs, getLockImplFromMemTyp}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Latency.{Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
@@ -403,7 +402,7 @@ object LockImplementation {
         Id(accessName) -> (TFun(List(addrType), TVoid()), Combinational),
         Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
         Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
-        Id(releaseName)    -> (TFun(List(addrType), TVoid()), Sequential),
+        Id(releaseName)    -> (TFun(List(handleType), TVoid()), Sequential),
         Id(canAtomicName) -> (TFun(List(), TBool()), Combinational),
         Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
         Id(atomicWriteName)  -> (TFun(List(addrType, dataType), TVoid()), Sequential)))

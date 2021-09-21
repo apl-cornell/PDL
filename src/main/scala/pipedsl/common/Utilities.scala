@@ -646,6 +646,22 @@ object Utilities {
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =
     ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
 
+
+  def getMemReads(e: Expr): List[EMemAccess] = e match {
+    case EIsValid(ex) => getMemReads(ex)
+    case EFromMaybe(ex) => getMemReads(ex)
+    case EToMaybe(ex) => getMemReads(ex)
+    case EUop(_, ex) => getMemReads(ex)
+    case EBinop(_, e1, e2) => getMemReads(e1) ++ getMemReads(e2)
+    case em@EMemAccess(_, _, _, _, _, _) => List(em)
+    case EBitExtract(num, _, _) => getMemReads(num)
+    case ETernary(cond, tval, fval) => getMemReads(cond) ++ getMemReads(tval) ++ getMemReads(fval)
+    case EApp(_, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
+    case ECall(_, _, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
+    case ECast(_, exp) => getMemReads(exp)
+    case _ => List()
+  }
+
   val (defaultReadPorts, defaultWritePorts) = (5, 2)
 
   val lock_handle_prefix = "_lock_id_"

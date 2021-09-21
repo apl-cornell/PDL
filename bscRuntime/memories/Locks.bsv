@@ -14,11 +14,11 @@ export mkDMAddrLock;
 typedef UInt#(TLog#(n)) LockId#(numeric type n);
 
 interface QueueLock#(type id);
-   method ActionValue#(id) res();
-   method Bool owns(id i);
-   method Action rel(id i);
+   method ActionValue#(id) res1();
+   method Bool owns1(id i);
+   method Action rel1(id i);
    method Bool isEmpty();
-   method Bool canRes();
+   method Bool canRes1();
 endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
@@ -43,17 +43,17 @@ module mkQueueLock(QueueLock#(LockId#(d)));
       return lockFree;
    endmethod
    
-   method Bool canRes();
+   method Bool canRes1();
       return held.notFull;
    endmethod
    
    //Returns True if thread `tid` already owns the lock
-   method Bool owns(LockId#(d) tid);
+   method Bool owns1(LockId#(d) tid);
       return owner == tid;
    endmethod
 	       
    //Releases the lock iff thread `tid` owns it already
-   method Action rel(LockId#(d) tid);
+   method Action rel1(LockId#(d) tid);
       if (owner == tid)
 	 begin
 	    held.deq();
@@ -61,7 +61,7 @@ module mkQueueLock(QueueLock#(LockId#(d)));
    endmethod
    
    //Reserves the lock and returns the associated id
-   method ActionValue#(LockId#(d)) res();
+   method ActionValue#(LockId#(d)) res1();
       held.enq(nextId);
       nextId <= nextId + 1;
       cnt <= cnt + 1;
@@ -145,7 +145,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       if (addrLock matches tagged Valid.lock)
 	    //in this case loc is associated with lockVec[idx]
 	    //so check to see if the requested thread owns it
-	    return lock.owns(tid);
+	    return lock.owns1(tid);
       else
 	    //otherwise none of the existing locks
 	    //are associated with loc - so if any of them are
@@ -158,7 +158,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       if (lockIdx matches tagged Valid.idx)
 	 begin
 	    QueueLock#(LockId#(d)) lock = lockVec[idx];
-	    lock.rel(tid);
+	    lock.rel1(tid);
 	    //disassociate the lock from the address once its empty in a separate rule
 	 end
       //else no lock is associated with loc, do nothing
@@ -170,7 +170,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	 begin
 	    let lock = lockVec[idx];
 	    resVec[idx].wset(True);
-	    let nid <- lock.res();
+	    let nid <- lock.res1();
             return nid;
 	 end
       else
@@ -179,7 +179,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	        if (freeLock matches tagged Valid.idx)
 	            begin
 		            entryVec[idx] <= tagged Valid loc;
-		            let nid <- lockVec[idx].res();
+		            let nid <- lockVec[idx].res1();
 		            return nid;
 	            end
 	        else return 0;
@@ -197,7 +197,7 @@ module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(add
    endmethod
 
    method Bool owns1(LockId#(d) tid, addr loc);
-      return lockVec[loc].owns(tid);
+      return lockVec[loc].owns1(tid);
    endmethod
    
    method Bool canRes1(addr loc);
@@ -205,11 +205,11 @@ module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(add
    endmethod
    
    method Action rel1(LockId#(d) tid, addr loc);
-      lockVec[loc].rel(tid);
+      lockVec[loc].rel1(tid);
    endmethod
    
    method ActionValue#(LockId#(d)) res1(addr loc);
-      let id <- lockVec[loc].res();
+      let id <- lockVec[loc].res1();
       return id;
    endmethod
    

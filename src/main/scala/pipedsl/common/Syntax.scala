@@ -312,6 +312,15 @@ object Syntax {
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
   def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+  def isSynchronousAccess(mem: Id, isWrite: Boolean): Boolean = mem.typ.get match {
+    case TMemType(_, _, readLatency, writeLatency, _, _) =>
+      val latency: Latency = if (isWrite) writeLatency else readLatency
+      latency == Latency.Asynchronous
+    case TLockedMemType(TMemType(_, _, readLatency, writeLatency, _, _), _, _) =>
+      val latency: Latency = if (isWrite) writeLatency else readLatency
+      latency == Latency.Asynchronous
+    case _ => false
+  }
 
   /**
    * Define common helper methods implicit classes.

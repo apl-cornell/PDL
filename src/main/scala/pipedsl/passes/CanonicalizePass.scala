@@ -1,5 +1,6 @@
 package pipedsl.passes
 
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.getAllVarNames
 import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
@@ -10,6 +11,8 @@ import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
  *
  * Now it also lifts all cast expressions into temporary variables to simplify code generation
  * and remove problems with implicit casting in the generated code.
+ *
+ * Finally it lifts Right-Hand-Side EMemAccess expressions (i.e., mem reads) out of sub-expressions.
  */
 class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
   with FunctionPass[FuncDef] with ProgPass[Prog]

@@ -201,6 +201,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       val env1 = checkExpr(e1, env, predicates)
       checkExpr(e2, env1, predicates)
     case EMemAccess(mem, index, _, _, _, isAtomic) if isLockedMemory(mem) && !isAtomic =>
+      //TODO this throws bad error if never reserved in any context (env(mem) crashes)
+      //it should fail (which is correct), but the error could be nicer
       checkAcquired(mem, index, env, predicates)
     case ETernary(cond, tval, fval) =>
       val env1 = checkExpr(cond, env, predicates)

@@ -93,6 +93,10 @@ object Errors {
   case class IllegalLockRelease(pos: Position) extends TypeError(
     s"Cannot release locks inside of a speculative block", pos)
 
+  case class UnsupportedLockOperation(mem: Id, op: String, pos: Position) extends TypeError(
+    s"Lock for Memory $mem does not support the $op operation", pos
+  )
+
   case class IllegalCast(pos: Position, rtyp: Type, ctyp: Type) extends TypeError(
     s"Cannot cast type $rtyp to $ctyp", pos)
 
