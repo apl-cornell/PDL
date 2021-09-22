@@ -97,7 +97,12 @@ endinterface
 interface QueueLockCombMem#(type addr, type elem, type id);
    method elem read(addr a);
    method Action write(addr a, elem b);
-   interface QueueLock#(id) lock;   
+   interface QueueLock#(id) lock;
+   method Bool canAtom_r1(addr a);
+   method Bool canAtom_r2(addr a);   
+   method elem atom_r(addr a);
+   method Bool canAtom_w1(addr a);
+   method Action atom_w(addr a, elem b);
 endinterface
 
 interface QueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid);
@@ -113,8 +118,11 @@ endinterface
 interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
    method elem read (addr a);
    method Action write(addr a, elem b);
-   method Bool canAtom_r(addr a);
+   method Bool canAtom_r1(addr a);
+   method Bool canAtom_r2(addr a);   
    method elem atom_r(addr a);
+   method Bool canAtom_w1(addr a);
+   method Action atom_w(addr a, elem b);   
    interface AddrLock#(id, addr, size) lock;
 endinterface
 
@@ -451,6 +459,26 @@ module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem,
       rf.upd(a, b);
    endmethod
    
+   method Bool canAtom_r1(addr a);
+      return l.isEmpty;
+   endmethod
+
+   method Bool canAtom_r2(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method elem atom_r(addr a);
+      return rf.sub(a);
+   endmethod
+ 
+   method Bool canAtom_w1(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method Action atom_w(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+  
 endmodule
 
 module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem, LockId#(d), numlocks) _unused_)
@@ -461,12 +489,24 @@ module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
       return rf.sub(a);
    endmethod
    
-   method Bool canAtom_r(addr a);
+   method Bool canAtom_r1(addr a);
+      return l.isEmpty(a);
+   endmethod
+
+   method Bool canAtom_r2(addr a);
       return l.isEmpty(a);
    endmethod
    
    method elem atom_r(addr a);
       return rf.sub(a);
+   endmethod
+
+   method Bool canAtom_w1(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method Action atom_w(addr a, elem b);
+      rf.upd(a, b);
    endmethod
 
    method Action write(addr a, elem b);
@@ -484,12 +524,24 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
       return rf.sub(a);
    endmethod
    
-   method Bool canAtom_r(addr a);
+   method Bool canAtom_r1(addr a);
+      return l.isEmpty(a);
+   endmethod
+
+   method Bool canAtom_r2(addr a);
       return l.isEmpty(a);
    endmethod
    
    method elem atom_r(addr a);
       return rf.sub(a);
+   endmethod
+
+   method Bool canAtom_w1(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method Action atom_w(addr a, elem b);
+      rf.upd(a, b);
    endmethod
 
    method Action write(addr a, elem b);

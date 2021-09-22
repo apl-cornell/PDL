@@ -403,8 +403,9 @@ object LockImplementation {
         Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
         Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
         Id(releaseName)    -> (TFun(List(handleType), TVoid()), Sequential),
-        Id(canAtomicName) -> (TFun(List(), TBool()), Combinational),
+        Id(canAtomicReadName) -> (TFun(List(), TBool()), Combinational),
         Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
+        Id(canAtomicWriteName) -> (TFun(List(), TBool()), Combinational),
         Id(atomicWriteName)  -> (TFun(List(addrType, dataType), TVoid()), Sequential)))
 
     override def shortName: String = "Queue"
@@ -434,8 +435,9 @@ object LockImplementation {
         Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
         Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
         Id(releaseName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
-        Id(canAtomicName)    -> (TFun(List(addrType), TBool()), Combinational),
+        Id(canAtomicReadName)    -> (TFun(List(addrType), TBool()), Combinational),
         Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
+        Id(canAtomicWriteName)    -> (TFun(List(addrType), TBool()), Combinational),
         Id(atomicWriteName)   -> (TFun(List(addrType, dataType), TVoid()), Combinational)))
 
 
