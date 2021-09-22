@@ -92,14 +92,24 @@ object Utilities {
         v ++ getWrittenVars(c.body)
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
-    case CAssign(lhs, _) => lhs match {
-      case EVar(id) => Set(id);
-      case _ => Set()
-    }
-    case CRecv(lhs, _) => lhs match {
-      case EVar(id) => Set(id);
-      case _ => Set()
-    }
+    case CAssign(lhs, rhs) =>
+      val lhsid: Set[Id] = lhs match {
+        case EVar(id) => Set(id);
+        case _ => Set()
+      }
+      getMemReads(rhs).foldLeft(lhsid)((s, m) => {
+        if (m.outHandle.isDefined) s + m.outHandle.get.id
+        else s
+      })
+    case CRecv(lhs, rhs) =>
+      val lhsid: Set[Id] = lhs match {
+        case EVar(id) => Set(id);
+        case _ => Set()
+      }
+      getMemReads(rhs).foldLeft(lhsid)((s, m) => {
+        if (m.outHandle.isDefined) s + m.outHandle.get.id
+        else s
+      })
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
     case IMemSend(handle, _, _, _, _, _, outHandle, _) => outHandle match
@@ -112,6 +122,7 @@ object Utilities {
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
     case IAssignLock(handle, _, _) => Set(handle.id)
+    case ICheckLockOwned(_, _, outHandle) => Set(outHandle.id)
     case CSpecCall(handle, _, _) => Set(handle.id)
     case CUpdate(newHandle, _, _, _) => Set(newHandle.id)
     case _ => Set()
@@ -173,7 +184,7 @@ object Utilities {
     }
     case IAssignLock(_, src, default) => getUsedVars(src) ++
       (if (default.isDefined) getUsedVars(default.get) else Set())
-    case ICheckLockOwned(larg, inHandle, outHandle) => Set(inHandle.id) ++ (larg.evar match {
+    case ICheckLockOwned(larg, inHandle, _) => Set(inHandle.id) ++ (larg.evar match {
       case Some(value) => Set(value.id)
       case None => Set()
     })

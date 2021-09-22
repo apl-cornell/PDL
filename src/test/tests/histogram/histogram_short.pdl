@@ -10,30 +10,25 @@ void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
 }
 */
 
-pipe hist(counter: uint<10>)[feature: uint<16>[10]<c,s>(FAQueue), weight: uint<32>[10]<c,s>(FAQueue), h: uint<32>[10]<c,s>(FAQueue)]: bool {
+pipe hist(counter: uint<10>)[feature: uint<16>[10]<c,s>, weight: uint<32>[10]<c,s>, h: uint<32>[10]<c,s>(FAQueue)]: bool {
   bool done = counter >= u1000<10>;
   if (!done) {
         call hist(counter + u1<10>);
-    start(feature);
-    acquire(feature[counter], R);
-    end(feature);
-    start(weight);
-    acquire(weight[counter], R);
-    end(weight);
+    start(feature);    
     uint<16> m = feature[counter];
+    end(feature);    
     uint<10> m1 = m{9:0};
     uint<10> mcp = m{9:0};
+    start(weight);    
     uint<32> wt = weight[counter];
-    release(feature[counter]);
-    release(weight[counter]);
+    end(weight);    
     start(h);
-    acquire(h[m1], R);
-    acquire(h[mcp], W);
+    reserve(h[mcp]);
+    uint<32> nm = h<a>[m1] + wt;    
     end(h);
-    uint<32> nm = h[m1] + wt;
-    release(h[m1]);
     ---
     print(nm);
+    block(h[mcp]);
     h[mcp] <- nm;
     release(h[mcp]);
     ---
@@ -45,11 +40,9 @@ pipe hist(counter: uint<10>)[feature: uint<16>[10]<c,s>(FAQueue), weight: uint<3
 
 circuit {
        tf = regfile(uint<16>, 10);
-       f = FAQueue(tf);
        tw = regfile(uint<32>, 10);
-       w = FAQueue(tw);
        th = regfile(uint<32>, 10);
        h = FAQueue(th);
-       hg = new hist[f, w, h];
+       hg = new hist[tf, tw, h];
        call hg(u0<10>);
 }

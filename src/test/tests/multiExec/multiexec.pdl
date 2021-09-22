@@ -22,16 +22,13 @@ pipe multi_stg_div(num: int<32>, denom: int<32>, quot: int<32>, acc: int<32>, cn
     }
 }
 
-pipe cpu(pc: uint<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem:
-int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
+pipe cpu(pc: uint<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem:int<32>[16]<a,a>, m: multi_stg_mul, f: multi_stg_div]: bool {
  bool done = pc >= u14<16>;
  if (!done) { 
   call cpu(pc + u1<16>);
  }
  start(imem);
- acquire(imem);
  int<32> insn <- imem[pc];
- release(imem);
  end(imem);
  ---
  int<2> op = insn{1:0};
@@ -39,13 +36,9 @@ int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
  uint<5> rs2 = cast(insn{11:7}, uint<5>);
  uint<5> rd = cast(insn{16:12}, uint<5>);
  start(rf);
- acquire(rf[rs1], R);
- acquire(rf[rs2], R);
- int<32> rf1 = rf[rs1];
- int<32> rf2 = rf[rs2];
- release(rf[rs1]);
- release(rf[rs2]);
- reserve(rf[rd], W);
+ int<32> rf1 = rf<a>[rs1];
+ int<32> rf2 = rf<a>[rs2];
+ reserve(rf[rd]);
  end(rf);
  ---
  if (op == 0<2>) {   
@@ -72,11 +65,10 @@ int<32>[16]<a,a>(Queue), m: multi_stg_mul, f: multi_stg_div]: bool {
 
 circuit {
  ti = memory(int<32>, 16);
- i = Queue(ti);
  tr = regfile(int<32>, 5);
  r = FAQueue(tr);
  m = new multi_stg_mul[];
  fp = new multi_stg_div[];
- c = new cpu[r, i, m, fp];
+ c = new cpu[r, ti, m, fp];
  call c(u0<16>);
 }
