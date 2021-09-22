@@ -22,9 +22,7 @@ pipe test1(input: int<32>)[rf: int<32>[32]] {
 pipe test2(input: int<32>)[rf: int<32>[32]<a,a>(Queue)] {
   a = 1;
   start(rf);
-  acquire(rf[a], R);
-  b <- rf[a];
-  release(rf[a]);
+  b <- rf<a>[a];
   end(rf);
   ---
   call test2(b);

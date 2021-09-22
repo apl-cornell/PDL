@@ -173,9 +173,9 @@ pipe test7()[rf: uint<32>[32]<a,a>(Queue)] {
   a = 1;
   b = a;
   start(rf);
-  acquire(rf[a], R);
-  c <- rf[a];
-  release(rf[a]);
+  //acquire(rf[a], R);
+  c <- rf<a>[a];
+  //release(rf[a]);
   end(rf);
   ---
   d = c == a;
