@@ -7,7 +7,7 @@ pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(Queue), m:int<32>[5]<c2,s>(Queu
     acquire(rf[rs1],R);
     acquire(rf[rs2],W);
     acquire(m[rs1], R);
-    rf[rs2] <- 1<32>;
+    rf<a>[rs2] <- 1<32>;
     end(m);
     end(rf);
     ---
