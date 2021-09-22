@@ -103,8 +103,9 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         })
       case (_ :EMemAccess, _ :EMemAccess) =>
         throw UnexpectedAsyncReference(lhs.pos, "Both sides of <- cannot be memory or modules references")
-      //don't need to check handles for unlocked mems nor atomic
-      case (e@EMemAccess(mem, _, _, inHandle, outHandle, false), _) if isLockedMemory(mem) =>
+      //don't need to check handles for unlocked mems nor atomic, nor general mems
+      case (e@EMemAccess(mem, _, _, inHandle, outHandle, false), _)
+        if isLockedMemory(mem) && inHandle.isDefined && outHandle.isDefined =>
         checkExpr(inHandle.get, vars)
         val accessOp = if (isSynchronousAccess(e.mem, isWrite = true)) None else Some(LockWrite)
         LockImplementation.getAccess(LockImplementation.getLockImpl(e), accessOp) match

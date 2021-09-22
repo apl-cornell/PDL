@@ -113,6 +113,8 @@ endinterface
 interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
    method elem read (addr a);
    method Action write(addr a, elem b);
+   method Bool canAtom_r(addr a);
+   method elem atom_r(addr a);
    interface AddrLock#(id, addr, size) lock;
 endinterface
 
@@ -459,6 +461,14 @@ module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
       return rf.sub(a);
    endmethod
    
+   method Bool canAtom_r(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method elem atom_r(addr a);
+      return rf.sub(a);
+   endmethod
+
    method Action write(addr a, elem b);
       rf.upd(a, b);
    endmethod
@@ -474,6 +484,14 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
       return rf.sub(a);
    endmethod
    
+   method Bool canAtom_r(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method elem atom_r(addr a);
+      return rf.sub(a);
+   endmethod
+
    method Action write(addr a, elem b);
       rf.upd(a, b);
    endmethod

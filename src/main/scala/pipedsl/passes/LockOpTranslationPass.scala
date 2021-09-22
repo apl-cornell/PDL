@@ -92,13 +92,11 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
 
   private def modifyMemArg(e: Expr, isLhs: Boolean): Expr = e match {
     case em@EMemAccess(mem, idx@EVar(_), wm, _, _, isAtomic) =>
-      val l_arg = LockArg(mem, em.granularity match
-      { case Locks.Specific => Some(idx)
-        case Locks.General => None
-      })
+      val l_arg = LockArg(mem, Some(idx))
+      l_arg.setPos(idx.pos)
       val newArg: Expr = idx
-      val addHandles = isLockedMemory(mem) && !isAtomic
-      //only add handles if this is a locked memory and not atomic
+      //only add handles if this is a locked memory, not an atomic access, and a Specific Lock (i.e., associated w/ an address)
+      val addHandles = isLockedMemory(mem) && !isAtomic && em.granularity == Locks.Specific
       val inHandle = if (addHandles) Some(lockVar(l_arg, LockedMemState.Acquired)) else None
       val outHandle = if (addHandles) Some(lockVar(l_arg, LockedMemState.Operated)) else None
       val res = EMemAccess(mem, newArg, wm, inHandle, outHandle, isAtomic).setPos(em.pos)
@@ -160,7 +158,9 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
         i.portNum = c.portNum
         i
       case Locks.Released =>
-        val i = IReleaseLock(c.mem, inHandle = lockVar(c.mem, LockedMemState.Operated)).setPos(c.pos)
+        //start state is Operated if a _specific lock_ otherwise it is Acquired
+        val startState = if (c.granularity == Locks.Specific) LockedMemState.Operated else LockedMemState.Acquired
+        val i = IReleaseLock(c.mem, inHandle = lockVar(c.mem, startState)).setPos(c.pos)
         i.memOpType = c.memOpType
         i.granularity = c.granularity
         i.portNum = c.portNum
