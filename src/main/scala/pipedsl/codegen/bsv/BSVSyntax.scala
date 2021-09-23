@@ -2,6 +2,7 @@ package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
+import pipedsl.common.LockImplementation
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
@@ -36,11 +37,6 @@ object BSVSyntax {
     val handleMap: Map[BSVType, BSVType] = Map()) extends Translator[BSVType, BExpr, BVar, BFuncDef] {
 
     private var variablePrefix = ""
-
-    def isLockedMem(mem: Id): Boolean =  mem.typ.get match {
-      case _:TMemType => false
-      case _ => true
-    }
 
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
@@ -94,10 +90,12 @@ object BSVSyntax {
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TMaybe(btyp) => BMaybe(toType(btyp))
       case TRequestHandle(n, rtyp) => rtyp match {
-        case pipedsl.common.Syntax.RequestType.Lock =>
+        case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType]=>
           //These are passed in the modmap rather than the handle map
-          modmap(n)
-        case pipedsl.common.Syntax.RequestType.Module =>
+            modmap(n)
+        //TODO allow this to be specified somewhere
+        case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
+        case _ => //pipedsl.common.Syntax.RequestType.Module =>
           val modtyp = toType(n.typ.get)
           if (handleMap.contains(modtyp)) {
             handleMap(modtyp)
@@ -110,8 +108,6 @@ object BSVSyntax {
               case _ => throw UnexpectedType(n.pos, "Module request handle", "A defined module req type", n.typ.get)
             }
           }
-          //TODO allow this to be specified somewhere
-        case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
       }
       case TVoid() => BVoid
       case TNamedType(name) => BTypeParam(name.v, List(PBits("_sz" + name.v)))
@@ -151,12 +147,19 @@ object BSVSyntax {
       case EApp(func, args) => BFuncCall(func.v, args.map(a => toExpr(a)))
       case ERecAccess(_, _) => throw UnexpectedExpr(e)
       case ERecLiteral(_) => throw UnexpectedExpr(e)
-      case EMemAccess(mem, index, _) =>
+      case EMemAccess(mem, index, _, inHandle, _, isAtomic) =>
         val portNum = mem.typ.get match {
-          case memType: TLockedMemType => if (memType.limpl.addReadPort) e.portNum else None
+          case memType: TLockedMemType => if (memType.limpl.usesReadPortNum) e.portNum else None
           case _ => None
         }
-        bsints.getCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index),portNum, isLockedMem(mem))
+        if (isLockedMemory(mem)) {
+          //use the lock implementation's read method
+          val mi = LockImplementation.getReadInfo(mem, index, inHandle, portNum, isAtomic).get
+          BMethodInvoke(BVar(mem.v, toType(mem.typ.get)), mi.name, mi.usesArgs.map(a => toExpr(a)))
+        } else {
+          //use the unlocked method
+          bsints.getUnlockedCombRead(BVar(mem.v, toType(mem.typ.get)), toExpr(index), portNum)
+        }
       case ec@ECast(_, _) => translateCast(ec)
       case EIsValid(ex) => BIsValid(toExpr(ex))
       case EInvalid => BInvalid

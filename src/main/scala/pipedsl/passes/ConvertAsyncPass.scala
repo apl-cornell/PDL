@@ -49,9 +49,11 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
 
     (c.lhs, c.rhs) match {
         //Mem Read
-      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_), _)) =>
+      //TODO maybe we can use the isAtomic variable rather than just passing the
+      // options and hoping they are correct lol
+      case (lhs@EVar(_), e@EMemAccess(mem, index@EVar(_), _, inHandle, outHandle, _)) =>
         val handle = freshMessage(mem)
-        val send = IMemSend(handle, writeMask = None, mem, None, index)
+        val send = IMemSend(handle, writeMask = None, mem, None, index, inHandle, outHandle, false)
         val recv = IMemRecv(mem, handle, Some(lhs))
         send.memOpType = e.memOpType
         send.granularity = e.granularity
@@ -61,10 +63,10 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         recv.portNum = c.portNum
         (send, recv)
       //Mem Write
-      case (e@EMemAccess(mem, index@EVar(_), wm), data@EVar(_)) => mem.typ.get match {
+      case (e@EMemAccess(mem, index@EVar(_), wm, inHandle, outHandle, isAtomic), data@EVar(_)) => mem.typ.get match {
         case TMemType(_, _, _, Latency.Asynchronous, _, _) =>
           val handle = freshMessage(mem)
-          val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
+          val send = IMemSend(handle, writeMask = wm, mem, Some(data), index, inHandle, outHandle, isAtomic)
           val recv = IMemRecv(mem, handle, None)
           send.memOpType = e.memOpType
           send.granularity = e.granularity
@@ -73,15 +75,15 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           recv.granularity = e.granularity
           recv.portNum = c.portNum
           (send, recv)
-        case TMemType(_, _, _, _, _, _) =>
-          val write = IMemWrite(mem, index, data).setPos(e.pos)
+        case _ :TMemType =>
+          val write = IMemWrite(mem, index, data, inHandle, outHandle, isAtomic).setPos(e.pos)
           write.memOpType = e.memOpType
           write.granularity = e.granularity
           write.portNum = c.portNum
           (write, CEmpty())
         case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous, _, _),_, _) =>
           val handle = freshMessage(mem)
-          val send = IMemSend(handle, writeMask = wm, mem, Some(data), index)
+          val send = IMemSend(handle, writeMask = wm, mem, Some(data), index, inHandle, outHandle, isAtomic)
           val recv = IMemRecv(mem, handle, None)
           send.memOpType = e.memOpType
           send.granularity = e.granularity
@@ -93,7 +95,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           //if the memory is sequential we don't use handle since it
           //is assumed to complete at the end of the cycle
         case TLockedMemType(_,_,_) =>
-          val write = IMemWrite(mem, index, data).setPos(e.pos)
+          val write = IMemWrite(mem, index, data, inHandle, outHandle, isAtomic).setPos(e.pos)
           write.memOpType = e.memOpType
           write.granularity = e.granularity
           write.portNum = c.portNum

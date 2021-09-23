@@ -13,12 +13,14 @@ pipe ex2(in: bool)[rf: int<32>[5]<a,a>(Queue)] :bool {
     ---
     if (in) {
         block(rf[addr]);
+	y <- rf[addr];
         release(rf[addr]);
     }
     end(rf);
     ---
     if (cond2) {
         block(rf[addr2]);
+	z <- rf[addr2];
         release(rf[addr2]);
     }
     output(in);

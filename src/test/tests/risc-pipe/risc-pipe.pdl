@@ -136,11 +136,9 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>, div: multi_stg_div]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div]: bool {
     start(imem);
-    acquire(imem);
     int<32> insn <- imem[cast(pc, uint<16>)];
-    release(imem);
     end(imem);
     ---
     //This OPCODE is J Self and thus we're using it to signal termination
@@ -178,21 +176,17 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queu
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
     start(rf);
     if (needrs1) {
-       acquire(rf[rs1], R);
-       int<32> rf1 = rf[rs1];
-       release(rf[rs1]);
+       int<32> rf1 = rf<a>[rs1];
     } else {
       int<32> rf1 = 0<32>;
     }
     if (needrs2) {
-       acquire(rf[rs2], R);
-       int<32> rf2 = rf[rs2];
-       release(rf[rs2]);
+       int<32> rf2 = rf<a>[rs2];
     } else {
        int<32> rf2 = 0<32>;
     }
     if (writerd) {
-       reserve(rf[rd], W);
+       reserve(rf[rd]);
     }
     end(rf);
     ---
@@ -311,11 +305,10 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queu
 
 circuit {
     ti = memory(int<32>, 16);
-    i = Queue(ti);
-    td = memory(int<32>, 16);
+     td = memory(int<32>, 16);
     rf = regfile(int<32>, 5);
     r = FAQueue(rf);
     div = new multi_stg_div[];
-    c = new cpu[r, i, td, div];
+    c = new cpu[r, ti, td, div];
     call c(0<16>);
 }

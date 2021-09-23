@@ -194,21 +194,14 @@ class BluespecInterfaces() {
 
   private val memCombReadNameUnlocked = "sub"
   private val memCombWriteNameUnlocked = "upd"
-  private val memCombReadName = "read"
-  private val memCombWriteName = "write"
 
   private val memAsync = "mem."
-  private val memAsync2PeekName1 = "peekResp"
-  private val memAsync2ReqName1 = "req"
-  private val memAsync2RespName1 = "resp"
-  private val memAsync2CheckName1 = "checkRespId"
+  private val memAsyncPeekName = "peekResp"
+  private val memAsyncReqName = "req"
+  private val memAsyncRespName = "resp"
+  private val memAsyncCheckName = "checkRespId"
 
-  private val memAsync2PeekName2 = "peekResp2"
-  private val memAsync2ReqName2 = "req2"
-  private val memAsync2RespName2 = "resp2"
-  private val memAsync2CheckName2 = "checkRespId2"
-
-
+  //TODO refactor to reuse code better
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
     val default = if (isWrite) { BAllOnes } else { BZero }
     if (m.isDefined) {
@@ -218,43 +211,44 @@ class BluespecInterfaces() {
     }
   }
 
-  def getCombRead(mem: BVar, addr: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+  def getUnlockedCombRead(mem: BVar, addr: BExpr, port: Option[Int]): BMethodInvoke = {
     val portString = if (port.isDefined) port.get.toString else ""
-    BMethodInvoke(mem, (if (isLocked) memCombReadName else memCombReadNameUnlocked) + portString, List(addr))
+    BMethodInvoke(mem, memCombReadNameUnlocked + portString, List(addr))
   }
-  def getCombWrite(mem: BVar, addr: BExpr, data: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+  def getUnlockedCombWrite(mem: BVar, addr: BExpr, data: BExpr, port: Option[Int]): BMethodInvoke = {
     val portString = if (port.isDefined) port.get.toString else ""
-    BMethodInvoke(mem, (if (isLocked) memCombWriteName else memCombWriteNameUnlocked) + portString, List(addr, data))
+    BMethodInvoke(mem, memCombWriteNameUnlocked + portString, List(addr, data))
   }
 
-  def getMemPeek(mem: BVar, handle: BExpr, port: Int, isLocked: Boolean): BMethodInvoke = {
-    port match {
-      case 1 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2PeekName1, List(handle))
-      case 2 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2PeekName2, List(handle))
-    }
+  def getMemPeek(mem: BVar, handle: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncPeekName + portString, List(handle))
   }
-  def getMemReq(mem: BVar, writeMask: Option[BExpr],
-                 addr: BExpr, data: Option[BExpr], port: Int, isLocked: Boolean): BMethodInvoke = {
+
+  def getMemReq(mem: BVar, isWrite: Boolean, writeMask: Option[BExpr], data: Option[BExpr],
+                addrArgs: List[BExpr], methodName: String, isAtomic: Boolean): BMethodInvoke = {
+    val mask = toMask(isWrite, writeMask)
+    val dataArg = data.getOrElse(BDontCare)
+    val name = if (isAtomic) methodName else memAsync + methodName //atomics go through lock, not the lower mem interface
+    BMethodInvoke(mem, name, addrArgs :+ dataArg :+ mask)
+  }
+
+  def getUnlockedMemReq(mem: BVar, writeMask: Option[BExpr],
+                        addr: BExpr, data: Option[BExpr], port: Option[Int]): BMethodInvoke = {
     val isWrite = data.isDefined
     val mask = toMask(isWrite, writeMask)
-    port match {
-      case 1 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2ReqName1, List(addr, data
-        .getOrElse(BDontCare), mask))
-      case 2 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2ReqName2, List(addr, data
-        .getOrElse(BDontCare), mask))
-    }
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, memAsyncReqName + portString, List(addr, data.getOrElse(BDontCare), mask))
   }
-  def getCheckMemResp(mem: BVar, handle: BExpr, port: Int, isLocked: Boolean): BMethodInvoke = {
-    port match {
-      case 1 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2CheckName1, List(handle))
-      case 2 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2CheckName2, List(handle))
-    }
+
+  def getCheckMemResp(mem: BVar, handle: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncCheckName + portString, List(handle))
   }
-  def getMemResp(mem: BVar, handle: BExpr, port: Int, isLocked: Boolean): BMethodInvoke = {
-    port match {
-      case 1 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2RespName1, List(handle))
-      case 2 => BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsync2RespName2, List(handle))
-    }
+
+  def getMemResp(mem: BVar, handle: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
+    val portString = if (port.isDefined) port.get.toString else ""
+    BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncRespName + portString, List(handle))
   }
 
   /**

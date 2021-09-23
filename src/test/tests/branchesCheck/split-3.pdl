@@ -4,7 +4,7 @@ pipe test(inarg: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     split {
         case: (cond == 0<2>) {
 	    uint<5> addr = u7<5>;
-            acquire(rf[addr], W);
+            reserve(rf[addr], W);
         }
         case: (cond == 1<2>) {
             uint<5> addr = u1<5>;
@@ -19,6 +19,7 @@ pipe test(inarg: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     end(rf);
     ---
     if (cond == 0<2>) {
+       block(rf[addr]);
         rf[addr] <- 0<32>;
         release(rf[addr]);
     }

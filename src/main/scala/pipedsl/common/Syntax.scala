@@ -16,10 +16,9 @@ object Syntax {
    * Annotations added by the various passes of the type checker.
    */
   object Annotations {
-    sealed trait TypeAnnotation {
+    trait TypeAnnotation {
       var typ: Option[Type] = None
     }
-
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
     }
@@ -117,6 +116,7 @@ object Syntax {
         if (sz.isDefined) s"<${sz.get.toString}>" else "")
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
+      case TReqHandle(tp, _) => s"${tp}_Request"
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
       case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")"
@@ -294,6 +294,8 @@ object Syntax {
                       writePorts: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
+  case class TReqHandle(tp :Type, rtyp :RequestType) extends Type
+  //TODO merge these two together
   case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
   //This is primarily used for parsing and is basically just a type variable
   case class TNamedType(name: Id) extends Type
@@ -307,7 +309,18 @@ object Syntax {
   case class TBitWidthLen(len: Int) extends TBitWidth
   case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
-  case class TObject(name: Id, typParams: List[Type], methods: Map[Id,TFun]) extends Type
+  case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
+
+  def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+  def isSynchronousAccess(mem: Id, isWrite: Boolean): Boolean = mem.typ.get match {
+    case TMemType(_, _, readLatency, writeLatency, _, _) =>
+      val latency: Latency = if (isWrite) writeLatency else readLatency
+      latency == Latency.Asynchronous
+    case TLockedMemType(TMemType(_, _, readLatency, writeLatency, _, _), _, _) =>
+      val latency: Latency = if (isWrite) writeLatency else readLatency
+      latency == Latency.Asynchronous
+    case _ => false
+  }
 
   /**
    * Define common helper methods implicit classes.
@@ -408,7 +421,19 @@ object Syntax {
   case class EBinop(op: BOp, e1: Expr, e2: Expr) extends Expr
   case class ERecAccess(rec: Expr, fieldName: Id) extends Expr
   case class ERecLiteral(fields: Map[Id, Expr]) extends Expr
-  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None) extends Expr with LockInfoAnnotation
+  case class EMemAccess(mem: Id, index: Expr, wmask: Option[Expr] = None, inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends Expr with LockInfoAnnotation with HasCopyMeta
+  {
+    override val copyMeta: HasCopyMeta => EMemAccess =
+      {
+        case from :EMemAccess =>
+        setPos(from.pos)
+        portNum = from.portNum
+        memOpType = from.memOpType
+        granularity = from.granularity
+        typ = from.typ
+        this
+      }
+  }
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
@@ -451,7 +476,19 @@ object Syntax {
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
-  case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType]) extends Command with LockInfoAnnotation
+  case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType], args :List[Expr], ret :Option[EVar]) extends Command with LockInfoAnnotation
+  {
+    override val copyMeta: HasCopyMeta => CLockOp =
+      {
+        case from :CLockOp =>
+          setPos(from.pos)
+          portNum = from.portNum
+          predicateCtx = from.predicateCtx
+          lockType = from.lockType
+          granularity = from.granularity
+        this
+      }
+  }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
 
@@ -464,19 +501,20 @@ object Syntax {
   case class ISend(handle: EVar, receiver: Id, args: List[EVar]) extends InternalCommand
   case class IRecv(handle: EVar, sender: Id, result: EVar) extends InternalCommand
   //TODO Clean up what actually needs the lock info annotation
-  case class IMemSend(handle: EVar, writeMask: Option[Expr], mem: Id, data: Option[EVar], addr: EVar)
-    extends InternalCommand with LockInfoAnnotation {
+  case class IMemSend(memHandle: EVar, writeMask: Option[Expr], mem: Id,
+                      data: Option[EVar], addr: EVar, lInHandle: Option[EVar], lOutHandle: Option[EVar],
+                      isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation {
     def isWrite: Boolean = data.isDefined
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
-  //used for sequential memories that don't commit writes immediately
-
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar) extends InternalCommand with LockInfoAnnotation
+  //used for sequential memories that don't commit writes immediately but don't send a response
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar,
+                       inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
-  case class ICheckLockOwned(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
-  case class IReserveLock(handle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
+  case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
+  case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
-  case class IReleaseLock(mem: LockArg, handle: EVar) extends InternalCommand with LockInfoAnnotation
+  case class IReleaseLock(mem: LockArg, inHandle: EVar) extends InternalCommand with LockInfoAnnotation
   //needed for internal compiler passes to track branches with explicitly no lockstate change
   case class ILockNoOp(mem: LockArg) extends InternalCommand
 
@@ -489,6 +527,14 @@ object Syntax {
     args: List[Param],
     ret: Type,
     body: Command) extends Definition
+
+  case class MethodDef(
+                      name :Id,
+                      args :List[Param],
+                      ret :Type,
+                      body :Command,
+                      lat :Latency
+                      ) extends Definition
 
   case class ModuleDef(
     name: Id,
@@ -509,7 +555,7 @@ object Syntax {
 
   case class Param(name: Id, typ: Type) extends Positional
 
-  case class ExternDef(name: Id, typParams: List[Type], methods: List[FuncDef]) extends Definition with TypeAnnotation
+  case class ExternDef(name: Id, typParams: List[Type], methods: List[MethodDef]) extends Definition with TypeAnnotation
 
   case class Prog(exts: List[ExternDef],
     fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional

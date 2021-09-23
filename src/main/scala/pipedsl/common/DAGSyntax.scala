@@ -180,51 +180,11 @@ object DAGSyntax {
       (lockCmds, nonlockCmds)
     }
 
+    /**
+     * Add the new commands to the end of this stage.
+     */
     def mergeStmts(newCmds: Iterable[Command]): Unit = {
-      //split commands into those with locks and those without
-      //also split the conditional lock ops vs. unconditional ones
-      val (srcLock, srcNonLock) = splitLockCmds(this.getCmds)
-      val (newLock, newNonLock) = splitLockCmds(newCmds)
-      var mergedCmds = List[Command]()
-      val lockIds = srcLock.keySet ++ newLock.keySet
-      lockIds.foreach(lid => {
-        val lockimpl = LockImplementation.getLockImpl(lid)
-        val srcCmds = srcLock.get(lid)
-        val newCmds = newLock.get(lid)
-        (srcCmds.isDefined, newCmds.isDefined) match {
-        case (true, false) => mergedCmds = mergedCmds ++ srcCmds.get
-        case (false, true) => mergedCmds = mergedCmds ++ newCmds.get
-        case (false, false) => ()
-        case (true, true) =>
-          var newCondLockCmds = Map[Expr, List[Command]]()
-          var newUnCondLockCmds = List[Command]()
-          srcCmds.get.foreach(l => {
-            newCmds.get.foreach(cl => {
-              (l, cl) match {
-                case (ICondCommand(lcond, lcs), ICondCommand(rcond, rcs)) =>
-                  newCondLockCmds = updateListMap(newCondLockCmds, AndOp(lcond, rcond), lcs ++ rcs)
-                case (ICondCommand(cond, lcs), _) =>
-                  newCondLockCmds = updateListMap(newCondLockCmds, cond, lcs :+ cl)
-                case (_, ICondCommand(cond, lcs)) =>
-                  newCondLockCmds = updateListMap(newCondLockCmds, cond, l +: lcs)
-                case (cl, cr) => newUnCondLockCmds = newUnCondLockCmds ++ List(cl, cr)
-              }
-            })
-          })
-          newCondLockCmds.foreach(ent => {
-            lockIds.foreach(l => {
-              val lockops = ent._2.filter(p => getLockId(p) == l)
-              mergedCmds = mergedCmds :+ ICondCommand(ent._1, lockimpl.mergeLockOps(l, lockops).toList)
-            })
-          })
-          lockIds.foreach(l => {
-            val lockops = newUnCondLockCmds.filter(p => getLockId(p) == l)
-            mergedCmds = mergedCmds ++ lockimpl.mergeLockOps(l, lockops)
-          })
-        }
-      })
-      //mergedCmds is the new set of lock cmds
-      this.setCmds(srcNonLock ++ newNonLock ++ mergedCmds)
+      this.setCmds(this.getCmds ++ newCmds)
     }
   }
 
@@ -247,7 +207,7 @@ object DAGSyntax {
 
   private def getLockId(c: Command): LockArg = c match {
     case ICheckLockFree(l) => l
-    case ICheckLockOwned(l, _) => l
+    case ICheckLockOwned(l, _, _) => l
     case IReserveLock(_, l) => l
     case IReleaseLock(l, _) => l
     case ILockNoOp(l) => l

@@ -1,5 +1,6 @@
 package pipedsl.passes
 
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.getAllVarNames
 import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
@@ -10,6 +11,8 @@ import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
  *
  * Now it also lifts all cast expressions into temporary variables to simplify code generation
  * and remove problems with implicit casting in the generated code.
+ *
+ * Finally it lifts Right-Hand-Side EMemAccess expressions (i.e., mem reads) out of sub-expressions.
  */
 class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
   with FunctionPass[FuncDef] with ProgPass[Prog]
@@ -107,7 +110,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         CSeq(nasgn, CExpr(nexp).setPos(c.pos)).setPos(c.pos)
       case CLockStart(_) => c
       case CLockEnd(_) => c
-      case CLockOp(_, _, _) => c
+      case CLockOp(_, _, _, _, _) => c
       case CEmpty() => c
       case _: InternalCommand => c
     }
@@ -143,11 +146,11 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case EBinop(op, e1, e2) => val (ne1, nc1) = extractCastVars(e1)
         val (ne2, nc2) = extractCastVars(e2)
         (EBinop(op, ne1, ne2).setPos(e.pos), CSeq(nc1, nc2).setPos(nc1.pos))
-      case EMemAccess(mem, index, Some(mask)) => val (ne, nc) = extractCastVars(index)
+      case EMemAccess(mem, index, Some(mask), inHandle, outHandle, isAtomic) => val (ne, nc) = extractCastVars(index)
         val (nm, ncm) = extractCastVars(mask)
-        (EMemAccess(mem, ne, Some(nm)).setPos(e.pos), CSeq(nc, ncm).setPos(e.pos))
-      case EMemAccess(mem, index, None) => val (ne, nc) = extractCastVars(index)
-        (EMemAccess(mem, ne, None).setPos(e.pos), nc)
+        (EMemAccess(mem, ne, Some(nm), inHandle, outHandle, isAtomic).setPos(e.pos), CSeq(nc, ncm).setPos(e.pos))
+      case EMemAccess(mem, index, None, inHandle, outHandle, isAtomic) => val (ne, nc) = extractCastVars(index)
+        (EMemAccess(mem, ne, None, inHandle, outHandle, isAtomic).setPos(e.pos), nc)
       case EBitExtract(num, start, end) => val (ne, nc) = extractCastVars(num)
         (EBitExtract(ne, start, end).setPos(e.pos), nc)
       case ETernary(cond, tval, fval) => val (ncond, nc) = extractCastVars(cond)

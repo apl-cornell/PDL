@@ -1,15 +1,20 @@
 //Expected Success
-pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(Queue), m:int<32>[5]<c2,s>(Queue)] {
+pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(RenameRF), m:int<32>[5]<c2,s>(RenameRF)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
     start(m);
-    acquire(rf[rs1],R);
-    acquire(rf[rs2],W);
-    acquire(m[rs1], R);
-    rf[rs2] <- 1<32>;
+    reserve(rf[rs1],R);
+    reserve(rf[rs2],W);
+    reserve(m[rs1], R);
     end(m);
-    end(rf);
+    end(rf);    
+    ---
+    block(rf[rs1]);
+    block(rf[rs2]);    
+    rf[rs2] <- rf[rs1];
+    block(m[rs1]);
+    y = m[rs1];
     ---
     release(rf[rs1]);
     release(rf[rs2]);
@@ -18,23 +23,25 @@ pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(Queue), m:int<32>[5]<c2,s>(Queu
 }
 
 //Tests that modules are analyzed separately
-pipe test4(input: uint<32>)[rf: int<32>[5]<c2,s>(Queue), m:int<32>[5]<c2,s>(Queue)] :bool {
+pipe test4(input: uint<32>)[rf: int<32>[5]<c2,s>(RenameRF), m:int<32>[5]<c2,s>(RenameRF)] :bool {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
     start(m);
     acquire(rf[rs1],R);
-    acquire(rf[rs2],W);
+    reserve(rf[rs2],W);
     acquire(m[rs1], R);
     end(m);
     end(rf);
     ---
-    rf[rs2] <- 15<32>;
+    block(rf[rs2]);
+    rf[rs2] <- rf[rs1];
+    y = m[rs1];
     release(rf[rs1]);
     release(rf[rs2]);
     release(m[rs1]);
-    call test3(input);
     output(true);
+    ---
 }
 
 circuit {
