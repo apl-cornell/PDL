@@ -135,13 +135,11 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(BypassQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>(FAQueue), div: multi_stg_div]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(BypassQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>, div: multi_stg_div]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
-    acquire(imem[pcaddr], R);
-    int<32> insn <- imem[pcaddr];
-    release(imem[pcaddr]);
+    int<32> insn <- imem<a>[pcaddr];
     end(imem);
     s <- speccall cpu(pc + 1<16>);
     ---
@@ -189,16 +187,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(BypassQueue), imem: int<32>[16]<a,a>(
     }
     start(rf);
     if (needrs1) {
-       acquire(rf[rs1], R);
-       int<32> rf1 = rf[rs1];
-       release(rf[rs1]);       
+       int<32> rf1 = rf<a>[rs1];
     } else {
        int<32> rf1 = 0<32>;
     }
     if (needrs2) {
-       acquire(rf[rs2], R);
-       int<32> rf2 = rf[rs2];
-       release(rf[rs2]);
+       int<32> rf2 = rf<a>[rs2];
     } else {
       int<32> rf2 = 0<32>;
     }
@@ -265,18 +259,14 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(BypassQueue), imem: int<32>[16]<a,a>(
    split {
         case: (isLoad) {
 	   uint<16> raddr = memaddr;
-	   acquire(dmem[raddr], R);
 	   int<32> wdata <- dmem[raddr];
-	   release(dmem[raddr]);
 	}
 	case: (isStore) {
 	      uint<16> waddr = memaddr;
-	      acquire(dmem[waddr], W);
 	      //use bottom bits of data and place in correct offset
 	      //shift by boff*8
 	      uint<5> nboff = boff ++ u0<3>;
 	      dmem[waddr, storeMask(boff, funct3)] <- (rf2 << nboff);
-	      release(dmem[waddr]);
 	      int<32> wdata <- 0<32>;
 	}
 	default: {
@@ -310,11 +300,10 @@ circuit {
     ti = memory(int<32>, 16);
     i = Queue(ti);
     td = memory(int<32>, 16);
-    d = FAQueue(td);
     rf = regfile(int<32>, 5);
 //    r = rflock ForwardRenameRF(int<32>, 5, 64);
     r = BypassQueue(rf);
     div = new multi_stg_div[];
-    c = new cpu[r, i, d, div];
+    c = new cpu[r, i, td, div];
     call c(0<16>);
 }
