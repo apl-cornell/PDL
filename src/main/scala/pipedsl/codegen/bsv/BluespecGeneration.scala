@@ -1171,7 +1171,7 @@ object BluespecGeneration {
         val reqInvoke = if (isLockedMemory(mem)) {
           val methodInfo = LockImplementation.getRequestInfo(mem, addr, inLockHandle, data, im.portNum, isAtomic).get
           bsInts.getMemReq(modParams(mem), im.isWrite, translator.toExpr(wMask),
-            translator.toExpr(data), methodInfo.usesArgs.map(a => translator.toExpr(a)), methodInfo.name)
+            translator.toExpr(data), methodInfo.usesArgs.map(a => translator.toExpr(a)), methodInfo.name, isAtomic)
         } else {
           bsInts.getUnlockedMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
             data.map(e => translator.toExpr(e)), cmd.portNum)

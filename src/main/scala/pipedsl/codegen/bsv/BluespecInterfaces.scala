@@ -201,11 +201,6 @@ class BluespecInterfaces() {
   private val memAsyncRespName = "resp"
   private val memAsyncCheckName = "checkRespId"
 
-  private val memAsync2PeekName2 = "peekResp2"
-  private val memAsync2ReqName2 = "req2"
-  private val memAsync2RespName2 = "resp2"
-  private val memAsync2CheckName2 = "checkRespId2"
-
   //TODO refactor to reuse code better
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
     val default = if (isWrite) { BAllOnes } else { BZero }
@@ -231,10 +226,11 @@ class BluespecInterfaces() {
   }
 
   def getMemReq(mem: BVar, isWrite: Boolean, writeMask: Option[BExpr], data: Option[BExpr],
-                addrArgs: List[BExpr], methodName: String): BMethodInvoke = {
+                addrArgs: List[BExpr], methodName: String, isAtomic: Boolean): BMethodInvoke = {
     val mask = toMask(isWrite, writeMask)
     val dataArg = data.getOrElse(BDontCare)
-    BMethodInvoke(mem, memAsync + methodName, addrArgs :+ dataArg :+ mask)
+    val name = if (isAtomic) methodName else memAsync + methodName //atomics go through lock, not the lower mem interface
+    BMethodInvoke(mem, name, addrArgs :+ dataArg :+ mask)
   }
 
   def getUnlockedMemReq(mem: BVar, writeMask: Option[BExpr],

@@ -435,6 +435,8 @@ object LockImplementation {
         Id(readName)  -> (TFun(List(addrType), dataType), Combinational),
         Id(writeName) -> (TFun(List(addrType, dataType), TVoid()), Combinational),
         Id(releaseName)    -> (TFun(List(handleType, addrType), TVoid()), Sequential),
+        Id(canAtomicName) -> (TFun(List(addrType), TBool()), Combinational),
+        Id(atomicAccessName) -> (TFun(List(addrType), TVoid()), Sequential), //confusing impl right now. need only address args for req methods
         Id(canAtomicReadName)    -> (TFun(List(addrType), TBool()), Combinational),
         Id(atomicReadName)   -> (TFun(List(addrType), dataType), Combinational),
         Id(canAtomicWriteName)    -> (TFun(List(addrType), TBool()), Combinational),

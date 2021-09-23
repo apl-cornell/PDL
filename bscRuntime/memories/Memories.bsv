@@ -108,11 +108,17 @@ endinterface
 interface QueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid);
    interface AsyncMem#(addr, elem, rid, nsz) mem;
    interface QueueLock#(lid) lock;
+   method Bool canAtom1(addr a);
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);   
 endinterface
 
 interface QueueLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, type lid);
    interface AsyncMem2#(addr, elem, rid, nsz) mem;
    interface QueueLock#(lid) lock;
+   method Bool canAtom1(addr a);
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
+   method Bool canAtom2(addr a);
+   method ActionValue#(rid) atom_req2(addr a, elem b, Bit#(nsz) wmask);   
 endinterface
 
 interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
@@ -140,11 +146,17 @@ endinterface
 interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid, numeric type size);
    interface AsyncMem#(addr, elem, rid, nsz) mem;
    interface AddrLock#(lid, addr, size) lock;
+   method Bool canAtom1(addr a);
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);   
 endinterface
 
 interface AddrLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, type lid, numeric type size);
    interface AsyncMem2#(addr, elem, rid, nsz) mem;
    interface AddrLock#(lid, addr, size) lock;
+   method Bool canAtom1(addr a);
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
+   method Bool canAtom2(addr a);
+   method ActionValue#(rid) atom_req2(addr a, elem b, Bit#(nsz) wmask);   
 endinterface
 
 //TODO fix this "mem" interface part since they client type doesn't quite match up.
@@ -559,6 +571,15 @@ module mkQueueLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, Queu
    interface lock = l;
    interface mem = amem;
    
+   method Bool canAtom1(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod
+   
 endmodule
 
 module mkFAAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
@@ -568,6 +589,15 @@ module mkFAAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, Add
    
    interface mem = amem;
    interface lock = l;
+
+   method Bool canAtom1(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod      
    
 endmodule
 
@@ -578,6 +608,15 @@ module mkDMAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, Add
    
    interface mem = amem;
    interface lock = l;
+
+   method Bool canAtom1(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod
    
 endmodule
 
@@ -590,6 +629,25 @@ module mkQueueLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, Qu
    interface lock = l;
    interface mem = amem;
    
+   method Bool canAtom1(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod
+
+   method Bool canAtom2(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req2(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req2(a, b, wmask);
+      return r;
+   endmethod
+   
+   
 endmodule
 
 module mkFAAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
@@ -599,7 +657,24 @@ module mkFAAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, A
    
    interface mem = amem;
    interface lock = l;
+
+   method Bool canAtom1(addr a);
+      return l.isEmpty(a);
+   endmethod
    
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod
+
+   method Bool canAtom2(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req2(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req2(a, b, wmask);
+      return r;
+   endmethod   
 endmodule
 
 module mkDMAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
@@ -609,7 +684,24 @@ module mkDMAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, A
    
    interface mem = amem;
    interface lock = l;
+
+   method Bool canAtom1(addr a);
+      return l.isEmpty(a);
+   endmethod
    
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod   
+   
+   method Bool canAtom2(addr a);
+      return l.isEmpty(a);
+   endmethod
+   
+   method ActionValue#(MemId#(inflight)) atom_req2(addr a, elem b, Bit#(n) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod   
 endmodule
 
 
