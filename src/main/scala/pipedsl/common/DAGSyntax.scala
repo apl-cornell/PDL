@@ -181,10 +181,15 @@ object DAGSyntax {
     }
 
     /**
-     * Add the new commands to the end of this stage.
+     * Add the new commands either to the end or beginning of this stage.
      */
-    def mergeStmts(newCmds: Iterable[Command]): Unit = {
-      this.setCmds(this.getCmds ++ newCmds)
+    def mergeStmts(newCmds: Iterable[Command], addAfter: Boolean = true): Unit = {
+      val finalCmds = if (addAfter) {
+        this.getCmds ++ newCmds
+      } else {
+        newCmds ++ this.getCmds
+      }
+      this.setCmds(finalCmds)
     }
   }
 

@@ -4,7 +4,7 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
 import pipedsl.common.Syntax.Annotations.TypeAnnotation
-import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, EVar, ICheckLockFree, ICheckLockOwned, IReleaseLock, IReserveLock, Id, LockArg}
+import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, EVar, Expr, ICheckLockFree, ICheckLockOwned, ICondCommand, IReleaseLock, IReserveLock, Id, LockArg}
 import pipedsl.common.Utilities.updateSetMap
 
 import scala.util.parsing.input.Position
@@ -113,8 +113,21 @@ object Locks {
    * @param stg The stage to modify
    */
   def eliminateLockRegions(stg: PStage): Unit = {
-    //get all ids that we start or stop regions for in this stage
-    val (startedRegions, endedRegions) = stg.getCmds.foldLeft(
+    val tmpCmds: Iterable[Command] = eliminateUnconditionalLockRegions(stg.getCmds)
+    val newCmds = tmpCmds.foldLeft(List[Command]())((l, c) => c match {
+      case ICondCommand(cond, cs) =>
+        val ncs = eliminateUnconditionalLockRegions(cs)
+        l :+ ICondCommand(cond, ncs.toList).setPos(c.pos)
+      case _ => l :+ c
+    })
+    stg.setCmds(newCmds)
+  }
+
+  //This does not recurse into ICondCommands, thus the top level function
+  //recurses exactly 1 level (we assume there are not nested ICondCommands)
+  private def eliminateUnconditionalLockRegions(cmds: Iterable[Command]): Iterable[Command] = {
+    //get all ids that we start or stop regions for in this set of commands
+    val (startedRegions, endedRegions) = cmds.foldLeft(
       (Set[Id](), Set[Id]()))((s:(Set[Id], Set[Id]), c) => c match {
       case CLockStart(mod) => (s._1 + mod, s._2)
       case CLockEnd(mod) => (s._1, s._2 + mod)
@@ -123,14 +136,12 @@ object Locks {
     //anytime we start and end in the same stage, we don't need those
     val unnecessaryReservations = startedRegions.intersect(endedRegions)
     //returns only necessary reservation cmds and all other cmds
-    val newCmds = stg.getCmds.filter {
+    cmds.filter {
       case CLockStart(mod) if unnecessaryReservations.contains(mod) => false
       case CLockEnd(mod) if unnecessaryReservations.contains(mod) => false
       case _ => true
     }
-    stg.setCmds(newCmds)
   }
-
   /**
    * Define common helper methods implicit classes.
    */
