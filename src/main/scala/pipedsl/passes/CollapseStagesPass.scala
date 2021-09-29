@@ -7,6 +7,7 @@ import pipedsl.common.Utilities.{andExpr, getReachableStages, getUsedVars, isRec
 import pipedsl.passes.Passes.StagePass
 
 import scala.collection.immutable.ListMap
+
 /**
  * The SplitStages pass forces IF statements to create
  * a new stage for each of their branches. In the event
@@ -55,7 +56,6 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
           mergeStages(s.joinStage, List(s.joinStage.succs.head), isForward = false);
         }
       }
-
       //there must only be one by construction
       val priorstg = s.inEdges.head.from
       //merge this into the prior stage since that delay was added unnecessarily
