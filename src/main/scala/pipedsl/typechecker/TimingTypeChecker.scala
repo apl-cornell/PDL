@@ -315,14 +315,15 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
-      //TODO methods are hacked
       name match
       {
+        //method invocation
         case Some(nm) => mod.typ match {
           case Some(TObject(_, _, methods)) => methods(nm)._2
           case Some(a) => throw UnexpectedType(e.pos, "Method call", "Object type", a)
           case None => throw MissingType(e.pos, "Method call")
         }
+        //calling another pipe
         case None => Asynchronous
       }
     case EVar(id) => if(!vars(id) && isRhs) {
