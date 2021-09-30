@@ -3,7 +3,7 @@ pipe test(inarg:int<32>)[rf:int<32>[5]<a, a>] {
   reserved(rf);
   acquired(rf);
   end(rf);
-  if ( inarg{0:0} == 1<1> ) {
+  if ( inarssg{0:0} == 1<1> ) {
       rf[inarg{4:0}] <- inarg;
       
       ---
