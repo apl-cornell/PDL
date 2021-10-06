@@ -86,7 +86,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       sdef
     case CRecv(lhs, _) => lhs match {
         //just match on mem writes
-      case EMemAccess(_, _, _) => if (s != NonSpeculative)
+      case _ :EMemAccess => if (s != NonSpeculative)
         throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
       case _ => ()
     }; s
@@ -105,9 +105,9 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CLockStart(_) => s //this should be OK to do speculatively or not
     case CLockEnd(_) => s //same
       //can only release READ-ONLY locks non-speculatively
-    case CLockOp(_, op, t) if op == Released && (t.isEmpty || t.get == LockWrite ) && s != NonSpeculative =>
+    case CLockOp(_, op, t, _, _) if op == Released && (t.isEmpty || t.get == LockWrite ) && s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-    case CLockOp(_, op, _)  if op == Reserved && s == Unknown=>
+    case CLockOp(_, op, _, _, _)  if op == Reserved && s == Unknown=>
       throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
     case _ => s
   }

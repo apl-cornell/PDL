@@ -2,7 +2,9 @@
 pipe test2(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     if (input{0:0} == 1) {
-        acquire(rf);
+        reserve(rf);
+	---
+	block(rf);
         release(rf);
     }
     end(rf);
@@ -12,12 +14,16 @@ pipe test2(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
 pipe test4(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     if (input{0:0} == 1) {
-        acquire(rf);
+	reserve(rf);
+	---
+	block(rf);
         int<32> arg <- rf[cast(input{4:0}, uint<5>)];
         release(rf);
     } else {
         ---
-        acquire(rf);
+	reserve(rf);
+	---
+        block(rf);
         ---
         release(rf);
     }
@@ -28,9 +34,10 @@ pipe test4(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
 pipe test5(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
 
     start(rf);
-    acquire(rf);
+    reserve(rf);
     ---
-    if (input{0:0} == 1) {
+    block(rf);
+    if (input{0:0} == 1) {        
         release(rf);
     } else {
         int<32> arg <- rf[cast(input{31:27}, uint<5>)];
@@ -44,11 +51,15 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     start(rf);
     if (input{0:0} == 1) {
         ---
-        acquire(rf);
+        reserve(rf);
+	---
+	block(rf);
         int<32> out <- rf[u0<5>];
     } else {
         ---
-        acquire(rf);
+	reserve(rf);
+	---
+	block(rf);
         int<32> out <- rf[u1<5>];
     }
     call test8(input);
@@ -56,17 +67,22 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     rf[u2<5>] <- out;
     release(rf);
     end(rf);
+    ---
 }
 //Expected success
 pipe test9(input: int<32>)[rf: int<32>[5]<c2,s>(Queue), dmem: int<32>[32]<a,a>(Queue)] {
     start(dmem);
     start(rf);
     if (input{0:0} == 1) {
-        acquire(rf);
+        reserve(rf);
+	---
+	block(rf);
         release(rf);
     }
     end(rf);
-    acquire(dmem);
+    reserve(dmem);
+    ---
+    block(dmem);
     release(dmem);
     end(dmem);
     call test9(input);
@@ -76,9 +92,11 @@ pipe test15(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     bool a = true;
     start(rf);
     if (a) {
-        acquire(rf);
+        reserve(rf);
     }
+    ---
     if (a) {
+        block(rf);
         release(rf);
     }
     end(rf);
@@ -92,11 +110,13 @@ pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
     start(rf);
     if (randomBool == a) {
         if (randomBool2 == b){
-            acquire(rf);
+            reserve(rf);
         }
     }
+    ---
     if (randomBool == a) {
         if (randomBool2 == b){
+	    block(rf);
             release(rf);
         }
     }
@@ -110,19 +130,21 @@ pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
     start(rf);
     split {
         case: randomBool {
-            acquire(rf);
+            reserve(rf);
         }
         case: randomBool2 {
-            acquire(rf);
+            reserve(rf);
 
         }
         case: (input{0:0} == 1) {
-            acquire(rf);
+            reserve(rf);
         }
         default: {
-            acquire(rf);
+            reserve(rf);
         }
     }
+    ---
+    block(rf);
     release(rf);
     end(rf);
     call test19(input, randomBool2, randomBool);
@@ -133,20 +155,27 @@ pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
     start(rf);
     split {
         case: randomBool {
-            acquire(rf);
+            reserve(rf);
+	    ---
+	    block(rf);
             release(rf);
         }
         case: randomBool2 {
-            acquire(rf);
-            release(rf);
-
+            reserve(rf);
+	    ---
+	    block(rf);
+            release(rf);	    
         }
         case: (input{0:0} == 1) {
-            acquire(rf);
-            release(rf);
+            reserve(rf);
+	    ---
+	    block(rf);
+            release(rf);	    	    
         }
         default: {
-            acquire(rf);
+            reserve(rf);
+	    ---
+	    block(rf);
             release(rf);
         }
     }

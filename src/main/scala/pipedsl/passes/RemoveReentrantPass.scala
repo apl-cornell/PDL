@@ -114,7 +114,7 @@ object RemoveReentrantPass extends StagePass[List[PStage]] {
     val addr = lockArg.evar.get
     val aliasCond = AndOp(EIsValid(aliasInfo._2), EqOp(addr, aliasInfo._1))
     ICondCommand(aliasCond, List(
-      ICheckLockOwned(lockArg, aliasInfo._2)
+      ICheckLockOwned(lockArg, aliasInfo._2, aliasInfo._2)
     ))
   }
 

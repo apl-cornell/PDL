@@ -1,6 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax._
+import pipedsl.common.Locks.eliminateLockRegions
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{andExpr, getReachableStages, getUsedVars, isReceivingCmd, updateListMap}
 import pipedsl.passes.Passes.StagePass
@@ -32,7 +33,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       val isBranchesComb = s.condStages.forall(stg => stg.head.outEdges.exists(e => e.to == s.joinStage))
       val isDefaultComb = s.defaultStages.head.outEdges.exists(e => e.to == s.joinStage)
       //Merge in the first true and false stages since that delay is artificial
-      mergeStages(s, s.condStages.map(stg => stg.head) :+ s.defaultStages.head, false)
+      mergeStages(s, s.condStages.map(stg => stg.head) :+ s.defaultStages.head, isForward = false)
       //Update IF stage metadata
       s.condStages = s.condStages.map(stg => stg.tail)
       s.defaultStages= s.defaultStages.tail
@@ -44,7 +45,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         val newOutEdge = PipelineEdge(None, None, s, s.joinStage, joinStgInputs)
         s.removeEdgesTo(s.joinStage)
         s.addEdge(newOutEdge)
-        mergeStages(s, List(s.joinStage), false)
+        mergeStages(s, List(s.joinStage), isForward = false)
       } else {
         //merge join stage into its successor, as long as its successor isn't another If stage
         //and that stage ALSO only has one predecessor
@@ -52,13 +53,13 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
           case _: IfStage => false
           case nstg => nstg.preds.size == 1
         })) {
-          mergeStages(s.joinStage, List(s.joinStage.succs.head), false);
+          mergeStages(s.joinStage, List(s.joinStage.succs.head), isForward = false);
         }
       }
       //there must only be one by construction
       val priorstg = s.inEdges.head.from
       //merge this into the prior stage since that delay was added unnecessarily
-      mergeStages(priorstg, List(s), false)
+      mergeStages(priorstg, List(s), isForward = false)
     case _ =>
   }
 
@@ -82,19 +83,30 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
   }
 
   //Ensures that ICondCommands don't contain any ICondCommands
+  //Try to minimize the number of ICondCommands we generate in order to avoid confusingly generated code
   private def flattenCondStmts(cond: Expr, stmts: Iterable[Command]): List[Command] = {
-    var condMap: Map[Expr, List[Command]] = ListMap()
-    stmts.foreach {
-      case ICondCommand(cex, cs) =>
-        val mapcondition = andExpr(Some(cond), Some(cex)).get
-        condMap = updateListMap(condMap, mapcondition, cs)
-      case c =>
-        val mapcondition = cond
-        condMap = updateListMap(condMap, mapcondition, c)
-    }
-    condMap.keys.foldLeft(List[Command]())((l, k) => {
-        l :+ ICondCommand(k, condMap(k))
+    var resultList: List[Command] = List()
+    val lastCmd = stmts.foldLeft(ICondCommand(cond, List()).setPos(cond.pos))((ic, s) => {
+      s match {
+        case ICondCommand(cex, cs) if ic.cond != cex =>
+          val condition = andExpr(Some(cond), Some(cex)).get
+          condition.setPos(cond.pos)
+          resultList = resultList :+ ic //push last command to output list
+          ICondCommand(condition, cs).setPos(s.pos) //return new conditional command with composite condition
+        case ICondCommand(_, cs) => //condition matches, just add our subcommands to it
+          ICondCommand(ic.cond, ic.cs ++ cs).setPos(ic.pos)
+        case c if ic.cond != cond =>
+          resultList = resultList :+ ic //push last command to output list
+          ICondCommand(cond, List(c)).setPos(c.pos) //start new command with original condition
+        case c =>
+          ICondCommand(ic.cond, ic.cs :+ c).setPos(ic.pos) //just add to command list
+      }
     })
+    if (lastCmd.cs.nonEmpty) {
+      resultList :+ lastCmd //add in the remaining command if its subcommands not empty
+    } else {
+      resultList
+    }
   }
 
   //split the given commands into a pair (receiving, normal) commands
@@ -127,10 +139,8 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
    */
   private def mergeStages(target: PStage, srcs: Iterable[PStage], isForward: Boolean): Unit = {
     var newstmts = List[Command]()
-    val lockids = srcs.foldLeft(Set[LockArg]())((ids, s) => {
-      ids ++ getLockIds(s.getCmds)
-    })
     srcs.foreach(src => {
+      // Check for each src, if there exists connection with other stages in the merging direction.
       val hasIncorrectEdges = if (isForward) {
         (s: PStage) => s.outEdges.exists(e => e.to != target) ||
           !s.outEdges.exists(e => e.to == target)
@@ -146,22 +156,20 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       } else {
         target.outEdges.filter(e => e.to == src)
       }
+      // Check if multi-edge.
       if (existingedges.size > 1) {
         throw new RuntimeException(s"Cannot merge ${src.name.v} into ${target.name.v} since they have multiple edges")
       }
+      // Check if exists conditional statements for n1 in n1 -> n2
       val cond = if (isForward) {
         existingedges.head.condRecv
       } else {
         existingedges.head.condSend
       }
       //merge in the commands
-      var receivingStmts = List[Command]()
+      var receivingStmts = List[Command]() // Create empty receiving stmts list
       if (cond.isDefined) {
-        val needIds = lockids.diff(getLockIds(src.getCmds).toSet)
-        val noops = needIds.foldLeft(List[Command]())((l, id) => {
-          l :+ ILockNoOp(id)
-        })
-        val flattenedCmds = flattenCondStmts(cond.get, src.getCmds ++ noops)
+        val flattenedCmds = flattenCondStmts(cond.get, src.getCmds)
         val (recvstmts, normalstmts) = splitReceivingStmts(flattenedCmds)
         newstmts = newstmts ++ normalstmts
         if (isForward) {
@@ -209,7 +217,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
           } else {
             receivingStmts
           }
-          e.to.addCmds(nstmts)
+          e.to.mergeStmts(nstmts, false)
         } // in else case, we're already moving receiving statements forward by merging with target
         val newedge = if (isForward) {
           PipelineEdge(e.condSend, andExpr(cond, e.condRecv), e.from, target, e.values)
@@ -220,7 +228,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
         target.addEdge(newedge)
       })
     })
-    //merge all subsequent stages at the same time
-    target.mergeStmts(newstmts)
+    target.mergeStmts(newstmts, addAfter = !isForward) //merge all subsequent stages at the same time
+    eliminateLockRegions(target) //after merging then remove any unnecessary lock region statements immediately
   }
 }

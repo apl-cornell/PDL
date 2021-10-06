@@ -5,7 +5,7 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
-import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Sequential}
+import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
 
 
@@ -19,10 +19,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
 
   //Add these named types to the env
   override def checkExt(e: ExternDef, env: Environment[Id, Type]): Environment[Id, Type] = {
-    val ftyps = e.methods.foldLeft(Map[Id, TFun]())((ms, m) => {
+    val ftyps = e.methods.foldLeft(Map[Id, (TFun, Latency)]())((ms, m) => {
       val typList = m.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
       val ftyp = TFun(typList, m.ret)
-      ms + (m.name -> ftyp)
+      ms + (m.name -> (ftyp, m.lat))
     })
     val typ = TObject(e.name, e.typParams, ftyps)
     e.typ = Some(typ)
@@ -307,10 +307,10 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case _: TMemType => tenv
         case _: TLockedMemType => tenv
       }
-    case CLockOp(mem, _, _) => {
+    case CLockOp(mem, _, _, _, _) =>
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
       {
-        case t: TLockedMemType => {
+        case t: TLockedMemType =>
           val memt = t.mem
           mem.id.typ = Some(t)
           if(mem.evar.isEmpty) tenv
@@ -321,9 +321,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
-        }
       }
-    }
     case CVerify(handle, args, preds, upd) =>
       //if there's an update clause check that stuff:
       if (upd.isDefined) {
@@ -499,7 +497,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       val ftyps = fields map { case (n, e) => (n, checkExpression(e, tenv, None)._1) }
       (TRecType(Id("anon"), ftyps) , tenv)//TODO these are wrong, maybe just remove these
     }
-    case EMemAccess(mem, index, wm) => {
+    case EMemAccess(mem, index, wm, _, _, _) =>
       val memt = tenv(mem)
       mem.typ = Some(memt)
       val (idxt, env1) = checkExpression(index, tenv, None)
@@ -528,7 +526,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
-    }
     case EBitExtract(num, start, end) => {
       val (ntyp, nenv) = checkExpression(num, tenv, None)
       val bitsLeft = math.abs(end - start) + 1
@@ -582,7 +579,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           (if (retType.isDefined) retType.get else TVoid(), tenv)
         }
         case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) => {
-          val mtyp = methods(name.get)
+          val mtyp = methods(name.get)._1
           val inputs = mtyp.args
           val retType = mtyp.ret
           //TODO refactor and pull into function since it is same as above

@@ -60,7 +60,11 @@ object Utilities {
     case CRecv(lhs, rhs) => getUsedVars(lhs) ++ getUsedVars(rhs)
     case CLockStart(mod) => Set(mod)
     case CLockEnd(mod) => Set(mod)
-    case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
+    case CLockOp(mem, _, _, args, ret) =>
+      val mem_vars = if (mem.evar.isDefined) Set(mem.id, mem.evar.get.id) else Set(mem.id)
+      val arg_vars = args.foldLeft(Set[Id]())((set, arg) => getUsedVars(arg) ++ set)
+      val ret_vars = ret match { case Some(value) => Set(value.id) case None => Set() }
+      mem_vars ++ arg_vars ++ ret_vars
     case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
     case CVerify(handle, args, preds, upd) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
@@ -88,21 +92,37 @@ object Utilities {
         v ++ getWrittenVars(c.body)
       })
     case CIf(_, cons, alt) => getWrittenVars(cons) ++ getWrittenVars(alt)
-    case CAssign(lhs, _) => lhs match {
-      case EVar(id) => Set(id);
-      case _ => Set()
-    }
-    case CRecv(lhs, _) => lhs match {
-      case EVar(id) => Set(id);
-      case _ => Set()
-    }
+    case CAssign(lhs, rhs) =>
+      val lhsid: Set[Id] = lhs match {
+        case EVar(id) => Set(id);
+        case _ => Set()
+      }
+      getMemReads(rhs).foldLeft(lhsid)((s, m) => {
+        if (m.outHandle.isDefined) s + m.outHandle.get.id
+        else s
+      })
+    case CRecv(lhs, rhs) =>
+      val lhsid: Set[Id] = lhs match {
+        case EVar(id) => Set(id);
+        case _ => Set()
+      }
+      getMemReads(rhs).foldLeft(lhsid)((s, m) => {
+        if (m.outHandle.isDefined) s + m.outHandle.get.id
+        else s
+      })
     case ICondCommand(_, c2) => getWrittenVars(c2)
     case IMemRecv(_, _, data) => if (data.isDefined) Set(data.get.id) else Set()
-    case IMemSend(handle, _, _, _, _) => Set(handle.id)
+    case IMemSend(handle, _, _, _, _, _, outHandle, _) => outHandle match
+    {
+      case Some(vl) => Set(handle.id, vl.id)
+      case None => Set(handle.id)
+    }
+    case i :IMemWrite => i.outHandle.map(vl => Set(vl.id)).getOrElse(Set())
     case ISend(handle, _, _) => Set(handle.id)
     case IRecv(_, _, out) => Set(out.id)
     case IReserveLock(handle, _) => Set(handle.id)
     case IAssignLock(handle, _, _) => Set(handle.id)
+    case ICheckLockOwned(_, _, outHandle) => Set(outHandle.id)
     case CSpecCall(handle, _, _) => Set(handle.id)
     case CUpdate(newHandle, _, _, _) => Set(newHandle.id)
     case CCheckpoint(handle, _) => Set(handle.id)
@@ -135,24 +155,28 @@ object Utilities {
       case e: EMemAccess => getUsedVars(e)
       case _ => Set()
     })
-    case CLockOp(mem, _, _) => if (mem.evar.isDefined) Set(mem.evar.get.id) else Set()
+    case CLockOp(mem, _, _, args, _) =>
+      val mem_vars = if (mem.evar.isDefined) Set(mem.evar.get.id) else Set()
+      val arg_vars = args.foldLeft(Set[Id]())((set, arg) => set ++ getUsedVars(arg))
+      arg_vars ++ mem_vars
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
     case CExpr(exp) => getUsedVars(exp)
     case ICondCommand(cond, c2) => getUsedVars(cond) ++ getUsedVars(c2)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) + specId ++ getUsedVars(originalSpec)
     case ICheck(specId, value) => getUsedVars(value) + specId
-    case IMemSend(_, writeMask, _, data, addr) =>
+    case IMemSend(_, writeMask, _, data, addr, inHandle, _, _) =>
       val dataSet = if (data.isDefined) {
-        Set(data.get.id, addr.id)
-      } else Set(addr.id)
+        Set(data.get.id, addr.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
+      } else Set(addr.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
       dataSet ++ (if (writeMask.isDefined) {
         getUsedVars(writeMask.get)
       } else {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data) => Set(addr.id, data.id)
+    case IMemWrite(_, addr, data, inHandle, _, _) =>
+      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {
@@ -161,7 +185,7 @@ object Utilities {
     }
     case IAssignLock(_, src, default) => getUsedVars(src) ++
       (if (default.isDefined) getUsedVars(default.get) else Set())
-    case ICheckLockOwned(larg, handle) => Set(handle.id) ++ (larg.evar match {
+    case ICheckLockOwned(larg, inHandle, _) => Set(inHandle.id) ++ (larg.evar match {
       case Some(value) => Set(value.id)
       case None => Set()
     })
@@ -198,8 +222,10 @@ object Utilities {
     case EUop(_, ex) => getUsedVars(ex)
     case EBinop(_, e1, e2) => getUsedVars(e1) ++ getUsedVars(e2)
     case ERecAccess(rec, _) => getUsedVars(rec)
-    case EMemAccess(_, index, mask) => (if (mask.isDefined) getUsedVars(mask.get) else Set()) ++
-      getUsedVars(index) //memories aren't variables, they're externally defined
+    case EMemAccess(_, index, mask, inHandle, _, _) =>
+      getUsedVars(index)  ++ //memories aren't variables, they're externally defined
+      (inHandle match {case Some(e) => getUsedVars(e) case None => Set()}) ++
+      (if (mask.isDefined) getUsedVars(mask.get) else Set())
     case EBitExtract(num, _, _) => getUsedVars(num)
     case ETernary(cond, tval, fval) => getUsedVars(cond) ++ getUsedVars(tval) ++ getUsedVars(fval)
     case EApp(_, args) => args.foldLeft[Set[Id]](Set())((s, a) => {
@@ -501,9 +527,10 @@ object Utilities {
           e.copy(fieldName = typeMapId(fieldName, f_opt), rec = typeMapExpr(rec, f_opt)).copyMeta(e)
         case e@ERecLiteral(fields) =>
           e.copy(fields = fields.map(idex => typeMapId(idex._1, f_opt) -> typeMapExpr(idex._2, f_opt))).copyMeta(e)
-        case e@EMemAccess(mem, index, wmask) =>
+        case e@EMemAccess(mem, index, wmask, inHandle, outHandle, isAtomic) =>
           e.copy(mem = typeMapId(mem, f_opt), index = typeMapExpr(index, f_opt),
-            wmask = opt_func(typeMapExpr(_, f_opt))(wmask)).copyMeta(e)
+            wmask = opt_func(typeMapExpr(_, f_opt))(wmask), inHandle = inHandle.map(typeMapEVar(_, f_opt)),
+            outHandle = outHandle.map(typeMapEVar(_, f_opt)), isAtomic).copyMeta(e)
         case e@EBitExtract(num, _, _) => e.copy(num = typeMapExpr(num, f_opt)).copyMeta(e)
         case e@ETernary(cond, tval, fval) =>
           e.copy(cond = typeMapExpr(cond, f_opt),
@@ -513,7 +540,8 @@ object Utilities {
           e.copy(func = typeMapId(func, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
         case e@ECall(mod, _, args) =>
           e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
-        case e@EVar(id) => e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
+        case e@EVar(id) =>
+          e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
         case e@ECast(tp, exp) =>
           val ntp = f_opt(Some(tp)).get
           val tmp = e.copy(ctyp = ntp, exp = typeMapExpr(exp, f_opt)).copyMeta(e)
@@ -531,6 +559,15 @@ object Utilities {
         case _ => e1
       }
     }
+
+  private def typeMapEVar(eVar: Syntax.EVar, f_opt: Option[Syntax.Type] => Utilities.FOption[Syntax.Type]) :EVar =
+    {
+      typeMapExpr(eVar, f_opt) match
+      {
+        case e :EVar => e
+      }
+    }
+
 
   /**
    * maps a function over the types of a command
@@ -550,29 +587,30 @@ object Utilities {
             cons = typeMapCmd(cons, f_opt),
             alt = typeMapCmd(alt, f_opt)).copyMeta(c)
         case c@CAssign(lhs, rhs) =>
-          c.copy(lhs = typeMapExpr(lhs, f_opt).asInstanceOf[EVar], rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
+          c.copy(lhs = typeMapEVar(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
         case c@CRecv(lhs, rhs) =>
           c.copy(lhs = typeMapExpr(lhs, f_opt), rhs = typeMapExpr(rhs, f_opt)).copyMeta(c)
         case c@CSpecCall(handle, pipe, args) =>
-          c.copy(handle = typeMapExpr(handle, f_opt).asInstanceOf[EVar],
+          c.copy(handle = typeMapEVar(handle, f_opt),
             pipe = typeMapId(pipe, f_opt),
             args = args.map(typeMapExpr(_, f_opt))).copyMeta(c)
         case c@CVerify(handle, args, preds, _) =>
-          c.copy(handle = typeMapExpr(handle, f_opt).asInstanceOf[EVar],
+          c.copy(handle = typeMapEVar(handle, f_opt),
             args = args.map(typeMapExpr(_, f_opt)),
             preds = preds.map(typeMapVar(_, f_opt))).copyMeta(c)
-        case c@CInvalidate(handle) => c.copy(typeMapExpr(handle, f_opt).asInstanceOf[EVar]).copyMeta(c)
+        case c@CInvalidate(handle) => c.copy(typeMapEVar(handle, f_opt)).copyMeta(c)
         case c@CPrint(args) => c.copy(args = args.map(typeMapExpr(_, f_opt))).copyMeta(c)
         case c@COutput(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
         case c@CReturn(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
         case c@CExpr(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
         case c@CLockStart(mod) => c.copy(mod = typeMapId(mod, f_opt)).copyMeta(c)
         case c@CLockEnd(mod) => c.copy(mod = typeMapId(mod, f_opt)).copyMeta(c)
-        case c@CLockOp(mem@LockArg(id, evar), _, _) =>
+        case c@CLockOp(mem@LockArg(id, evar), _, _, args, ret) =>
           c.copy(mem = mem.copy(id = typeMapId(id, f_opt), evar = evar match {
-            case Some(e) => Some(typeMapExpr(e, f_opt).asInstanceOf[EVar])
+            case Some(e) => Some(typeMapEVar(e, f_opt))
             case None => None
-          })).copyMeta(c)
+          }), args = args.map(typeMapExpr(_, f_opt)),
+            ret = ret.map(typeMapEVar(_, f_opt))).copyMeta(c)
         case c@CSplit(cases, default) =>
           c.copy(cases = cases.map(cs => cs.copy(cond = typeMapExpr(cs.cond, f_opt), body = typeMapCmd(cs.body, f_opt))),
             default = typeMapCmd(default, f_opt)).copyMeta(c)
@@ -622,6 +660,26 @@ object Utilities {
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =
     ctx.mkImplies(t1.asInstanceOf[Z3BoolExpr], t2.asInstanceOf[Z3BoolExpr])
 
+
+  def getMemReads(e: Expr): List[EMemAccess] = e match {
+    case EIsValid(ex) => getMemReads(ex)
+    case EFromMaybe(ex) => getMemReads(ex)
+    case EToMaybe(ex) => getMemReads(ex)
+    case EUop(_, ex) => getMemReads(ex)
+    case EBinop(_, e1, e2) => getMemReads(e1) ++ getMemReads(e2)
+    case em@EMemAccess(_, _, _, _, _, _) => List(em)
+    case EBitExtract(num, _, _) => getMemReads(num)
+    case ETernary(cond, tval, fval) => getMemReads(cond) ++ getMemReads(tval) ++ getMemReads(fval)
+    case EApp(_, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
+    case ECall(_, _, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
+    case ECast(_, exp) => getMemReads(exp)
+    case _ => List()
+  }
+
   val (defaultReadPorts, defaultWritePorts) = (5, 2)
+
+  val lock_handle_prefix = "_lock_id_"
+  val is_handle_var :Id => Boolean =
+    { id: Id => id.v.startsWith(lock_handle_prefix) }
 
 }

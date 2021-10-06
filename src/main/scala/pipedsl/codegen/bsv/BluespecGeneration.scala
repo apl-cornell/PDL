@@ -6,7 +6,7 @@ import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{flattenStageList, log2, annotateSpecTimings}
+import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2}
 
 import scala.collection.immutable.ListMap
 
@@ -206,8 +206,6 @@ object BluespecGeneration {
       BVar("reg" + b.name, bsInts.getRegType(b.typ))
     }
 
-    //TODO put in a good comment here that describes the return values
-
     /**
      * Given a circuit, generate the statements that are used in the TestBench
      * code to execute Call Statements and start execution
@@ -275,7 +273,6 @@ object BluespecGeneration {
     //Create a top level module that is synthesizable, takes no parameters
     //and instantiates all of the required memories and pipeline modules
     private val topLevelModule: BModuleDef = {
-
 
       //Assigns the internal modules to their external facing interfaces, exposing only clients as necessary
       val assignInts = finalArgMap.values.foldLeft(List[BStatement]())((l, a) => a.typ match {
@@ -653,6 +650,7 @@ object BluespecGeneration {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case CLockStart(mod) =>
           l :+ bsInts.getCheckStart(lockRegions(mod))
+          //TODO delete the ICheckLockFree ast node
         case cl@ICheckLockFree(mem) =>
           val methodInfo = LockImplementation.getLockImpl(mem).getCheckEmptyInfo(cl)
           if (methodInfo.isDefined) {
@@ -661,19 +659,36 @@ object BluespecGeneration {
             l
           }
         case cl@IReserveLock(_, mem) =>
-          val methodInfo = LockImplementation.getLockImpl(mem).getCanReserveInfo(cl)
+          val methodInfo = LockImplementation.getCanReserveInfo(cl)
           if (methodInfo.isDefined) {
             l :+ translateMethod(modParams(mem.id), methodInfo.get)
           } else {
             l
           }
-        case cl@ICheckLockOwned(mem, _) =>
-          val methodInfo = LockImplementation.getLockImpl(mem).getCheckOwnsInfo(cl)
+        case cl@ICheckLockOwned(mem, _, _) =>
+          val methodInfo = LockImplementation.getBlockInfo(cl)
           if (methodInfo.isDefined) {
             l :+ translateMethod(modParams(mem.id), methodInfo.get)
           } else {
             l
           }
+        case im@IMemWrite(mem, addr, data, _, _, isAtomic) if isAtomic =>
+          val methodInfo = LockImplementation.getCanAtomicWrite(mem, addr, data, im.portNum)
+          if (methodInfo.isDefined) {
+            l :+ translateMethod(modParams(mem), methodInfo.get)
+          } else {
+            l
+          }
+        case im@IMemSend(_, _, mem, data, addr, _, _, isAtomic) if isAtomic =>
+          val methodInfo = LockImplementation.getCanAtomicAccess(mem, addr, data, im.portNum)
+          if (methodInfo.isDefined) {
+            l :+ translateMethod(modParams(mem), methodInfo.get)
+          } else {
+            l
+          }
+        //these are just to find EMemAccesses that are also atomic
+        case CAssign(_, rhs) => l ++ getBlockConds(rhs)
+        case CRecv(_, rhs) => l ++ getBlockConds(rhs)
         case COutput(_) => if (mod.isRecursive) l :+ busyReg else l
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
@@ -705,10 +720,34 @@ object BluespecGeneration {
       })
     }
 
+    //only necessary to find atomic Reads and get their blocking conds
+    private def getBlockConds(e: Expr): List[BExpr] = e match {
+      case EIsValid(ex) => getBlockConds(ex)
+      case EFromMaybe(ex) => getBlockConds(ex)
+      case EToMaybe(ex) => getBlockConds(ex)
+      case EUop(_, ex) => getBlockConds(ex)
+      case EBinop(_, e1, e2) => getBlockConds(e1) ++ getBlockConds(e2)
+      case em@EMemAccess(mem, index, _, _, _, isAtomic) if isAtomic =>
+        val methodInfo = LockImplementation.getCanAtomicRead(mem, index, em.portNum)
+        if (methodInfo.isDefined) {
+          List(translateMethod(modParams(mem), methodInfo.get))
+        } else List()
+      case EBitExtract(num, _, _) => getBlockConds(num)
+        //can't appear in cond of ternary
+      case ETernary(_, tval, fval) => getBlockConds(tval) ++ getBlockConds(fval)
+      case EApp(_, args) => args.foldLeft(List[BExpr]())((l, a) => {
+        l ++ getBlockConds(a)
+      })
+      case ECall(_, _, args) => args.foldLeft(List[BExpr]())((l, a) => {
+        l ++ getBlockConds(a)
+      })
+      case ECast(_, exp) => getBlockConds(exp)
+      case _ => List()
+    }
     private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, translator.isLockedMem(mem))
+          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem))
         case IRecv(handle, sender, _) =>
           l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
         case ICondCommand(cond, cs) =>
@@ -951,11 +990,19 @@ object BluespecGeneration {
 
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
+      case IMemSend(_, _, _, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
+      case IMemWrite(_, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
       }
       case IRecv(_, _, result) => Some(BDecl(translator.toVar(result), None))
+      case il@IReserveLock(outHandle, _) => val mi = LockImplementation.getReserveInfo(il)
+        if (mi.isDefined && !mi.get.doesModify) {
+          Some(BDecl(translator.toVar(outHandle), Some(BInvalid)))
+        } else { None }
+      case ICheckLockOwned(_, _, outH) =>
+        Some(BDecl(translator.toVar(outH), None))
       case _ => None
     }
 
@@ -988,20 +1035,36 @@ object BluespecGeneration {
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
+      case IMemSend(_, _, _, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
+        Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
+      case IMemWrite(_, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
+        Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
-          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum.get, translator.isLockedMem(mem))
+          bsInts.getMemPeek(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))
         ))
         case None => None
       }
       case IRecv(_, sender, outvar) => Some(
         BAssign(translator.toVar(outvar), bsInts.getModPeek(modParams(sender)))
       )
-      //if preds != args, update preds definition
+      case il@IReserveLock(outHandle, mem) =>
+        val mi = LockImplementation.getReserveInfo(il)
+        if (mi.isDefined && !mi.get.doesModify) {
+          val resMethod = translateMethod(modParams(mem.id), mi.get)
+          Some(BAssign(translator.toVar(outHandle), BTaggedValid(resMethod)))
+        } else { None }
+      case ICheckLockOwned(_, inH, outH) => Some(BAssign(translator.toVar(outH), translator.toExpr(inH)))
+      case il@IReleaseLock(mem, _) =>
+        val mi = LockImplementation.getReleaseInfo(il)
+        if (mi.isDefined && !mi.get.doesModify) {
+          val relMethod = translateMethod(modParams(mem.id), mi.get)
+          Some(BExprStmt(relMethod))
+        } else { None }
       case CUpdate(_, _, _, _) => None
       case CLockStart(_) => None
       case CLockEnd(_) => None
-      case CLockOp(_, _, _) => None
+      case CLockOp(_, _, _, _, _) => None
       case CSpecCall(_, _, _) => None
       case CVerify(_, _, _, _) => None
       case CInvalidate(_) => None
@@ -1009,7 +1072,6 @@ object BluespecGeneration {
       case CEmpty() => None
       case _: IUpdate => None
       case _: ICheck => None
-      case _: IMemSend => None
       case _: ISend => None
       case _: InternalCommand => None
       case COutput(_) => None
@@ -1037,13 +1099,12 @@ object BluespecGeneration {
             }
           })
         case c => val decopt = getEffectDecl(c)
-          if (decopt.isDefined) {
-            val dec = decopt.get
-            if (!decls.contains(dec.lhs)) {
-              result = result :+ dec
-              decls = decls + dec.lhs
-            }
-          }
+            decopt.foreach(dec =>
+            //if (!decls.contains(dec.lhs))
+              {
+                result = result :+ dec
+                decls = decls + dec.lhs
+              })
       }
       result
     }
@@ -1061,16 +1122,18 @@ object BluespecGeneration {
       case ISend(handle, rec, _) => if (rec != mod.name) {
         Some(BDecl(translator.toVar(handle), None))
       } else { None }
-      case IReserveLock(handle, _) => Some(
-        BDecl(translator.toVar(handle), Some(BInvalid))
-      )
+      case resl@IReserveLock(handle, _) =>
+        val mi = LockImplementation.getReserveInfo(resl)
+        if (mi.isDefined && mi.get.doesModify) {
+          Some(BDecl(translator.toVar(handle), Some(BInvalid)))
+        } else { None }
       case IAssignLock(handle, _, default) => Some(
         BDecl(translator.toVar(handle), default match {
-          case Some(value) =>Some(translator.toExpr(value))
-          case None =>None
+          case Some(value) => Some(translator.toExpr(value))
+          case None => None
         }))
-      case IMemSend(handle, _, _, _, _) =>
-        Some(BDecl(translator.toVar(handle), None))
+      case IMemSend(memHandle, _, _, _, _, _, _, _) =>
+        Some(BDecl(translator.toVar(memHandle), None))
       case CSpecCall(handle, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
       case CUpdate(newHandle, _, _, _) =>
@@ -1105,22 +1168,32 @@ object BluespecGeneration {
           }
         })
         if (stmtlist.nonEmpty) Some(BIf(translator.toExpr(cond), stmtlist, List())) else None
-      case IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar) => Some(
-        BInvokeAssign(translator.toVar(handle),
-          bsInts.getMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
-            data.map(e => translator.toExpr(e)), cmd.portNum.get, translator.isLockedMem(mem))
-      ))
+      case im@IMemSend(handle, wMask, mem: Id, data: Option[EVar], addr: EVar, inLockHandle, _, isAtomic) =>
+        val reqInvoke = if (isLockedMemory(mem)) {
+          val methodInfo = LockImplementation.getRequestInfo(mem, addr, inLockHandle, data, im.portNum, isAtomic).get
+          bsInts.getMemReq(modParams(mem), im.isWrite, translator.toExpr(wMask),
+            translator.toExpr(data), methodInfo.usesArgs.map(a => translator.toExpr(a)), methodInfo.name, isAtomic)
+        } else {
+          bsInts.getUnlockedMemReq(modParams(mem), translator.toExpr(wMask), translator.toExpr(addr),
+            data.map(e => translator.toExpr(e)), cmd.portNum)
+        }
+        Some(BInvokeAssign(translator.toVar(handle), reqInvoke))
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum.get, translator.isLockedMem(mem))))
-      case IMemWrite(mem, addr, data) =>
+        Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))))
+      case IMemWrite(mem, addr, data, lHandle, _, isAtomic) =>
         val portNum = mem.typ.get match {
-          case memType: TLockedMemType => if (memType.limpl.addWritePort) cmd.portNum else None
-          case _ => None
+          case memType: TLockedMemType => if (memType.limpl.usesWritePortNum) cmd.portNum else None
+          case _ => None //In the future we may allow unlocked mems with port annotations
         }
         Some(BExprStmt(
-          bsInts.getCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum, translator.isLockedMem(mem))
-        ))
+        if (isLockedMemory(mem)) {
+          //ask lock for its translation
+          translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, portNum, isAtomic).get)
+        } else {
+          //use unlocked translation
+          bsInts.getUnlockedCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)
+        }))
       case ISend(handle, receiver, args) =>
         //Only for sends that are recursive (i.e., not leaving this module)
         if (receiver == mod.name) {
@@ -1146,35 +1219,26 @@ object BluespecGeneration {
           //place the result in the output queue
           BExprStmt(bsInts.getFifoEnq(outputQueue, outstruct))
         )))
-      case cl@IReserveLock(handle, mem) =>
-        val methodInfo = LockImplementation.getLockImpl(mem).getReserveInfo(cl)
-        if (methodInfo.isDefined) {
+      case cl@IReserveLock(outHandle, mem) =>
+        val methodInfo = LockImplementation.getReserveInfo(cl)
+        if (methodInfo.isDefined && methodInfo.get.doesModify) {
           val resMethod = translateMethod(modParams(mem.id), methodInfo.get)
-          Some(
-            if (methodInfo.get.doesModify) {
-              //can't just apply TaggedValid( resMethod) if it is an Action method (i.e., uses <-).
-              //Need to assign to a fresh variable and then tag that.
-              val handletyp = handle.typ.get.matchOrError(
-                handle.pos, "Extract Lock Handle", "Maybe(Handle)") { case TMaybe(t) => t }
-              val fresh = freshTmp(translator.toType(handletyp))
-              BStmtSeq(List(
+          //can't just apply TaggedValid( resMethod) if it is an Action method (i.e., uses <-).
+          //Need to assign to a fresh variable and then tag that.
+          val handletyp = outHandle.typ.get.matchOrError(
+                outHandle.pos, "Extract Lock Handle", "Maybe(Handle)") { case TMaybe(t) => t }
+          val fresh = freshTmp(translator.toType(handletyp))
+          Some(BStmtSeq(List(
                 BInvokeAssign(fresh, resMethod).setUseLet(true),
-                BAssign(translator.toVar(handle), BTaggedValid(fresh))
-              ))
-            } else {
-              BAssign(translator.toVar(handle), BTaggedValid(resMethod))
-          })
-        } else {
-          throw new RuntimeException(
-            s"Lock Library: ${LockImplementation.getLockImpl(mem).toString} has bad Reserve Method"
-          )
-        }
+                BAssign(translator.toVar(outHandle), BTaggedValid(fresh))
+          )))
+        } else { None }
       case IAssignLock(handle, src, _) => Some(
         BAssign(translator.toVar(handle), translator.toExpr(src))
       )
-      case cl@IReleaseLock(mem, h) =>
-        val methodInfo = LockImplementation.getLockImpl(mem).getReleaseInfo(cl)
-        if (methodInfo.isDefined) {
+      case cl@IReleaseLock(mem, _) =>
+        val methodInfo = LockImplementation.getReleaseInfo(cl)
+        if (methodInfo.isDefined && methodInfo.get.doesModify) {
           Some(
             BExprStmt(translateMethod(modParams(mem.id), methodInfo.get))
           )
@@ -1246,7 +1310,7 @@ object BluespecGeneration {
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
-      case CLockOp(_, _, _) => throw UnexpectedCommand(cmd)
+      case _ :CLockOp => throw UnexpectedCommand(cmd)
     }
 
     private def getRecvCmds(cmds: Iterable[Command]): List[BStatement] = {
@@ -1270,7 +1334,7 @@ object BluespecGeneration {
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(
-          bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum.get, translator.isLockedMem(mem))))
+          bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem))))
       case IRecv(_, sender, _) =>
         Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
       case _ => None
@@ -1283,7 +1347,6 @@ object BluespecGeneration {
       }
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
-
   }
 
 }

@@ -1,0 +1,20 @@
+pipe test(cond: uint<2>, addr: uint<16>)[mem: int<32>[16]<a,a>]: bool {
+     start(mem);
+     if (cond == 0) {
+       int<32> wdata <- mem[addr];
+     } else {
+       int<32> wdata <- 3;
+     }
+     end(mem);
+     ---
+     x = (cond == 0) ? wdata : wdata + 1;
+     print(x);
+     output(true);
+}
+
+circuit {
+  ti = memory(int<32>, 16);
+  tr = regfile(int<32>, 5);
+  c = new test[ti];
+  call c(u0<2>, u10<16>);
+}

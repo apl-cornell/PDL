@@ -95,13 +95,11 @@ pipe test6(input: int<32>)[rf: int<32>[32]] {
   call test6(input);
 }
 
-pipe test7()[rf: uint<32>[32]<a,a>(Queue)] {
+pipe test7()[rf: uint<32>[32]<a,a>] {
   a = 1;
   b = a;
   start(rf);
-  acquire(rf[a], R);
   c <- rf[a];
-  release(rf[a]);
   end(rf);
   ---
   d = c == a;

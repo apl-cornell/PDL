@@ -3,14 +3,10 @@ pipe test1(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
-    acquire(rf[rs1],R);
-    int<32> arg1 <- rf[rs1]; 
-    acquire(rf[rs2],R);
-    int<32> arg2 <- rf[rs2]; 
+    int<32> arg1 <- rf<a>[rs1]; 
+    int<32> arg2 <- rf<a>[rs2]; 
     end(rf);
     ---
-    release(rf[rs1]);
-    release(rf[rs2]);    
     call test1(input);
 } 
 
@@ -19,17 +15,23 @@ pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
-    if (input{0:0} == u1) {
-        acquire(rf[rs1],R);
+    bool doR1 = (input{0:0} == u1);
+    if (doR1) {
+        reserve(rf[rs1],R);
+    }
+    reserve(rf[rs2],R);
+    end(rf);
+    ---
+    if (doR1) {
+        block(rf[rs1]);	
         int<32> arg1 <- rf[rs1];
         release(rf[rs1]);
     }
-    acquire(rf[rs2],R);
+    block(rf[rs2]);
     int<32> arg2 <- rf[rs2];
-    end(rf);
-    ---
     release(rf[rs2]);
     call test2(input);
+    ---
 }
 
 
@@ -40,19 +42,23 @@ pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};
     start(rf);
-    acquire(rf[rs2],R);
+    reserve(rf[rs2],R);
     if (randomBool == a) {
         if (randomBool2 == b){
-            acquire(rf[rs1],R);
+            reserve(rf[rs1],R);
         }
     }
     end(rf);
     ---
     if (randomBool == a) {
         if (randomBool2 == b){
+	    block(rf[rs1]);
+	    x = rf[rs1];
             release(rf[rs1]);
         }
     }
+    block(rf[rs2]);
+    y = rf[rs2];
     release(rf[rs2]);
     call test5(input, randomBool2, randomBool);
 }

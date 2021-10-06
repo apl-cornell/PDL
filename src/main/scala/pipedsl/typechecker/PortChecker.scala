@@ -141,7 +141,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       checkCommand(cons, env, start_env).union(checkCommand(alt, env, start_env))
     case CAssign(_, data) =>
       checkExpr(data, env, start_env)
-    case CRecv(EVar(_), EMemAccess(mem, EVar(_), _)) =>
+    case CRecv(EVar(_), EMemAccess(mem, EVar(_), _, _, _, _)) =>
       /*asynch read*/
       {mem.typ.get match {
         case TMemType(_, _, rlat, _, _, _) =>
@@ -177,7 +177,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           ret
       }
 
-    case CRecv(EMemAccess(mem, _, _), _) =>
+    case CRecv(EMemAccess(mem, _, _, _, _, _), _) =>
       /*any write, asynch or sequential*/
       /*println("any write: " + mem + " : " + env(mem) + " : " + start_env(mem))*/
       val ret = env.add(mem, (0, 1))
@@ -212,7 +212,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
      case COutput(exp) => checkExpr(exp, env, start_env)
     case CReturn(exp) => checkExpr(exp, env, start_env)
     case CExpr(exp) => checkExpr(exp, env, start_env)
-     case CLockOp(mem, op, lockType) =>
+    case CLockOp(mem, op, lockType, _, _) =>
       val mangled = lockType match
       {
         case Some(Syntax.LockRead)  => Id(mem.id.v + "?r")
@@ -279,7 +279,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
     case ERecAccess(rec, _) => checkExpr(rec, env, start_env)
     case ERecLiteral(fields) =>
       fields.foldLeft(env)((en, p) => checkExpr(p._2, en, start_env))
-    case EMemAccess(mem, _, _) =>
+    case EMemAccess(mem, _, _, _, _, _) =>
       /*combinational read*/
 //      println("combinational read")
       val ret = env.add(mem, (1, 0))
