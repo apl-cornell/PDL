@@ -17,6 +17,7 @@ object LockImplementation {
   private val rename = new RenameRegfile()
   private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
+  private val chkq = new CheckpointLockQueue()
 
   //Stand-in Type Variables for Address, Data and Lock Handle
   private val addrType = TNamedType(Id("addr"))
@@ -278,7 +279,8 @@ object LockImplementation {
     bypassRF.shortName -> bypassRF,
     rename.shortName -> rename,
     forwardRename.shortName -> forwardRename,
-    lsq.shortName -> lsq
+    lsq.shortName -> lsq,
+    chkq.shortName -> chkq
   )
   /**
    * Lookup the lock implementation based on its name, only the string

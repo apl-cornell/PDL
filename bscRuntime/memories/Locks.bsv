@@ -6,9 +6,12 @@ import Vector :: *;
 import ConfigReg :: *;
 export LockId(..);
 export QueueLock(..);
+export CheckpointQueueLock(..);
 export AddrLock(..);
 
 export mkQueueLock;
+export mkCountingLock;
+export mkCheckpointQueueLock;
 export mkFAAddrLock;
 export mkDMAddrLock;
 
@@ -140,6 +143,7 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
    RWire#(LockId#(d)) doRel <- mkRWire();
    
    //for when you're doing not rollback
+   (*fire_when_enabled*)
    rule updateEmpty;
       let res = fromMaybe(False, doRes.wget());
       if (res &&& doRel.wget() matches tagged Invalid) empty <= False;
@@ -190,7 +194,6 @@ typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
 module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, szAddr), Eq#(addr));
 
    
-//   Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkQueueLock() );
    Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkCountingLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkConfigReg(tagged Invalid) );
    //Signal that a reservation used an already-allocated lock this cycle
@@ -306,7 +309,7 @@ endmodule: mkFAAddrLock
 
 module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(addr, szAddr));
    
-   Vector#(TExp#(szAddr), QueueLock#(LockId#(d))) lockVec <- replicateM( mkQueueLock() );
+   Vector#(TExp#(szAddr), QueueLock#(LockId#(d))) lockVec <- replicateM( mkCountingLock() );
 
    method Bool isEmpty(addr loc);
       return lockVec[loc].isEmpty();
