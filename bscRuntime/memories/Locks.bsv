@@ -23,11 +23,11 @@ interface QueueLock#(type id);
 endinterface
 
 interface CheckpointQueueLock#(type id, type cid);
-   method ActionValue#(id) res();
-   method Bool owns(id i);
-   method Action rel(id i);
+   method ActionValue#(id) res1();
+   method Bool owns1(id i);
+   method Action rel1(id i);
    method Bool isEmpty();
-   method Bool canRes();
+   method Bool canRes1();
    method ActionValue#(cid) checkpoint();
    method Action rollback(cid id);
 endinterface
@@ -81,6 +81,55 @@ module mkQueueLock(QueueLock#(LockId#(d)));
       
 endmodule
 
+module mkCountingLock(QueueLock#(LockId#(d)));
+
+   Ehr#(2, LockId#(d)) nextId <- mkEhr(0);   
+   Reg#(LockId#(d)) owner <- mkReg(0);
+   Reg#(Bool) empty <- mkReg(True);
+
+   Bool full = !empty && nextId[0] == owner;
+
+   RWire#(Bool) doRes <- mkRWire();
+   RWire#(LockId#(d)) doRel <- mkRWire();
+   
+   (*fire_when_enabled*)
+   rule updateEmpty;
+      let res = fromMaybe(False, doRes.wget());
+      //did reserve but not release, definitely not empty
+      if (res &&& doRel.wget() matches tagged Invalid) empty <= False;
+      //did release and no reserve, empty if new owner equals nextId (i.e., next person to call res)
+      if (!res &&& doRel.wget() matches tagged Valid.nextOwner) empty <= nextOwner == nextId[1];
+      //else must still be same (non-empty)
+   endrule
+
+   method Bool isEmpty();
+      return empty;
+   endmethod
+   
+   method Bool canRes1();
+      return !full;
+   endmethod
+   
+   //Returns True if thread `tid` already owns the lock
+   method Bool owns1(LockId#(d) tid);
+      return owner == tid;
+   endmethod
+	       
+   //Releases the lock
+   method Action rel1(LockId#(d) tid);
+      owner <= owner + 1;
+      doRel.wset(owner + 1);
+   endmethod
+   
+   //Reserves the lock and returns the associated id
+   method ActionValue#(LockId#(d)) res1();
+      nextId[0] <= nextId[0] + 1;
+      doRes.wset(True);
+      return nextId[0];
+   endmethod
+      
+endmodule
+
 module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
 
    Ehr#(2, LockId#(d)) nextId <- mkEhr(0);
@@ -101,23 +150,23 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
       return empty;
    endmethod
    
-   method Bool canRes();
+   method Bool canRes1();
       return empty || nextId[0] != owner;
    endmethod
    
    //Returns True if thread `tid` already owns the lock
-   method Bool owns(LockId#(d) tid);
+   method Bool owns1(LockId#(d) tid);
       return owner == tid;
    endmethod
 	       
    //Releases the lock, assume `tid` owns it
-   method Action rel(LockId#(d) tid);
+   method Action rel1(LockId#(d) tid);
       owner <= owner + 1; //assign next owner
       doRel.wset(owner + 1);
    endmethod
    
    //Reserves the lock and returns the associated id
-   method ActionValue#(LockId#(d)) res();
+   method ActionValue#(LockId#(d)) res1();
       nextId[0] <= nextId[0] + 1;
       doRes.wset(True);
       return nextId[0];
@@ -141,7 +190,8 @@ typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
 module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, szAddr), Eq#(addr));
 
    
-   Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkQueueLock() );
+//   Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkQueueLock() );
+   Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkCountingLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkConfigReg(tagged Invalid) );
    //Signal that a reservation used an already-allocated lock this cycle
    //which tells the relevant "free lock" rules not to execute
