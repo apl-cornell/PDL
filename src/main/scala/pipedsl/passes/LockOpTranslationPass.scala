@@ -137,12 +137,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
 
   private def translateOp(c: CLockOp): Command = {
     c.op match {
-      case Locks.Free =>
-        val i = ICheckLockFree(c.mem).setPos(c.pos)
-        i.memOpType = c.memOpType
-        i.granularity = c.granularity
-        i.portNum = c.portNum
-        i
+      case Locks.Free => ILockNoOp(c.mem) //TODO throw error instead
       case Locks.Reserved =>
         val i = IReserveLock(lockVar(c.mem, LockedMemState.Reserved), c.mem).setPos(c.pos)
         i.memOpType = c.memOpType

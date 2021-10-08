@@ -650,14 +650,6 @@ object BluespecGeneration {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case CLockStart(mod) =>
           l :+ bsInts.getCheckStart(lockRegions(mod))
-          //TODO delete the ICheckLockFree ast node
-        case cl@ICheckLockFree(mem) =>
-          val methodInfo = LockImplementation.getLockImpl(mem).getCheckEmptyInfo(cl)
-          if (methodInfo.isDefined) {
-            l :+ translateMethod(modParams(mem.id), methodInfo.get)
-          } else {
-            l
-          }
         case cl@IReserveLock(_, mem) =>
           val methodInfo = LockImplementation.getCanReserveInfo(cl)
           if (methodInfo.isDefined) {
@@ -1246,7 +1238,6 @@ object BluespecGeneration {
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
       case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))
-      case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
       case CSpecCall(handle, _, args) =>

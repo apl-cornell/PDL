@@ -22,6 +22,7 @@ object LockImplementation {
   private val addrType = TNamedType(Id("addr"))
   private val dataType = TNamedType(Id("data"))
   private val handleType = TNamedType(Id("handle"))
+  private val checkType = TNamedType(Id("checkHandle"))
   //Lock Object Method Names
   private val canResName = "canRes"
   private val canResReadName = canResName + "_r"
@@ -50,6 +51,9 @@ object LockImplementation {
   private val atomicReadName = "atom_r"
   private val atomicWriteName = "atom_w"
   private val atomicAccessName = "atom_req"
+
+  private val checkpointName = "checkpoint"
+  private val rollbackName = "rollback"
 
   private def toPortString(port: Option[Int]): String = port match {
     case Some(value) => value.toString
@@ -364,8 +368,6 @@ object LockImplementation {
 
     def usesWritePortNum: Boolean = false
 
-    def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo]
-
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int]
 
     //LSQ doesn't need a separate lock id so use this to differentiate
@@ -413,15 +415,29 @@ object LockImplementation {
     override def getModuleName(m: TMemType): String = queueLockName.v + getSuffix(m)
 
     override def granularity: LockGranularity = General
-    //TODO placing the interface name (lock.) here is weird but OK i guess
-    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
-      Some(MethodInfo("lock.isEmpty", doesModify = false, List()))
-    }
 
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
   }
+  private class CheckpointLockQueue extends LockQueue {
+    private val queueLockName = Id("CheckpointQueueLock")
+    override def getType: TObject = {
+      val parent = super.getType
+      TObject(queueLockName, List(),
+        parent.methods ++ Map(
+          Id(checkpointName) -> (TFun(List(), checkType), Sequential),
+          Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+        )
+      )
+    }
+    override def shortName: String = "CheckpointQueue"
 
+    override def getModuleName(m: TMemType): String = queueLockName.v + getSuffix(m)
+
+    override def granularity: LockGranularity = General
+
+    override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
+  }
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once
   private class FALockQueue extends LockQueue {
@@ -451,10 +467,6 @@ object LockImplementation {
 
     override def granularity: LockGranularity = Specific
 
-    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = {
-      Some(MethodInfo("lock.isEmpty", doesModify = false, List(l.mem.evar.get)))
-    }
-
     override def getTypeArgs(szParams: List[Int]): List[Int] = List(szParams.headOption.getOrElse(defaultNumLocks))
   }
 
@@ -479,12 +491,6 @@ object LockImplementation {
     override def granularity: LockGranularity = Specific
 
     override def hasLockSubInterface: Boolean = false
-
-    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = l.memOpType match {
-      case Some(LockWrite) => Some(MethodInfo("canWrite", doesModify = false, List(l.mem.evar.get)))
-      case Some(LockRead)  => Some(MethodInfo("canRead", doesModify = false, List(l.mem.evar.get)))
-      case None => throw new RuntimeException("Bad lock info")//TODO better exception
-    }
 
     override def getTypeArgs(szParams: List[Int]): List[Int] =
       List(szParams.headOption.getOrElse(defaultNumLocks))
@@ -518,8 +524,6 @@ object LockImplementation {
 
     override def hasLockSubInterface: Boolean = false
 
-    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
-
     override def getTypeArgs(szParams: List[Int]): List[Int] = List()
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] =
       List(Utilities.exp2(m.addrSize))
@@ -552,8 +556,6 @@ object LockImplementation {
     override def granularity:LockGranularity = Specific
 
     override def hasLockSubInterface: Boolean = false
-
-    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = {
       //TODO make default more configurable
@@ -592,8 +594,6 @@ object LockImplementation {
     override def granularity: LockGranularity = Specific
 
     override def hasLockSubInterface: Boolean = false
-
-    override def getCheckEmptyInfo(l: ICheckLockFree): Option[MethodInfo] = None
 
     def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 

@@ -195,7 +195,7 @@ object DAGSyntax {
 
 
   private def isLockStmt(c: Command): Boolean = c match {
-    case _:ICheckLockFree | _:ICheckLockOwned |
+    case _:ICheckLockOwned |
          _:IReserveLock | _:IReleaseLock | _:ILockNoOp => true
     case _ => false
   }
@@ -211,7 +211,6 @@ object DAGSyntax {
   }
 
   private def getLockId(c: Command): LockArg = c match {
-    case ICheckLockFree(l) => l
     case ICheckLockOwned(l, _, _) => l
     case IReserveLock(_, l) => l
     case IReleaseLock(l, _) => l
