@@ -26,6 +26,12 @@ interface RenameRF#(type addr, type elem, type name);
    // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
 endinterface
 
+interface CheckpointRF#(type addr, type elem, type name, type cid);
+   interface RenameRF#(addr, elem, name) renamerf;
+   method ActionValue#(cid) checkpoint();
+   method Action commit(cid c, Bool doRoll, Bool doRel);
+endinterface
+   
 interface BypassRF#(type addr, type elem, type id);
    method ActionValue#(id) res_w1(addr a);
    method ActionValue#(id) res_r1(addr a);
@@ -119,6 +125,59 @@ import "BVI" ForwardRenameRF =
        schedule (rel_w1) C (rel_w1);
     
  endmodule
+
+import "BVI" CheckpointRF =
+ module mkCheckpointRF#(Integer aregs, Integer pregs, Integer replicas, Bool init, String fileInit)(CheckpointRF#(addr, elem, name, cid)) provisos
+    (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bits#(cid, szCid), Bounded#(name),
+     PrimIndex#(addr, an), PrimIndex#(name, nn));
+
+    parameter addr_width = valueOf(szAddr);
+    parameter data_width = valueOf(szElem);
+    parameter name_width = valueOf(szName);
+    parameter replica_width = valueOf(szCid);    
+    parameter lo_arch = 0;
+    parameter hi_arch = aregs - 1;
+    parameter lo_phys = 0;
+    parameter hi_phys = pregs - 1;
+    parameter num_replicas = replicas;
+
+    parameter binaryInit = init;
+    parameter file = fileInit;
+
+    default_clock clk(CLK, (*unused*) clk_gate);
+    default_reset rst (RST);
+    
+    interface RenameRF renamerf;
+       method NAME_OUT_1 res_r1 (ADDR_1);
+       method VALID_OUT_1 owns_r1 (VALID_NAME_1);
+       method NAME_OUT_2 res_r2 (ADDR_2);
+       method VALID_OUT_2 owns_r2 (VALID_NAME_2);
+       method D_OUT read[2] (NAME);
+       method write[2] (NAME_IN, D_IN) enable(WE);    
+       method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+       method rel_w1(NAME_F) enable(FE);
+    endinterface
+
+    method CHK_OUT checkpoint() enable(CHK_E) ready(CHK_READY);       
+    method commit (ROLLBK_IN, DO_ROLL, DO_REL) enable(ROLLBK_E);
+    
+       schedule (checkpoint) C (checkpoint);
+       schedule (commit) C (commit);
+       schedule (checkpoint) CF (commit);
+       schedule (checkpoint, commit) CF (renamerf_res_r1, renamerf_res_r2, renamerf_owns_r1, renamerf_owns_r2, renamerf_read, renamerf_write, renamerf_rel_w1);      
+       schedule (renamerf_res_r1, renamerf_res_r2) CF (renamerf_res_r1, renamerf_res_r2);
+       schedule (renamerf_res_r1, renamerf_res_r2) CF (renamerf_owns_r1, renamerf_owns_r2, renamerf_read, renamerf_res_w1, renamerf_write, renamerf_rel_w1);
+       schedule (renamerf_owns_r1, renamerf_owns_r2) CF (renamerf_owns_r1, renamerf_owns_r2);
+       schedule (renamerf_owns_r1, renamerf_owns_r2) CF (renamerf_read, renamerf_res_w1, renamerf_write, renamerf_rel_w1);
+       schedule (renamerf_read) CF (renamerf_read);
+       schedule (renamerf_read) CF (renamerf_res_w1, renamerf_write, renamerf_rel_w1);
+       schedule (renamerf_res_w1) C (renamerf_res_w1);
+       schedule (renamerf_res_w1) CF (renamerf_write, renamerf_rel_w1, checkpoint, commit);
+       schedule (renamerf_write) CF (renamerf_write, renamerf_rel_w1);
+       schedule (renamerf_rel_w1) C (renamerf_rel_w1);
+        
+ endmodule
+
 
 import "BVI" BypassRF =
 module mkBypassRF#(Integer regnum, Bool init, String fileInit)(BypassRF#(addr, elem, name)) provisos
@@ -223,31 +282,5 @@ import "BVI" BHT = module mkBHT#(Integer entries)(BHT#(addr)) provisos (Bits#(ad
 			 schedule (upd) C (upd);
 endmodule
 
-// import "BVI" FIFO2 = module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
-
-// 	parameter width = valueOf(szdtyp);
-// 	parameter guarded = 1;
-	
-// 	default_clock clk(CLK, (*unused*) clk_gate);
-// 	default_reset rst (RST);
-
-// 	method enq(D_IN) enable(ENQ) ready(FULL_N);
-// 	method deq() enable(DEQ) ready(EMPTY_N);
-// 	method D_OUT first() ready(EMPTY_N);
-// 	method FULL_N notFull();
-// 	method EMPTY_N notEmpty();
-// 	method clear() enable(CLR);
-	   
-// 	   schedule (notFull, notEmpty, first) CF (notFull, notEmpty, first);
-// 	   schedule (notFull, notEmpty) SB (enq, deq, clear);
-// 	   schedule (first) CF (enq);
-// 	   schedule (first) SB (deq, clear);
-// 	   schedule (enq) CF (enq, deq);
-// 	   schedule (enq) SB (clear);
-// 	   schedule (deq) C (deq);
-// 	   schedule (deq) SB (clear);
-// 	   schedule (clear) SBR (clear);
-    
-// endmodule
 
 endpackage
