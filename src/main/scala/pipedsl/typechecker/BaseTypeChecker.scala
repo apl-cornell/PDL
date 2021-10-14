@@ -6,7 +6,9 @@ import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, is_generic}
+
+import scala.collection.mutable
 
 
 //  This checks the 'Normal stuff' with base types.
@@ -544,14 +546,40 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           if (targs.length != args.length) {
             throw ArgLengthMismatch(e.pos, targs.length, args.length)
           }
+          val this_app_templated = mutable.HashMap.empty[Id, Type]
           targs.zip(args).foreach {
             case (expectedT, a) =>
               val (atyp, aenv) = checkExpression(a, tenv, None)
-              if (!isSubtype(atyp, expectedT)) {
+              val act_exp :Type = expectedT match {
+                case TSizedInt(TBitWidthVar(name), _) if is_generic(name) =>
+                this_app_templated.get(name) match {
+                  case Some(value) => value
+                  case None => this_app_templated.put(name, atyp); atyp
+                }
+                case _ => expectedT
+              }
+
+/*
+              val act_exp :Type= if(is_generic(expectedT))
+                {
+                  val name = expectedT.asInstanceOf[TNamedType].name//this is a safe cast since all generics are named types
+                  this_app_templated.get(name) match
+                  {
+                    case Some(value) => value
+                    case None =>
+                    this_app_templated.put(name, atyp)
+                    atyp
+                  }
+                } else expectedT*/
+              if (!isSubtype(atyp, act_exp)) {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
           }
-          (tret, tenv)
+          val act_ret = if(is_generic(tret))
+            {
+              this_app_templated.getOrElse(tret.asInstanceOf[TSizedInt].len.asInstanceOf[TBitWidthVar].name, tret)
+            } else tret
+          (act_ret, tenv)
         }
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }

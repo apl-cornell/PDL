@@ -4,6 +4,7 @@ import common.Syntax._
 import common.Locks._
 import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.Latency
+import pipedsl.common.Utilities.generic_type_prefix
 
 import scala.util.matching.Regex
 
@@ -230,9 +231,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
      
   lazy val lhs: Parser[Expr] = memAccess | variable
 
-  lazy val simpleCmd: P[Command] = positioned {
+  lazy val simpleCmd: P[Command] = dlog(positioned {
     speccall |
-    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
+    dlog(typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) })("assign") |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
@@ -246,7 +247,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => { COutput(e)}) |
       expr ^^ (e => { CExpr(e)})
-  }
+  })("simple command")
   
   lazy val lockArg: P[LockArg] = positioned { 
     iden ~ brackets(variable).? ^^ {case i ~ v => LockArg(i, v)}
@@ -332,9 +333,12 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
     seqCmd } )
 
+  lazy val bitWidth :P[TBitWidth] = dlog(iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
+    posint ^^ {i => TBitWidthLen(i)})("parsed bit width")
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TSigned() ) } |
-  "uint" ~> angular(posint) ^^ { bits =>  TSizedInt(TBitWidthLen(bits), TUnsigned() ) }
+
+  lazy val sizedInt: P[Type] = "int" ~> angular(bitWidth) ^^ { bits => TSizedInt(bits, TSigned() ) } |
+  "uint" ~> angular(bitWidth) ^^ { bits =>  TSizedInt(bits, TUnsigned() ) }
 
   lazy val latency: P[Latency.Latency] =
     "c" ^^ { _ => Latency.Combinational } |
@@ -426,9 +430,11 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     }
   }
 
+lazy val genericName :P[Id] = iden ^^ {i => Id(i.v + generic_type_prefix)}
+
   lazy val fdef: P[FuncDef] = positioned {
-    "def" ~> iden ~ parens(repsep(param, ",")) ~ ":" ~ typ ~ braces(cmd) ^^ {
-      case i ~ ps ~ _ ~ t ~ c => FuncDef(i, ps, t, c)
+    "def" ~> iden ~ angular(repsep(genericName, ",")).? ~ parens(repsep(param, ",")) ~ ":" ~ (typ) ~ braces(cmd) ^^ {
+      case i ~ tp ~ ps ~ _ ~ t ~ c => FuncDef(i, ps, t, c, tp.getOrElse(List()))
     }
   }
 

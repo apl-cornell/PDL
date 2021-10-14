@@ -502,7 +502,8 @@ object Utilities {
               case Some(_) => TSigned()
             }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
-          case _ => throw LackOfConstraints(e1)
+          case _ =>
+            throw LackOfConstraints(e1)
         }
         case t => e1.typ = t.toOptionUnsafe
       }
@@ -678,5 +679,15 @@ object Utilities {
   val lock_handle_prefix = "_lock_id_"
   val is_handle_var :Id => Boolean =
     { id: Id => id.v.startsWith(lock_handle_prefix) }
+
+  val generic_type_prefix = "__SUPERSPECIALGENERIC_"
+  def is_generic(t :Any) :Boolean = t match {
+    case TNamedType(name) => name.v.startsWith(generic_type_prefix)
+    case TSizedInt(l, _) => is_generic(l)
+    case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix)
+    case _:Type => false
+    case id:Id => id.v.startsWith(generic_type_prefix)
+    case s:String => s.startsWith(generic_type_prefix)
+  }
 
 }

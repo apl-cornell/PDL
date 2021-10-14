@@ -526,7 +526,8 @@ object Syntax {
     name: Id,
     args: List[Param],
     ret: Type,
-    body: Command) extends Definition
+    body: Command,
+    templateTypes :List[Id]) extends Definition
 
   case class MethodDef(
                       name :Id,

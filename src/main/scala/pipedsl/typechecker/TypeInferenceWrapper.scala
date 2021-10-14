@@ -4,8 +4,8 @@ import pipedsl.common.Errors
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, fopt_func, typeMapFunc, typeMapModule}
-import pipedsl.typechecker.Environments.{Environment, TypeEnv}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, fopt_func, is_generic, typeMapFunc, typeMapModule}
+import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 
 import scala.collection.mutable
@@ -80,50 +80,55 @@ object TypeInferenceWrapper
    }
   }
 
-  private def type_subst_map_fopt(t :Type, tp_mp: mutable.HashMap[Id, Type]) :Option[Type] = try
+  private def type_subst_map_fopt(t :Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id] = mutable.HashSet.empty) :Option[Type] = try
     {
-     Some(type_subst_map(t, tp_mp))
+     Some(type_subst_map(t, tp_mp, templated))
     } catch
    {
     case IntWidthNotSpecified() => None
    }
 
-  private def type_subst_map(t: Type, tp_mp: mutable.HashMap[Id, Type]): Type = t match
-  {
-   case TSignVar(nm) => tp_mp.get(nm) match
+  private def type_subst_map(t: Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id]): Type =
    {
-    case Some(value) => type_subst_map(value, tp_mp)
+    t match
+    {
+     case TSignVar(nm) => tp_mp.get(nm) match
+     {
+      case Some(value) => type_subst_map(value, tp_mp, templated)
+     }
+     case sz@TSizedInt(len, sign) =>
+      val width = type_subst_map(len, tp_mp, templated).copyMeta(sz) |> to_width
+      val sn = type_subst_map(sign, tp_mp, templated).copyMeta(sign) |> to_sign
+      sz.copy(len = width, sign = sn)
+     case f@TFun(args, ret) => f.copy(args = args.map(type_subst_map(_, tp_mp, templated)), ret = type_subst_map(ret, tp_mp, templated)).copyMeta(f)
+     case r@TRecType(_, fields) => r.copy(fields = fields.map(idtp => (idtp._1, type_subst_map(idtp._2, tp_mp, templated)))).copyMeta(r)
+     case m: TMemType => m.copy(elem = type_subst_map(m.elem, tp_mp, templated)).copyMeta(m)
+     case m@TModType(inputs, refs, _, _) => m.copy(inputs = inputs.map(type_subst_map(_, tp_mp, templated)), refs = refs.map(type_subst_map(_, tp_mp, templated))).copyMeta(m)
+     case l@TLockedMemType(mem, _, _) => l.copy(mem = type_subst_map(mem, tp_mp, templated).asInstanceOf[TMemType]).copyMeta(l)
+     case TNamedType(name) if templated.contains(name) => t
+     case TNamedType(name)  => tp_mp.get(name) match
+     {
+      case Some(value) => type_subst_map(value, tp_mp, templated)
+      case None => throw IntWidthNotSpecified()
+     }
+     case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp, templated))
+     case TBitWidthAdd(b1, b2) =>
+      val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
+      val len2 = type_subst_map(b2, tp_mp, templated) |> to_len
+      TBitWidthLen(len1 + len2)
+     case TBitWidthMax(b1, b2) =>
+      val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
+      val len2 = type_subst_map(b2, tp_mp, templated) |> to_len
+      TBitWidthLen(Math.max(len1, len2))
+     case TBitWidthVar(name) if templated.contains(name) => t
+     case TBitWidthVar(name) => tp_mp.get(name) match
+     {
+      case Some(value) => type_subst_map(value, tp_mp, templated)
+      case None => throw IntWidthNotSpecified()
+     }
+     case _ => t
+    }
    }
-   case sz@TSizedInt(len, sign) =>
-    val width = type_subst_map(len, tp_mp).copyMeta(sz) |> to_width
-    val sn = type_subst_map(sign, tp_mp).copyMeta(sign) |> to_sign
-    sz.copy(len = width, sign = sn)
-   case f@TFun(args, ret) => f.copy(args = args.map(type_subst_map(_, tp_mp)), ret = type_subst_map(ret, tp_mp)).copyMeta(f)
-   case r@TRecType(_, fields) => r.copy(fields = fields.map(idtp => (idtp._1, type_subst_map(idtp._2, tp_mp)))).copyMeta(r)
-   case m: TMemType => m.copy(elem = type_subst_map(m.elem, tp_mp)).copyMeta(m)
-   case m@TModType(inputs, refs, _, _) => m.copy(inputs = inputs.map(type_subst_map(_, tp_mp)), refs = refs.map(type_subst_map(_, tp_mp))).copyMeta(m)
-   case l@TLockedMemType(mem, _, _) => l.copy(mem = type_subst_map(mem, tp_mp).asInstanceOf[TMemType]).copyMeta(l)
-   case TNamedType(name) => tp_mp.get(name) match
-   {
-    case Some(value) => type_subst_map(value, tp_mp)
-    case None => throw IntWidthNotSpecified()
-   }
-   case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp))
-   case TBitWidthAdd(b1, b2) =>
-    val len1 = type_subst_map(b1, tp_mp) |> to_len
-    val len2 = type_subst_map(b2, tp_mp) |> to_len
-    TBitWidthLen(len1 + len2)
-   case TBitWidthMax(b1, b2) =>
-    val len1 = type_subst_map(b1, tp_mp) |> to_len
-    val len2 = type_subst_map(b2, tp_mp) |> to_len
-    TBitWidthLen(Math.max(len1, len2))
-   case TBitWidthVar(name) => tp_mp.get(name) match
-   {
-    case Some(value) => type_subst_map(value, tp_mp)
-    case None => throw IntWidthNotSpecified()
-   }
-   case _ => t
-  }
 
   class TypeInference(autocast: bool)
    {
@@ -191,11 +196,33 @@ object TypeInferenceWrapper
       val inputTypes = f.args.map(a => a.typ)
       val funType = TFun(inputTypes, f.ret)
       val funEnv = env.add(f.name, funType)
+      val templated = mutable.HashSet.from(f.templateTypes)
+      if(templated.nonEmpty)
+       (funEnv, f)
+      else
+       {
       val inEnv = f.args.foldLeft[Environment[Id, Type]](funEnv)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
-      val hash = mutable.HashMap.from(subst)
-      val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash)))
-      (funEnv, newFunc)
+
+        val hash = mutable.HashMap.from(subst)
+        val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash, templated)))
+        (funEnv, newFunc)
+       }
+
+     }
+
+    private var unique_count = 0
+    private def uniquify_gen(value: Type) :Type = value match {
+     case TNamedType(name) if is_generic(name) =>  TNamedType(Id(name + unique_count.toString)).copyMeta(value)
+     case TBitWidthVar(name) if is_generic(name) => TBitWidthVar(Id(name + unique_count.toString)).copyMeta(value)
+     case s@TSizedInt(len, _) => s.copy(len = uniquify_gen(len).asInstanceOf[TBitWidth]).copyMeta(value)
+     case _ => value
+    }
+
+    private def uniqueify_fun(t : TFun) :TFun =
+     {
+      unique_count += 1
+      TFun(ret = uniquify_gen(t.ret), args = t.args.map(uniquify_gen))
      }
 
     /** INVARIANTS
@@ -341,6 +368,7 @@ object TypeInferenceWrapper
       val typ = lhs.typ
       val (slhs, tlhs, lhsEnv) = (List(), typ.getOrElse(generateTypeVar()), env)
       val (srhs, trhs, rhsEnv, rhsFixed) = infer(lhsEnv, rhs)
+      println(s"rhs type: $trhs")
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
       val rhstyp = apply_subst_typ(tempSub, trhs)
@@ -585,18 +613,21 @@ object TypeInferenceWrapper
         val fixed1 = if (cast) ECast(retTyp, fixed) else fixed
         (retSubst, retTyp, env1.apply_subst_typeenv(retSubst), u.copy(ex = fixed1).copyMeta(u))
        case b@EBinop(op, e1, e2) =>
-
+        //we gotta do something here to test for generics...
         val (s1, t1, env1, fixed1) = infer(env, e1)
         val (s2, t2, env2, fixed2) = infer(env1, e2)
+        println(s"original: $t1, $t2")
         val retType = generateTypeVar()
         val subTemp = compose_subst(s1, s2)
         val t1New = apply_subst_typ(subTemp, t1)
         val t2New = apply_subst_typ(subTemp, t2)
+        println(s"new: $t1New, $t2New")
         val (subst, _) = unify(TFun(List(t1New, t2New), retType), binOpExpectedType(op), binop = true)
         val retSubst = compose_many_subst(subTemp, subst)
         val retTyp = apply_subst_typ(retSubst, retType)
         val t1VNew = apply_subst_typ(retSubst, t1New)
         val t2VNew = apply_subst_typ(retSubst, t2New)
+        println(s"vNew: $t1VNew, $t2VNew, $retTyp")
         val (castL, castR) = binOpTypesFromRet(op, retTyp, t1VNew, t2VNew)
         val moreFixed1 = castL match
         {
@@ -652,7 +683,7 @@ object TypeInferenceWrapper
         val retSubst = compose_many_subst(sc, st, sf, substc, subst)
         val retType = apply_subst_typ(retSubst, ttNew)
         (retSubst, retType, env3.apply_subst_typeenv(retSubst), trn.copy(cond = fixed_cond, tval = fixed_tval1, fval = fixed_fval1).copyMeta(trn))
-       case ap@EApp(func, args) => val expectedType = env(func).asInstanceOf[TFun]
+       case ap@EApp(func, args) => val expectedType = uniqueify_fun(env(func).asInstanceOf[TFun])
         val retType = generateTypeVar()
         var runningEnv: TypeEnv = env
         var runningSubst: Subst = List()
