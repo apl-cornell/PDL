@@ -8,7 +8,7 @@
  `define BSV_RESET_VALUE 1
 `endif
 
-module RenameRF(CLK,
+module CheckpointRenameRF(CLK,
 		RST,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //rename req
 		ADDR_1, NAME_OUT_1,                      //read name 1
@@ -168,8 +168,8 @@ module RenameRF(CLK,
    //Read/alloc names
    assign ALLOC_READY = nextNameValid;
    assign NAME_OUT = nextName;
-   assign NAME_OUT_1 = names[ADDR1 +: name_width];   
-   assign NAME_OUT_2 = names[ADDR2 +: name_width];   
+   assign NAME_OUT_1 = names[(ADDR_1 * name_width) +: name_width];   
+   assign NAME_OUT_2 = names[(ADDR_2 * name_width) +: name_width];   
 
    //Read data
    assign D_OUT_1 = phys[NAME_1];
@@ -219,6 +219,7 @@ module RenameRF(CLK,
    always@(posedge CLK)
      begin
 	$display("FreeList %b", free);
+	$display("Names %b", names);	
      end
    `endif   
    //update my stateful elements
@@ -231,7 +232,7 @@ module RenameRF(CLK,
 	  `endif
 	  for (initi = lo_arch; initi <= hi_arch; initi = initi + 1)
 	    begin
-	       names[initi +: name_width] <= initi;
+	       names[(initi * name_width) +: name_width] <= initi;
 	       free[initi] <= 0;
 	       busy[initi] <= 0;	       
 	    end
@@ -271,8 +272,8 @@ module RenameRF(CLK,
 	    begin
 	       busy[nextName] <= `BSV_ASSIGNMENT_DELAY 1;
 	       free[nextName] <= `BSV_ASSIGNMENT_DELAY 0;
-	       old[nextName] <= `BSV_ASSIGNMENT_DELAY names[ADDR_IN +: name_width];
-	       names[ADDR_IN +: name_width] <= `BSV_ASSIGNMENT_DELAY nextName;	     
+	       old[nextName] <= `BSV_ASSIGNMENT_DELAY names[(ADDR_IN * name_width) +: name_width];
+	       names[(ADDR_IN * name_width) +: name_width] <= `BSV_ASSIGNMENT_DELAY nextName;	     
 	    end
 	  if (WE_1)
 	    begin

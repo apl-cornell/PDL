@@ -5,10 +5,12 @@ import FIFOF :: *;
 import RWire :: *;
 
 export RenameRF(..);
+export CheckpointRF(..);
 export BypassRF(..);
 export BHT(..);
 export mkRenameRF;
 export mkForwardRenameRF;
+export mkCheckpointRF;
 export mkBypassRF;
 export mkNBFIFOF;
 export mkBHT;
@@ -126,7 +128,7 @@ import "BVI" ForwardRenameRF =
     
  endmodule
 
-import "BVI" CheckpointRF =
+import "BVI" CheckpointRenameRF =
  module mkCheckpointRF#(Integer aregs, Integer pregs, Integer replicas, Bool init, String fileInit)(CheckpointRF#(addr, elem, name, cid)) provisos
     (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bits#(cid, szCid), Bounded#(name),
      PrimIndex#(addr, an), PrimIndex#(name, nn));
