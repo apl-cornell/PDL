@@ -430,7 +430,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     }
   }
 
-lazy val genericName :P[Id] = iden ^^ {i => Id(i.v + generic_type_prefix)}
+lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
 
   lazy val fdef: P[FuncDef] = positioned {
     "def" ~> iden ~ angular(repsep(genericName, ",")).? ~ parens(repsep(param, ",")) ~ ":" ~ (typ) ~ braces(cmd) ^^ {

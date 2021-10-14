@@ -124,7 +124,10 @@ object TypeInferenceWrapper
      case TBitWidthVar(name) => tp_mp.get(name) match
      {
       case Some(value) => type_subst_map(value, tp_mp, templated)
-      case None => throw IntWidthNotSpecified()
+      case None =>
+       println(s"couldn't find $name")
+       println(templated)
+       throw IntWidthNotSpecified()
      }
      case _ => t
     }
@@ -197,7 +200,7 @@ object TypeInferenceWrapper
       val funType = TFun(inputTypes, f.ret)
       val funEnv = env.add(f.name, funType)
       val templated = mutable.HashSet.from(f.templateTypes)
-      if(templated.nonEmpty)
+      if(templated.nonEmpty && false)
        (funEnv, f)
       else
        {
@@ -368,7 +371,7 @@ object TypeInferenceWrapper
       val typ = lhs.typ
       val (slhs, tlhs, lhsEnv) = (List(), typ.getOrElse(generateTypeVar()), env)
       val (srhs, trhs, rhsEnv, rhsFixed) = infer(lhsEnv, rhs)
-      println(s"rhs type: $trhs")
+      println(s"$rhs : rhs type: $trhs")
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
       val rhstyp = apply_subst_typ(tempSub, trhs)
@@ -387,6 +390,7 @@ object TypeInferenceWrapper
       }
       lhs.typ = Some(lhstyp)
       rhs.typ = Some(rhstyp)
+      println(s"decided lhs = $lhstyp, rhs = $rhstyp")
       (ca.copy(rhs = rhsFixed1).copyMeta(ca), newEnv.asInstanceOf[TypeEnv].apply_subst_typeenv(sret), sret)
      case cs@CSeq(c1, c2) => val (fixed1, e1, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e1, s)
@@ -397,7 +401,8 @@ object TypeInferenceWrapper
     /** for subtyping bit widths, t1 is the subtype, t2 is the supertype. so t2 is the expected private */
     def unify(a: Type, b: Type, binop: bool = false): (Subst, bool) =
      {
-      (a, b) match
+     // println(s"unifying $a and $b")
+      val ret = (a, b) match
       {
        case (t1: TNamedType, t2) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
        case (t1, t2: TNamedType) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
@@ -442,6 +447,8 @@ object TypeInferenceWrapper
         (compose_subst(s2, s3), c2 || c3)
        case (TMemType(elem1, addr1, rl1, wl1, rp1, wp1), TMemType(elem2, addr2, rl2, wl2, rp2, wp2)) => if (addr1 != addr2 || rl1 != rl2 || wl1 != wl2 || rp1 < rp2 || wp1 < wp2) throw UnificationError(a, b)
         unify(elem1, elem2)
+       case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_generic(t2) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
+       case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_generic(t1) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
        case (t1: TBitWidthVar, t2: TBitWidth) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
        case (t1: TBitWidth, t2: TBitWidthVar) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
        case (TBitWidthAdd(a1: TBitWidthLen, a2), TBitWidthLen(len)) => unify(a2, TBitWidthLen(len - a1.len), binop)
@@ -465,6 +472,8 @@ object TypeInferenceWrapper
         }
        case _ => throw UnificationError(a, b)
       }
+    //  println(s"$a u $b to $ret")
+      ret
      }
 
     private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type], CirExpr) = c match
@@ -614,6 +623,7 @@ object TypeInferenceWrapper
         (retSubst, retTyp, env1.apply_subst_typeenv(retSubst), u.copy(ex = fixed1).copyMeta(u))
        case b@EBinop(op, e1, e2) =>
         //we gotta do something here to test for generics...
+        println("got here")
         val (s1, t1, env1, fixed1) = infer(env, e1)
         val (s2, t2, env2, fixed2) = infer(env1, e2)
         println(s"original: $t1, $t2")
