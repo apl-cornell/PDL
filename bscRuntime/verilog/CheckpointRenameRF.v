@@ -189,8 +189,9 @@ module CheckpointRenameRF(CLK,
 	currentFreeSnapshot = free;
 	if (ALLOC_E && nextNameValid) //add
 	  begin
-	     currentNameSnapshot[ADDR_IN +: name_width] = nextName;	     
-	  end
+	     currentNameSnapshot[(ADDR_IN * name_width) +: name_width] = nextName;
+	     currentFreeSnapshot[nextName] = 0;	     
+	  end	
 	if (FE)
 	  begin
 	     currentFreeSnapshot[oldName] = 1;	     
@@ -215,11 +216,15 @@ module CheckpointRenameRF(CLK,
 	  end
      end
    
-   `ifdef DEBUG
+`ifdef DEBUG
+   integer debugi;   
    always@(posedge CLK)
      begin
 	$display("FreeList %b", free);
-	$display("Names %b", names);	
+	for (debugi = lo_arch; debugi <= hi_arch; debugi = debugi + 1)
+	  begin
+	     $display("%d -> %d", debugi, names[(debugi * name_width) +: name_width]);	     
+	  end
      end
    `endif   
    //update my stateful elements
