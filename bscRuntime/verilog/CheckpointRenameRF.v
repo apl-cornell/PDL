@@ -119,6 +119,8 @@ module CheckpointRenameRF(CLK,
 
    //replica free list
    reg [num_replicas - 1 : 0] freeReplicas;
+   reg [num_replicas - 1 : 0] nextFreeReplicas;   
+   
    reg [replica_width - 1 : 0] nextReplica;   
    reg 			      nextReplicaValid;
    integer 		      jj = 0;
@@ -161,6 +163,28 @@ module CheckpointRenameRF(CLK,
 	     end
 	end
    end
+
+   always@(*)
+     begin
+	if (ROLLBK_E)
+	  begin
+	     case ({DO_REL, DO_ROLL})
+	       2'b00 : nextFreeReplicas = freeReplicas;	       
+	       2'b01 : nextFreeReplicas =  ~(1 << ROLLBK_IN); // free everything but ROLLBK_IN
+	       2'b10 : nextFreeReplicas =  freeReplicas | (1 << ROLLBK_IN);  //only free ROLLBK_IN
+	       2'b11 : nextFreeReplicas =  ~0; // free everything
+	     endcase // case ({DO_REL, DO_ROLL})	     
+	  end
+	else
+	  begin
+	     nextFreeReplicas = freeReplicas;	     
+	  end // else: !if(ROLLBK_E)
+	if (CHK_E & nextReplicaValid)
+	  begin
+	     nextFreeReplicas[nextReplica] = 0;	     
+	  end	
+     end // always@ begin
+   
    assign CHK_READY = nextReplicaValid;
    assign CHK_OUT = nextReplica;
    
@@ -190,14 +214,14 @@ module CheckpointRenameRF(CLK,
 	if (ALLOC_E && nextNameValid) //add
 	  begin
 	     currentNameSnapshot[(ADDR_IN * name_width) +: name_width] = nextName;
-	     currentFreeSnapshot[nextName] = 0;	     
+	     currentFreeSnapshot[nextName] = 0;
+	     //no alloc and RB at same time
 	  end	
 	if (FE)
 	  begin
-	     currentFreeSnapshot[oldName] = 1;	     
+	     currentFreeSnapshot[oldName] = 1;
 	  end
-     end // always@ begin
-   
+     end // always@ begin   
 
    integer 		       initi;
    integer 		       initf;
@@ -252,28 +276,18 @@ module CheckpointRenameRF(CLK,
        end
      else
        begin
-	  if (ROLLBK_E) //cannot rollbk AND checkpoint in same cycle -- assume not called
+	  //ROLLBK_E & DO_ROLL => !CHK_E & !ALLOC_E
+	  if (ROLLBK_E | (CHK_E & nextReplicaValid))
 	    begin
-	       case ({DO_REL, DO_ROLL})
-		 2'b00 : freeReplicas <= `BSV_ASSIGNMENT_DELAY freeReplicas; //shouldn't be called, just NOP
-		 2'b01 : freeReplicas <= `BSV_ASSIGNMENT_DELAY ~(1 << ROLLBK_IN); // free everything but ROLLBK_IN
-		 2'b10 : freeReplicas <= `BSV_ASSIGNMENT_DELAY freeReplicas | (1 << ROLLBK_IN);  //only free ROLLBK_IN
-		 2'b11 : freeReplicas <= `BSV_ASSIGNMENT_DELAY ~0; // free everything
-	       endcase // case ({DO_REL, DO_ROLL})
-	       if (DO_ROLL)
-		 begin //update the current mapping table & freelist
-		    free <= `BSV_ASSIGNMENT_DELAY free_copies[ROLLBK_IN];
-		    names <= `BSV_ASSIGNMENT_DELAY name_copies[ROLLBK_IN];
-		 end
-	    end	  
-	  if (CHK_E & nextReplicaValid) //assume this and rollbk not called together
+	       freeReplicas <= `BSV_ASSIGNMENT_DELAY nextFreeReplicas;
+	    end
+	  if (CHK_E & nextReplicaValid)
 	    begin
-	       freeReplicas[nextReplica] <= `BSV_ASSIGNMENT_DELAY 0;
 	       //copy current state to replica
 	       name_copies[nextReplica] <= `BSV_ASSIGNMENT_DELAY currentNameSnapshot;
 	       free_copies[nextReplica] <= `BSV_ASSIGNMENT_DELAY currentFreeSnapshot;	       
 	    end
-	  if (ALLOC_E && nextNameValid)
+	  if (ALLOC_E && nextNameValid) //cannot run with ROLLBK_E & DO_ROLL
 	    begin
 	       busy[nextName] <= `BSV_ASSIGNMENT_DELAY 1;
 	       free[nextName] <= `BSV_ASSIGNMENT_DELAY 0;
@@ -290,9 +304,14 @@ module CheckpointRenameRF(CLK,
 	       phys[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY D_IN_2;
 	       busy[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY 0;	     
 	    end	  
-	  if (FE)
+	  if (ROLLBK_E && DO_ROLL)
 	    begin
-	       free[oldName] <= `BSV_ASSIGNMENT_DELAY 1;	     
+	       names <= `BSV_ASSIGNMENT_DELAY name_copies[ROLLBK_IN];	       
+	       free <= `BSV_ASSIGNMENT_DELAY free_copies[ROLLBK_IN] | (FE << oldName) | free;	       	      
+	    end
+	  else if (FE)
+	    begin
+	       free[oldName] <= `BSV_ASSIGNMENT_DELAY 1;	       
 	    end
        end // else: !if(RST)
      end // always@ (posedge CLK)
