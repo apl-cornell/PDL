@@ -52,15 +52,16 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
 
   /**
    * Speculation for the current thread must be completely resolved (via a blocking speccheck)
-   * before any of the following commands are executed:
-   *  - Writes to memories (CRECV with memories on LHS)
+   * before any of the following commands are executed
    *  (TODO we can move this into nb. check once we update lock libraries)
    *  - Releasing any Write locks
+   *  - Unlocked Memory Writes
    *  - Updating the results of speculation made by this thread (CVerify)
    *
    *  The current stage must have a non-blocking spec check to run the following commands:
    *  - Lock reservation
    *  - Speculative Calls
+   *  - Locked Memory Writes (Reads??)
    *
    * @param c The command to check
    * @param s The speculative state of this thread at command c
@@ -84,10 +85,19 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         if (sco != sdef) { throw MismatchedSpeculationState(co.body.pos) }
       })
       sdef
+      //only allow locked writes speculatively
+      //and those must not definitely be misspeculated
     case CRecv(lhs, _) => lhs match {
         //just match on mem writes
-      case _ :EMemAccess => if (s != NonSpeculative)
-        throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
+        //must be nonspeculative if unlocked, else must be at least not definitely misspeculated
+      case EMemAccess(m, _, _ ,_ ,_, _) =>
+        if (s != NonSpeculative && !isLockedMemory(m)) {
+          throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
+        }
+        if (s == Unknown && isLockedMemory(m)) {
+          throw IllegalSpeculativeOperation(lhs.pos, Speculative.toString)
+        }
+        ()
       case _ => ()
     }; s
     case CSpecCall(_, _, _) if s == Unknown =>
@@ -103,11 +113,13 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case COutput(_) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
     case CLockStart(_) => s //this should be OK to do speculatively or not
-    case CLockEnd(_) => s //same
-      //can only release READ-ONLY locks non-speculatively
+    case CLockEnd(_) => s //TODO technically we still need to introduce the code to release this if the thread is killed
+      //can only release READ-ONLY locks speculatively
+      //any lock that _might_ allow writes needs to be Non-Speculatively
     case CLockOp(_, op, t, _, _) if op == Released && (t.isEmpty || t.get == LockWrite ) && s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-    case CLockOp(_, op, _, _, _)  if op == Reserved && s == Unknown=>
+      //must not be definitely misspeculated to reserve, regardless of type
+    case CLockOp(_, op, _, _, _)  if op == Reserved && s == Unknown =>
       throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
     case _ => s
   }
