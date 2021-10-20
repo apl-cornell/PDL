@@ -1,0 +1,68 @@
+pipe testwrite(pc: int<8>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<32>[8]<a1,a1>]: bool {
+     spec_check();
+     start(imem);
+     int<32> insn <- imem[cast(pc, uint<8>)];
+     end(imem);
+     s <- speccall testwrite(pc + 1);
+     ---
+     spec_check();
+     done = (insn{31:31} == 1<1>);
+     int<1> op = insn{0:0};
+     int<8> brImm = 0<4> ++ insn{4:1};
+     uint<5> rs1 = cast(insn{9:5}, uint<5>);
+     uint<5> rs2 = cast(insn{14:10}, uint<5>);
+     uint<5> rd = cast(insn{19:15}, uint<5>);     
+     if (!done) {
+     	  start(rf);
+	  a1 = rf<a>[rs1];
+	  a2 = rf<a>[rs2];	  
+     	  if (op == 0<1>) {
+     	     reserve(rf[rd], W);
+     	  }
+     	  end(rf); //need checkpoint here
+     } else {
+       int<32> a1 = 0;
+       int<32> a2 = 0;
+       invalidate(s);       
+     }
+     ---
+     spec_check();
+     int<32> out = a1 + a2;     
+     if (!done) {
+     	  if (op == 0<1>) {
+             block(rf[rd]);
+             rf[rd] <- out;
+     	  }
+     }     
+     ---
+     ---
+     spec_barrier();
+     if (!done) { 
+     	  if (op != 0<1>) {	  
+       	     int<8> npc = (a1 == a2) ? (pc + brImm) : (pc + 1<8>);
+	     print(npc);
+	     verify(s, npc);
+     	  } else {
+     	    verify(s, pc + 1<8>);
+     	  }
+     }
+     ---
+     if (!done) {
+     	if (op == 0<1>) {
+	  print(out);
+      	  release(rf[rd]);
+	}
+     }
+     ---
+     if (done) {
+       output(true);
+     }
+}
+
+circuit {
+ ti = memory(int<32>, 8);
+ rename = regfile(int<32>, 5);
+ qrf = CheckpointQueue(rename);
+ t = new testwrite[qrf, ti];
+ call t(0<8>);	
+}
