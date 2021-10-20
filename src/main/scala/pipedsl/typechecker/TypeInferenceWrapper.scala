@@ -288,7 +288,7 @@ object TypeInferenceWrapper
      case CCheckSpec(_) => (c, env, sub)
      case _: CVerify => (c, env, sub)
      case _: CUpdate => (c, env, sub)
-     case CInvalidate(_) => (c, env, sub)
+     case CInvalidate(_, _) => (c, env, sub)
      case ct@CTBar(c1, c2) => val (fixed1, e, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e, s)
       (ct.copy(c1 = fixed1, c2 = fixed2).copyMeta(ct), e2, s2)

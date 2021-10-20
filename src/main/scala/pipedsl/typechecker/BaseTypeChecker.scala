@@ -322,11 +322,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             }
           }
       }
-    case CVerify(handle, args, preds, upd) =>
+    case CVerify(handle, args, preds, upd, cHandles) =>
       //if there's an update clause check that stuff:
       if (upd.isDefined) {
         checkExpression(upd.get, tenv, None)
       }
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -358,8 +364,14 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           tenv
       }
-    case CUpdate(newHandle, handle, args, preds) =>
+    case CUpdate(newHandle, handle, args, preds, cHandles) =>
       //TODO solve the fact that this is just verify copypasta-ed
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -393,11 +405,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           newHandle.id.typ = Some(htyp)
           tenv.add(newHandle.id, htyp)
       }
-    case CInvalidate(handle) =>
+    case CInvalidate(handle, cHandles) =>
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
         case TRequestHandle(_, RequestType.Speculation) => ()
       }
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       tenv
     case CCheckSpec(_) => tenv
     case CCheckpoint(handle, mod) => tenv(mod).matchOrError(mod.pos, "lock checkpoint", "Locked Memory or Module Type")

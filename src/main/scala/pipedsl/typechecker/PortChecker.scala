@@ -207,7 +207,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           c.portNum = Some(ret(pipe)._1)
           ret
       }
-    case CVerify(_, args,_, _) =>
+    case CVerify(_, args,_, _, _) =>
       args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
      case COutput(exp) => checkExpr(exp, env, start_env)
     case CReturn(exp) => checkExpr(exp, env, start_env)

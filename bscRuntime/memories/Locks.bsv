@@ -32,7 +32,7 @@ interface CheckpointQueueLock#(type id, type cid);
    method Bool isEmpty();
    method Bool canRes1();
    method ActionValue#(cid) checkpoint();
-   method Action rollback(cid id);
+   method Action rollback(cid id, Bool doRoll, Bool doRel);
 endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
@@ -181,10 +181,14 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
       return nextId[1];
    endmethod
    
-   method Action rollback(LockId#(d) i);
+   method Action rollback(LockId#(d) i, Bool doRoll, Bool doRollRel);
+      //rollback release is noop
       //conflicts with other update rules - cannot res/rel and rollback
-      nextId[0] <= i;
-      empty <= i == owner; //if i is Owner, then this is actually empty after rollback
+      if (doRoll)
+	 begin
+	    nextId[0] <= i;
+	    empty <= i == owner; //if i is Owner, then this is actually empty after rollback
+	 end
    endmethod   
    
 endmodule

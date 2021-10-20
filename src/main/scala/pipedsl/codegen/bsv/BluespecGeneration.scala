@@ -1042,13 +1042,13 @@ object BluespecGeneration {
           val relMethod = translateMethod(modParams(mem.id), mi.get)
           Some(BExprStmt(relMethod))
         } else { None }
-      case CUpdate(_, _, _, _) => None
+      case CUpdate(_, _, _, _,_) => None
       case CLockStart(_) => None
       case CLockEnd(_) => None
       case CLockOp(_, _, _, _, _) => None
       case CSpecCall(_, _, _) => None
-      case CVerify(_, _, _, _) => None
-      case CInvalidate(_) => None
+      case CVerify(_, _, _, _,_) => None
+      case CInvalidate(_,_) => None
       case CCheckSpec(_) => None
       case CEmpty() => None
       case _: IUpdate => None
@@ -1118,7 +1118,7 @@ object BluespecGeneration {
         Some(BDecl(translator.toVar(memHandle), None))
       case CSpecCall(handle, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
-      case CUpdate(newHandle, _, _, _) =>
+      case CUpdate(newHandle, _, _, _,_) =>
         Some(BDecl(translator.toVar(newHandle), None))
       case _ => None
     }
@@ -1244,18 +1244,30 @@ object BluespecGeneration {
         val allocExpr = bsInts.getSpecAlloc(specTable)
         val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
         Some(BStmtSeq(allocAssign +: sendStmts))
-      case CVerify(handle, args, preds, upd) =>
+      case CVerify(handle, args, preds, upd, cHandles) =>
         val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
           val a = l._1
           val p = l._2
           BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
         })
+        //TODO extract into function
+        val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = true)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+        })
+        val releases = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = false, doRelease = true)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+        })
         val updCmd = translator.toExpr(upd)
         val specCmd = BIf(correct,
           //true branch, just update spec table
-          List(BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle), stgSpecOrder))),
+          BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle), stgSpecOrder)) +: releases,
           //false branch, update spec table _and_ resend call with correct arguments
-          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder)) +: sendToModuleInput(args)
+          (BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder)) +:
+            sendToModuleInput(args)) ++ rollbacks
         )
         Some(if (updCmd.isDefined) {
           BStmtSeq(List(BExprStmt(updCmd.get), specCmd))
@@ -1263,11 +1275,17 @@ object BluespecGeneration {
           specCmd
         })
         //if args != preds -> do spec invalidate and speccall, reassign handle and predictions
-      case CUpdate(nh, handle, args, preds) =>
+      case CUpdate(nh, handle, args, preds, cHandles) =>
         val incorrect = args.zip(preds).foldLeft[BExpr](BBoolLit(false))((b, l) => {
           val a = l._1
           val p = l._2
           BBOp("||", b, BBOp("!=", translator.toExpr(a), translator.toExpr(p)))
+        })
+        //rollback when invalidating
+        val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = false)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
         })
         //order update invalidate AFTER a CInvalidate or CVerify command
         val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder))
@@ -1278,10 +1296,16 @@ object BluespecGeneration {
         val allocAssign = BInvokeAssign(translator.toVar(nh), allocExpr)
         //if correct then copy handle over
         val copyHandle = BAssign(translator.toVar(nh), translator.toExpr(handle))
-        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts, List(copyHandle)))
+        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts ++ rollbacks, List(copyHandle)))
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
-      case CInvalidate(handle) => Some(BExprStmt(
-        bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder)))
+      case CInvalidate(handle, cHandles) =>
+        val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = true)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+        })
+        Some(BStmtSeq(rollbacks :+
+          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder))))
         //only free speculation entries for the blocking call
         //but do so conditionally based on being Speculative at all
       case CCheckSpec(isBlocking) if isBlocking =>

@@ -265,6 +265,17 @@ object LockImplementation {
     }
   }
 
+  def getRollbackInfo(mem: Id, cid: EVar, doRollback: Boolean, doRelease: Boolean): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getRollback(interface) match {
+      case Some(_) =>
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + rollbackName
+        //TODO do we put the booleans in as named arguments too? kinda unnecessary
+        Some(MethodInfo(methodName, doesModify = true, List(cid, EBool(doRollback), EBool(doRelease))))
+      case None => None
+    }
+  }
+
   private def extractHandle(h: Expr): Expr = {
     val e = EFromMaybe(h).setPos(h.pos)
     e.typ = h.typ.get.matchOrError(h.pos, "Lock Handle", "Maybe type") {

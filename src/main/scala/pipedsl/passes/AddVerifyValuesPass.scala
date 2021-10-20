@@ -44,13 +44,13 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
       })
       val newSpec = CSpecCall(handle, p, assgnCmds._2).setPos(c.pos)
       (CSeq(assgnCmds._1, newSpec), env + (handle.id -> assgnCmds._2))
-    case CVerify(handle, args, _, upd) =>
+    case CVerify(handle, args, _, upd, cHandles) =>
       if (!env.contains(handle.id)) {
         throw MissingPredictionValues(c.pos, handle.id.v)
       }
-      val nc = CVerify(handle, args, env(handle.id), upd).setPos(c.pos)
+      val nc = CVerify(handle, args, env(handle.id), upd, cHandles).setPos(c.pos)
       (nc, env)
-    case CUpdate(nh, handle, args, _) =>
+    case CUpdate(nh, handle, args, _, cHandles) =>
       if (!env.contains(handle.id)) {
         throw MissingPredictionValues(c.pos, handle.id.v)
       }
@@ -62,7 +62,7 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
         val args = cm._2
         ( CSeq(priorCmds, assgn).setPos(c.pos), args :+ assgn.lhs )
       })
-      val nc = CUpdate(nh, handle, assgnCmds._2, env(handle.id)).setPos(c.pos)
+      val nc = CUpdate(nh, handle, assgnCmds._2, env(handle.id), cHandles).setPos(c.pos)
       (CSeq(assgnCmds._1, nc), env + (nh.id -> assgnCmds._2))
     case CSplit(cases, default) =>
       val venvs = cases.foldLeft(List[(CaseObj, VEnv)]())((l, b) => {

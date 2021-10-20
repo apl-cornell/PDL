@@ -105,11 +105,11 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CCheckSpec(isBlocking) => if (s != Unknown)  throw IllegalSpeculativeOperation(c.pos, Unknown.toString)
       if (isBlocking) { NonSpeculative }
       else { Speculative }
-    case CVerify(_, _, _,_) if s != NonSpeculative =>
+    case CVerify(_, _, _,_, _) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-    case CUpdate(_, _, _, _) if s == Unknown =>
+    case CUpdate(_, _, _, _, _) if s == Unknown =>
       throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
-    case CInvalidate(_) => s // can always invalidate speculation
+    case CInvalidate(_, _) => s // can always invalidate speculation
     case COutput(_) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
     case CLockStart(_) => s //this should be OK to do speculatively or not
@@ -135,11 +135,11 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       })
     case CSpecCall(handle, _, _) =>
       env + handle.id
-    case CVerify(handle, _, _, _) =>
+    case CVerify(handle, _, _, _, _) =>
       env + handle.id
-    case CUpdate(nh, handle, _, _) =>
+    case CUpdate(nh, handle, _, _, _) =>
       env + handle.id + nh.id
-    case CInvalidate(handle) =>
+    case CInvalidate(handle, _) =>
       env + handle.id
     case _ => env
   }
@@ -168,17 +168,17 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       checkResolved(handle.id, env, c.predicateCtx.get, expected = INIT)
       env.add(handle.id,
       mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = STARTED)))
-    case CVerify(handle, _, _, _) =>
+    case CVerify(handle, _, _, _, _) =>
       checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
       env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
-    case CUpdate(nh, handle, _, _) =>
+    case CUpdate(nh, handle, _, _, _) =>
       //"reolves" the current spec but starts a new one
       checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
       checkResolved(nh.id, env, c.predicateCtx.get, expected = INIT)
       env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED))).add(
         nh.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(nh.id, state = STARTED))
       )
-    case CInvalidate(handle) =>
+    case CInvalidate(handle, _) =>
       checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
       env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
     case _ => env

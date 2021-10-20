@@ -79,8 +79,8 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     case CRecv(lhs, rhs) =>
       CRecv(modifyMemArg(lhs, isLhs = true), modifyMemArg(rhs, isLhs = false)).copyMeta(c)
     case CSpecCall(handle, pipe, args) => CSpecCall(handle, pipe, args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
-    case CVerify(handle, args, preds, update) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall])).copyMeta(c)
-    case CUpdate(newHandle, handle, args, preds) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds).copyMeta(c)
+    case CVerify(handle, args, preds, update, cHandles) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall]), cHandles).copyMeta(c)
+    case CUpdate(newHandle, handle, args, preds, cHandles) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds, cHandles).copyMeta(c)
     case CPrint(args) => CPrint(args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
     case COutput(exp) =>  COutput(modifyMemArg(exp, isLhs = false)).copyMeta(c)
     case CReturn(exp) => CReturn(modifyMemArg(exp, isLhs = false)).copyMeta(c)

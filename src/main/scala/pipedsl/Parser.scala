@@ -287,13 +287,13 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
         CSpecCall(sv, i, args)
     } |
     iden ~ "<-" ~ "update" ~ parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
-      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List()) }
+      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List(), List()) }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
     "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
-      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
-    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
+      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u, List()) } |
+    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i, List()))
   }
 
   lazy val casestmt: P[CaseObj] = positioned {
