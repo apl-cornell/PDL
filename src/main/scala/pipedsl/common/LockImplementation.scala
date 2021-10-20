@@ -10,6 +10,9 @@ object LockImplementation {
 
   sealed case class MethodInfo(name: String, doesModify: Boolean, usesArgs: List[Expr])
 
+  val defaultLockHandleSize = 4
+  val defaultChkHandleSize = 4
+
   private val lqueue = new LockQueue()
   private val falqueue = new FALockQueue()
   private val bypassQueue = new BypassQueue()
@@ -105,18 +108,16 @@ object LockImplementation {
     l.getType.methods.get(getBlockName(l, op, isAtomic))
   }
 
-  private def getAccessName(l:  LockInterface, op: Option[LockType], isAtomic: Boolean = false): Id = l.granularity match {
-    case Locks.Specific =>
+  private def getAccessName(op: Option[LockType], isAtomic: Boolean = false): Id = {
       Id(op match {
         case Some(Syntax.LockRead) => if (isAtomic) atomicReadName else readName
         case Some(Syntax.LockWrite) => if (isAtomic) atomicWriteName else writeName
         case None => if (isAtomic) atomicAccessName else accessName
       })
-    case Locks.General => Id(if (isAtomic) atomicAccessName else accessName)
   }
 
   def getAccess(l: LockInterface, op: Option[LockType], isAtomic: Boolean = false): Option[(TFun, Latency)] = {
-    l.getType.methods.get(getAccessName(l, op, isAtomic))
+    l.getType.methods.get(getAccessName(op, isAtomic))
   }
 
   private def getReleaseName(l:  LockInterface, op: Option[LockType]): Id = l.granularity match {
@@ -131,6 +132,15 @@ object LockImplementation {
 
   def getRelease(l: LockInterface, op: Option[LockType]): Option[(TFun, Latency)] = {
     l.getType.methods.get(getReleaseName(l, op))
+  }
+
+  def supportsCheckpoint(l: LockInterface): Boolean = getCheckpoint(l).isDefined
+  def getCheckpoint(l: LockInterface): Option[(TFun, Latency)] = {
+    l.getType.methods.get(Id(checkpointName))
+  }
+
+  def getRollback(l: LockInterface): Option[(TFun, Latency)] = {
+    l.getType.methods.get(Id(rollbackName))
   }
 
   //-------Methods for translation info--------------------------\\
@@ -209,7 +219,7 @@ object LockImplementation {
     getAccess(interface, Some(LockRead), isAtomic) match {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, Some(addr), inHandle)
-        val methodName = getAccessName(interface, Some(LockRead), isAtomic).v + toPortString(portNum)
+        val methodName = getAccessName(Some(LockRead), isAtomic).v + toPortString(portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
     }
@@ -219,7 +229,7 @@ object LockImplementation {
       val interface = getLockImplFromMemTyp(mem)
       val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
       val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
-      val methodName = getAccessName(interface, Some(LockWrite), isAtomic).v + toPortString(portNum)
+      val methodName = getAccessName(Some(LockWrite), isAtomic).v + toPortString(portNum)
       Some(MethodInfo(methodName, latency != Combinational, args))
   }
 
@@ -228,7 +238,7 @@ object LockImplementation {
     val interface = getLockImplFromMemTyp(mem)
     val (funTyp, _) = getAccess(interface, None, isAtomic).get
     val args = getArgs(funTyp, Some(addr), inHandle, data)
-    val methodName = getAccessName(interface, None, isAtomic).v + toPortString(portNum)
+    val methodName = getAccessName(None, isAtomic).v + toPortString(portNum)
     Some(MethodInfo(methodName, doesModify = true, args))
   }
 
@@ -375,6 +385,9 @@ object LockImplementation {
     //LSQ doesn't need a separate lock id so use this to differentiate
     def useUniqueLockId(): Boolean = true
 
+    def getLockIdSize: Int = defaultLockHandleSize
+    def getChkIdSize(lidSize: Int): Int = defaultChkHandleSize
+
     def getTypeArgs(szParams: List[Int]): List[Int] = List()
 
     def shortName: String
@@ -421,8 +434,11 @@ object LockImplementation {
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
   }
+
   private class CheckpointLockQueue extends LockQueue {
+
     private val queueLockName = Id("CheckpointQueueLock")
+
     override def getType: TObject = {
       val parent = super.getType
       TObject(queueLockName, List(),
@@ -432,6 +448,7 @@ object LockImplementation {
         )
       )
     }
+
     override def shortName: String = "CheckpointQueue"
 
     override def getModuleName(m: TMemType): String = queueLockName.v + getSuffix(m)
@@ -439,6 +456,9 @@ object LockImplementation {
     override def granularity: LockGranularity = General
 
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
+
+    //Checkpoint id must equal the lock id size
+    override def getChkIdSize(lidSize: Int): Int = lidSize
   }
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once

@@ -1,7 +1,7 @@
-pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<37>[8]<a1,a1>]: bool {
+pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<40>[8]<a1,a1>]: bool {
      spec_check();
      start(imem);
-     int<37> insn <- imem[cast(pc, uint<8>)];
+     int<40> insn <- imem[cast(pc, uint<8>)];
      end(imem);
      s <- speccall testwrite(pc + 1);
      ---
@@ -26,7 +26,7 @@ pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<37
 }
 
 circuit {
- ti = memory(int<37>, 8);
+ ti = memory(int<40>, 8);
  rf = regfile(int<32>, 5);
  qrf = CheckpointQueue(rf);
  t = new testwrite[qrf, ti];

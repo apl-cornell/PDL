@@ -2,6 +2,7 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
+import pipedsl.common.LockImplementation
 
 class BluespecInterfaces() {
 
@@ -82,17 +83,20 @@ class BluespecInterfaces() {
   private val fifoFirstMethodName = "first"
 
   private val lockHandleName = "LockId"
-  val defaultLockHandleSize = 4
+  private val chkpointHandleName = "LockId"
 
-  def getDefaultLockHandleType: BSizedType = getLockHandleType(defaultLockHandleSize)
+  def getDefaultLockHandleType: BSizedType = getLockHandleType(LockImplementation.defaultLockHandleSize)
+  def getDefaultChkHandleType: BSizedType = getChkHandleType(LockImplementation.defaultChkHandleSize)
 
   def getLockHandleType(sz: Integer): BSizedType = {
     BSizedType(lockHandleName, List(sz))
   }
+  def getChkHandleType(sz: Integer): BSizedType = {
+    BSizedType(chkpointHandleName, List(sz))
+  }
 
   private val lockRegionType = "Reg"
   private val lockRegionModule = "mkReg"
-  private val lockType = "Lock"
 
   def getLockRegionType: BInterface = {
     BInterface(lockRegionType, List(BVar("busy", BBool)))

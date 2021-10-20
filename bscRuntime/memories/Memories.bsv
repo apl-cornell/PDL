@@ -20,6 +20,7 @@ export BramPort2(..);
 export AsyncMem(..);
 export AsyncMem2(..);
 export QueueLockCombMem(..);
+export CheckpointQueueLockCombMem(..);
 export QueueLockAsyncMem(..);
 export QueueLockAsyncMem2(..);
 export BypassLockCombMem(..);
@@ -34,6 +35,7 @@ export mkBramPort2;
 export mkAsyncMem;
 export mkAsyncMem2;
 export mkQueueLockCombMem;
+export mkCheckpointQueueLockCombMem;
 export mkQueueLockAsyncMem;
 export mkQueueLockAsyncMem2;
 export mkFAAddrLockCombMem;
@@ -98,6 +100,17 @@ interface QueueLockCombMem#(type addr, type elem, type id);
    method elem read(addr a);
    method Action write(addr a, elem b);
    interface QueueLock#(id) lock;
+   method Bool canAtom_r1(addr a);
+   method Bool canAtom_r2(addr a);   
+   method elem atom_r(addr a);
+   method Bool canAtom_w1(addr a);
+   method Action atom_w(addr a, elem b);
+endinterface
+
+interface CheckpointQueueLockCombMem#(type addr, type elem, type id, type cid);
+   method elem read(addr a);
+   method Action write(addr a, elem b);
+   interface CheckpointQueueLock#(id, cid) lock;
    method Bool canAtom_r1(addr a);
    method Bool canAtom_r2(addr a);   
    method elem atom_r(addr a);
@@ -460,6 +473,42 @@ endmodule
 module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem, LockId#(d)) _unused_);
 
    QueueLock#(LockId#(d)) l <- mkQueueLock();
+   
+   interface lock = l;
+   
+   method elem read(addr a);
+      return rf.sub(a);
+   endmethod
+      
+   method Action write(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+   
+   method Bool canAtom_r1(addr a);
+      return l.isEmpty;
+   endmethod
+
+   method Bool canAtom_r2(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method elem atom_r(addr a);
+      return rf.sub(a);
+   endmethod
+ 
+   method Bool canAtom_w1(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method Action atom_w(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+  
+endmodule
+
+module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLockCombMem#(addr, elem, LockId#(d), LockId#(d)) _unused_);
+
+   CheckpointQueueLock#(LockId#(d), LockId#(d)) l <- mkCheckpointQueueLock();
    
    interface lock = l;
    
