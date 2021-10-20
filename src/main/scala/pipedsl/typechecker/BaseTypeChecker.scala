@@ -400,6 +400,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
       tenv
     case CCheckSpec(_) => tenv
+    case CCheckpoint(handle, mod) => tenv(mod).matchOrError(mod.pos, "lock checkpoint", "Locked Memory or Module Type")
+      {
+        case t: TLockedMemType => mod.typ = Some(t)
+      }
+      tenv.add(handle.id, handle.typ.get)
     case COutput(exp) => {
       checkExpression(exp, tenv, None)
       tenv

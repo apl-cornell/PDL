@@ -73,6 +73,7 @@ object Utilities {
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
         preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id + nh.id
     case CInvalidate(handle) => Set(handle.id)
+    case CCheckpoint(handle, _) => Set(handle.id)
     case CCheckSpec(_) => Set()
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)

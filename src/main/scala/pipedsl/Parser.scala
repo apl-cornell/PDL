@@ -263,8 +263,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val checkPoint: P[Command] = positioned {
-    iden ~ "<-" ~ "checkpoint" ~ parens(iden) ^^ {
-      case cid ~ _ ~ _ ~ lid => {
+   "checkpoint" ~> parens(iden) ^^ {
+      case lid => {
+        val cid = Id("_checkpoint_" + lid.v)
         val handleVar = EVar(cid)
         handleVar.typ = Some(TRequestHandle(lid, RequestType.Checkpoint))
         cid.typ = handleVar.typ

@@ -12,6 +12,7 @@ pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<40
      int<32> sdata = rf<a>[addr];
      reserve(rf[addr], W); //stupid to put here, but doing it just for the sake of things
      end(rf);
+     checkpoint(rf);
      wdata = data + sdata;     
      ---
      spec_check();

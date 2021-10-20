@@ -110,9 +110,11 @@ object BSVSyntax {
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TMaybe(btyp) => BMaybe(toType(btyp))
       case TRequestHandle(n, rtyp) => rtyp match {
-        case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType]=>
-          //These are passed in the modmap rather than the handle map
+        //These are passed in the modmap rather than the handle map
+        case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType] =>
             modmap(n)
+        case pipedsl.common.Syntax.RequestType.Checkpoint =>
+          lockIdToCheckId(modmap(n))
         //TODO allow this to be specified somewhere
         case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
         case _ => //pipedsl.common.Syntax.RequestType.Module =>

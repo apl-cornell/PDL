@@ -214,6 +214,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
         (vars, nextVars)
+      case CCheckpoint(handle,_) => (vars, nextVars + handle.id)
       case CCheckSpec(_) => (vars, nextVars)
       case COutput(exp) =>
         if (checkExpr(exp, vars) != Combinational) {

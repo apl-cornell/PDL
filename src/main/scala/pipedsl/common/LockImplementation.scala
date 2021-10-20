@@ -135,6 +135,7 @@ object LockImplementation {
   }
 
   def supportsCheckpoint(l: LockInterface): Boolean = getCheckpoint(l).isDefined
+
   def getCheckpoint(l: LockInterface): Option[(TFun, Latency)] = {
     l.getType.methods.get(Id(checkpointName))
   }
@@ -250,6 +251,16 @@ object LockImplementation {
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
           getReleaseName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
+      case None => None
+    }
+  }
+
+  def getCheckpointInfo(mem: Id): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getCheckpoint(interface) match {
+      case Some(_) =>
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + checkpointName
+        Some(MethodInfo(methodName, doesModify = true, List()))
       case None => None
     }
   }

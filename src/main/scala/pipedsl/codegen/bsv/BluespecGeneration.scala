@@ -67,17 +67,6 @@ object BluespecGeneration {
       fmap + (fdef.name -> translator.toFunc(fdef))
     })
 
-    //utility to check if this instantiates an async memory
-    private def isAsyncMem(c:CirExpr): Boolean = c match {
-      case CirMem(_, _, _) => true
-      case _ => false
-    }
-    //utility to check if this instantiates a (non-async memory) module
-    private def isModule(c:CirExpr): Boolean = c match {
-      case CirMem(_, _, _) => false
-      case _ => true
-    }
-
     // Given the circuit specification and module types:
     // generate the set of statements that instantiate the top level modules,
     // and add any new type bindings to the environment by instantiating the modules
@@ -1068,13 +1057,13 @@ object BluespecGeneration {
       case _: InternalCommand => None
       case COutput(_) => None
       case CPrint(_) => None
+      case CCheckpoint(_,_) => None
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
       case CTBar(_, _) => throw UnexpectedCommand(cmd)
       case CReturn(_) => throw UnexpectedCommand(cmd)
       case CSplit(_, _) => throw UnexpectedCommand(cmd)
-      case CCheckpoint(_,_) => throw UnexpectedCommand(cmd)
     }
 
     //Helper to accumulate geteffectdecl results into a single list
@@ -1124,6 +1113,7 @@ object BluespecGeneration {
           case Some(value) => Some(translator.toExpr(value))
           case None => None
         }))
+      case CCheckpoint(handle, _) => Some(BDecl(translator.toVar(handle), None))
       case IMemSend(memHandle, _, _, _, _, _, _, _) =>
         Some(BDecl(translator.toVar(memHandle), None))
       case CSpecCall(handle, _, _) =>
@@ -1237,6 +1227,13 @@ object BluespecGeneration {
         } else { None }
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
+      case CCheckpoint(handle, mod) =>
+        val methodInfo = LockImplementation.getCheckpointInfo(mod)
+        if (methodInfo.isDefined && methodInfo.get.doesModify) {
+          Some(
+            BAssign(translator.toVar(handle), translateMethod(modParams(mod), methodInfo.get))
+          )
+        } else { None }
       case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
