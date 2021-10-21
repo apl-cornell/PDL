@@ -67,8 +67,8 @@ object Utilities {
       mem_vars ++ arg_vars ++ ret_vars
     case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
     case CVerify(handle, args, preds, upd, cHandles) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
-      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++ cHandles.map(v => v.id)
-      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
+      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) ++ cHandles.map(v => v.id) + handle.id
     case CUpdate(nh, handle, args, preds, cHandles) =>
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
         preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id + nh.id ++ cHandles.map(v => v.id)
@@ -200,8 +200,8 @@ object Utilities {
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
     case CCheckpoint(_, _) => Set()
     case CVerify(handle, args, preds, upd, cHandles) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
-      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++ cHandles.map(v => v.id)
-      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
+      args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
+      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) ++ cHandles.map(v => v.id) + handle.id
     case CUpdate(_, handle, args, preds, cHandles) =>
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
         preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id ++ cHandles.map(v => v.id)
@@ -232,7 +232,7 @@ object Utilities {
       s ++ getUsedVars(a)
     })
     //functions are also externally defined
-    case ECall(id, _, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => {
+    case ECall(id, _, args) => args.foldLeft[Set[Id]](Set[Id]())((s, a) => {
       s ++ getUsedVars(a)
     })
     case EVar(id) => id.typ = e.typ; Set(id)
