@@ -4,6 +4,15 @@ import pipedsl.common.Errors.MissingPredictionValues
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
+/**
+ * This pass propagates speculative predictions to
+ * the corresponding Verify statement which will then check
+ * those predictions against the "correct" values in the Verify statement.
+ *
+ * This also refactors SpecCall statements such that each of the arguments becomes
+ * an explicit variable, which can then be referenced by the Verify statement succinctly.
+ *
+ */
 object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
 
   type VEnv = Map[Id, List[EVar]];
@@ -87,6 +96,8 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
 
   //if the values are defined in either branch, take those.
   //if defined in both branches, then only add if they match
+  //this allows us to correctly track the following:
+  //if (x) {
   private def intersectEnv(e1: VEnv, e2: VEnv): VEnv = {
     val keys = e1.keySet.union(e2.keySet)
     keys.foldLeft[VEnv](Map())((m, k) => {
