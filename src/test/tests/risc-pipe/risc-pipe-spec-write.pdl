@@ -140,7 +140,7 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
@@ -196,6 +196,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>, dm
 	   invalidate(s);
     }}} else { s2 <- s; invalidate(s); }
     start(rf);
+    if (!done && (notBranch || isBranch)) {  checkpoint(rf); }
     if (needrs1) {
        reserve(rf[rs1], R);
     }
@@ -332,7 +333,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>, dm
 circuit {
     ti = memory(int<32>, 16);
     td = memory(int<32>, 16);
-    rf = rflock(int<32>, 5, 64);
+    rf = rflock CheckpointRF(int<32>, 5, 64);
     div = new multi_stg_div[];
     b = new BHT[](4);
     c = new cpu[rf, ti, td, div, b];

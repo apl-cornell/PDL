@@ -85,8 +85,14 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       caseEnvList.foldLeft[Environment[Id, LockState]](caseEnvList(0))((env1, env2) => env1.intersect(env2))
     case CLockStart(mod) => env.add(mod, Acquired)
     case CLockEnd(mod) => env.add(mod, Released)
-      //can only reserve locks insisde of the relevant lock region
-      //other lock ops can be outside of this pass
+    //must take the checkpoint inside the appropriate lock region
+    case CCheckpoint(_, lock) =>
+      if (env(lock) != Acquired) {
+        throw InvalidLockState(c.pos, lock.v, env(lock), Acquired)
+      }
+      env
+    //can only reserve locks insisde of the relevant lock region
+    //other lock ops can be outside of this pass
     case CLockOp(mem, op, _, _, _) if op == Reserved =>
       if (env(mem.id) != Acquired) {
         throw InvalidLockState(c.pos, mem.id.v, env(mem.id), Acquired)
@@ -98,7 +104,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case _ => env
   }
 
-  //Check that unlocked and Atomic memory accesses happen _inside_ lock regions for unlocked memories
+  //Check that Unlocked and Atomic memory accesses happen _inside_ lock regions for unlocked memories
   private def checkMemAccess(e: Expr, env: Environment[Id, LockState]): Unit = e match {
     case EIsValid(ex) => checkMemAccess(ex, env)
     case EFromMaybe(ex) => checkMemAccess(ex, env)

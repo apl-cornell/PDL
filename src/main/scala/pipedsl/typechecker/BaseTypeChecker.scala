@@ -5,6 +5,7 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
+import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
 
@@ -418,9 +419,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       })
       tenv
     case CCheckSpec(_) => tenv
-    case CCheckpoint(handle, mod) => tenv(mod).matchOrError(mod.pos, "lock checkpoint", "Locked Memory or Module Type")
+    case CCheckpoint(handle, mod) => tenv(mod).matchOrError(mod.pos, "lock checkpoint",
+      "Locked Memory or Module Type that supports Checkpoint Functionality ")
       {
-        case t: TLockedMemType => mod.typ = Some(t)
+        case t: TLockedMemType if LockImplementation.getCheckpoint(t.limpl).isDefined &&
+          LockImplementation.getRollback(t.limpl).isDefined =>
+          mod.typ = Some(t)
       }
       tenv.add(handle.id, handle.typ.get)
     case COutput(exp) => {

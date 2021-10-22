@@ -21,6 +21,7 @@ object LockImplementation {
   private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
   private val chkq = new CheckpointLockQueue()
+  private val chkRf = new CheckpointRF()
 
   //Stand-in Type Variables for Address, Data and Lock Handle
   private val addrType = TNamedType(Id("addr"))
@@ -312,7 +313,8 @@ object LockImplementation {
     rename.shortName -> rename,
     forwardRename.shortName -> forwardRename,
     lsq.shortName -> lsq,
-    chkq.shortName -> chkq
+    chkq.shortName -> chkq,
+    chkRf.shortName -> chkRf
   )
   /**
    * Lookup the lock implementation based on its name, only the string
@@ -607,6 +609,26 @@ object LockImplementation {
       val pregs = if (szParams.isEmpty) aregs * 2 else szParams.head
       List(Utilities.exp2(m.addrSize), pregs)
     }
+  }
+
+  private class CheckpointRF extends RenameRegfile {
+    private val defaultReplicas = 4
+
+    override def getType: TObject = {
+      val parent = super.getType
+      TObject(Id("CheckpointRF"), List(), parent.methods ++ Map(
+        Id(checkpointName) -> (TFun(List(), checkType), Sequential),
+        Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+      ))
+    }
+    //TODO make more parameterizable
+    override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = {
+      super.getModInstArgs(m, szParams) :+
+        (if (szParams.size > 1) { szParams(1) } else defaultReplicas)
+    }
+
+    override  def shortName: String = "CheckpointRF"
+    override def getModuleName(m: TMemType): String = "CheckpointRF"
   }
 
   private class ForwardingRegfile extends RenameRegfile {
