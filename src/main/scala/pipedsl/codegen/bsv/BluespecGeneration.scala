@@ -1231,7 +1231,7 @@ object BluespecGeneration {
         val methodInfo = LockImplementation.getCheckpointInfo(mod)
         if (methodInfo.isDefined && methodInfo.get.doesModify) {
           Some(
-            BAssign(translator.toVar(handle), translateMethod(modParams(mod), methodInfo.get))
+            BInvokeAssign(translator.toVar(handle), translateMethod(modParams(mod), methodInfo.get))
           )
         } else { None }
       case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))

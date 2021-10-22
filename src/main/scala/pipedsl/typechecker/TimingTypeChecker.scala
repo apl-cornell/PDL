@@ -185,16 +185,13 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           throw UnexpectedAsyncReference(a.pos, a.toString)
         })
         (vars, nextVars + handle.id)
-      case CVerify(handle, args, preds, upd, cHandles) =>
+      case CVerify(handle, args, preds, upd, _) =>
         //handle and args must be available this cycle
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
         args.foreach(a => if(checkExpr(a, vars) != Combinational) {
           throw UnexpectedAsyncReference(a.pos, a.toString)
-        })
-        cHandles.foreach(c => if(checkExpr(c, vars) != Combinational) {
-          throw UnexpectedAsyncReference(c.pos, c.toString)
         })
         //just don't check preds they get inserted by the compiler automatically
         if (upd.isDefined) {
@@ -203,25 +200,19 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           }
         }
         (vars, nextVars)
-      case CUpdate(nh, handle, args, preds, cHandles) =>
+      case CUpdate(nh, handle, args, preds, _) =>
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
         args.foreach(a => if(checkExpr(a, vars) != Combinational) {
           throw UnexpectedAsyncReference(a.pos, a.toString)
         })
-        cHandles.foreach(c => if(checkExpr(c, vars) != Combinational) {
-          throw UnexpectedAsyncReference(c.pos, c.toString)
-        })
         //just don't check preds they get inserted by the compiler automatically
         (vars, nextVars + nh.id)
-      case CInvalidate(handle, cHandles) =>
+      case CInvalidate(handle, _) =>
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
-        cHandles.foreach(c => if(checkExpr(c, vars) != Combinational) {
-          throw UnexpectedAsyncReference(c.pos, c.toString)
-        })
         (vars, nextVars)
       case CCheckpoint(handle,_) => (vars, nextVars + handle.id)
       case CCheckSpec(_) => (vars, nextVars)

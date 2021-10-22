@@ -20,6 +20,7 @@ pipe testwrite(pc: int<8>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<32>
      	     reserve(rf[rd], W);
      	  }
      	  end(rf); //need checkpoint here
+	  checkpoint(rf);
      } else {
        int<32> a1 = 0;
        int<32> a2 = 0;
@@ -37,11 +38,10 @@ pipe testwrite(pc: int<8>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<32>
      ---
      ---
      spec_barrier();
+     int<8> npc = (a1 == a2) ? (pc + brImm) : (pc + 1<8>);     
      if (!done) { 
      	  if (op != 0<1>) {	  
-       	     int<8> npc = (a1 == a2) ? (pc + brImm) : (pc + 1<8>);
-	     print(npc);
-	     verify(s, npc);
+	    verify(s, npc);
      	  } else {
      	    verify(s, pc + 1<8>);
      	  }
@@ -51,6 +51,8 @@ pipe testwrite(pc: int<8>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<32>
      	if (op == 0<1>) {
 	  print(out);
       	  release(rf[rd]);
+	} else {
+	  print(npc);
 	}
      }
      ---
