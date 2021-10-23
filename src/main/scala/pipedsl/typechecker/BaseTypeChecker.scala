@@ -585,40 +585,48 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     }
     case ECall(mod, name, args) => {
-      val mtyp = tenv(mod)
-      mod.typ = Some(mtyp)
-      mtyp match {
-        case TModType(inputs, _, retType, _) => {
-          if (inputs.length != args.length) {
-            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
-          }
-          inputs.zip(args).foreach {
-            case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv, None)
-              if (!isSubtype(atyp, expectedT)) {
-                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+      e.typ match
+      {
+        case Some(t) => (t, tenv)
+        case None => val mtyp = tenv(mod)
+          mod.typ = Some(mtyp)
+          mtyp match
+          {
+            case TModType(inputs, _, retType, _) =>
+              {
+                if (inputs.length != args.length)
+                  {
+                    throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+                  }
+                inputs.zip(args).foreach
+                { case (expectedT, a) => val (atyp, aenv) = checkExpression(a, tenv, None)
+                  if (!isSubtype(atyp, expectedT))
+                    {
+                      throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+                    }
+                }
+                (if (retType.isDefined) retType.get else TVoid(), tenv)
               }
-          }
-          (if (retType.isDefined) retType.get else TVoid(), tenv)
-        }
-        case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) => {
-          val mtyp = methods(name.get)._1
-          val inputs = mtyp.args
-          val retType = mtyp.ret
-          //TODO refactor and pull into function since it is same as above
-          if (inputs.length != args.length) {
-            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
-          }
-          inputs.zip(args).foreach {
-            case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv, None)
-              if (!isSubtype(atyp, expectedT)) {
-                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+            case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) =>
+              {
+                val mtyp = methods(name.get)._1
+                val inputs = mtyp.args
+                val retType = mtyp.ret //TODO refactor and pull into function since it is same as above
+                if (inputs.length != args.length)
+                  {
+                    throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+                  }
+                inputs.zip(args).foreach
+                { case (expectedT, a) => val (atyp, aenv) = checkExpression(a, tenv, None)
+                  if (!isSubtype(atyp, expectedT))
+                    {
+                      throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+                    }
+                }
+                (retType, tenv)
               }
+            case _ => throw UnexpectedType(mod.pos, "module name", "module type", mtyp)
           }
-          (retType, tenv)
-        }
-        case _ => throw UnexpectedType(mod.pos, "module name", "module type", mtyp)
       }
     }
     case EVar(id) => e.typ match {

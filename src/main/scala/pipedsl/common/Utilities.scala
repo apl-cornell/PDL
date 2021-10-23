@@ -512,8 +512,14 @@ object Utilities {
         case e@EInt(v, _, _) =>
           if(e.typ.isEmpty)
             e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
-          e.copy(bits = e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
-            {case t :TSizedInt => t}.len.getLen).copyMeta(e)
+          e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
+          {
+            case t: TSizedInt => t.len.matchOrError(e.pos, "TSizedInt", "len or var")
+            {
+              case TBitWidthLen(l) => e.copy(bits = l).copyMeta(e)
+              case TBitWidthVar(v) if is_generic(v) => e
+            }
+          }
         case e@EIsValid(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EFromMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EToMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
@@ -689,5 +695,34 @@ object Utilities {
     case id:Id => id.v.startsWith(generic_type_prefix)
     case s:String => s.startsWith(generic_type_prefix)
   }
+
+  val not_gen_pref = "__NOT_GEN"
+  def degenerify(t :Type) :Type =
+    {
+      def _degenerify(t :Type) :Type = t match
+      {
+        case TSignVar(nm) if (is_generic(nm)) =>
+          TSignVar(Id(not_gen_pref + nm.v).copyMeta(nm))
+        case TSizedInt(len, sign) =>
+          TSizedInt(degenerify(len).asInstanceOf[TBitWidth], degenerify(sign).asInstanceOf[TSignedNess])
+        case TFun(args, ret) =>
+          TFun(args.map(degenerify), degenerify(ret))
+        case TRecType(name, fields) =>
+          TRecType(name, fields.map((idtp) => (idtp._1, degenerify(idtp._2))))
+        case TModType(inputs, refs, retType, name) =>
+          TModType(inputs.map(degenerify), refs.map(degenerify), retType.map(degenerify), name)
+        case TReqHandle(tp, rtyp) => TReqHandle(degenerify(tp), rtyp)
+        case TNamedType(name) if is_generic(name) =>
+          TNamedType(Id(not_gen_pref + name.v).copyMeta(name))
+        case TMaybe(btyp) =>
+          TMaybe(degenerify(btyp))
+        case TBitWidthVar(nm) if is_generic(nm) =>
+          TBitWidthVar(Id(not_gen_pref + nm.v).copyMeta(nm))
+        case TObject(name, typParams, methods) =>
+          TObject(name, typParams.map(degenerify), methods.map(idtp => (idtp._1, (degenerify(idtp._2._1).asInstanceOf[TFun], idtp._2._2))))
+        case other => other
+      }
+      _degenerify(t).copyMeta(t)
+    }
 
 }
