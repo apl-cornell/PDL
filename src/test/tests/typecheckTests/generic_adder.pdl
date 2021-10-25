@@ -1,0 +1,28 @@
+def adder<T>(x :int<T>, y :int<T>) :int<T>
+{
+   return x + y;
+}
+
+def multiply_pos<T, U>(x :int<T>, y :int<U>) :bool
+{
+   a = x $* cast(y, int<T>);//doesn't work fully with different widths
+   return a > 0;
+}
+
+pipe test1(input: int<32>)[rf: int<32>[32]] :int<100>
+{
+   out = adder(3, 4);
+   other = adder(1<1>, 0<1>); //test to see we can use different ones
+   output (out);
+}
+
+pipe test2(input: int<32>)[rf: int<32>[32]] :int<100>
+{
+   bool pos = multiply_pos(4<4>, 8<5>);
+   output (1);
+}
+
+
+circuit {
+   r = memory(int<32>, 32);
+}

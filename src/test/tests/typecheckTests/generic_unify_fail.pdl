@@ -1,0 +1,17 @@
+def adder<T>(x :int<T>, y :int<T>) :int<T>
+{
+   return x + y;
+}
+
+pipe test1(input: int<32>)[rf: int<32>[32]] :int<100>
+{
+   first = adder(input, 15);
+   second = adder(cast(input, int<16>), 15);
+   whoops = adder(first, second);
+   output(1);
+}
+
+
+circuit {
+   r = memory(int<32>, 32);
+}

@@ -314,9 +314,6 @@ object TypeInferenceWrapper
       (ce.copy(exp = fixed).copyMeta(ce), e.apply_subst_typeenv(retS), retS)
      case CCheckSpec(_) => (c, env, sub)
      case c@CVerify(handle, args, preds, update) =>
-      println(c)
-      println(s"UPDATE????: $update")
-
       update.map(c =>
       {
        infer(env, c)
@@ -393,7 +390,6 @@ object TypeInferenceWrapper
       val typ = lhs.typ
       val (slhs, tlhs, lhsEnv) = (List(), typ.getOrElse(generateTypeVar()), env)
       val (srhs, trhs, rhsEnv, rhsFixed) = infer(lhsEnv, rhs)
-//      println(s"$rhs : rhs type: $trhs")
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
       val rhstyp = apply_subst_typ(tempSub, trhs)
@@ -412,7 +408,6 @@ object TypeInferenceWrapper
       }
       lhs.typ = Some(lhstyp)
       rhs.typ = Some(rhstyp)
-//      println(s"decided lhs = $lhstyp, rhs = $rhstyp")
       (ca.copy(rhs = rhsFixed1).copyMeta(ca), newEnv.asInstanceOf[TypeEnv].apply_subst_typeenv(sret), sret)
      case cs@CSeq(c1, c2) => val (fixed1, e1, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e1, s)
@@ -423,7 +418,7 @@ object TypeInferenceWrapper
     /** for subtyping bit widths, t1 is the subtype, t2 is the supertype. so t2 is the expected private */
     def unify(a: Type, b: Type, binop: bool = false): (Subst, bool) =
      {
-     // println(s"unifying $a and $b")
+     //println(s"unifying $a and $b")
       val ret = (a, b) match
       {
        case (t1: TNamedType, t2) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
@@ -644,22 +639,17 @@ object TypeInferenceWrapper
         val fixed1 = if (cast) ECast(retTyp, fixed) else fixed
         (retSubst, retTyp, env1.apply_subst_typeenv(retSubst), u.copy(ex = fixed1).copyMeta(u))
        case b@EBinop(op, e1, e2) =>
-        //we gotta do something here to test for generics...
-        //println("got here")
         val (s1, t1, env1, fixed1) = infer(env, e1)
         val (s2, t2, env2, fixed2) = infer(env1, e2)
-        //println(s"original: $t1, $t2")
         val retType = generateTypeVar()
         val subTemp = compose_subst(s1, s2)
         val t1New = apply_subst_typ(subTemp, t1)
         val t2New = apply_subst_typ(subTemp, t2)
-        //println(s"new: $t1New, $t2New")
         val (subst, _) = unify(TFun(List(t1New, t2New), retType), binOpExpectedType(op), binop = true)
         val retSubst = compose_many_subst(subTemp, subst)
         val retTyp = apply_subst_typ(retSubst, retType)
         val t1VNew = apply_subst_typ(retSubst, t1New)
         val t2VNew = apply_subst_typ(retSubst, t2New)
-        //println(s"vNew: $t1VNew, $t2VNew, $retTyp")
         val (castL, castR) = binOpTypesFromRet(op, retTyp, t1VNew, t2VNew)
         val moreFixed1 = castL match
         {
@@ -715,7 +705,8 @@ object TypeInferenceWrapper
         val retSubst = compose_many_subst(sc, st, sf, substc, subst)
         val retType = apply_subst_typ(retSubst, ttNew)
         (retSubst, retType, env3.apply_subst_typeenv(retSubst), trn.copy(cond = fixed_cond, tval = fixed_tval1, fval = fixed_fval1).copyMeta(trn))
-       case ap@EApp(func, args) => val expectedType = uniqueify_fun(env(func).asInstanceOf[TFun])
+       case ap@EApp(func, args) =>
+        val expectedType = uniqueify_fun(env(func).asInstanceOf[TFun])
         val retType = generateTypeVar()
         var runningEnv: TypeEnv = env
         var runningSubst: Subst = List()
@@ -730,6 +721,7 @@ object TypeInferenceWrapper
           runningEnv = env1
          }
         typeList = typeList.map(t => apply_subst_typ(runningSubst, t))
+        //println(s"unifying: ${TFun(typeList, retType)} and $expectedType")
         val (subst, cast) = unify(TFun(typeList, retType), expectedType)
         val fixed_arg_list = if (cast)
          {
@@ -738,6 +730,7 @@ object TypeInferenceWrapper
         val retSubst = compose_subst(runningSubst, subst)
         val retEnv = runningEnv.apply_subst_typeenv(retSubst)
         val retTyp = apply_subst_typ(retSubst, retType)
+        ap.typ = Some(retTyp)
         (retSubst, retTyp, retEnv, ap.copy(args = fixed_arg_list).copyMeta(ap))
        case ca@ECall(mod, name, args) if name.isEmpty =>
         if (!env(mod).isInstanceOf[TModType]) throw UnexpectedType(e.pos, "Module Call", "TModType", env(mod))
@@ -821,8 +814,6 @@ object TypeInferenceWrapper
 
     private def substIntoCall(expectedT: TFun, ca: ECall, args: List[Expr], env: TypeEnv) = {
      val expectedType = degenerify(expectedT).asInstanceOf[TFun]
-     //TODO ALL THE BASE TYPECHECKING FOR FUNCTION CALLS NEEDS TO HAPPEN HERE!!!
-//     println(s"expected: $expectedType")
      val retType = generateTypeVar()
      var runningEnv: TypeEnv = env
      var runningSubst: Subst = List()
@@ -836,7 +827,7 @@ object TypeInferenceWrapper
       runningEnv = env1
      }
      typeList = typeList.map(t => apply_subst_typ(runningSubst, t))
-//     println(s"got: ${TFun(typeList, retType)}")
+     //println(s"unifying ${TFun(typeList, retType)} and $expectedType")
      val (subst, cast) = unify(TFun(typeList, retType), expectedType)
      val fixed_arg_list = if (cast) {
       argList.zip(expectedType.args).map(argtp => ECast(argtp._2, argtp._1))
@@ -844,9 +835,10 @@ object TypeInferenceWrapper
      val retSubst = compose_subst(runningSubst, subst)
      val retEnv = runningEnv.apply_subst_typeenv(retSubst)
      val retTyp = apply_subst_typ(retSubst, retType)
-     println(retTyp)
      ca.typ = Some(retTyp)
-     (retSubst, retTyp, retEnv, ca.copy(args = fixed_arg_list).copyMeta(ca))
+     val mtyp = env(ca.mod)
+     ca.mod.typ = Some(mtyp)
+   (retSubst, retTyp, retEnv, ca.copy(args = fixed_arg_list).copyMeta(ca))
     }
    }
  }

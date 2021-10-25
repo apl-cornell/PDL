@@ -546,38 +546,28 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           if (targs.length != args.length) {
             throw ArgLengthMismatch(e.pos, targs.length, args.length)
           }
-          val this_app_templated = mutable.HashMap.empty[Id, Type]
+          val this_app_templated = mutable.HashMap.empty[Id, Int]
           targs.zip(args).foreach {
             case (expectedT, a) =>
               val (atyp, aenv) = checkExpression(a, tenv, None)
               val act_exp :Type = expectedT match {
-                case TSizedInt(TBitWidthVar(name), _) if is_generic(name) =>
+                case TSizedInt(TBitWidthVar(name), sign) if is_generic(name) =>
                 this_app_templated.get(name) match {
-                  case Some(value) => value
-                  case None => this_app_templated.put(name, atyp); atyp
+                  case Some(value) => TSizedInt(TBitWidthLen(value), sign)
+                  case None => this_app_templated.put(name, atyp.asInstanceOf[TSizedInt].len.getLen); atyp
                 }
                 case _ => expectedT
               }
-
-/*
-              val act_exp :Type= if(is_generic(expectedT))
-                {
-                  val name = expectedT.asInstanceOf[TNamedType].name//this is a safe cast since all generics are named types
-                  this_app_templated.get(name) match
-                  {
-                    case Some(value) => value
-                    case None =>
-                    this_app_templated.put(name, atyp)
-                    atyp
-                  }
-                } else expectedT*/
               if (!isSubtype(atyp, act_exp)) {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
           }
           val act_ret = if(is_generic(tret))
             {
-              this_app_templated.getOrElse(tret.asInstanceOf[TSizedInt].len.asInstanceOf[TBitWidthVar].name, tret)
+              val sign = tret.asInstanceOf[TSizedInt].sign
+              TSizedInt(TBitWidthLen(
+                this_app_templated.getOrElse(tret.asInstanceOf[TSizedInt].len
+                  .asInstanceOf[TBitWidthVar].name, -1)), sign)
             } else tret
           (act_ret, tenv)
         }
@@ -587,8 +577,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case ECall(mod, name, args) => {
       e.typ match
       {
-        case Some(t) => (t, tenv)
-        case None => val mtyp = tenv(mod)
+        //case Some(t) => (t, tenv)
+        case _ => val mtyp = tenv(mod)
           mod.typ = Some(mtyp)
           mtyp match
           {
