@@ -177,30 +177,37 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CIf(_, cons, alt) =>
       val lt = checkResolved(cons, env)
       val rt = checkResolved(alt, env)
-      lt.intersect(rt)
+      val lenv = mapConditionalContext(lt, cons)
+      val renv = mapConditionalContext(rt, alt)
+      lenv.intersect(renv)
     case CSplit(cases, default) =>
-      cases.foldLeft[Environment[Id,Z3AST]](checkResolved(default, env))((menv, cobj) => {
+      val startEnv = mapConditionalContext(env, default)
+      cases.foldLeft[Environment[Id,Z3AST]](checkResolved(default, startEnv))((menv, cobj) => {
         //merge logic lives in Environments (conjunction of branches)
-        menv.intersect(checkResolved(cobj.body, env))
+        val condenv = mapConditionalContext(checkResolved(cobj.body, env), cobj.body)
+        menv.intersect(condenv)
       })
     case CSpecCall(handle, _, _) =>
       checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = INIT)
-      env.add(handle.id,
-      mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = STARTED)))
+      env.add(handle.id,makeEquals(handle.id, state = STARTED))
     case CVerify(handle, _, _, _, _) =>
       checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = STARTED)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
+      env.add(handle.id, makeEquals(handle.id, state = RESOLVED))
     case CUpdate(nh, handle, _, _, _) =>
       //"reolves" the current spec but starts a new one
       checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = STARTED)
       checkPossibleStates(nh.id, env, c.predicateCtx.get, expected = INIT)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED))).add(
-        nh.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(nh.id, state = STARTED))
+      env.add(handle.id, makeEquals(handle.id, state = RESOLVED)).add(
+        nh.id, makeEquals(nh.id, state = STARTED)
       )
     case CInvalidate(handle, _) =>
       checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = STARTED)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
+      env.add(handle.id, makeEquals(handle.id, state = RESOLVED))
     case _ => env
+  }
+
+  private def mapConditionalContext(lt: Environment[Id, Z3AST], c: Command): Environment[Id, Z3AST] = {
+    lt.map(n => { mkImplies(ctx, c.predicateCtx.get, n) }, emptyEnv())
   }
 
   private def makeEquals(specId: Id, state: Status): Z3BoolExpr = {
@@ -257,11 +264,12 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CSeq(c1, c2) => checkCheckpointsHelper(c2, checkCheckpointsHelper(c1, env))
     case CTBar(c1, c2) => checkCheckpointsHelper(c2, checkCheckpointsHelper(c1, env))
     case CIf(_, cons, alt) =>
-      val lt = checkCheckpointsHelper(cons, env)
-      val rt = checkCheckpointsHelper(alt, env)
+      val lt = mapConditionalContext(checkCheckpointsHelper(cons, env), cons)
+      val rt = mapConditionalContext(checkCheckpointsHelper(alt, env), alt)
       lt.intersect(rt)
     case CSplit(cases, default) =>
-      cases.foldLeft[Environment[Id,Z3AST]](checkCheckpointsHelper(default, env))((menv, cobj) => {
+      cases.foldLeft[Environment[Id,Z3AST]](checkCheckpointsHelper(default,
+        mapConditionalContext(env, default)))((menv, cobj) => {
         //merge logic lives in Environments (conjunction of branches)
         menv.intersect(checkCheckpointsHelper(cobj.body, env))
       })
@@ -269,8 +277,8 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       checkHandles.foldLeft(env)((e, chk) => {
         //check that checkpoint has been made in this context
         checkPossibleStates(chk.id, env, c.predicateCtx.get, expected = STARTED)
-        //add implication that currentCtx => chk is resolved
-        e.add(chk.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(chk.id, state = RESOLVED)))
+        //add implication that chk is resolved
+        e.add(chk.id, makeEquals(chk.id, state = RESOLVED))
       })
     case CUpdate(_, _, _, _, checkHandles) =>
       checkHandles.foldLeft(env)((e, chk) => {
@@ -282,11 +290,11 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       checkHandles.foldLeft(env)((e, chk) => {
         //check that checkpoint has been made in this context
         checkPossibleStates(chk.id, env, c.predicateCtx.get, expected = STARTED)
-        //add implication that currentCtx => chk is resolved
-        e.add(chk.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(chk.id, state = RESOLVED)))
+        //add implication that chk is resolved
+        e.add(chk.id, makeEquals(chk.id, state = RESOLVED))
       })
     case CCheckpoint(handle, _) => //set the checkpoint state to initialized in this context
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = STARTED)))
+      env.add(handle.id, makeEquals(handle.id, state = STARTED))
     case _ => env
   }
 
