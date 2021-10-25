@@ -24,14 +24,19 @@ interface RenameRF#(type addr, type elem, type name);
    method ActionValue#(name) res_w1(addr a); //allocate a new name to be written
    method Action rel_w1(name a); //indicate old name for a can be "freed"
    method Action write(name a, elem b); //write data given allocated name
-
-   // method Action abort(name a); use for speculative threads that die so name a can be "freed" since not going to be written
 endinterface
 
 interface CheckpointRF#(type addr, type elem, type name, type cid);
-   interface RenameRF#(addr, elem, name) renamerf;
+   method name res_r1(addr a); //get name to read data later
+   method Bool owns_r1(name n);  //check if safe to read  
+   method name res_r2(addr a); //get name to read data later
+   method Bool owns_r2(name n);  //check if safe to read
+   method elem read(name a);    //do the read
+   method ActionValue#(name) res_w1(addr a); //allocate a new name to be written
+   method Action rel_w1(name a); //indicate old name for a can be "freed"
+   method Action write(name a, elem b); //write data given allocated name   
    method ActionValue#(cid) checkpoint();
-   method Action commit(cid c, Bool doRoll, Bool doRel);
+   method Action rollback(cid c, Bool doRoll, Bool doRel);
 endinterface
    
 interface BypassRF#(type addr, type elem, type id);
@@ -149,34 +154,32 @@ import "BVI" CheckpointRenameRF =
     default_clock clk(CLK, (*unused*) clk_gate);
     default_reset rst (RST);
     
-    interface RenameRF renamerf;
-       method NAME_OUT_1 res_r1 (ADDR_1);
-       method VALID_OUT_1 owns_r1 (VALID_NAME_1);
-       method NAME_OUT_2 res_r2 (ADDR_2);
-       method VALID_OUT_2 owns_r2 (VALID_NAME_2);
-       method D_OUT read[2] (NAME);
-       method write[2] (NAME_IN, D_IN) enable(WE);    
-       method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
-       method rel_w1(NAME_F) enable(FE);
-    endinterface
+    method NAME_OUT_1 res_r1 (ADDR_1);
+    method VALID_OUT_1 owns_r1 (VALID_NAME_1);
+    method NAME_OUT_2 res_r2 (ADDR_2);
+    method VALID_OUT_2 owns_r2 (VALID_NAME_2);
+    method D_OUT read[2] (NAME);
+    method write[2] (NAME_IN, D_IN) enable(WE);    
+    method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+    method rel_w1(NAME_F) enable(FE);
 
     method CHK_OUT checkpoint() enable(CHK_E) ready(CHK_READY);       
-    method commit (ROLLBK_IN, DO_ROLL, DO_REL) enable(ROLLBK_E);
+    method rollback (ROLLBK_IN, DO_ROLL, DO_REL) enable(ROLLBK_E);
     
        schedule (checkpoint) C (checkpoint);
-       schedule (commit) C (commit);
-       schedule (checkpoint) CF (commit);
-       schedule (checkpoint, commit) CF (renamerf_res_r1, renamerf_res_r2, renamerf_owns_r1, renamerf_owns_r2, renamerf_read, renamerf_write, renamerf_rel_w1);      
-       schedule (renamerf_res_r1, renamerf_res_r2) CF (renamerf_res_r1, renamerf_res_r2);
-       schedule (renamerf_res_r1, renamerf_res_r2) CF (renamerf_owns_r1, renamerf_owns_r2, renamerf_read, renamerf_res_w1, renamerf_write, renamerf_rel_w1);
-       schedule (renamerf_owns_r1, renamerf_owns_r2) CF (renamerf_owns_r1, renamerf_owns_r2);
-       schedule (renamerf_owns_r1, renamerf_owns_r2) CF (renamerf_read, renamerf_res_w1, renamerf_write, renamerf_rel_w1);
-       schedule (renamerf_read) CF (renamerf_read);
-       schedule (renamerf_read) CF (renamerf_res_w1, renamerf_write, renamerf_rel_w1);
-       schedule (renamerf_res_w1) C (renamerf_res_w1);
-       schedule (renamerf_res_w1) CF (renamerf_write, renamerf_rel_w1, checkpoint, commit);
-       schedule (renamerf_write) CF (renamerf_write, renamerf_rel_w1);
-       schedule (renamerf_rel_w1) C (renamerf_rel_w1);
+       schedule (rollback) C (rollback);
+       schedule (checkpoint) CF (rollback);
+       schedule (checkpoint, rollback) CF (res_r1, res_r2, owns_r1, owns_r2, read, write, rel_w1);      
+       schedule (res_r1, res_r2) CF (res_r1, res_r2);
+       schedule (res_r1, res_r2) CF (owns_r1, owns_r2, read, res_w1, write, rel_w1);
+       schedule (owns_r1, owns_r2) CF (owns_r1, owns_r2);
+       schedule (owns_r1, owns_r2) CF (read, res_w1, write, rel_w1);
+       schedule (read) CF (read);
+       schedule (read) CF (res_w1, write, rel_w1);
+       schedule (res_w1) C (res_w1);
+       schedule (res_w1) CF (write, rel_w1, checkpoint, rollback);
+       schedule (write) CF (write, rel_w1);
+       schedule (rel_w1) C (rel_w1);
         
  endmodule
 

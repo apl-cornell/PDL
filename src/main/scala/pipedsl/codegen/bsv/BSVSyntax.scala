@@ -43,7 +43,10 @@ object BSVSyntax {
     //rename the type variable so that lockId and chkpointId can be independent
     //otherwise leave it the same
     private def lockIdToCheckId(l: BSVType): BSVType = l match {
-      case BTypeParam(name, provisos) => BTypeParam("chk" + name, provisos)
+      case BTypeParam(name, provisos) => BTypeParam("chk" + name, provisos.map {
+        case PBits(szName) => PBits("chk" + szName)
+        case b => b
+      })
       case _ => l
     }
     //TODO it would be nice not to need two type translation methods
