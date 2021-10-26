@@ -12,7 +12,7 @@ import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
  * into the operational realization of lock operations. Specifically,
  * this involves generating variables to represent the lock state information
  * held by the Thread. Reserve statements will produce these 'handles' which
- * must be passed to future operations like 'block' and 'release'
+ * must be passed to future operations like 'block' and 'release'.
  *
  * This additionally annotates memory accesses with the appropriate lock handle variable,
  * s.t. implementations that feed the memory accesses through the lock API have the information
@@ -79,8 +79,8 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     case CRecv(lhs, rhs) =>
       CRecv(modifyMemArg(lhs, isLhs = true), modifyMemArg(rhs, isLhs = false)).copyMeta(c)
     case CSpecCall(handle, pipe, args) => CSpecCall(handle, pipe, args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
-    case CVerify(handle, args, preds, update) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall])).copyMeta(c)
-    case CUpdate(newHandle, handle, args, preds) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds).copyMeta(c)
+    case CVerify(handle, args, preds, update, cHandles) => CVerify(handle, args.map(modifyMemArg(_, isLhs = false)), preds, update.map(modifyMemArg(_, isLhs = false).asInstanceOf[ECall]), cHandles).copyMeta(c)
+    case CUpdate(newHandle, handle, args, preds, cHandles) => CUpdate(newHandle, handle, args.map(modifyMemArg(_, isLhs = false)), preds, cHandles).copyMeta(c)
     case CPrint(args) => CPrint(args.map(modifyMemArg(_, isLhs = false))).copyMeta(c)
     case COutput(exp) =>  COutput(modifyMemArg(exp, isLhs = false)).copyMeta(c)
     case CReturn(exp) => CReturn(modifyMemArg(exp, isLhs = false)).copyMeta(c)
@@ -137,12 +137,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
 
   private def translateOp(c: CLockOp): Command = {
     c.op match {
-      case Locks.Free =>
-        val i = ICheckLockFree(c.mem).setPos(c.pos)
-        i.memOpType = c.memOpType
-        i.granularity = c.granularity
-        i.portNum = c.portNum
-        i
+      case Locks.Free => ILockNoOp(c.mem) //TODO throw error instead
       case Locks.Reserved =>
         val i = IReserveLock(lockVar(c.mem, LockedMemState.Reserved), c.mem).setPos(c.pos)
         i.memOpType = c.memOpType

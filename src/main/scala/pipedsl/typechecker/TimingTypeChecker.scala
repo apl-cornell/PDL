@@ -185,7 +185,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           throw UnexpectedAsyncReference(a.pos, a.toString)
         })
         (vars, nextVars + handle.id)
-      case CVerify(handle, args, preds, upd) =>
+      case CVerify(handle, args, preds, upd, _) =>
         //handle and args must be available this cycle
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
@@ -200,7 +200,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           }
         }
         (vars, nextVars)
-      case CUpdate(nh, handle, args, preds) =>
+      case CUpdate(nh, handle, args, preds, _) =>
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
@@ -209,11 +209,12 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         })
         //just don't check preds they get inserted by the compiler automatically
         (vars, nextVars + nh.id)
-      case CInvalidate(handle) =>
+      case CInvalidate(handle, _) =>
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
         (vars, nextVars)
+      case CCheckpoint(handle,_) => (vars, nextVars + handle.id)
       case CCheckSpec(_) => (vars, nextVars)
       case COutput(exp) =>
         if (checkExpr(exp, vars) != Combinational) {
@@ -265,6 +266,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         case (Combinational, Combinational) => Combinational
         case (Combinational, _) => throw UnexpectedAsyncReference(e2.pos, e2.toString)
         case (_, Combinational) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
+        case (_,_) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
       }
     case ERecAccess(rec, _) => checkExpr(rec, vars, isRhs) match {
       case Combinational => Combinational

@@ -10,4 +10,5 @@
 00000420 // rf[0] <= rf[1] + rf[1] ; pc + 1  SKIPPED
 00000845 // beq rf[2], rf[2], pc + 2 ; pc + 2 PRED WRONG
 00000000 // w/e SKIPPED
+00000420 // rf[0] <= rf[1] + rf[1] ; pc + 1 PRED CORRECT (print 4)
 ffffffff // END

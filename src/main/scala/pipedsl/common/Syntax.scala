@@ -69,7 +69,7 @@ object Syntax {
 
   object RequestType extends Enumeration {
     type RequestType = Value
-    val Lock, Module, Speculation = Value
+    val Lock, Module, Speculation, Checkpoint = Value
   }
 
   import RequestType._
@@ -145,6 +145,7 @@ object Syntax {
           lbl = from.lbl
           maybeSpec = from.maybeSpec
           this
+        case _ => this
       }
 
     /**
@@ -322,6 +323,12 @@ object Syntax {
     case _ => false
   }
 
+  def getMemFromRequest(r: Type): Id = {
+      r.matchOrError(r.pos, "Checkpoint Handle", "Checkpoint Request Type") {
+        case TRequestHandle(mod, _) => mod
+      }
+  }
+
   /**
    * Define common helper methods implicit classes.
    */
@@ -454,6 +461,7 @@ object Syntax {
         portNum = from.portNum
         predicateCtx = from.predicateCtx
         this
+        case _ => this
       }
   }
   case class CSeq(c1: Command, c2: Command) extends Command
@@ -467,15 +475,16 @@ object Syntax {
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
   case class CCheckSpec(isBlocking: Boolean) extends Command
-  case class CVerify(handle: EVar, args: List[Expr], preds: List[EVar], update: Option[ECall]) extends Command
-  case class CUpdate(newHandle: EVar, handle: EVar, args: List[Expr], preds: List[EVar]) extends Command
-  case class CInvalidate(handle: EVar) extends Command
+  case class CVerify(handle: EVar, args: List[Expr], preds: List[EVar], update: Option[ECall], checkHandles: List[EVar]) extends Command
+  case class CUpdate(newHandle: EVar, handle: EVar, args: List[Expr], preds: List[EVar], checkHandles: List[EVar]) extends Command
+  case class CInvalidate(handle: EVar, checkHandles: List[EVar]) extends Command
   case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
+  case class CCheckpoint(handle: EVar, lock: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType], args :List[Expr], ret :Option[EVar]) extends Command with LockInfoAnnotation
   {
     override val copyMeta: HasCopyMeta => CLockOp =
@@ -510,7 +519,6 @@ object Syntax {
   //used for sequential memories that don't commit writes immediately but don't send a response
   case class IMemWrite(mem: Id, addr: EVar, data: EVar,
                        inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
-  case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
@@ -550,6 +558,7 @@ object Syntax {
           isRecursive = from.isRecursive
           pos = from.pos
           this
+          case _ => this
         }
     }
 

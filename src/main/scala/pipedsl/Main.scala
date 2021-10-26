@@ -74,11 +74,9 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
     val pinfo = new ProgInfo(prog)
     try {
-      val verifProg = AddVerifyValuesPass.run(prog)
+      val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(prog))
       val canonProg2 = new CanonicalizePass().run(verifProg)
-      val canonProg1 = new TypeInference(autocast).checkProgram(canonProg2)
-      val canonProg = canonProg1//LockOpTranslationPass.run(canonProg1)
-      //new PrettyPrinter(None).printProgram(canonProg)
+      val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       MarkNonRecursiveModulePass.run(nprog)

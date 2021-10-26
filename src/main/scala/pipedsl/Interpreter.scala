@@ -169,7 +169,7 @@ class Interpreter(val maxIterations: Int) {
             for (i <- 0 until queueSize) {
                 val dequeuedCall = moduleCalls.dequeue
                 moduleCalls = dequeuedCall._2
-                dequeuedCall._1()
+                dequeuedCall._1.apply(())
             }
             iterations = iterations + 1
         }

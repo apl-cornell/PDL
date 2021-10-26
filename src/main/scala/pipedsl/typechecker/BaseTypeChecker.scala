@@ -5,6 +5,7 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
+import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
 
@@ -292,6 +293,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               }
           }
         }
+        case _ => throw UnexpectedType(c.pos, "SpecCall Mod", "Module Type", mtyp)
       }
       //add spec handle type to env
       tenv.add(h.id, h.typ.get)
@@ -321,11 +323,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             }
           }
       }
-    case CVerify(handle, args, preds, upd) =>
+    case CVerify(handle, args, preds, upd, cHandles) =>
       //if there's an update clause check that stuff:
       if (upd.isDefined) {
         checkExpression(upd.get, tenv, None)
       }
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -353,11 +361,18 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                     throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
                   }
               }
+            case _ =>  throw UnexpectedType(c.pos, "Spec Verify", "Module Type", mtyp)
           }
           tenv
       }
-    case CUpdate(newHandle, handle, args, preds) =>
+    case CUpdate(newHandle, handle, args, preds, cHandles) =>
       //TODO solve the fact that this is just verify copypasta-ed
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -385,18 +400,33 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                     throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
                   }
               }
+            case _ =>  throw UnexpectedType(c.pos, "Spec Update", "Module Type", mtyp)
           }
           newHandle.typ = Some(htyp)
           newHandle.id.typ = Some(htyp)
           tenv.add(newHandle.id, htyp)
       }
-    case CInvalidate(handle) =>
+    case CInvalidate(handle, cHandles) =>
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
         case TRequestHandle(_, RequestType.Speculation) => ()
       }
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       tenv
     case CCheckSpec(_) => tenv
+    case CCheckpoint(handle, mod) => tenv(mod).matchOrError(mod.pos, "lock checkpoint",
+      "Locked Memory or Module Type that supports Checkpoint Functionality ")
+      {
+        case t: TLockedMemType if LockImplementation.getCheckpoint(t.limpl).isDefined &&
+          LockImplementation.getRollback(t.limpl).isDefined =>
+          mod.typ = Some(t)
+      }
+      tenv.add(handle.id, handle.typ.get)
     case COutput(exp) => {
       checkExpression(exp, tenv, None)
       tenv
@@ -458,9 +488,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
         case BitOp("<<", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "shift left", "sized number", t1)
         }
         case BitOp(">>", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "shift right", "sized number", t1)
         }
         case NumOp("*", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>

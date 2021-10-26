@@ -66,8 +66,8 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         port_map.getMappedKeys().foreach(mem =>
           {
             /*sadly we are reusing the int pair to mean sth dif on mem/locks*/
-            println(mem + " r/res: " + port_map(mem)._1)
-            println(mem + " w/rel: " + port_map(mem)._2)
+            println(mem.v + " r/res: " + port_map(mem)._1)
+            println(mem.v + " w/rel: " + port_map(mem)._2)
           })
 
       m.modules.foreach(mod =>
@@ -207,7 +207,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
           c.portNum = Some(ret(pipe)._1)
           ret
       }
-    case CVerify(_, args,_, _) =>
+    case CVerify(_, args,_, _, _) =>
       args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
      case COutput(exp) => checkExpr(exp, env, start_env)
     case CReturn(exp) => checkExpr(exp, env, start_env)
@@ -215,9 +215,9 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
     case CLockOp(mem, op, lockType, _, _) =>
       val mangled = lockType match
       {
-        case Some(Syntax.LockRead)  => Id(mem.id + "?r")
-        case Some(Syntax.LockWrite) => Id(mem.id + "?w")
-        case None => Id(mem.id + "?g")
+        case Some(Syntax.LockRead)  => Id(mem.id.v + "?r")
+        case Some(Syntax.LockWrite) => Id(mem.id.v + "?w")
+        case None => Id(mem.id.v + "?g")
       }
       op match
       {

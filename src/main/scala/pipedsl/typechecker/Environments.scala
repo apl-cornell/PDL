@@ -46,6 +46,20 @@ object Environments {
                 env.remove(key)
             })
         }
+
+        /**
+         * Fill a new environment by mapping a function over the values
+         * of this environment
+         * @param mapfunc The map function to apply to all of the values of the environment
+         * @param emptyEnv The new environment to add (via the @add method)
+         *                 all of the transformed values to.
+         * @return The given environment (emptyEnv) but with the transformed values added
+         */
+        def map(mapfunc: T => T, emptyEnv: Environment[U, T]): Environment[U, T] = {
+            this.getMappedKeys().foldLeft(emptyEnv)((e, k) => {
+                e.add(k, mapfunc(this(k)))
+            })
+        }
     }
 
     case class TypeEnv(

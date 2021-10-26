@@ -1,6 +1,5 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.getAllVarNames
 import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
@@ -94,13 +93,13 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case CSpecCall(handle, pipe, args) => val (nargs, nc) = extractCastVars(args)
         CSeq(nc, CSpecCall(handle, pipe, nargs).setPos(c.pos)).setPos(c.pos)
       case CCheckSpec(_) => c
-      case CVerify(handle, args, preds, upd) =>
+      case CVerify(handle, args, preds, upd, cHandles) =>
         val (nargs, nc) = extractCastVars(args)
-        CSeq(nc, CVerify(handle, nargs, preds, upd).setPos(c.pos)).setPos(c.pos)
-      case CUpdate(newHandle, handle, args, preds) =>
+        CSeq(nc, CVerify(handle, nargs, preds, upd, cHandles).setPos(c.pos)).setPos(c.pos)
+      case CUpdate(newHandle, handle, args, preds, cHandles) =>
         val (nargs, nc) = extractCastVars(args)
-        CSeq(nc, CUpdate(newHandle, handle, nargs, preds).setPos(c.pos)).setPos(c.pos)
-      case CInvalidate(_) => c
+        CSeq(nc, CUpdate(newHandle, handle, nargs, preds, cHandles).setPos(c.pos)).setPos(c.pos)
+      case CInvalidate(_,_) => c
       case CPrint(_) => c
       case COutput(exp) => val (nexp, nasgn) = extractCastVars(exp)
         CSeq(nasgn, COutput(nexp).setPos(c.pos)).setPos(c.pos)
@@ -108,6 +107,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         CSeq(nasgn, CReturn(nexp).setPos(c.pos)).setPos(c.pos)
       case CExpr(exp) => val (nexp, nasgn) = extractCastVars(exp)
         CSeq(nasgn, CExpr(nexp).setPos(c.pos)).setPos(c.pos)
+      case CCheckpoint(_,_) => c
       case CLockStart(_) => c
       case CLockEnd(_) => c
       case CLockOp(_, _, _, _, _) => c

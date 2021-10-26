@@ -67,17 +67,6 @@ object BluespecGeneration {
       fmap + (fdef.name -> translator.toFunc(fdef))
     })
 
-    //utility to check if this instantiates an async memory
-    private def isAsyncMem(c:CirExpr): Boolean = c match {
-      case CirMem(_, _, _) => true
-      case _ => false
-    }
-    //utility to check if this instantiates a (non-async memory) module
-    private def isModule(c:CirExpr): Boolean = c match {
-      case CirMem(_, _, _) => false
-      case _ => true
-    }
-
     // Given the circuit specification and module types:
     // generate the set of statements that instantiate the top level modules,
     // and add any new type bindings to the environment by instantiating the modules
@@ -122,25 +111,25 @@ object BluespecGeneration {
       case CirExprStmt(CirCall(m, _)) => Map(m -> env(m))
       case CirConnect(name, c) => c match {
         case CirLockMem(elemTyp,addrSize,_,_,numPorts) if memMap.contains(name) => //TODO less copying
-          val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous,
-            Latency.Asynchronous, numPorts, numPorts)
-          if(is_dp(name.typ.get)) {
+          val mtyp = TMemType(elemTyp, addrSize, Latency.Asynchronous, Latency.Asynchronous, numPorts, numPorts)
+          if(isDualPorted(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(mtyp)),
               name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(mtyp))
             )
           }
-          else
+          else {
             Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(mtyp)))
+          }
         case CirMem(_, _, _)  if memMap.contains(name) =>
-          if(is_dp(name.typ.get)) {
+          if(isDualPorted(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(name.typ.get)),
               name.copy(name.v + "2") -> BVar(name.v + "." + bsInts.getBramClientName + "2", translator.toClientType(name.typ.get))
             )
-          }
-          else
+          } else {
             Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(name.typ.get)))
+          }
         case _ => Map()
       }
       case _ => Map()
@@ -235,7 +224,7 @@ object BluespecGeneration {
       case _ => (List(), List(), List())
     }
 
-    private val is_dp :Type => Boolean = {
+    private def isDualPorted(t: Type): Boolean = t match {
       case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
       case _ => false
@@ -650,14 +639,6 @@ object BluespecGeneration {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         case CLockStart(mod) =>
           l :+ bsInts.getCheckStart(lockRegions(mod))
-          //TODO delete the ICheckLockFree ast node
-        case cl@ICheckLockFree(mem) =>
-          val methodInfo = LockImplementation.getLockImpl(mem).getCheckEmptyInfo(cl)
-          if (methodInfo.isDefined) {
-            l :+ translateMethod(modParams(mem.id), methodInfo.get)
-          } else {
-            l
-          }
         case cl@IReserveLock(_, mem) =>
           val methodInfo = LockImplementation.getCanReserveInfo(cl)
           if (methodInfo.isDefined) {
@@ -1061,13 +1042,13 @@ object BluespecGeneration {
           val relMethod = translateMethod(modParams(mem.id), mi.get)
           Some(BExprStmt(relMethod))
         } else { None }
-      case CUpdate(_, _, _, _) => None
+      case CUpdate(_, _, _, _,_) => None
       case CLockStart(_) => None
       case CLockEnd(_) => None
       case CLockOp(_, _, _, _, _) => None
       case CSpecCall(_, _, _) => None
-      case CVerify(_, _, _, _) => None
-      case CInvalidate(_) => None
+      case CVerify(_, _, _, _,_) => None
+      case CInvalidate(_,_) => None
       case CCheckSpec(_) => None
       case CEmpty() => None
       case _: IUpdate => None
@@ -1076,6 +1057,7 @@ object BluespecGeneration {
       case _: InternalCommand => None
       case COutput(_) => None
       case CPrint(_) => None
+      case CCheckpoint(_,_) => None
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CIf(_, _, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
@@ -1131,11 +1113,12 @@ object BluespecGeneration {
           case Some(value) => Some(translator.toExpr(value))
           case None => None
         }))
+      case CCheckpoint(handle, _) => Some(BDecl(translator.toVar(handle), None))
       case IMemSend(memHandle, _, _, _, _, _, _, _) =>
         Some(BDecl(translator.toVar(memHandle), None))
       case CSpecCall(handle, _, _) =>
         Some(BDecl(translator.toVar(handle), None))
-      case CUpdate(newHandle, _, _, _) =>
+      case CUpdate(newHandle, _, _, _,_) =>
         Some(BDecl(translator.toVar(newHandle), None))
       case _ => None
     }
@@ -1244,8 +1227,14 @@ object BluespecGeneration {
         } else { None }
       case CLockStart(mod) => Some(bsInts.getStart(lockRegions(mod)))
       case CLockEnd(mod) => Some(bsInts.getStop(lockRegions(mod)))
+      case CCheckpoint(handle, mod) =>
+        val methodInfo = LockImplementation.getCheckpointInfo(mod)
+        if (methodInfo.isDefined && methodInfo.get.doesModify) {
+          Some(
+            BInvokeAssign(translator.toVar(handle), translateMethod(modParams(mod), methodInfo.get))
+          )
+        } else { None }
       case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))
-      case _: ICheckLockFree => None
       case _: ICheckLockOwned => None
       case _: ILockNoOp => None
       case CSpecCall(handle, _, args) =>
@@ -1255,18 +1244,30 @@ object BluespecGeneration {
         val allocExpr = bsInts.getSpecAlloc(specTable)
         val allocAssign = BInvokeAssign(translator.toVar(handle), allocExpr)
         Some(BStmtSeq(allocAssign +: sendStmts))
-      case CVerify(handle, args, preds, upd) =>
+      case CVerify(handle, args, preds, upd, cHandles) =>
         val correct = args.zip(preds).foldLeft[BExpr](BBoolLit(true))((b, l) => {
           val a = l._1
           val p = l._2
           BBOp("&&", b, BBOp("==", translator.toExpr(a), translator.toExpr(p)))
         })
+        //TODO extract into function
+        val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = true)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+        })
+        val releases = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = false, doRelease = true)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+        })
         val updCmd = translator.toExpr(upd)
         val specCmd = BIf(correct,
           //true branch, just update spec table
-          List(BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle), stgSpecOrder))),
+          BExprStmt(bsInts.getSpecValidate(specTable, translator.toVar(handle), stgSpecOrder)) +: releases,
           //false branch, update spec table _and_ resend call with correct arguments
-          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder)) +: sendToModuleInput(args)
+          (BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder)) +:
+            sendToModuleInput(args)) ++ rollbacks
         )
         Some(if (updCmd.isDefined) {
           BStmtSeq(List(BExprStmt(updCmd.get), specCmd))
@@ -1274,11 +1275,17 @@ object BluespecGeneration {
           specCmd
         })
         //if args != preds -> do spec invalidate and speccall, reassign handle and predictions
-      case CUpdate(nh, handle, args, preds) =>
+      case CUpdate(nh, handle, args, preds, cHandles) =>
         val incorrect = args.zip(preds).foldLeft[BExpr](BBoolLit(false))((b, l) => {
           val a = l._1
           val p = l._2
           BBOp("||", b, BBOp("!=", translator.toExpr(a), translator.toExpr(p)))
+        })
+        //rollback when invalidating
+        val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = false)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
         })
         //order update invalidate AFTER a CInvalidate or CVerify command
         val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder))
@@ -1289,10 +1296,16 @@ object BluespecGeneration {
         val allocAssign = BInvokeAssign(translator.toVar(nh), allocExpr)
         //if correct then copy handle over
         val copyHandle = BAssign(translator.toVar(nh), translator.toExpr(handle))
-        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts, List(copyHandle)))
+        Some(BIf(incorrect, List(invalidate, allocAssign) ++ sendStmts ++ rollbacks, List(copyHandle)))
         //Invalidate _doesn't_ resend with correct arguments (since it doesn't know what they are!)
-      case CInvalidate(handle) => Some(BExprStmt(
-        bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder)))
+      case CInvalidate(handle, cHandles) =>
+        val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
+          val mod = getMemFromRequest(c.typ.get)
+          val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = true)
+          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+        })
+        Some(BStmtSeq(rollbacks :+
+          BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder))))
         //only free speculation entries for the blocking call
         //but do so conditionally based on being Speculative at all
       case CCheckSpec(isBlocking) if isBlocking =>

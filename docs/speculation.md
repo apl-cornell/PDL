@@ -72,3 +72,22 @@ state used to represent the checkpoint can be freed. It is possible that this ma
 (e.g., when child speculation status is verified).
 
 
+
+# Checkpoint and RollBack
+
+The current actual implementation of checkpoint and rollback will establish the following:
+
+1. Only 1 checkpoint per memory may be made and it must be made in the same cycle
+as the `end(mem)` statement. The semantics are that it captures the effects of all reserves
+made in the same cycle.
+2. Checkpoints may be made conditionally; the conditions under which they are made must
+imply all of the conditions under which speculative threads are validated (`verify`, `update` and `invalidate` statements)
+after the checkpoint stage. The condition must also be implied by all paths that
+speculate (otherwise some thread may speculate but not make a checkpoint) after the checkpoint.
+3. A checkpoint is only necessary if a stage speculatively reserves (any op)
+or atomically writes a memory. In this case, if no checkpoint is ever made it is an error.
+4. Rollback operations are automatically inserted at the relevant `verify`, `update`, and `invalidate` statements:
+ - `verify` conditionally rollsback the lock state and releases checkpoint
+ - `update` rollsback the lock state but _does not_ release the checkpoint
+ - `invalidate` rollsback the lock state and releases the checkpoint
+5. It is an error if a checkpoint is not released by the end of the pipeline.

@@ -44,6 +44,8 @@ object TypeInferenceWrapper
    case TVoid() => inType
    case TSigned() => inType
    case TUnsigned() => inType
+   case TMaybe(btyp) => TMaybe(subst_into_type(typevar, toType, btyp))
+   case TRecType(_,_) => inType //TODO
    case TFun(args, ret) => TFun(args.map(a => subst_into_type(typevar, toType, a)), subst_into_type(typevar, toType, ret)).setPos(inType.pos)
    case TNamedType(name) => if (name == typevar) toType else inType
    case TSignVar(name) => if (name == typevar) toType else inType
@@ -93,6 +95,7 @@ object TypeInferenceWrapper
    case TSignVar(nm) => tp_mp.get(nm) match
    {
     case Some(value) => type_subst_map(value, tp_mp)
+    case None => throw MissingType(nm.pos, "No type found for type parameter " + nm.v)
    }
    case sz@TSizedInt(len, sign) =>
     val width = type_subst_map(len, tp_mp).copyMeta(sz) |> to_width
@@ -285,7 +288,7 @@ object TypeInferenceWrapper
      case CCheckSpec(_) => (c, env, sub)
      case _: CVerify => (c, env, sub)
      case _: CUpdate => (c, env, sub)
-     case CInvalidate(_) => (c, env, sub)
+     case CInvalidate(_, _) => (c, env, sub)
      case ct@CTBar(c1, c2) => val (fixed1, e, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e, s)
       (ct.copy(c1 = fixed1, c2 = fixed2).copyMeta(ct), e2, s2)
@@ -293,6 +296,9 @@ object TypeInferenceWrapper
      case CSpecCall(h,_,_) => //TODO maybe wrong?
       //add spec handle type to env
       (c, env.add(h.id, h.typ.get).asInstanceOf[TypeEnv], sub)
+     case CCheckpoint(handle, lock) =>
+      //add checkpoint handle type to env
+      (c, env.add(handle.id, handle.typ.get).asInstanceOf[TypeEnv], sub)
      case co@COutput(exp) =>
       val (s, t, e, fixed) = infer(env, exp)
       val tempSub = compose_subst(sub, s)
@@ -499,6 +505,7 @@ object TypeInferenceWrapper
      case TString() => false
      case TVoid() => false
      case TBool() => false
+     case TMaybe(t) => occursIn(name, t)
      case TFun(args, ret) => args.foldLeft[bool](false)((b, t) => b || occursIn(name, t)) || occursIn(name, ret)
      case _: TRecType => false
      case _: TMemType => false
@@ -512,6 +519,7 @@ object TypeInferenceWrapper
      case _: TSignedNess => false
      case _: TObject => false //TODO need?
      case _: TRequestHandle => false //TODO need?
+     case TLockedMemType(_, _, _) => false
     }
 
     private def apply_subst_substs(subst: Subst, inSubst: Subst): Subst = inSubst.foldLeft[Subst](List())((s, c) => s :+ ((c._1, apply_subst_typ(subst, c._2))))

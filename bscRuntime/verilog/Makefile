@@ -52,7 +52,7 @@ sim: $(B_LIB) $(B_SIM)
 	$(BSC) -show-schedule $(DEBUG) $(VSIM) $(B_SIM)
 	$(BSC) $(DEBUG) -verilog -e mk$(OUT) -o mk$(OUT).bexe
 #	$(BSC) $(VSIM) -o mk$(OUT).bexe -e mk$(OUT) mk$(OUT).ba
-	./mk$(OUT).bexe > smoke_test_bluesim.out 
+	./mk$(OUT).bexe +bscvcd > smoke_test_bluesim.out 
 
 .PHONY: clean
 clean:

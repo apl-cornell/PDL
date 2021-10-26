@@ -4,7 +4,7 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.DFMap
 import pipedsl.common.Errors.InvalidLockState
 import pipedsl.common.Syntax.Annotations.TypeAnnotation
-import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, EVar, Expr, ICheckLockFree, ICheckLockOwned, ICondCommand, IReleaseLock, IReserveLock, Id, LockArg}
+import pipedsl.common.Syntax.{CLockEnd, CLockOp, CLockStart, Command, EVar, ICondCommand, IReleaseLock, IReserveLock, Id, LockArg}
 import pipedsl.common.Utilities.updateSetMap
 
 import scala.util.parsing.input.Position

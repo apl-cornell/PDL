@@ -230,7 +230,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
-    speccall |
+    speccall | checkPoint |
     typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
@@ -262,7 +262,17 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     block | conditional | split
   }
 
-  //TODO better syntax for these
+  lazy val checkPoint: P[Command] = positioned {
+   "checkpoint" ~> parens(iden) ^^ {
+      case lid => {
+        val cid = Id("_checkpoint_" + lid.v)
+        val handleVar = EVar(cid)
+        handleVar.typ = Some(TRequestHandle(lid, RequestType.Checkpoint))
+        cid.typ = handleVar.typ
+        CCheckpoint(handleVar, lid)
+      }
+    }
+  }
   lazy val check: P[Command] = positioned {
     "spec_barrier()" ^^ { _ => CCheckSpec(true) } |
     "spec_check()" ^^ { _ => CCheckSpec(false) }
@@ -277,13 +287,13 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
         CSpecCall(sv, i, args)
     } |
     iden ~ "<-" ~ "update" ~ parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
-      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List()) }
+      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List(), List()) }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
     "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
-      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
-    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
+      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u, List()) } |
+    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i, List()))
   }
 
   lazy val casestmt: P[CaseObj] = positioned {
