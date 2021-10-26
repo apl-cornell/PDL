@@ -134,6 +134,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           ctx)
         tenv.intersect(runningEnv)
 
+        //TODO refactor this code so it looks like the code in the SpeculationChecker (it does _exactly_ the same
+        //thing, I just think it looks nicer there)
       case CIf(expr, cons, alt) =>
         val lt = checkCommand(cons, env)
         //makes new environment with all locks implied by true branch
