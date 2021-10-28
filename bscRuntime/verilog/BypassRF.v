@@ -103,7 +103,9 @@ module BypassRF(CLK,
    reg [name_width - 1: 0]    wQueueHead;
    reg [addr_width - 1 : 0]    wQueueAddr[ 0 : numNames - 1];   
    reg 			       wQueueValid[ 0 : numNames - 1];
-   reg 			       wQueueWritten[ 0 : numNames - 1];      
+   reg 			       wQueueWritten[ 0 : numNames - 1];
+   reg [data_width - 1 : 0]    wQueueData[ 0 : numNames - 1 ];
+   
    reg [name_width - 1 : 0]    wQueueOwner;
 
    function automatic [0:0] isNewer(input [name_width - 1 : 0] a, b, h);
@@ -193,9 +195,18 @@ module BypassRF(CLK,
    assign RF_FWD12 = WE_1 && NAME_IN_1 == rf2_conflict && rf2_hasc;   
    assign RF_FWD21 = WE_2 && NAME_IN_2 == rf1_conflict && rf1_hasc;   
    assign RF_FWD22 = WE_2 && NAME_IN_2 == rf2_conflict && rf2_hasc;
-   
-   assign RF_DATA_1 = (RF_FWD11) ? D_IN_1 : ((RF_FWD21) ? D_IN_2 : rf[ADDR_1]);   
-   assign RF_DATA_2 = (RF_FWD12) ? D_IN_1 : ((RF_FWD22) ? D_IN_2 : rf[ADDR_2]);  
+
+   //forward from concurrent write combinationally or from the write queue,
+   //read from RF if no conflict
+   assign RF_DATA_1 = (RF_FWD11) ? D_IN_1 :
+		      ((RF_FWD21) ? D_IN_2 :
+		      (rf1_foundc ? wQueueData[rf1_conflict] :
+		       rf[ADDR_1]));
+      
+   assign RF_DATA_2 = (RF_FWD12) ? D_IN_1 :
+		      ((RF_FWD22) ? D_IN_2 :
+		       (rf2_foundc ? wQueueData[rf2_conflict] :
+			rf[ADDR_2]));   
    
    assign stillConflict1 = rf1_hasc && (!RF_FWD11) & (!RF_FWD21);
    assign stillConflict2 = rf2_hasc && (!RF_FWD12) & (!RF_FWD22);   
@@ -299,24 +310,25 @@ module BypassRF(CLK,
 	       $display("ALLOC W entry %d for addr %d", wQueueHead, ADDR_IN);
 	  `endif
 	    end
-	  //write 1
+	  //write 1 to write queue
 	  if (WE_1)
 	    begin
-	       rf[wQueueAddr[NAME_IN_1]] <=  `BSV_ASSIGNMENT_DELAY D_IN_1;	       
 	       wQueueWritten[NAME_IN_1] <= `BSV_ASSIGNMENT_DELAY 1;
+	       wQueueData[NAME_IN_1] <= `BSV_ASSIGNMENT_DELAY D_IN_1;	       
 	    end
-	  //write 2
+	  //write 2 to write queue
 	  if (WE_2)
 	    begin
-	       rf[wQueueAddr[NAME_IN_2]] <=  `BSV_ASSIGNMENT_DELAY D_IN_2;
 	       wQueueWritten[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY 1;
+	       wQueueData[NAME_IN_2] <= `BSV_ASSIGNMENT_DELAY D_IN_2;	       	       
 	    end
-	  //free writes
+	  //free writes and commit to rf
 	  if (WFE & F_READY)
 	    begin
 	       wQueueValid[W_F] <= `BSV_ASSIGNMENT_DELAY 0;
 	       wQueueWritten[W_F] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	       wQueueOwner <= `BSV_ASSIGNMENT_DELAY wQueueOwner + 1;
+	       rf[wQueueAddr[W_F]] <= `BSV_ASSIGNMENT_DELAY wQueueData[W_F];	       
 	  `ifdef DEBUG
 	       $display("Freeing entry %d for addr %d", W_F, wQueueAddr[W_F]);	       
 	  `endif
