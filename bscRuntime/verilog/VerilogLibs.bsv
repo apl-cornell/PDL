@@ -53,6 +53,22 @@ interface BypassRF#(type addr, type elem, type id);
    method Action write(id i, elem b);
 endinterface
 
+interface CheckpointBypassRF#(type addr, type elem, type id, type cid);
+   method ActionValue#(id) res_w1(addr a);
+   method ActionValue#(id) res_r1(addr a);
+   method ActionValue#(id) res_r2(addr a);
+   method Bool owns_r1();
+   method Bool owns_r2();
+   method Action rel_r1();
+   method Action rel_r2();
+   method Action rel_w1(id i);      
+   method elem read1(id a);
+   method elem read2(id a);
+   method Action write(id i, elem b);
+   method ActionValue#(cid) checkpoint();
+   method Action rollback(cid c, Bool doRoll, Bool doRel);   
+endinterface
+
 import "BVI" RenameRF =
  module mkRenameRF#(Integer aregs, Integer pregs, Bool init, String fileInit)(RenameRF#(addr, elem, name)) provisos
     (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
@@ -214,6 +230,57 @@ module mkBypassRF#(Integer regnum, Bool init, String fileInit)(BypassRF#(addr, e
    
       schedule (res_w1) C (res_w1);
       schedule (res_w1) CF (res_r1, res_r2, owns_r1, owns_r2, rel_r1, rel_r2, read1, read2, write, rel_w1);
+      schedule (res_r1) C (res_r1);
+      schedule (res_r2) C (res_r2);
+      schedule (res_r1) CF (res_r2);
+      schedule (owns_r1, owns_r2, read1, read2, rel_r1, rel_r2) SBR (res_r1, res_r2);
+      schedule (read1, read2) CF (owns_r1, owns_r2, read1, read2, rel_r1, rel_r2, rel_w1);
+      schedule (owns_r1, owns_r2) CF (owns_r1, owns_r2, rel_r1, rel_r2, rel_w1);
+      schedule (write) SBR (res_r1, res_r2, read1, read2, owns_r1, owns_r2);
+      schedule (write) CF (rel_r1, rel_r2, write);
+      schedule (rel_w1) SBR (write);
+      schedule (rel_w1) C (rel_w1);
+      schedule (rel_w1) CF (res_r1, res_r2, rel_r1, rel_r2);
+      schedule (rel_r1, rel_r2) CF (rel_r1, rel_r2);
+
+endmodule
+
+import "BVI" CheckpointBypassRF =
+module mkCheckpointBypassRF#(Integer regnum, Bool init, String fileInit)(CheckpointBypassRF#(addr, elem, name, name)) provisos
+   (Bits#(elem, szElem), Bits#(addr, szAddr), Bits#(name, szName), Bounded#(name),
+    PrimIndex#(addr, an), PrimIndex#(name, nn));
+   
+   parameter addr_width = valueOf(szAddr);
+   parameter data_width = valueOf(szElem);
+   parameter name_width = valueOf(szName);
+   parameter lo_arch = 0;
+   parameter hi_arch = regnum - 1;
+   parameter binaryInit = init;
+   parameter file = fileInit;
+        
+   default_clock clk(CLK, (*unused*) clk_gate);
+   default_reset rst (RST);
+   
+   method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
+   method RNAME_OUT_1 res_r1(ADDR_1) enable(RRESE_1) ready (RRES_READY_1);
+   method RNAME_OUT_2 res_r2(ADDR_2) enable(RRESE_2) ready (RRES_READY_2);
+   method VALID_OUT_1 owns_r1();
+   method VALID_OUT_2 owns_r2();
+   method write[2](NAME_IN, D_IN) enable (WE);
+   method D_OUT_1 read1(RD_NAME_1);
+   method D_OUT_2 read2(RD_NAME_2);
+   method rel_r1() enable (FE_1);
+   method rel_r2() enable (FE_2);
+   method rel_w1(W_F) enable (WFE) ready (F_READY);
+   method CHK_OUT checkpoint() enable (CHK_E);
+   method rollback(ROLLBK_IN, DO_ROLL, DO_REL) enable (ROLLBK_E);
+   
+      schedule (checkpoint) C (checkpoint);
+      schedule (rollback) C (rollback);
+      schedule (checkpoint) CF (rollback);
+      schedule (checkpoint, rollback) CF (res_r1, res_r2, owns_r1, owns_r2, read1, read2, write, rel_r1, rel_r2, rel_w1);
+      schedule (res_w1) C (res_w1);
+      schedule (res_w1) CF (res_r1, res_r2, owns_r1, owns_r2, rel_r1, rel_r2, read1, read2, write, rel_w1, checkpoint, rollback);
       schedule (res_r1) C (res_r1);
       schedule (res_r2) C (res_r2);
       schedule (res_r1) CF (res_r2);

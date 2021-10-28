@@ -9,7 +9,7 @@
 
 //`define DEBUG 1
 
-module BypassRF(CLK,
+module CheckpointBypassRF(CLK,
 		RST,
 		ADDR_IN, NAME_OUT, ALLOC_E, ALLOC_READY, //write res req
 		ADDR_1, RNAME_OUT_1, RRESE_1, RRES_READY_1,  //read res 1
@@ -23,7 +23,7 @@ module BypassRF(CLK,
 		W_F, WFE, F_READY,                     //free write port
 		FE_1,                 //free rd port 1
 		FE_2,                  //free rd port 2
-		CHK_OUT, CHK_E, CHK_READY, //checkpoint req
+		CHK_OUT, CHK_E, //checkpoint req
 		ROLLBK_IN, DO_ROLL, DO_REL, ROLLBK_E //rollback req
 		);
 
@@ -87,24 +87,25 @@ module BypassRF(CLK,
    //checkpoint
    input 		       CHK_E;
    output [name_width - 1 : 0] CHK_OUT;
-   output 		       CHK_READY;
 
    //rollback
    input [name_width - 1 : 0]  ROLLBK_IN;
-   input 		       ROLLBK_E, DO_ROLL, RO_REL;
+   input 		       DO_ROLL, DO_REL, ROLLBK_E;   
    
    
    //phys_regfile
    reg [data_width - 1 : 0]    rf[lo_arch:hi_arch];
 
    //pending reads
+   reg [name_width - 1 : 0]    rf1_owner;   
    
    reg [data_width - 1 : 0]    rf1;
    reg [name_width - 1 : 0]    rf1_write;
    reg 			       rf1_valid;
    reg 			       rf1_inUse;
  			       
-   
+
+   reg [name_width - 1 : 0]    rf2_owner;      
    reg [data_width - 1 : 0]    rf2;
    reg [name_width - 1 : 0]    rf2_write;
    reg 			       rf2_valid;
@@ -273,9 +274,17 @@ module BypassRF(CLK,
 
    assign VALID_OUT_1 = RF1_VALID;   
    assign VALID_OUT_2 = RF2_VALID;
-    
-   integer 		       initq;
-   integer 		       siminit;  
+
+
+   //Checkpoint info:
+   //next wqueuehead is the checkpoint id (i.e., the thing we reset the queue head to)
+   assign CHK_OUT = (ALLOC_E && ALLOC_READY) ? wQueueHead + 1 : wQueueHead;   
+
+   
+   integer initq;   
+   integer 		       siminit;
+   integer 		       rbi;
+   
    //simulation initialization
    initial
      begin
@@ -310,6 +319,24 @@ module BypassRF(CLK,
        end
      else
        begin
+	  //do rollback
+	  if (ROLLBK_E && DO_ROLL)
+	    begin
+	       //reset head of write queue
+	       wQueueHead <= `BSV_ASSIGNMENT_DELAY ROLLBK_IN;
+	       //reset validity of ALL queue entries NEWER than current head but older than ROLLBK_IN
+	       for (rbi = 0; rbi < numNames; rbi = rbi + 1)
+		 begin
+		    if (!isNewer(rbi, ROLLBK_IN, wQueueHead))
+		      begin
+			 wQueueValid[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
+			 wQueueWritten[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
+		      end			 
+		 end
+	       //if the person making the checkpoint is not the owner of rd slots, reset their status
+	       if (rf1_owner != ROLLBK_IN) rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
+	       if (rf2_owner != ROLLBK_IN) rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;	       	       
+	    end	 
 	  //write reservation
 	  if (ALLOC_E && ALLOC_READY)
 	    begin
@@ -347,6 +374,7 @@ module BypassRF(CLK,
 	  //rf1 res regs
 	  if (RRES_READY_1 & RRESE_1)
 	    begin
+	       rf1_owner <= `BSV_ASSIGNMENT_DELAY CHK_OUT;	       
 	       rf1_inUse <= `BSV_ASSIGNMENT_DELAY 1;
 	       rf1_write <= `BSV_ASSIGNMENT_DELAY rf1_conflict;	       
 	       rf1 <= `BSV_ASSIGNMENT_DELAY RF_DATA_1;
@@ -357,7 +385,7 @@ module BypassRF(CLK,
 	    end
 	  //freeing
 	  else if (FE_1)
-	    begin
+	    begin	       
 	       rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;
 	    end
@@ -370,6 +398,7 @@ module BypassRF(CLK,
 	  //rf2 res regs
 	  if (RRES_READY_2 & RRESE_2)
 	    begin
+	       rf2_owner <= `BSV_ASSIGNMENT_DELAY CHK_OUT;	       
 	       rf2_inUse <= `BSV_ASSIGNMENT_DELAY 1;
 	       rf2_write <= `BSV_ASSIGNMENT_DELAY rf2_conflict;
 	       rf2_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict2;	       
