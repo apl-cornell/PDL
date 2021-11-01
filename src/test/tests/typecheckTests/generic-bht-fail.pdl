@@ -1,4 +1,4 @@
-extern BHT<int<T>> {
+extern BHT<T> {
        method req(pc: int<16>, skip: int<16>, take: int<16>): int<16>;
        method upd(pc: int<16>, taken: bool): ();
 }

@@ -435,6 +435,8 @@ object Utilities {
   sealed abstract class FOption[+A]() {
     def get: A
 
+    def getOrElse[B >: A](default: => B): B
+
     def toOptionOrThrow(x: Exception): Option[A]
 
     def toOptionUnsafe = toOptionOrThrow(new RuntimeException("you brought this upon yourself"))
@@ -452,6 +454,8 @@ object Utilities {
     override def isError: Boolean = false
 
     override def isEmpty: Boolean = false
+
+    override def getOrElse[B >: A](default: => B): B = value
   }
 
   case object FNone extends FOption[Nothing] {
@@ -462,6 +466,8 @@ object Utilities {
     override def isEmpty: Boolean = true
 
     override def isError: Boolean = false
+
+    override def getOrElse[B >: Nothing](default: => B): B = default
   }
 
   case object FError extends FOption[Nothing] {
@@ -472,6 +478,8 @@ object Utilities {
     override def isEmpty: Boolean = true
 
     override def isError: Boolean = true
+
+    override def getOrElse[B >: Nothing](default: => B): B = default
   }
 
   private def typeMapVar(v: EVar, f_opt: Option[Type] => FOption[Type]): EVar = typeMapExpr(v, f_opt) match {
@@ -554,7 +562,7 @@ object Utilities {
         case expr: CirExpr => expr match
         {
           case e@CirLock(mem, _, _) => e.copy(mem = typeMapId(mem, f_opt)).copyMeta(e)
-          case e@CirNew(mod, mods, _) => e.copy(mod = typeMapId(mod, f_opt),
+          case e@CirNew(mod, specialized, mods, _) => e.copy(mod = typeMapId(mod, f_opt),
             mods = mods.map((i: Id) => typeMapId(i, f_opt))).copyMeta(e)
           case e@CirCall(mod, args) => e.copy(mod = typeMapId(mod, f_opt),
             args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
@@ -640,7 +648,11 @@ object Utilities {
   def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => FOption[Type]) :FuncDef =
     fun.copy(body = typeMapCmd(fun.body, f_opt))
   def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
-    mod.copy(body = typeMapCmd(mod.body, f_opt)).copyMeta(mod)
+    mod.copy(body = typeMapCmd(mod.body, f_opt),
+      modules = mod.modules.map(p => {
+        println(s"${p.typ} : ${f_opt(Some(p.typ))}")
+        p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
+      })).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {

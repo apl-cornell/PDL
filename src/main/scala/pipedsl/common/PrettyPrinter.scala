@@ -143,8 +143,11 @@ class PrettyPrinter(output: Option[File]) {
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
       case CirLock(mem, impl, sz) => impl.toString + "(" + mem.v + ")" +
         "<" + sz.map(a => a.toString).mkString(",") + ">"
-      case CirNew(mod, mods, _) => "new " + mod.v +
-        "[" + mods.map(m => m.v).mkString(",") + "]"
+      case CirNew(mod, spe, mods, _) => "new " + mod.v +
+        (spe match {
+        case Nil => ""
+        case h::t => "<" + t.foldLeft(h.toString)((acc, i) => acc + ", " + i) + ">"
+      }) + "[" + mods.map(m => m.v).mkString(",") + "]"
       case CirCall(mod, args) => "call " + mod.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     }
     case _ => "TODO"

@@ -451,8 +451,9 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
   }
 
   lazy val cnew: P[CirExpr] = positioned {
-    "new" ~ iden ~ brackets(repsep(iden,",")).? ~ parens(repsep(num,",")).? ^^ {
-      case _ ~ i ~ mods ~ params => CirNew(i, if (mods.isDefined) mods.get else List(),
+    "new" ~ iden ~ angular(repsep(posint, ",")).? ~ brackets(repsep(iden,",")).?  ~ parens(repsep(num,",")).? ^^ {
+      case _ ~ i ~ mods ~ specialize ~ params =>
+        CirNew(i, if (mods.isDefined) mods.get else List(), specialize.getOrElse(List()),
         if (params.isDefined) params.get else List())
     }
   }
@@ -516,8 +517,8 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
   }
 
   lazy val extern: P[ExternDef] = positioned {
-    "extern" ~> iden ~ angular(repsep(typ, ",")).? ~ braces(methodDef.*) ^^ {
-      case i ~ t ~ f => ExternDef(i, if (t.isDefined) t.get else List(), f) }
+    "extern" ~> iden ~ angular(repsep(genericName, ",")).? ~ braces(methodDef.*) ^^ {
+      case i ~ t ~ f => ExternDef(i, t.getOrElse(List()).map(x => TNamedType(x)), f) }
   }
 
   lazy val prog: P[Prog] = positioned {

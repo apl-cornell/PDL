@@ -192,7 +192,7 @@ object BluespecGeneration {
           impl, idsz)
         val modargs = if (env.contains(mem)) { largs :+ env(mem) } else { largs }
         (lockedMemType, BModule(modInstName, modargs))
-      case CirNew(mod, mods, params) =>
+      case CirNew(mod, specialized, mods, params) =>
         //TODO better for externs
         val interface = if (modMap.contains(mod)) bsInts.getInterface(modMap(mod)) else extMap(mod)
         val modName =   if (modMap.contains(mod)) bsInts.getModuleName(modMap(mod)) else "mk" + mod.v

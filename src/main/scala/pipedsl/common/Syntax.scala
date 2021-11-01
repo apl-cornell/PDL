@@ -129,7 +129,8 @@ object Syntax {
         case TUnsigned() => "unsigned"
         case TSignVar(name) => "sign(" + name + ")"
       }
-      case TObject(name, tparams, methods) => "TODO"        
+      case TObject(name, tparams, methods) => s"$name <" + tparams + ">"
+        //methods.foldLeft("")((s, f) => s + s"\n{${f._2._1.toString}}")
     }
 
     /**
@@ -575,6 +576,6 @@ object Syntax {
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
   case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int], numPorts: Int) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
-  case class CirNew(mod: Id, mods: List[Id], params: List[EInt]) extends CirExpr
+  case class CirNew(mod: Id, specialized :List[Int], mods: List[Id], params: List[EInt]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }

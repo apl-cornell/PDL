@@ -1,6 +1,6 @@
-extern BHT<int<16>> {
-       method req(pc: int<16>, skip: int<16>, take: int<16>): int<16>;
-       method upd(pc: int<16>, taken: bool): ();
+extern BHT<T> {
+       method req(pc: int<T>, skip: int<T>, take: int<T>): int<T>;
+       method upd(pc: int<T>, taken: bool): ();
 }
 
 def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
@@ -191,7 +191,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>, dm
 	      s2 <- s;
        } else {
        	 if (isBranch) {
-	       s2 <- update(s, bht.req(pc, immB, 1<16>));
+	       s2 <- update(s, bht.req(pc, immB, 1));
 	 } else {
 	   s2 <- s;
 	   invalidate(s);
