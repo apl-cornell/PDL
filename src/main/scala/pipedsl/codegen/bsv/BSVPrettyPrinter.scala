@@ -48,6 +48,9 @@ object BSVPrettyPrinter {
       } else {
         ""
       }) + "Int#(" + size + ")"
+    case BVarSizedInt(unsigned, size) =>
+      (if (unsigned) "U" else "") +
+      "Int#(" + size + ")"
     case BBool => "Bool"
     case BVoid => "void"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +

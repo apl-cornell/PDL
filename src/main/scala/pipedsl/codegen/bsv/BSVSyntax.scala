@@ -25,6 +25,7 @@ object BSVSyntax {
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedType(name: String, sizeParams: List[Integer] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
+  case class BVarSizedInt(unsigned :Boolean, size :String) extends BSVType
   case class BTypeParam(name: String, provisos: List[Proviso]) extends BSVType
   case object BBool extends BSVType
   case object BString extends BSVType
@@ -83,7 +84,8 @@ object BSVSyntax {
           (None, mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ)
         }
         getLockedMemType(mem, mtyp, lidSz, lidtyp, limpl, useTypeVars = false, None)
-      case TSizedInt(len, sign) => BSizedInt(sign.unsigned(), len.getLen)
+      case TSizedInt(TBitWidthVar(name), sign) => BVarSizedInt(sign.unsigned(), name.v)
+      case TSizedInt(len :TBitWidthLen, sign) => BSizedInt(sign.unsigned(), len.getLen)
       case TBitWidthLen(len) => BNumericType(len)
       case TBool() => BBool
       case TString() => BString
@@ -196,9 +198,25 @@ object BSVSyntax {
     //automatically determine an output type
     private def translateIntCast(from: TSizedInt, to:TSizedInt, e: Expr): BExpr = {
       val baseExpr = toExpr(e)
-      val needsExtend = from.len.getLen < to.len.getLen
-      val needsTruncate = to.len.getLen < from.len.getLen
-      val needsPack = from.sign != to.sign
+      //val needsExtend = from.len.getLen < to.len.getLen
+      //val needsTruncate = to.len.getLen < from.len.getLen
+      val needsExtend = (to.len, from.len) match {
+        case (TBitWidthLen(lto), TBitWidthLen(lfrom)) => lfrom < lto
+        case _ => false
+      }
+      val needsTruncate = (to.len, from.len) match {
+        case (TBitWidthLen(lto), TBitWidthLen(lfrom)) => lto < lfrom
+        case _ => false
+      }
+
+
+      val needsPack = (to, from) match {
+        case (TSizedInt(_:TBitWidthLen, sto), TSizedInt(_:TBitWidthLen, sfrom)) =>
+          sto != sfrom
+        case _ => true
+      }
+
+        from.sign != to.sign
       val extended = if (needsExtend) {
         //If making a signed number, sign extend
         BExtend(baseExpr, useSign = to.sign.signed())
