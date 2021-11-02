@@ -194,12 +194,20 @@ object BluespecGeneration {
         (lockedMemType, BModule(modInstName, modargs))
       case CirNew(mod, specialized, mods, params) =>
         //TODO better for externs
-        val interface = if (modMap.contains(mod)) bsInts.getInterface(modMap(mod)) else extMap(mod)
+        val interface = specialize(
+          if (modMap.contains(mod)) bsInts.getInterface(modMap(mod)) else extMap(mod),
+          specialized)
         val modName =   if (modMap.contains(mod)) bsInts.getModuleName(modMap(mod)) else "mk" + mod.v
         val szParams = params.map(p => BUnsizedInt(p.v))
         (interface, BModule(name = modName, args = mods.map(m => env(m)) ++ szParams))
       case CirCall(_, _) => throw UnexpectedExpr(c)
     }
+
+    private def specialize(i : BSVType, specs :List[Int]) = i match
+    {
+      case BInterface(name, tparams) => BInterface(name, tparams.zip(specs).map((bvi) =>
+        BVar(bvi._1.name, BNumericType(bvi._2))))
+      case other => other    }
 
     private var freshCnt = 0
     private def varToReg(b: BVar): BVar = {

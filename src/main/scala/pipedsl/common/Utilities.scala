@@ -649,10 +649,9 @@ object Utilities {
     fun.copy(body = typeMapCmd(fun.body, f_opt))
   def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
     mod.copy(body = typeMapCmd(mod.body, f_opt),
-      modules = mod.modules.map(p => {
-        println(s"${p.typ} : ${f_opt(Some(p.typ))}")
+      modules = mod.modules.map(p =>
         p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
-      })).copyMeta(mod)
+      )).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {
@@ -749,7 +748,6 @@ object Utilities {
           case _ => ""
         }).zip(new_types)
         val map = assoc_list.toMap
-        println(s"MAP:::: ${map}")
         val new_args = old_fun.args.map
         { case ts@TSizedInt(len@TBitWidthVar(name), sign) => TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
         case other => other }
@@ -757,8 +755,6 @@ object Utilities {
           case ts@TSizedInt(len@TBitWidthVar(name), sign) => TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
           case other => other
         }
-        println(s"old ret: ${old_fun.ret}")
-        println(s"new ret: ${new_ret}")
         (id_funlat._1, (TFun(new_args, new_ret).copyMeta(old_fun).asInstanceOf[TFun], id_funlat._2._2))
       })).copyMeta(t)
     case _ => t
