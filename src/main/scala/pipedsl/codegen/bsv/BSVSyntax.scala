@@ -2,7 +2,7 @@ package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
-import pipedsl.common.LockImplementation
+import pipedsl.common.{LockImplementation, Syntax}
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
@@ -84,6 +84,7 @@ object BSVSyntax {
         }
         getLockedMemType(mem, mtyp, lidSz, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(len, sign) => BSizedInt(sign.unsigned(), len.getLen)
+      case TBitWidthLen(len) => BNumericType(len)
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)

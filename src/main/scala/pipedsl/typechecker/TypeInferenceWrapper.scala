@@ -4,7 +4,7 @@ import pipedsl.common.Errors
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, typeMap, typeMapFunc, typeMapModule}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, specialise, typeMap, typeMapFunc, typeMapModule}
 import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 
@@ -552,8 +552,9 @@ object TypeInferenceWrapper
       val ltyp = TLockedMemType(mtyp, idsz, impl)
       c.typ = Some(ltyp)
       (ltyp, tenv, c)
-     case CirNew(mod, specialized, mods, _) => val mtyp = tenv(mod)
+     case CirNew(mod, specialized, mods, _) => val mtyp = specialise(tenv(mod), specialized)
       //TODO apply specialization
+      println(s"mtyp: ${mtyp} : ${mtyp.getClass}")
       mtyp match
       {
        case TModType(_, refs, _, _) => if (refs.length != mods.length) throw ArgLengthMismatch(c.pos, mods.length, refs.length)

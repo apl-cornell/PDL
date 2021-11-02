@@ -737,4 +737,30 @@ object Utilities {
       _degenerify(t).copyMeta(t)
     }
 
+  def specialise(t :Type, s :List[Int]) :Type = t match {
+    case t :TObject =>
+    val new_types = s.map(l => TBitWidthLen(l))
+    t.copy(typParams = new_types,
+      methods = t.methods.map((id_funlat) => {
+        val old_fun = id_funlat._2._1
+        val assoc_list = t.typParams.map({
+          case TBitWidthVar(v) => v.v
+          case TNamedType(v) => v.v
+          case _ => ""
+        }).zip(new_types)
+        val map = assoc_list.toMap
+        println(s"MAP:::: ${map}")
+        val new_args = old_fun.args.map
+        { case ts@TSizedInt(len@TBitWidthVar(name), sign) => TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+        case other => other }
+        val new_ret = old_fun.ret match {
+          case ts@TSizedInt(len@TBitWidthVar(name), sign) => TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+          case other => other
+        }
+        println(s"old ret: ${old_fun.ret}")
+        println(s"new ret: ${new_ret}")
+        (id_funlat._1, (TFun(new_args, new_ret).copyMeta(old_fun).asInstanceOf[TFun], id_funlat._2._2))
+      })).copyMeta(t)
+    case _ => t
+  }
 }

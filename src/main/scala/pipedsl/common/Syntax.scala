@@ -129,8 +129,8 @@ object Syntax {
         case TUnsigned() => "unsigned"
         case TSignVar(name) => "sign(" + name + ")"
       }
-      case TObject(name, tparams, methods) => s"$name <" + tparams + ">"
-        //methods.foldLeft("")((s, f) => s + s"\n{${f._2._1.toString}}")
+      case TObject(name, tparams, methods) => s"$name <" + tparams + ">" +
+        methods.foldLeft("")((s, f) => s + s"\n{${f._2._1.toString}}")
     }
 
     /**
