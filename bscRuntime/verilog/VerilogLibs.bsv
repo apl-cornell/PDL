@@ -7,11 +7,13 @@ import RWire :: *;
 export RenameRF(..);
 export CheckpointRF(..);
 export BypassRF(..);
+export CheckpointBypassRF(..);
 export BHT(..);
 export mkRenameRF;
 export mkForwardRenameRF;
 export mkCheckpointRF;
 export mkBypassRF;
+export mkCheckpointBypassRF;
 export mkNBFIFOF;
 export mkBHT;
 

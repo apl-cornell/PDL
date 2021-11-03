@@ -327,7 +327,7 @@ module CheckpointBypassRF(CLK,
 	       //reset validity of ALL queue entries NEWER than current head but older than ROLLBK_IN
 	       for (rbi = 0; rbi < numNames; rbi = rbi + 1)
 		 begin
-		    if (!isNewer(rbi, ROLLBK_IN, wQueueHead))
+		    if (rbi == ROLLBK_IN || !isNewer(rbi, ROLLBK_IN, wQueueHead))
 		      begin
 			 wQueueValid[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
 			 wQueueWritten[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
