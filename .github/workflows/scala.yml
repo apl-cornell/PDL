@@ -35,7 +35,7 @@ jobs:
            sudo apt-get install tcl-dev
            sudo apt-get install flex bison
            sudo apt-get install iverilog
-           git clone --recursive https://github.com/B-Lang-org/bsc
+           git clone --recursive --branch 2021.07 https://github.com/B-Lang-org/bsc
            pushd bsc
            make install-src
            popd
