@@ -40,6 +40,9 @@ jobs:
         wget https://github.com/B-Lang-org/bsc/releases/download/2021.07/bsc-2021.07-ubuntu-18.04.tar.gz
         tar -xvf bsc-2021.07-ubuntu-18.04.tar.gz
         mv bsc-2021.07-ubuntu-18.04 bsc
+        pushd bsc
+        make install-src
+        popd
     - name: Build Libs
       env:
         BLUESPECDIR: ${{github.workspace}}/bsc
