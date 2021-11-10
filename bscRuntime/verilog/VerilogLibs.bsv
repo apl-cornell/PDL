@@ -274,7 +274,7 @@ module mkCheckpointBypassRF#(Integer regnum, Bool init, String fileInit)(Checkpo
    method rel_r1() enable (FE_1);
    method rel_r2() enable (FE_2);
    method rel_w1(W_F) enable (WFE) ready (F_READY);
-   method CHK_OUT checkpoint() enable (CHK_E);
+   method CHK_OUT checkpoint() enable (CHK_E) ready (CHK_READY);
    method rollback(ROLLBK_IN, DO_ROLL, DO_REL) enable (ROLLBK_E);
    
       schedule (checkpoint) C (checkpoint);

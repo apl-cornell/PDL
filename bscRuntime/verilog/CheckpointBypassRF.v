@@ -23,7 +23,7 @@ module CheckpointBypassRF(CLK,
 		W_F, WFE, F_READY,                     //free write port
 		FE_1,                 //free rd port 1
 		FE_2,                  //free rd port 2
-		CHK_OUT, CHK_E, //checkpoint req
+		CHK_OUT, CHK_E, CHK_READY, //checkpoint req
 		ROLLBK_IN, DO_ROLL, DO_REL, ROLLBK_E //rollback req
 		);
 
@@ -86,6 +86,7 @@ module CheckpointBypassRF(CLK,
 
    //checkpoint
    input 		       CHK_E;
+   output 		       CHK_READY;   
    output [name_width - 1 : 0] CHK_OUT;
 
    //rollback
@@ -110,6 +111,7 @@ module CheckpointBypassRF(CLK,
    reg [name_width - 1 : 0]    rf2_write;
    reg 			       rf2_valid;
    reg 			       rf2_inUse;
+
    
    //write queue
    reg [name_width - 1: 0]    wQueueHead;
@@ -131,8 +133,11 @@ module CheckpointBypassRF(CLK,
 	 isNewer = !isOlder;
       end
    endfunction // isNewer
-   
-   
+
+   reg [name_width - 1 : 0] nextCheck; //next checkpoint to allocate
+   reg [name_width - 1 : 0] chkQueue [ 0 : numNames - 1]; //wQueueHead to reset to for given checkpoint   
+   reg 			    chkBusy [0 : numNames -1 ]; //whether or not we have an available checkpoint (probably unnecessary but still)2
+
    //find conflicting writes   
    wire [numNames - 1 : 0]   rf1_foundc_bv;   
    wire 				       rf1_foundc;
@@ -277,9 +282,14 @@ module CheckpointBypassRF(CLK,
 
 
    //Checkpoint info:
-   //next wqueuehead is the checkpoint id (i.e., the thing we reset the queue head to)
-   assign CHK_OUT = (ALLOC_E && ALLOC_READY) ? wQueueHead + 1 : wQueueHead;   
+   assign CHK_OUT = nextCheck;
+   assign CHK_READY = !chkBusy[nextCheck];   
+   wire [name_width - 1 : 0] chkPointer;
+   assign chkPointer = (ALLOC_E && ALLOC_READY) ? wQueueHead + 1 : wQueueHead;   
 
+   //Rollback info:
+   wire [name_width - 1 : 0] rollBkWQueue;
+   assign rollBkWQueue = chkQueue[ROLLBK_IN];   
    
    integer initq;   
    integer 		       siminit;
@@ -310,33 +320,65 @@ module CheckpointBypassRF(CLK,
 	  rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
 	  rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;	  
 	  wQueueHead <= `BSV_ASSIGNMENT_DELAY 0;
-	  wQueueOwner <= `BSV_ASSIGNMENT_DELAY 0;	  
+	  wQueueOwner <= `BSV_ASSIGNMENT_DELAY 0;
+	  nextCheck <= `BSV_ASSIGNMENT_DELAY 0;	  
 	  for (initq = 0; initq < numNames ; initq = initq + 1)
 	    begin
 	       wQueueValid[initq] <= `BSV_ASSIGNMENT_DELAY 0;
-	       wQueueWritten[initq] <= `BSV_ASSIGNMENT_DELAY 0;	       
+	       wQueueWritten[initq] <= `BSV_ASSIGNMENT_DELAY 0;
+	       chkBusy[initq] <= `BSV_ASSIGNMENT_DELAY 0;	       
 	    end	  
        end
      else
        begin
+	  //do checkpoint
+	  if (CHK_E && CHK_READY)
+	    begin
+	       nextCheck <= `BSV_ASSIGNMENT_DELAY nextCheck + 1;
+	       chkQueue[nextCheck] <= `BSV_ASSIGNMENT_DELAY chkPointer;
+	       chkBusy[nextCheck] <= `BSV_ASSIGNMENT_DELAY 1;	       
+	    end	  	  
 	  //do rollback
 	  if (ROLLBK_E && DO_ROLL)
 	    begin
 	       //reset head of write queue
-	       wQueueHead <= `BSV_ASSIGNMENT_DELAY ROLLBK_IN;
-	       //reset validity of ALL queue entries NEWER than current head but older than ROLLBK_IN
+	       wQueueHead <= `BSV_ASSIGNMENT_DELAY rollBkWQueue;	       
+	       //reset validity of ALL queue entries NEWER than rollback point
+	  `ifdef DEBUG
+	       $display("Rolling back write queue head from %d to %d", wQueueHead, rollBkWQueue);
+	  `endif
 	       for (rbi = 0; rbi < numNames; rbi = rbi + 1)
-		 begin
-		    if (rbi == ROLLBK_IN || !isNewer(rbi, ROLLBK_IN, wQueueHead))
+		 begin		    
+		    if (rbi == wQueueHead || isNewer(rbi, rollBkWQueue, wQueueHead))
 		      begin
+	  `ifdef DEBUG			 
+			 $display("Rolling back writeQ entry %d", rbi);
+	  `endif
 			 wQueueValid[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
 			 wQueueWritten[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
-		      end			 
+		      end
+		    //make all newer checkpoints available again too:
+		    if ((rbi != ROLLBK_IN) && isNewer(rbi, ROLLBK_IN, nextCheck)) chkBusy[rbi] <= `BSV_ASSIGNMENT_DELAY 0;
 		 end
-	       //if the person making the checkpoint is not the owner of rd slots, reset their status
-	       if (rf1_owner != ROLLBK_IN) rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
-	       if (rf2_owner != ROLLBK_IN) rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;	       	       
-	    end	 
+
+
+	       //if the read owner is newer than the checkpoint ID, reset to free
+	       if ((rf1_owner != ROLLBK_IN) && isNewer(rf1_owner, ROLLBK_IN, nextCheck))
+		 begin		    
+		    rf1_inUse <= `BSV_ASSIGNMENT_DELAY 0;
+		    rf1_valid <= `BSV_ASSIGNMENT_DELAY 0;
+		 end
+	       if ((rf2_owner != ROLLBK_IN) && isNewer(rf2_owner, ROLLBK_IN, nextCheck))
+		 begin
+		    rf2_inUse <= `BSV_ASSIGNMENT_DELAY 0;
+		    rf2_valid <= `BSV_ASSIGNMENT_DELAY 0;
+		 end	       
+	    end // if (ROLLBK_E && DO_ROLL)
+	  //release checkpoint state
+	  if (ROLLBK_E && DO_REL)
+	    begin
+	       chkBusy[ROLLBK_IN] <= `BSV_ASSIGNMENT_DELAY 0;	       
+	    end
 	  //write reservation
 	  if (ALLOC_E && ALLOC_READY)
 	    begin
@@ -368,7 +410,7 @@ module CheckpointBypassRF(CLK,
 	       wQueueOwner <= `BSV_ASSIGNMENT_DELAY wQueueOwner + 1;
 	       rf[wQueueAddr[W_F]] <= `BSV_ASSIGNMENT_DELAY wQueueData[W_F];	       
 	  `ifdef DEBUG
-	       $display("Freeing entry %d for addr %d", W_F, wQueueAddr[W_F]);	       
+	       $display("Freeing entry %d for addr %d %t", W_F, wQueueAddr[W_F], $time);	       
 	  `endif
 	    end
 	  //rf1 res regs
@@ -380,7 +422,7 @@ module CheckpointBypassRF(CLK,
 	       rf1 <= `BSV_ASSIGNMENT_DELAY RF_DATA_1;
 	       rf1_valid <= `BSV_ASSIGNMENT_DELAY !stillConflict1;
 	  `ifdef DEBUG
-	       $display("RF1 Res found conflict %b, with entry %d for addr %d", rf1_foundc, rf1_conflict, ADDR_1);
+	       $display("RF1 Res found conflict %b, with entry %d for addr %d %t", rf1_foundc, rf1_conflict, ADDR_1, $time);
 	  `endif
 	    end
 	  //freeing
