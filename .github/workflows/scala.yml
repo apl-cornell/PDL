@@ -35,8 +35,11 @@ jobs:
         path: bsc
         key: ubuntu-bsc
     - name: Install BSV
-      if: steps.cache-bsc.outputs.cache-hit != 'true'
-      run: git clone --recursive --branch 2021.07 https://github.com/B-Lang-org/bsc; pushd bsc; sudo apt-get install libghc-regex-compat-dev; make install-src; popd
+      id: install-bsv
+      run: |
+        wget https://github.com/B-Lang-org/bsc/releases/download/2021.07/bsc-2021.07-ubuntu-18.04.tar.gz
+        tar -xvf bsc-2021.07-ubuntu-18.04.tar.gz
+        mv bsc-2021.07-ubuntu-18.04 bsc
     - name: Build Libs
       env:
         BLUESPECDIR: ${{github.workspace}}/bsc
