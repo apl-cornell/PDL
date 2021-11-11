@@ -289,7 +289,7 @@ module mkCheckpointBypassRF#(Integer regnum, Bool init, String fileInit)(Checkpo
       schedule (owns_r1, owns_r2, read1, read2, rel_r1, rel_r2) SBR (res_r1, res_r2);
       schedule (read1, read2) CF (owns_r1, owns_r2, read1, read2, rel_r1, rel_r2, rel_w1);
       schedule (owns_r1, owns_r2) CF (owns_r1, owns_r2, rel_r1, rel_r2, rel_w1);
-      schedule (write) SBR (res_r1, res_r2, read1, read2, owns_r1, owns_r2);
+      schedule (write) SB (res_r1, res_r2, read1, read2, owns_r1, owns_r2);
       schedule (write) CF (rel_r1, rel_r2, write);
       schedule (rel_w1) SBR (write);
       schedule (rel_w1) C (rel_w1);
