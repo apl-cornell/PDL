@@ -91,17 +91,6 @@ module CheckpointRenameRF(CLK,
    //checkpoint mapping files
    reg [copy_width - 1 : 0]    name_copies[0:num_replicas - 1];
    reg [copy_width - 1 : 0]    currentNameSnapshot;   
-      
-
-   //looks up a name given a copy
-   function automatic [ name_width - 1 : 0 ] getName(input [copy_width - 1 : 0] copy, input [addr_width - 1 : 0] addr);
-      reg [copy_width - 1 : 0] shift;      
-      begin
-	 shift = copy >> (2 ** addr);	 
-	 getName = shift[name_width - 1 : 0];	 
-      end
-   endfunction // getName
-   
    
    //phys_regfile
    reg [data_width - 1 : 0]    phys[lo_phys:hi_phys];
