@@ -208,22 +208,20 @@ object TypeInferenceWrapper
 
     def checkFunc(f: FuncDef, env: TypeEnv): (Environment[Id, Type], FuncDef) =
      {
+      println(s"checking func ${f.name}")
       val inputTypes = f.args.map(a => a.typ)
       val funType = TFun(inputTypes, f.ret)
       val funEnv = env.add(f.name, funType)
       val templated = mutable.HashSet.from(f.templateTypes)
-      if(templated.nonEmpty && false)
-       (funEnv, f)
-      else
-       {
       val inEnv = f.args.foldLeft[Environment[Id, Type]](funEnv)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
 
-        val hash = mutable.HashMap.from(subst)
-        val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash, templated)))
-        (funEnv, newFunc)
-       }
-
+      val hash = mutable.HashMap.from(subst)
+      println("about to type map...")
+      println(hash)
+      val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash, templated)))
+      println(s"done checking ${f.name}")
+      (funEnv, newFunc)
      }
 
     private var unique_count = 0
@@ -282,9 +280,12 @@ object TypeInferenceWrapper
       case b => throw UnexpectedType(mem.id.pos, c.toString, "Memory or Module Type", b)
      }
      case CEmpty() => (c, env, sub)
-     case cr@CReturn(exp) => val (s, t, e, fixed) = infer(env, exp)
+     case cr@CReturn(exp) =>
+      println(s"checking return $exp")
+      val (s, t, e, fixed) = infer(env, exp)
       val tempSub = compose_subst(sub, s)
       val tNew = apply_subst_typ(tempSub, t)
+      println(s"return type: $tNew")
       val funT = env(currentDef)
       funT match
       {
@@ -294,7 +295,11 @@ object TypeInferenceWrapper
           val tmp = ECast(ret, fixed)
           tmp.typ = Some(tmp.ctyp)
           tmp
-         } else fixed
+         } else
+         {
+          fixed.typ = Some(tNew)
+          fixed
+         }
         val retSub = compose_subst(tempSub, subst)
         (cr.copy(exp = more_fixed).copyMeta(cr), e.apply_subst_typeenv(retSub), retSub)
        case b => throw UnexpectedType(c.pos, c.toString, funT.toString, b)
@@ -394,8 +399,7 @@ object TypeInferenceWrapper
       val tempSub = compose_many_subst(sub, slhs, srhs)
       val lhstyp = apply_subst_typ(tempSub, tlhs)
       val rhstyp = apply_subst_typ(tempSub, trhs)
-      lhs.typ = Some(lhstyp)
-      rhs.typ = Some(rhstyp)
+
       val (s1, cast) = unify(rhstyp, lhstyp)
       val rhsFixed1 = if (cast) ECast(lhstyp, rhsFixed) else rhsFixed
       val sret = compose_many_subst(tempSub, s1, typ match
@@ -404,6 +408,9 @@ object TypeInferenceWrapper
         compose_subst(s2, s3)
        case None => List()
       })
+
+      lhs.typ = Some(apply_subst_typ(s1, lhstyp))
+      rhs.typ = Some(apply_subst_typ(s1, rhstyp))
       val newEnv = lhs match
       {
        case EVar(id) => rhsEnv.add(id, tlhs)
@@ -430,8 +437,11 @@ object TypeInferenceWrapper
        case EVar(id) => rhsEnv.add(id, tlhs)
        case _ => rhsEnv
       }
-      lhs.typ = Some(lhstyp)
-      rhs.typ = Some(rhstyp)
+      lhs.typ = Some(apply_subst_typ(s1, lhstyp))
+      rhs.typ = Some(apply_subst_typ(s1, rhstyp))
+      println(s"red: ${lhs.typ}")
+      println(s"right: ${rhstyp}")
+      println(sret)
       (ca.copy(rhs = rhsFixed1).copyMeta(ca), newEnv.asInstanceOf[TypeEnv].apply_subst_typeenv(sret), sret)
      case cs@CSeq(c1, c2) => val (fixed1, e1, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e1, s)
@@ -668,6 +678,7 @@ object TypeInferenceWrapper
         val fixed1 = if (cast) ECast(retTyp, fixed) else fixed
         (retSubst, retTyp, env1.apply_subst_typeenv(retSubst), u.copy(ex = fixed1).copyMeta(u))
        case b@EBinop(op, e1, e2) =>
+        println(s"checking ${e1} ${op} ${e2}")
         val (s1, t1, env1, fixed1) = infer(env, e1)
         val (s2, t2, env2, fixed2) = infer(env1, e2)
         val retType = generateTypeVar()
@@ -694,12 +705,15 @@ object TypeInferenceWrapper
         }
         moreFixed1.typ = Some(castL.getOrElse(t1VNew))
         moreFixed2.typ = Some(castR.getOrElse(t2VNew))
+        println(s"(l, r) = (${moreFixed1.typ}, ${moreFixed2.typ})")
         val finalRetType = generateTypeVar()
         val (finSubst, _) = unify(TFun(List(moreFixed1.typ.get, moreFixed2.typ.get), finalRetType), binOpExpectedType(op), binop = true)
         val finalRetSubst = compose_many_subst(subTemp, finSubst)
         val finalRetTyp = apply_subst_typ(finalRetSubst, finalRetType)
+        println(s"final ret type: ${finalRetTyp}")
         val bFixed = b.copy(e1 = moreFixed1, e2 = moreFixed2).copyMeta(b)
         bFixed.typ = Some(finalRetTyp)
+        println(s"done w/ binop ${e1} ${op} ${e2}")
         (finalRetSubst, finalRetTyp, env2.apply_subst_typeenv(finalRetSubst), bFixed)
        case m@EMemAccess(mem, index, _, _, _, _) => if (!(env(mem).isInstanceOf[TMemType] || env(mem).isInstanceOf[TLockedMemType])) throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env(mem))
         val retType = generateTypeVar()
@@ -735,6 +749,7 @@ object TypeInferenceWrapper
         val retType = apply_subst_typ(retSubst, ttNew)
         (retSubst, retType, env3.apply_subst_typeenv(retSubst), trn.copy(cond = fixed_cond, tval = fixed_tval1, fval = fixed_fval1).copyMeta(trn))
        case ap@EApp(func, args) =>
+        println(s"checking calling ${func}")
         val expectedType = uniquify_fun(env(func).asInstanceOf[TFun])
         val retType = generateTypeVar()
         var runningEnv: TypeEnv = env
@@ -759,6 +774,7 @@ object TypeInferenceWrapper
         val retEnv = runningEnv.apply_subst_typeenv(retSubst)
         val retTyp = apply_subst_typ(retSubst, retType)
         ap.typ = Some(retTyp)
+        println(s"done checking call of ${func}")
         (retSubst, retTyp, retEnv, ap.copy(args = fixed_arg_list).copyMeta(ap))
        case ca@ECall(mod, name, args) if name.isEmpty =>
         if (!env(mod).isInstanceOf[TModType]) throw UnexpectedType(e.pos, "Module Call", "TModType", env(mod))

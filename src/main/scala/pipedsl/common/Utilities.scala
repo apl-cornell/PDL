@@ -510,7 +510,8 @@ object Utilities {
               case Some(_) => TSigned()
             }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
-          case _ =>
+          case t =>
+            println(s"bad: ${t.typ}")
             throw LackOfConstraints(e1)
         }
         case t => e1.typ = t.toOptionUnsafe
