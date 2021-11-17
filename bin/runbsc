@@ -73,7 +73,7 @@ TB="mkTB"
 ARGS="$WARN""-u -no-show-timestamps -no-show-version --aggressive-conditions"
 BSC=bsc
 #for now just include both possible relative dirs
-VPATH="-vsearch $BLUESPECDIR/lib/Verilog:$BLUESPECDIR/lib/Verilog.Vivado:$BLUESPECDIR/src/Verilog.Quartus:$BLUESPECDIR/src/Verilog:$BLUESPECDIR/src/Verilog.Vivado:$BLUESPECDIR/src/Verilog.Quartus:$RUNTIMEPATH/verilog"
+VPATH="-vsearch $BLUESPECDIR/src/Verilog:$BLUESPECDIR/lib/Verilog:$BLUESPECDIR/src/Verilog.Vivado:$BLUESPECDIR/lib/Verilog.Vivado:$BLUESPECDIR/src/Verilog.Quartus:$BLUESPECDIR/src/Verilog.Quartus:$RUNTIMEPATH/verilog"
 VSIM="-vsim iverilog"
 BSC_LIB_DIR="$RUNTIMEPATH/memories:$RUNTIMEPATH/verilog"
 BPATH="-p .:$BSC_LIB_DIR:$BLUESPECDIR/inst/lib/Libraries/:$BLUESPECDIR/lib/Libraries/"
