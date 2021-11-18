@@ -42,13 +42,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
     val fenv = f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
     val ftyp = TFun(typList, f.ret)
-    val e1 = checkCommand(f.body, fenv)
-    val rt = checkFuncWellFormed(f.body, e1)
-    if (rt.isEmpty) {
-      throw MalformedFunction(f.pos, "Missing return statement")
-    } else if (!areEqual(ftyp.ret, rt.get)) {
-      throw UnexpectedType(f.pos, s"${f.name} return type", ftyp.toString(), rt.get)
-    }
+//    val e1 = checkCommand(f.body, fenv)
+//    val rt = checkFuncWellFormed(f.body, e1)
+//    if (rt.isEmpty) {
+//      throw MalformedFunction(f.pos, "Missing return statement")
+//    } else if (!areEqual(ftyp.ret, rt.get)) {
+//      throw UnexpectedType(f.pos, s"${f.name} return type", ftyp.toString(), rt.get)
+//    }
     tenv.add(f.name, ftyp)
   }
 

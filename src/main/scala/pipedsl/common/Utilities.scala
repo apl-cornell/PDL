@@ -5,6 +5,7 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{LackOfConstraints, UnexpectedCommand}
 import pipedsl.common.Syntax._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 
@@ -554,7 +555,9 @@ object Utilities {
         case e@ECall(mod, _, args) =>
           e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
         case e@EVar(id) =>
-          e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
+          val ret = e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
+          println(s"${id}'s type is not ${ret.typ}")
+          ret
         case e@ECast(tp, exp) =>
           val ntp = f_opt(Some(tp)).get
           val tmp = e.copy(ctyp = ntp, exp = typeMapExpr(exp, f_opt)).copyMeta(e)
@@ -698,14 +701,23 @@ object Utilities {
   val is_handle_var :Id => Boolean =
     { id: Id => id.v.startsWith(lock_handle_prefix) }
 
-  val generic_type_prefix = "__SUPERSPECIALGENERIC_"
-  def is_generic(t :Any) :Boolean = t match {
+  val generic_type_prefix = "__GEN_"
+  @tailrec def is_generic(t:Any) :Boolean = t match {
     case TNamedType(name) => name.v.startsWith(generic_type_prefix)
     case TSizedInt(l, _) => is_generic(l)
     case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix)
     case _:Type => false
     case id:Id => id.v.startsWith(generic_type_prefix)
     case s:String => s.startsWith(generic_type_prefix)
+  }
+
+  @tailrec def is_my_generic(t :Any) :Boolean = t match {
+    case TNamedType(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+    case TSizedInt(l, _) => is_my_generic(t)
+    case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+    case _:Type => false
+    case name:Id => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+    case name:String => name.startsWith(generic_type_prefix) && !name.endsWith("*")
   }
 
   val not_gen_pref = "__NOT_GEN"

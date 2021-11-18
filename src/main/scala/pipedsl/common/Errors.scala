@@ -199,4 +199,8 @@ object Errors {
   )
 
   case class IntWidthNotSpecified() extends RuntimeException
+
+  case class NotSoGenericAreWe(id :Id, needed :Type) extends RuntimeException(
+    withPos(s"Generic type $id should not need to be set to ${needed}.", id.pos)
+  )
 }

@@ -1,0 +1,8 @@
+def adder<T>(x :int<T>, y :int<T>) :int<T>
+{
+   return x + y + 1<1>;
+}
+
+circuit {
+   r = memory(int<32>, 32);
+}

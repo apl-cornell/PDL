@@ -4,7 +4,7 @@ import pipedsl.common.Errors
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, specialise, typeMap, typeMapFunc, typeMapModule}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, is_my_generic, specialise, typeMap, typeMapFunc, typeMapModule}
 import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 
@@ -55,7 +55,13 @@ object TypeInferenceWrapper
    case TRequestHandle(_, _) => inType //TODO do we ever need to sub into this?
    case t: TBitWidth => t match
    {
-    case TBitWidthVar(name) => if (name == typevar) toType else inType
+    case TBitWidthVar(name) =>
+//     println(s"name: $name")
+//     println(s"totype: $toType")
+//     println(s"intype: $inType")
+     if(name == typevar && is_my_generic(name) && toType != inType)
+      throw NotSoGenericAreWe(name, toType)
+     if (name == typevar) toType else inType
     case TBitWidthLen(_) => inType
     case TBitWidthAdd(b1, b2) =>
      val w1 = subst_into_type(typevar, toType, b1) |> to_width
@@ -196,6 +202,7 @@ object TypeInferenceWrapper
       val pipeEnv = m.modules.zip(modTypes).foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m._1.name, m._2))
       val (fixed_cmd, _, subst) = checkCommand(m.body, pipeEnv.asInstanceOf[TypeEnv], mod_subs)
       val hash = mutable.HashMap.from(subst)
+      println(hash)
       val newMod = typeMapModule(m.copy(body = fixed_cmd).copyMeta(m), fopt_func(type_subst_map_fopt(_, hash)))
 
       val new_input = newMod.inputs.map(p => p.typ)
@@ -218,7 +225,7 @@ object TypeInferenceWrapper
 
       val hash = mutable.HashMap.from(subst)
       println("about to type map...")
-      println(hash)
+      println(subst)
       val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash, templated)))
       println(s"done checking ${f.name}")
       (funEnv, newFunc)
@@ -226,8 +233,8 @@ object TypeInferenceWrapper
 
     private var unique_count = 0
     private def uniquify_gen(value: Type) :Type = value match {
-     case TNamedType(name) if is_generic(name) =>  TNamedType(Id(name + unique_count.toString)).copyMeta(value)
-     case TBitWidthVar(name) if is_generic(name) => TBitWidthVar(Id(name + unique_count.toString)).copyMeta(value)
+     case TNamedType(name) if is_generic(name) =>  TNamedType(Id(name + unique_count.toString + "*")).copyMeta(value)
+     case TBitWidthVar(name) if is_generic(name) => TBitWidthVar(Id(name + unique_count.toString + "*")).copyMeta(value)
      case s@TSizedInt(len, _) => s.copy(len = uniquify_gen(len).asInstanceOf[TBitWidth]).copyMeta(value)
      case _ => value
     }
@@ -252,7 +259,7 @@ object TypeInferenceWrapper
 
     /** INVARIANTS
      * Transforms the argument sub by composing any additional substitution
-     * Transforms the argument env by subbing in the returned substitution and adding any relevatn variables */
+     * Transforms the argument env by subbing in the returned substitution and adding any relevant variables */
     def checkCommand(c: Command, env: TypeEnv, sub: Subst): (Command, TypeEnv, Subst) = c match
     {
      case CLockOp(mem, _, _, _, _) => env(mem.id) match
@@ -498,6 +505,10 @@ object TypeInferenceWrapper
         (compose_subst(s2, s3), c2 || c3)
        case (TMemType(elem1, addr1, rl1, wl1, rp1, wp1), TMemType(elem2, addr2, rl2, wl2, rp2, wp2)) => if (addr1 != addr2 || rl1 != rl2 || wl1 != wl2 || rp1 < rp2 || wp1 < wp2) throw UnificationError(a, b)
         unify(elem1, elem2)
+       case (t1 :TBitWidthVar, t2 :TBitWidthVar) if t1.name == t2.name =>
+        (List(), false)
+       case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_my_generic(t2) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
+       case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_my_generic(t1) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
        case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_generic(t2) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
        case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_generic(t1) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
        case (t1: TBitWidthVar, t2: TBitWidth) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
@@ -525,7 +536,7 @@ object TypeInferenceWrapper
         (List(), false)
        case _ => throw UnificationError(a, b)
       }
-    //  println(s"$a u $b to $ret")
+      //println(s"$a u $b to $ret")
       ret
      }
 
@@ -662,7 +673,8 @@ object TypeInferenceWrapper
      * The environment returned is guaratneed to already have been substituted into with the returned substitution */
     private def infer(env: TypeEnv, e: Expr): (Subst, Type, TypeEnv, Expr) =
      {
-      e match
+      println(s"Inferring for ${e}")
+      val ret : (Subst, Type, TypeEnv, Expr) = e match
       {
        case _: EInt => val newvar = generateTypeVar()
         if (e.typ.isEmpty) e.typ = Some(newvar)
@@ -784,13 +796,19 @@ object TypeInferenceWrapper
         if (!env(mod).isInstanceOf[TObject]) throw UnexpectedType(e.pos, "Object Call", "TObject", env(mod))
         val expectedType = env(mod).asInstanceOf[TObject].methods(method.get)._1
         substIntoCall(expectedType, ca, args, env)
-       case EVar(id) => (List(), env(id), env, e)
+       case EVar(id) =>
+        id.typ = Some(env(id))
+        (List(), env(id), env, e)
        case ECast(ctyp, exp) =>
         val (s, t, env1, _) = infer(env, exp)
         val newT = apply_subst_typ(s, t)
         if (!canCast(ctyp, newT)) throw Errors.IllegalCast(e.pos, ctyp, newT)
         (s, ctyp, env1, e)
       }
+      println(ret._1)
+      e.typ = Some (ret._2)
+      println(s"setting type of ${e} to ${e.typ.get}")
+      ret
      }
 
     private def generateSignTypeVar(): TSignedNess =
