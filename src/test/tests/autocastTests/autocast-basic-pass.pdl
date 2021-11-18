@@ -27,11 +27,11 @@ def ass_cast_test() :int<32>
     return c;
   }
 
-def tern_cast_test(input :bool) :int<32>
+def tern_cast_test(inpt :bool) :int<32>
   {
     a = 10<10>;
     b = 1<30>;
-    d = ((input) ? (a) : (b));
+    d = ((inpt) ? (a) : (b));
     return d;
   }
 
@@ -66,18 +66,18 @@ pipe output_cast()[] :int<32>
 
 
 
-pipe recv_cast1(input :uint<32>)[rf :int<32>[32]<a,a>(Queue)]
+pipe recv_cast1(inpt :uint<32>)[rf :int<32>[32]<a,a>(Queue)]
   {
     start(rf);
-    reserve(rf[input], W);
+    reserve(rf[inpt], W);
     end(rf);
     ---
     int<10> a = 4;
-    block(rf[input]);
-    rf[input] <- a;
+    block(rf[inpt]);
+    rf[inpt] <- a;
     ---
-    release(rf[input]);
-    call recv_cast1(input);
+    release(rf[inpt]);
+    call recv_cast1(inpt);
   }
 
 pipe recv_cast2()[]
@@ -87,18 +87,18 @@ pipe recv_cast2()[]
   }
 
 
-pipe test1(input: int<32>)[rf: int<32>[32]] {
-  a = input;
+pipe test1(inpt: int<32>)[rf: int<32>[32]] {
+  a = inpt;
   b = true;
   c = b;
   if (c) {
     d = a + 5<32>;  
   }
-  call test1(input);
+  call test1(inpt);
 }
 
-pipe test2(input: int<32>)[rf: int<32>[32]] {
-  a = input;
+pipe test2(inpt: int<32>)[rf: int<32>[32]] {
+  a = inpt;
   b = true;
   c = b;
   if (c) {
@@ -106,7 +106,7 @@ pipe test2(input: int<32>)[rf: int<32>[32]] {
   } else {
     d = b;
   }
-  call test2(input);
+  call test2(inpt);
 }
 
 pipe test3()[] {
@@ -157,8 +157,8 @@ pipe test5()[] {
 }
 
 
-pipe test6(input: int<32>)[rf: int<32>[32]] {
-  a = input;
+pipe test6(inpt: int<32>)[rf: int<32>[32]] {
+  a = inpt;
   b = true;
   c = b;
   if (c) {
@@ -166,7 +166,7 @@ pipe test6(input: int<32>)[rf: int<32>[32]] {
   } else {
     d = b;
   }
-  call test6(input);
+  call test6(inpt);
 }
 
 pipe test7()[rf: uint<32>[32]<a,a>(Queue)] {

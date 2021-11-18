@@ -1,14 +1,14 @@
 //Expected Fail
-pipe test6(input: int<32>)[rf: int<32>[5]<c,s>] {
+pipe test6(inpt: int<32>)[rf: int<32>[5]<c,s>] {
     start(rf);
     reserve(rf);
     end(rf);
     ---
-    int<32> x = rf[u0<5>] + input;
+    int<32> x = rf[u0<5>] + inpt;
     ---
     block(rf);
     release(rf);
-    call test6(input);
+    call test6(inpt);
 }
 
 circuit {

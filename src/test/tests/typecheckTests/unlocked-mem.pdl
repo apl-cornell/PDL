@@ -1,11 +1,11 @@
 //Expected Success
-pipe unlock(input: int<32>)[rf: int<32>[5]<c,s>] {
+pipe unlock(inpt: int<32>)[rf: int<32>[5]<c,s>] {
     start(rf);
-    int<32> x = rf[u0<5>] + input;
+    int<32> x = rf[u0<5>] + inpt;
     rf[u1<5>] <- x;
     end(rf);
     ---
-    call unlock(input);
+    call unlock(inpt);
 }
 
 circuit {

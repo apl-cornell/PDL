@@ -1,11 +1,11 @@
-pipe test1(input: int<32>)[rf: int<32>[5]] {
+pipe test1(inpt: int<32>)[rf: int<32>[5]] {
     start(rf);
-    if (input{0:0} == 1) {
+    if (inpt{0:0} == 1) {
         acquire(rf);
     }
     release(rf);
     end(rf);
-    call test1(input);
+    call test1(inpt);
 }
 
 circuit {

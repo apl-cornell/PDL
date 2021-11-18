@@ -2,9 +2,9 @@ def func(a: bool, b: int<32>): bool {
   return b;
 }
 
-pipe test1(input: int<32>)[rf: int<32>[32]] {
+pipe test1(inpt: int<32>)[rf: int<32>[32]] {
   a = true;
-  b = func(a, input) + 5<32>;
+  b = func(a, inpt) + 5<32>;
 }
 
 circuit {

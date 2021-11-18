@@ -1,8 +1,8 @@
-pipe quad_call(input: int<32>)[rf: int<32>[5]<c, s>]
+pipe quad_call(inpt: int<32>)[rf: int<32>[5]<c, s>]
   {
-    bool a = input{0:0};
-    bool b = input{1:1};
-    bool c = input{2:2};
+    bool a = inpt{0:0};
+    bool b = inpt{1:1};
+    bool c = inpt{2:2};
     if(a && b && c)
       {
         output(true);

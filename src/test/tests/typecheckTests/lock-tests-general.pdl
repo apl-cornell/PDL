@@ -1,23 +1,23 @@
 // Expected Success
-pipe test2(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test2(inpt: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
-    if (input{0:0} == 1) {
+    if (inpt{0:0} == 1) {
         reserve(rf);
 	---
 	block(rf);
         release(rf);
     }
     end(rf);
-    call test2(input);
+    call test2(inpt);
 }
 //Expected Success
-pipe test4(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test4(inpt: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
-    if (input{0:0} == 1) {
+    if (inpt{0:0} == 1) {
 	reserve(rf);
 	---
 	block(rf);
-        int<32> arg <- rf[cast(input{4:0}, uint<5>)];
+        int<32> arg <- rf[cast(inpt{4:0}, uint<5>)];
         release(rf);
     } else {
         ---
@@ -28,28 +28,28 @@ pipe test4(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
         release(rf);
     }
     end(rf);
-    call test4(input);
+    call test4(inpt);
 }
 //Expected Success
-pipe test5(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test5(inpt: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
 
     start(rf);
     reserve(rf);
     ---
     block(rf);
-    if (input{0:0} == 1) {        
+    if (inpt{0:0} == 1) {        
         release(rf);
     } else {
-        int<32> arg <- rf[cast(input{31:27}, uint<5>)];
+        int<32> arg <- rf[cast(inpt{31:27}, uint<5>)];
         release(rf);
     }
     end(rf);
-    call test5(input);
+    call test5(inpt);
 }
 //Expected success since reserve is before branch
-pipe test8(input: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
+pipe test8(inpt: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     start(rf);
-    if (input{0:0} == 1) {
+    if (inpt{0:0} == 1) {
         ---
         reserve(rf);
 	---
@@ -62,7 +62,7 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
 	block(rf);
         int<32> out <- rf[u1<5>];
     }
-    call test8(input);
+    call test8(inpt);
     ---
     rf[u2<5>] <- out;
     release(rf);
@@ -70,10 +70,10 @@ pipe test8(input: int<32>)[rf: int<32>[5]<a,a>(Queue)] {
     ---
 }
 //Expected success
-pipe test9(input: int<32>)[rf: int<32>[5]<c2,s>(Queue), dmem: int<32>[32]<a,a>(Queue)] {
+pipe test9(inpt: int<32>)[rf: int<32>[5]<c2,s>(Queue), dmem: int<32>[32]<a,a>(Queue)] {
     start(dmem);
     start(rf);
-    if (input{0:0} == 1) {
+    if (inpt{0:0} == 1) {
         reserve(rf);
 	---
 	block(rf);
@@ -85,10 +85,10 @@ pipe test9(input: int<32>)[rf: int<32>[5]<c2,s>(Queue), dmem: int<32>[32]<a,a>(Q
     block(dmem);
     release(dmem);
     end(dmem);
-    call test9(input);
+    call test9(inpt);
 }
 //Expected Success
-pipe test15(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test15(inpt: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
     bool a = true;
     start(rf);
     if (a) {
@@ -100,11 +100,11 @@ pipe test15(input: int<32>)[rf: int<32>[5]<c2,s>(Queue)] {
         release(rf);
     }
     end(rf);
-    call test15(input);
+    call test15(inpt);
 }
 
 //Expected Success
-pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test17(inpt: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
     bool a = true;
     bool b = false;
     start(rf);
@@ -121,12 +121,12 @@ pipe test17(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
         }
     }
     end(rf);
-    call test17(input, randomBool2, randomBool);
+    call test17(inpt, randomBool2, randomBool);
 }
 
 
 //ExpectedSuccess
-pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test19(inpt: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     split {
         case: randomBool {
@@ -136,7 +136,7 @@ pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
             reserve(rf);
 
         }
-        case: (input{0:0} == 1) {
+        case: (inpt{0:0} == 1) {
             reserve(rf);
         }
         default: {
@@ -147,11 +147,11 @@ pipe test19(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
     block(rf);
     release(rf);
     end(rf);
-    call test19(input, randomBool2, randomBool);
+    call test19(inpt, randomBool2, randomBool);
 }
 
 //ExpectedSuccess
-pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
+pipe test20(inpt: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c2,s>(Queue)] {
     start(rf);
     split {
         case: randomBool {
@@ -166,7 +166,7 @@ pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
 	    block(rf);
             release(rf);	    
         }
-        case: (input{0:0} == 1) {
+        case: (inpt{0:0} == 1) {
             reserve(rf);
 	    ---
 	    block(rf);
@@ -180,7 +180,7 @@ pipe test20(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<
         }
     }
     end(rf);
-    call test20(input, randomBool2, randomBool);
+    call test20(inpt, randomBool2, randomBool);
 }
 
 circuit {

@@ -198,5 +198,9 @@ object Errors {
     withPos(s"Not enough constraints provided to infer types. Found error at $e", e.pos)
   )
 
+  case class ExtremelyCriticalExceptionFailure(msg :String, pos:Position) extends RuntimeException(
+    withPos(s"Extremely Critical Exception Failure at: $msg", pos)
+  )
+
   case class IntWidthNotSpecified() extends RuntimeException
 }

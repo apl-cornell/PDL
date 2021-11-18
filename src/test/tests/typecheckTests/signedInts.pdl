@@ -1,6 +1,6 @@
 //Expected Success
-pipe signtest(input: int<8>)[]: bool {
-    int<8> x = input + 1<8>;
+pipe signtest(inpt: int<8>)[]: bool {
+    int<8> x = inpt + 1<8>;
     bool a = x > -1<8>;
     print(a);
     bool b = cast(x, uint<8>) > cast(-1<8>, uint<8>);
