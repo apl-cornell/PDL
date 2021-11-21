@@ -204,7 +204,7 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    
 endmodule
 
-interface BHT#(type addr);
+interface BHT#(numeric type addr);
    method Int#(addr) req(Int#(addr) pc, Int#(addr) skip, Int#(addr) take);
    method Action upd(Int#(addr) pc, Bool take);
 endinterface

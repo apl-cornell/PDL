@@ -433,6 +433,11 @@ object Utilities {
     case None => FNone
   }
 
+  /**
+   * All of this is a re-implementation of the built in option type to include
+   * 1 more bit of information, allowing 2 different types of non-present
+   * states: None AND Error. Everything else should be self explanatory.
+   */
   sealed abstract class FOption[+A]() {
     def get: A
 
@@ -512,7 +517,6 @@ object Utilities {
             }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
           case t =>
-            println(s"bad: ${t.typ}")
             throw LackOfConstraints(e1)
         }
         case t => e1.typ = t.toOptionUnsafe
@@ -556,7 +560,6 @@ object Utilities {
           e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
         case e@EVar(id) =>
           val ret = e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
-          println(s"${id}'s type is not ${ret.typ}")
           ret
         case e@ECast(tp, exp) =>
           val ntp = f_opt(Some(tp)).get
@@ -702,6 +705,10 @@ object Utilities {
     { id: Id => id.v.startsWith(lock_handle_prefix) }
 
   val generic_type_prefix = "__GEN_"
+
+  /**
+   * check if a type represents a generic
+   */
   @tailrec def is_generic(t:Any) :Boolean = t match {
     case TNamedType(name) => name.v.startsWith(generic_type_prefix)
     case TSizedInt(l, _) => is_generic(l)
@@ -711,6 +718,11 @@ object Utilities {
     case s:String => s.startsWith(generic_type_prefix)
   }
 
+  /**
+   * check if a type represents a generic, and is one of THE generics of the
+   * current function. (There are generic types of other called functions, but
+   * they are specialized, and can be distinguished)
+   */
   @tailrec def is_my_generic(t :Any) :Boolean = t match {
     case TNamedType(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
     case TSizedInt(l, _) => is_my_generic(t)
@@ -721,6 +733,10 @@ object Utilities {
   }
 
   val not_gen_pref = "__NOT_GEN"
+
+  /**
+   * take a generic type, and turn it into not a generic type
+   */
   def degenerify(t :Type) :Type =
     {
       def _degenerify(t :Type) :Type = t match
@@ -749,6 +765,15 @@ object Utilities {
       _degenerify(t).copyMeta(t)
     }
 
+  /**
+   * take a type {@param t} and if it is an object, map the list of ints
+   * {@param s} over all the generic types. For example: if you have a
+   * BHT&lt;T&gt;, and you specialise it with the list 16::[], then you will
+   * get back a BHT&lt;16&gt;
+   *
+   * For anythign that isn't an object, return it unchanged. This is just
+   * convenient for where this is used
+   */
   def specialise(t :Type, s :List[Int]) :Type = t match {
     case t :TObject =>
     val new_types = s.map(l => TBitWidthLen(l))
@@ -762,10 +787,12 @@ object Utilities {
         }).zip(new_types)
         val map = assoc_list.toMap
         val new_args = old_fun.args.map
-        { case ts@TSizedInt(len@TBitWidthVar(name), sign) => TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+        { case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
+          TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
         case other => other }
         val new_ret = old_fun.ret match {
-          case ts@TSizedInt(len@TBitWidthVar(name), sign) => TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+          case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
+            TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
           case other => other
         }
         (id_funlat._1, (TFun(new_args, new_ret).copyMeta(old_fun).asInstanceOf[TFun], id_funlat._2._2))

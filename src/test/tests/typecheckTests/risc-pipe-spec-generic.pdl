@@ -2,12 +2,12 @@ def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
     uint<32> mag1 = cast(mag(arg1), uint<32>);
     uint<32> mag2 = cast(mag(arg2), uint<32>);
     //MULHU => positive sign always
-    int<32> s1 = (op == u3<3>) ? 1<32> : sign(arg1);
+    int<32> s1 = (op == 3) ? 1 : sign(arg1);
     //MULHU/MULHSU => positive sign always
-    int<32> s2 = (op >= u2<3>) ? 1<32> : sign(arg2);
+    int<32> s2 = (op >= 2) ? 1 : sign(arg2);
     int<64> magRes = cast((mag1 * mag2), int<64>);
     int<64> m = (s1 == s2) ? (magRes) : -(magRes);
-    if (op == u0<3>) { //MUL
+    if (op == 0) { //MUL
       	return m{31:0};
     } else {
      	return m{63:32};
@@ -15,36 +15,36 @@ def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
 }
 
 def alu(arg1: int<32>, arg2: int<32>, op: uint<3>, flip: bool): int<32> {
-    uint<5> shamt = cast(arg2{4:0}, uint<5>);
-    if (op == u0<3>) {  //000 == ADD , flip == sub
+    shamt = cast(arg2{4:0}, uint<5>);
+    if (op == 0) {  //000 == ADD , flip == sub
        if (!flip) {
          return arg1 + arg2;
        } else {
          return arg1 - arg2;
        }
     } else {
-    if (op == u1<3>) { //001 == SLL
+    if (op == u1) { //001 == SLL
         return arg1 << shamt;
     } else {
-    if (op == u2<3>) { //010 == SLT 
-        return (arg1 < arg2) ? 1<32> : 0<32>;
+    if (op == u2) { //010 == SLT 
+        return (arg1 < arg2) ? 1 : 0;
     } else {
-    if (op == u3<3>) { //011 == SLTU
-       uint<32> un1 = cast(arg1, uint<32>);
-       uint<32> un2 = cast(arg2, uint<32>);
-       return (un1 < un2) ? 1<32> : 0<32>;
+    if (op == u3) { //011 == SLTU
+       un1 = cast(arg1, uint<32>);
+       un2 = cast(arg2, uint<32>);
+       return (un1 < un2) ? 1 : 0;
     } else {
-    if (op == u4<3>) { //100 == XOR
+    if (op == u4) { //100 == XOR
         return arg1 ^ arg2;
     } else {
-    if (op == u5<3>) { //101 == SRL / SRA
+    if (op == u5) { //101 == SRL / SRA
       if (!flip) {
         return cast((cast(arg1, uint<32>)) >> shamt, int<32>); //SRL
       } else {
         return arg1 >> shamt; //SRA
       }
     } else {
-    if (op == u6<3>) { //110 == OR
+    if (op == u6) { //110 == OR
         return arg1 | arg2;
     } else { //111 == AND
         return arg1 & arg2;
@@ -52,10 +52,10 @@ def alu(arg1: int<32>, arg2: int<32>, op: uint<3>, flip: bool): int<32> {
     
 }
 
-def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16> {
+def br<T>(pc: int<T>, off:int<T>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<T> {
     //divide by 4 b/c we count instructions not bytes
-    int<16> offpc = pc + (off >> 2);
-    int<16> npc = pc + 1<16>;
+    offpc = pc + (off >> 2);
+    npc = pc + 1;
     if (op == u0<3>) { //BEQ
         if (arg1 == arg2) { return offpc; } else { return npc; }
     } else {
@@ -69,13 +69,13 @@ def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16
        if (arg1 >= arg2)  { return offpc; } else { return npc; }
     } else {
     if (op == u6<3>) { //BLTU
-        uint<32> un1 = cast(arg1, uint<32>);
-        uint<32> un2 = cast(arg2, uint<32>);
+        un1 = cast(arg1, uint<32>);
+        un2 = cast(arg2, uint<32>);
         if (un1 < un2)  { return offpc; } else { return npc; }
     } else {
     if (op == u7<3>) { //BGEU
-        uint<32> un1 = cast(arg1, uint<32>);
-        uint<32> un2 = cast(arg2, uint<32>);
+        un1 = cast(arg1, uint<32>);
+        un2 = cast(arg2, uint<32>);
         if (un1 >= un2) { return offpc; } else { return npc; }
     } else {
       return npc;
@@ -85,7 +85,7 @@ def br(pc: int<16>, off:int<16>, op:uint<3>, arg1:int<32>, arg2:int<32>): int<16
 
 def storeMask(off: uint<2>, op: uint<3>): uint<4> {
     if (op == u0<3>) { //SB
-       return (u0b0001<4> << off);
+       return ((1) << (off));
     } else {
     if (op == u1<3>) { //SH
        uint<2> shamt = off{1:1} ++ u0<1>;
@@ -97,11 +97,11 @@ def storeMask(off: uint<2>, op: uint<3>): uint<4> {
 
 def maskLoad(data: int<32>, op: uint<3>, start: uint<2>): int<32> {
     //start == offset in bytes, need to multiply by 8
-    uint<5> boff = start ++ u0<3>;
-    int<32> tmp = data >> boff;
-    uint<8> bdata = cast(tmp, uint<8>);
-    uint<16> hdata = cast(tmp, uint<16>);
-
+    boff = start ++ u0<3>;
+    tmp = data >> boff;
+    bdata = cast(tmp, uint<8>);
+    hdata = cast(tmp, uint<16>);
+    
     if (op == u0<3>) { //LB
        return cast(bdata, int<32>);
     } else {
@@ -119,27 +119,30 @@ def maskLoad(data: int<32>, op: uint<3>, start: uint<2>): int<32> {
        uint<32> zext = cast(hdata, uint<32>);
        return cast(zext, int<32>);
     } else {
-      return 0<32>;
+      return 0;
     }}}}}
 }
 
 pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>, cnt: uint<5>, retQuot: bool)[]: uint<32> {
-    uint<32> tmp = acc{30:0} ++ num{31:31};
-    uint<32> na = (tmp >= denom) ? (tmp - denom) : (tmp);
-    uint<32> nq = (tmp >= denom) ? ((quot << 1){31:1} ++ u1<1>) : (quot << 1);
-    uint<32> nnum = num << 1;
-    if (cnt == u31<5>) {
+    tmp = acc{30:0} ++ num{31:31};
+    na = (tmp >= denom) ? (tmp - denom) : (tmp);
+    nq = (tmp >= denom) ? ((quot << 1){31:1} ++ 1) : (quot << 1);
+    nnum = num << 1;
+    if (cnt == 31) {
         output( (retQuot) ? nq : na );
     } else {
-        call multi_stg_div(nnum, denom, nq, na, cnt + u1<5>, retQuot);
+        call multi_stg_div(nnum, denom, nq, na, cnt + 1, retQuot);
     }
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queue), dmem: int<32>[16]<a,a>, div: multi_stg_div]: bool {
+    spec_check();
     start(imem);
-    int<32> insn <- imem[cast(pc, uint<16>)];
+    pcaddr = cast(pc, uint<16>);
+    insn <- imem<a>[pcaddr];
     end(imem);
+    s <- speccall cpu(pc + 1<16>);
     ---
     //This OPCODE is J Self and thus we're using it to signal termination
     bool done = insn == 0x0000006f<32>;
@@ -174,6 +177,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>, dme
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore || isJalr;
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
+    spec_barrier();
+    bool notBranch = (!isBranch) && (!isJal) && (!isJalr);
+    if ((!done) && notBranch) {
+       verify(s, pc + 1<16>);
+    } else {
+      invalidate(s);
+    }
     start(rf);
     if (needrs1) {
        int<32> rf1 = rf<a>[rs1];
@@ -203,7 +213,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>, dme
     } else {
        int<16> npc = pc + 1<16>;
     }}}
-    if (!done) { call cpu(npc); }
+    if ((!done) && (!notBranch)) { call cpu(npc); }
 
     int<32> alu_arg2 = (isOpImm) ? immI : rf2;
     
@@ -259,7 +269,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>, dme
 	  default: {
   	  	uint<16> memaddr = u0<16>;
 		uint<2> boff = u0<2>;
-	  }
+	  }	  
     }
     ---
     start(dmem);
@@ -305,10 +315,11 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>, dme
 
 circuit {
     ti = memory(int<32>, 16);
-     td = memory(int<32>, 16);
+    i = Queue(ti);
+    td = memory(int<32>, 16);
     rf = regfile(int<32>, 5);
     r = FAQueue(rf);
     div = new multi_stg_div[];
-    c = new cpu[r, ti, td, div];
+    c = new cpu[r, i, td, div];
     call c(0<16>);
 }

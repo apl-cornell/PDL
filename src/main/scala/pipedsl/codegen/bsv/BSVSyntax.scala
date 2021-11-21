@@ -125,7 +125,10 @@ object BSVSyntax {
     }
 
     def toVar(i: Id): BVar = {
-      if (i.typ.isEmpty) println(i)
+      if (i.typ.isEmpty)
+        {
+          println(s"$i at ${i.pos}")
+        }
       BVar(variablePrefix + i.v, toType(i.typ.get))
     }
 

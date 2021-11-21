@@ -577,7 +577,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case ECall(mod, name, args) => {
       val mtyp = tenv(mod)
       mod.typ = Some(mtyp)
-      //if (e.typ.isDefined) (e.typ.get, tenv) else
       mtyp match
       {
         case TModType(inputs, _, retType, _) =>
@@ -590,7 +589,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             { case (expectedT, a) => val (atyp, aenv) = checkExpression(a, tenv, None)
               if (!isSubtype(atyp, expectedT))
               {
-                //throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
             }
             e.typ match {
@@ -611,7 +610,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             { case (expectedT, a) => val (atyp, aenv) = checkExpression(a, tenv, None)
               if (!isSubtype(atyp, expectedT))
               {
-                //throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
+                throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
             }
             e.typ match {

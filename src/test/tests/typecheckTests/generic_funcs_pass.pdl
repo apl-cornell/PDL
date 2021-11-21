@@ -1,0 +1,76 @@
+def fixed_1(inpt :int<10>) :bool
+{
+   shamt = cast(inpt{4:0}, uint<5>);
+   return true;
+}
+
+
+def iden<U>(a :int<U>) :int<U>
+{
+   return a;
+}
+
+
+def fun_1<T>(x :int<T>, y :int<T>) :int<T>
+{
+   z = x + y;
+   w = z - iden(12);
+   return w + iden(y);
+}
+
+def fun_2<V>(x :int<V>, y :uint<V>) :int<V>
+{
+   casted = cast(y, int<V>);
+   return fun_1(x, casted);
+}
+
+// generified ALU. Since we don't want to cast generics, shamt needs to be passed as an arg
+// (this is pretty cool that this works :)
+def alu<W>(arg1: int<W>, arg2: int<W>, op: uint<3>, flip: bool, shamt :uint<5>): int<W> {
+    //shamt = cast(arg2{4:0}, uint<5>);
+    if (op == 0) {  //000 == ADD , flip == sub
+       if (!flip) {
+         return arg1 + arg2;
+       } else {
+         return arg1 - arg2;
+       }
+    } else {
+    if (op == u1) { //001 == SLL
+        return arg1 << shamt;
+    } else {
+    if (op == u2) { //010 == SLT
+        return (arg1 < arg2) ? 1 : 0;
+    } else {
+    if (op == u3) { //011 == SLTU
+       un1 = cast(arg1, uint<W>);
+       un2 = cast(arg2, uint<W>);
+       return (un1 < un2) ? 1 : 0;
+    } else {
+    if (op == u4) { //100 == XOR
+        return arg1 ^ arg2;
+    } else {
+    if (op == u5) { //101 == SRL / SRA
+      if (!flip) {
+        return cast((cast(arg1, uint<W>)) >> shamt, int<W>); //SRL
+      } else {
+        return arg1 >> shamt; //SRA
+      }
+    } else {
+    if (op == u6) { //110 == OR
+        return arg1 | arg2;
+    } else { //111 == AND
+        return arg1 & arg2;
+    }}}}}}}
+}
+
+
+
+pipe test1(inpt: int<32>)[rf: int<32>[32]] :int<100>
+{
+   output (fun_1(3, 4));
+}
+
+
+circuit {
+   r = memory(int<32>, 32);
+}

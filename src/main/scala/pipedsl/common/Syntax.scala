@@ -576,6 +576,8 @@ object Syntax {
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
   case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int], numPorts: Int) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
+  /* specialized is the list of ints which "specialize" the (potential) generics of mod */
+  /* invariant: length of specialized matches up with # of generics in mod */
   case class CirNew(mod: Id, specialized :List[Int], mods: List[Id], params: List[EInt]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }
