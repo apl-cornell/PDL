@@ -5,7 +5,7 @@ import TypeChecker._
 import Environments._
 import pipedsl.common.Errors.{AlreadyResolvedSpeculation, IllegalSpeculativeOperation, MismatchedSpeculationState, UnresolvedSpeculation}
 import pipedsl.common.Syntax._
-import pipedsl.common.Locks.{Released}
+import pipedsl.common.Locks.Released
 import pipedsl.common.Utilities.{mkAnd, mkImplies}
 
 class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
