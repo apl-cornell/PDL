@@ -59,6 +59,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         case TMemType(_, _, _, _, r, w) => modLims.addOne((mod.name, (r, w)))
         case TLockedMemType(TMemType(_, _, _, _, r, w), _, _) =>
           modLims.addOne((mod.name, (r, w)))
+        case _ : TModType => modLims.addOne((mod.name, (1, 1)))
         case _ =>
       })
       val port_map = checkPipe(m.body, emptyEnv())

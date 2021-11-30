@@ -302,11 +302,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       {
         case _: TMemType => tenv
         case _: TLockedMemType => tenv
+        case _: TModType => tenv
       }
     case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
         case _: TMemType => tenv
         case _: TLockedMemType => tenv
+        case _: TModType => tenv
       }
     case CLockOp(mem, _, _, _, _) =>
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
@@ -322,6 +324,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
+        case t: TModType =>
+          mem.id.typ = Some(t)
+          tenv
       }
     case CVerify(handle, args, preds, upd, cHandles) =>
       //if there's an update clause check that stuff:

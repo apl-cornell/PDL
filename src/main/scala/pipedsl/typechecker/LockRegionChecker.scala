@@ -29,10 +29,11 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       case TLockedMemType(_, _, _) => e.add(m.name, Free)
       case TMemType(_, _, _,_ ,_ ,_) => e.add(m.name, Free)
         //TODO eventually do need locks here
-      case TModType(_, _, _, _) => e  //no locks for modules , but they're an expected type
+      case TModType(_, _, _, _) => e.add(m.name, Free)
       case TObject(_, _, _) => e //no locks here either
       case _ => throw UnexpectedCase(m.pos)
     })
+
     val finalStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
     finalStates.getMappedKeys().foreach(m => finalStates(m) match {
       case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
@@ -128,7 +129,12 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case EBitExtract(num, _, _) => checkMemAccess(num, env)
     case ETernary(cond, tval, fval) => checkMemAccess(cond, env); checkMemAccess(tval, env); checkMemAccess(fval, env)
     case EApp(_, args) => args.foreach(a => checkMemAccess(a, env))
-    case ECall(_, _, args) => args.foreach(a => checkMemAccess(a, env))
+    case ECall(mod, _, args) => {
+      if (env(mod) != Acquired) {
+        throw InvalidLockState(mod.pos, mod.v, env(mod), Acquired)
+      }
+      args.foreach(a => checkMemAccess(a, env))
+    }
     case ECast(_, exp) => checkMemAccess(exp, env)
     case _ => ()
   }
