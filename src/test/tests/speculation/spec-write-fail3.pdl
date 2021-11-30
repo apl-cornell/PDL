@@ -7,7 +7,6 @@ pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<40
      ---
      spec_check();
      bool x = pc == 1;
-     if (x) { invalidate(s); }
      ---
      spec_check();
      int<32> data = insn{36:5};
@@ -18,7 +17,8 @@ pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<40
                      //TODO allow these and generate the right logic to release along those paths
      reserve(rf[addr], W); //stupid to put here, but doing it just for the sake of things
      end(rf);
-     wdata = data + sdata;     
+     wdata = data + sdata;
+     if (x) { invalidate(s); }                         
      ---
      spec_check();
      block(rf[addr]);
@@ -27,7 +27,11 @@ pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<40
      spec_barrier();
 
      nextPc = (addr{0:0} == 0) ? pc + 2 : pc + 1;
-     verify(s, nextPc);
+     if (!x) {
+          verify(s, nextPc);
+     } else {
+          call testwrite(nextPc);
+     }
      print("ADDR: %d, DATA: %h", addr, wdata);
      release(rf[addr]);
 }
