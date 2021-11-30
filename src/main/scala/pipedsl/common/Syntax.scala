@@ -322,7 +322,6 @@ object Syntax {
       latency == Latency.Asynchronous
     case _ => false
   }
-
   def getMemFromRequest(r: Type): Id = {
       r.matchOrError(r.pos, "Checkpoint Handle", "Checkpoint Request Type") {
         case TRequestHandle(mod, _) => mod
