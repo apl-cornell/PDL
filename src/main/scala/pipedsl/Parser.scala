@@ -151,11 +151,11 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val methodCall: P[ECall] = positioned {
-    iden ~ "." ~ iden ~ parens(repsep(expr, ",")) ^^ { case i ~ _  ~ n ~ args => ECall(i, Some(n), args) }
+    angular("atomic" | "a").? ~ iden ~ "." ~ iden ~ parens(repsep(expr, ",")) ^^ { case a ~ i ~ _  ~ n ~ args => ECall(i, Some(n), args, a.isDefined) }
   }
 
   lazy val simpleAtom: P[Expr] = positioned {
-    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, None, args) } |
+    "call" ~> angular("atomic" | "a").? ~ iden ~ parens(repsep(expr, ",")) ^^ { case a ~ i ~ args => ECall(i, None, args, a.isDefined) } |
       not ~ simpleAtom ^^ { case n ~ e => EUop(n, e) } |
       neg |
       cast |

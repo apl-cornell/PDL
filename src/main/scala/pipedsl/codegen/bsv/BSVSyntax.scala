@@ -199,7 +199,7 @@ object BSVSyntax {
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
       case EToMaybe(ex) => BTaggedValid(toExpr(ex))
-      case ECall(mod, method, args) if method.isDefined =>
+      case ECall(mod, method, args, isAtomic) if method.isDefined =>
         //type doesn't matter on the var
         BMethodInvoke(BVar(mod.v, BVoid), method.get.v, args.map(a => toExpr(a)))
       case _ => throw UnexpectedExpr(e)

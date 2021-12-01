@@ -232,7 +232,7 @@ object Utilities {
       s ++ getUsedVars(a)
     })
     //functions are also externally defined
-    case ECall(id, _, args) => args.foldLeft[Set[Id]](Set[Id]())((s, a) => {
+    case ECall(id, _, args, _) => args.foldLeft[Set[Id]](Set[Id]())((s, a) => {
       s ++ getUsedVars(a)
     })
     case EVar(id) => id.typ = e.typ; Set(id)
@@ -538,7 +538,7 @@ object Utilities {
             fval = typeMapExpr(fval, f_opt)).copyMeta(e)
         case e@EApp(func, args) =>
           e.copy(func = typeMapId(func, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
-        case e@ECall(mod, _, args) =>
+        case e@ECall(mod, _, args, _) =>
           e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
         case e@EVar(id) =>
           e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
@@ -671,7 +671,7 @@ object Utilities {
     case EBitExtract(num, _, _) => getMemReads(num)
     case ETernary(cond, tval, fval) => getMemReads(cond) ++ getMemReads(tval) ++ getMemReads(fval)
     case EApp(_, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
-    case ECall(_, _, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
+    case ECall(_, _, args, _) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
     case ECast(_, exp) => getMemReads(exp)
     case _ => List()
   }

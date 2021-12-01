@@ -129,8 +129,8 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case EBitExtract(num, _, _) => checkMemAccess(num, env)
     case ETernary(cond, tval, fval) => checkMemAccess(cond, env); checkMemAccess(tval, env); checkMemAccess(fval, env)
     case EApp(_, args) => args.foreach(a => checkMemAccess(a, env))
-    case ECall(mod, _, args) => {
-      if (env(mod) != Acquired) {
+    case ECall(mod, _, args, isAtomic) => {
+      if (isAtomic && env(mod) != Acquired) {
         throw InvalidLockState(mod.pos, mod.v, env(mod), Acquired)
       }
       args.foreach(a => checkMemAccess(a, env))

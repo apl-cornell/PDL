@@ -593,7 +593,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }
     }
-    case ECall(mod, name, args) => {
+    case ECall(mod, name, args, isAtomic) => {
       val mtyp = tenv(mod)
       mod.typ = Some(mtyp)
       mtyp match {
