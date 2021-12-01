@@ -41,7 +41,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
     val fenv = f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
     val ftyp = TFun(typList, f.ret)
-    val e1 = checkCommand(f.body, fenv)
+    val e1 = checkCommand(f.name, f.body, fenv)
     val rt = checkFuncWellFormed(f.body, e1)
     if (rt.isEmpty) {
       throw MalformedFunction(f.pos, "Missing return statement")
@@ -98,7 +98,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
-    checkCommand(m.body, bodyEnv)
+    checkCommand(m.name, m.body, bodyEnv)
     outEnv
   }
 
@@ -238,21 +238,21 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
    * @param tenv
    * @return
    */
-  def checkCommand(c: Command, tenv: Environment[Id, Type]): Environment[Id, Type] = c match {
+  def checkCommand(modId: Id, c: Command, tenv: Environment[Id, Type]): Environment[Id, Type] = c match {
     case CSeq(c1, c2) => {
-      val e2 = checkCommand(c1, tenv)
-      checkCommand(c2, e2)
+      val e2 = checkCommand(modId, c1, tenv)
+      checkCommand(modId, c2, e2)
     }
     case CTBar(c1, c2) => {
-      val e2 = checkCommand(c1, tenv)
-      checkCommand(c2, e2)
+      val e2 = checkCommand(modId, c1, tenv)
+      checkCommand(modId, c2, e2)
     }
     case CSplit(cases, default) => {
-      var endEnv = checkCommand(default, tenv)
+      var endEnv = checkCommand(modId, default, tenv)
       for (c <- cases) {
         val (condTyp, cenv) = checkExpression(c.cond, tenv, None)
         condTyp.matchOrError(c.cond.pos, "case condition", "boolean") { case _: TBool => () }
-        val benv = checkCommand(c.body, cenv)
+        val benv = checkCommand(modId, c.body, cenv)
         endEnv = endEnv.intersect(benv)
       }
       endEnv
@@ -260,8 +260,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CIf(cond, cons, alt) => {
       val (condTyp, cenv) = checkExpression(cond, tenv, None)
       condTyp.matchOrError(cond.pos, "if condition", "boolean") { case _: TBool => () }
-      val etrue = checkCommand(cons, cenv)
-      val efalse = checkCommand(alt, cenv)
+      val etrue = checkCommand(modId, cons, cenv)
+      val efalse = checkCommand(modId, alt, cenv)
       etrue.intersect(efalse)
     }
     case CAssign(lhs, rhs) => {
@@ -326,6 +326,9 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
         case t: TModType =>
           mem.id.typ = Some(t)
+          if(mem.id == modId){
+            throw RecursiveCallLockAcquisition(mem.pos)
+          }
           tenv
       }
     case CVerify(handle, args, preds, upd, cHandles) =>
