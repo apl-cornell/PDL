@@ -17,6 +17,7 @@ object LockImplementation {
   private val falqueue = new FALockQueue()
   private val bypassQueue = new BypassQueue()
   private val bypassRF = new BypassRF()
+  private val checkBypassRF = new CheckpointBypassRF()
   private val rename = new RenameRegfile()
   private val forwardRename = new ForwardingRegfile()
   private val lsq = new LoadStoreQueue()
@@ -310,6 +311,7 @@ object LockImplementation {
     falqueue.shortName -> falqueue,
     bypassQueue.shortName -> bypassQueue,
     bypassRF.shortName -> bypassRF,
+    checkBypassRF.shortName -> checkBypassRF,
     rename.shortName -> rename,
     forwardRename.shortName -> forwardRename,
     lsq.shortName -> lsq,
@@ -577,6 +579,22 @@ object LockImplementation {
     override def shortName: String = "BypassRF"
 
     override def getModuleName(m: TMemType): String = "BypassRF"
+  }
+
+  private class CheckpointBypassRF extends BypassRF {
+    private val lockName = Id("CheckpointBypassRF")
+    override def getType: TObject = TObject(lockName, List(),
+      super.getType.methods ++ Map(
+        Id(checkpointName) -> (TFun(List(), checkType), Sequential),
+        Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+      ))
+
+    override def shortName: String = "CheckpointBypassRF"
+
+    override def getModuleName(m: TMemType): String = "CheckpointBypassRF"
+
+    //Checkpoint id must equal the lock id size
+    override def getChkIdSize(lidSize: Int): Int = lidSize
   }
 
   /**
