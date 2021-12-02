@@ -63,8 +63,8 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       val altIds = getResRegionIds(alt).intersect(mods)
       //if ID reserved/atomic accessed in cond, OR in both cons & alt (or in a branch
       // and in the code following the if, then add before
-      val addBefore = addedInCond ++
-        consIds.intersect(altIds) ++ consIds.intersect(resedLater) ++ altIds.intersect(resedLater)
+      val addBefore = (addedInCond ++
+        consIds.intersect(altIds) ++ consIds.intersect(resedLater) ++ altIds.intersect(resedLater)).intersect(mods)
       val (consp, addedCons) = insertStarts(cons, mods -- addBefore, resedLater)
       val (altp, addedAlt) = insertStarts(alt, mods -- addBefore, resedLater)
       val cp = CIf(cond, consp, altp).setPos(c.pos)
@@ -79,9 +79,10 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       var addBefore = addedInConds
       //for each branch, check if it intersects with union of all others (i know it's n^2...sad)
       for (i <- addedInBranch.indices) {
-        val rest = addedInBranch.drop(i).reduce((s1, s2) => s1 ++ s2)
+        val rest = (addedInBranch.take(i) ++ addedInBranch.drop(i + 1)).reduce((s1, s2) => s1 ++ s2)
         addBefore = addBefore ++ addedInBranch(i).intersect(rest)
       }
+      addBefore = addBefore.intersect(mods)
       var allAdded = addBefore
       val ncases = cases.map(cs => {
         val (nbody, added) = insertStarts(cs.body, mods -- addBefore, resedLater)
@@ -126,8 +127,8 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       val usedInCond = getAtomicAccessIds(cond).intersect(mods)
       val consIds = getResRegionIds(cons).intersect(mods)
       val altIds = getResRegionIds(alt).intersect(mods)
-      val addedAfter = usedInCond ++ consIds.intersect(altIds) ++
-        consIds.intersect(resedBefore) ++ altIds.intersect(resedBefore)
+      val addedAfter = (usedInCond ++ consIds.intersect(altIds) ++
+        consIds.intersect(resedBefore) ++ altIds.intersect(resedBefore)).intersect(mods)
       val (consp, addedCons) = insertEnds(cons, mods -- addedAfter, resedBefore)
       val (altp, addedAlt) = insertEnds(alt, mods -- addedAfter, resedBefore)
       val cp = CIf(cond, consp, altp).setPos(c.pos)
@@ -142,9 +143,10 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       var addAfter = addedInConds
       //for each branch, check if it intersects with union of all others (i know it's n^2...sad)
       for (i <- addedInBranch.indices) {
-        val rest = addedInBranch.drop(i).reduce((s1, s2) => s1 ++ s2)
+        val rest = (addedInBranch.take(i) ++ addedInBranch.drop(i + 1)).reduce((s1, s2) => s1 ++ s2)
         addAfter = addAfter ++ addedInBranch(i).intersect(rest)
       }
+      addAfter = addAfter.intersect(mods)
       var allAdded = addAfter
       val ncases = cases.map(cs => {
         val (nbody, added) = insertEnds(cs.body, mods -- addAfter, resedBefore)
