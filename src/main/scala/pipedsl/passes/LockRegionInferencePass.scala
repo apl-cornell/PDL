@@ -31,8 +31,8 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
 
   override def run(m: ModuleDef): ModuleDef = {
     val modIds = m.modules.map(p => p.name).toSet
-    val starts = insertStarts(m.body, modIds)._1
-    val ends = insertEnds(starts, modIds)._1
+    val starts = insertStarts(m.body, modIds, Set())._1
+    val ends = insertEnds(starts, modIds, Set())._1
     val checks = insertChecks(ends, modIds)
     m.copy(body = checks).setPos(m.pos)
   }
@@ -43,27 +43,30 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
    * any atomic memory accesses for the given mem, or reservations for the given mem.
    * @param c The command to modify
    * @param mods The set of lock regions we plan to add by module name
+   * @param resedLater The set of ids which still get reserved later in the program
    * @return (Modified command, set of START regions added)
    */
-  private def insertStarts(c: Command, mods: Set[Id]): (Command, Set[Id]) = c match {
+  private def insertStarts(c: Command, mods: Set[Id], resedLater: Set[Id]): (Command, Set[Id]) = c match {
     case CSeq(c1, c2) =>
-      val (c1p, addedLeft) = insertStarts(c1, mods)
-      val (c2p, addedRight) = insertStarts(c2, mods -- addedLeft)
+      val (c1p, addedLeft) = insertStarts(c1, mods, resedLater ++ getResRegionIds(c2))
+      val (c2p, addedRight) = insertStarts(c2, mods -- addedLeft, resedLater)
       val cp = CSeq(c1p, c2p).setPos(c.pos)
       (cp, addedLeft ++ addedRight)
     case CTBar(c1, c2) =>
-      val (c1p, addedLeft) = insertStarts(c1, mods)
-      val (c2p, addedRight) = insertStarts(c2, mods -- addedLeft)
+      val (c1p, addedLeft) = insertStarts(c1, mods, resedLater ++ getResRegionIds(c2))
+      val (c2p, addedRight) = insertStarts(c2, mods -- addedLeft, resedLater)
       val cp = CTBar(c1p, c2p).setPos(c.pos)
       (cp, addedLeft ++ addedRight)
     case CIf(cond, cons, alt) =>
       val addedInCond = getAtomicAccessIds(cond).intersect(mods)
       val consIds = getResRegionIds(cons).intersect(mods)
       val altIds = getResRegionIds(alt).intersect(mods)
-      //if ID reserved/atomic accessed in cond OR in both cons & alt, then add before
-      val addBefore = addedInCond ++ consIds.intersect(altIds)
-      val (consp, addedCons) = insertStarts(cons, mods -- addBefore)
-      val (altp, addedAlt) = insertStarts(alt, mods -- addBefore)
+      //if ID reserved/atomic accessed in cond, OR in both cons & alt (or in a branch
+      // and in the code following the if, then add before
+      val addBefore = addedInCond ++
+        consIds.intersect(altIds) ++ consIds.intersect(resedLater) ++ altIds.intersect(resedLater)
+      val (consp, addedCons) = insertStarts(cons, mods -- addBefore, resedLater)
+      val (altp, addedAlt) = insertStarts(alt, mods -- addBefore, resedLater)
       val cp = CIf(cond, consp, altp).setPos(c.pos)
       val cpAdded = addLockStarts(addBefore, cp)
       (cpAdded, addBefore ++ addedCons ++ addedAlt)
@@ -71,8 +74,8 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       val addedInConds = cases.foldLeft(Set[Id]())((s, cs) => {
         s ++ getAtomicAccessIds(cs.cond)
       }).intersect(mods)
-      val addedInBranch = (cases.map(cs => cs.body) :+ default).map(cmd => getResRegionIds(cmd).intersect(mods))
-      //if ID reserved/atomic accessed in any cond OR in any two branches, then add before
+      val addedInBranch = (cases.map(cs => cs.body) :+ default).map(cmd => getResRegionIds(cmd).intersect(mods)) :+ resedLater
+      //if ID reserved/atomic accessed in any cond OR in any two branches (including after the program), then add before
       var addBefore = addedInConds
       //for each branch, check if it intersects with union of all others (i know it's n^2...sad)
       for (i <- addedInBranch.indices) {
@@ -81,11 +84,11 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       }
       var allAdded = addBefore
       val ncases = cases.map(cs => {
-        val (nbody, added) = insertStarts(cs.body, mods -- addBefore)
+        val (nbody, added) = insertStarts(cs.body, mods -- addBefore, resedLater)
         allAdded = allAdded ++ added
         CaseObj(cs.cond, nbody).setPos(cs.pos)
       })
-      val (ndefault, defAdded) = insertStarts(default, mods -- addBefore)
+      val (ndefault, defAdded) = insertStarts(default, mods -- addBefore, resedLater)
       allAdded = allAdded ++ defAdded
       val cp = CSplit(ncases, ndefault).setPos(c.pos)
       val cpAdded = addLockStarts(addBefore, cp)
@@ -103,27 +106,30 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
    * any atomic memory accesses for the given mem, or reservations for the given mem.
    * @param c The command to modify
    * @param mods The set of lock regions we plan to add by module name
+   * @param resedBefore The set of lock regions reserved before this statement, used
+   *                    to push ends outside of branches when some reserves happen before the start of the if.
    * @return (Modified command, set of END regions added)
    */
-  private def insertEnds(c: Command, mods: Set[Id]): (Command, Set[Id]) = c match {
+  private def insertEnds(c: Command, mods: Set[Id], resedBefore: Set[Id]): (Command, Set[Id]) = c match {
     //this one recurses on the right first and adds things afterwards (opposite of insertStarts)
     case CSeq(c1, c2) =>
-      val (c2p, addedRight) = insertEnds(c2, mods)
-      val (c1p, addedLeft) = insertEnds(c1, mods -- addedRight)
+      val (c2p, addedRight) = insertEnds(c2, mods, resedBefore ++ getResRegionIds(c1))
+      val (c1p, addedLeft) = insertEnds(c1, mods -- addedRight, resedBefore)
       val cp = CSeq(c1p, c2p).setPos(c.pos)
       (cp, addedLeft ++ addedRight)
     case CTBar(c1, c2) =>
-      val (c2p, addedRight) = insertEnds(c2, mods)
-      val (c1p, addedLeft) = insertEnds(c1, mods -- addedRight)
+      val (c2p, addedRight) = insertEnds(c2, mods, resedBefore ++ getResRegionIds(c1))
+      val (c1p, addedLeft) = insertEnds(c1, mods -- addedRight, resedBefore)
       val cp = CTBar(c1p, c2p).setPos(c.pos)
       (cp, addedLeft ++ addedRight)
     case CIf(cond, cons, alt) =>
       val usedInCond = getAtomicAccessIds(cond).intersect(mods)
       val consIds = getResRegionIds(cons).intersect(mods)
       val altIds = getResRegionIds(alt).intersect(mods)
-      val addedAfter = usedInCond ++ consIds.intersect(altIds)
-      val (consp, addedCons) = insertEnds(cons, mods -- addedAfter)
-      val (altp, addedAlt) = insertEnds(alt, mods -- addedAfter)
+      val addedAfter = usedInCond ++ consIds.intersect(altIds) ++
+        consIds.intersect(resedBefore) ++ altIds.intersect(resedBefore)
+      val (consp, addedCons) = insertEnds(cons, mods -- addedAfter, resedBefore)
+      val (altp, addedAlt) = insertEnds(alt, mods -- addedAfter, resedBefore)
       val cp = CIf(cond, consp, altp).setPos(c.pos)
       val cpAdded = addLockEnds(addedAfter, cp)
       (cpAdded, addedAfter ++ addedCons ++ addedAlt)
@@ -131,7 +137,7 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       val addedInConds = cases.foldLeft(Set[Id]())((s, cs) => {
         s ++ getAtomicAccessIds(cs.cond)
       }).intersect(mods)
-      val addedInBranch = (cases.map(cs => cs.body) :+ default).map(cmd => getResRegionIds(cmd).intersect(mods))
+      val addedInBranch = (cases.map(cs => cs.body) :+ default).map(cmd => getResRegionIds(cmd).intersect(mods)) :+ resedBefore
       //if ID reserved/atomic accessed in any cond OR in any two branches, then add after
       var addAfter = addedInConds
       //for each branch, check if it intersects with union of all others (i know it's n^2...sad)
@@ -141,11 +147,11 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       }
       var allAdded = addAfter
       val ncases = cases.map(cs => {
-        val (nbody, added) = insertEnds(cs.body, mods -- addAfter)
+        val (nbody, added) = insertEnds(cs.body, mods -- addAfter, resedBefore)
         allAdded = allAdded ++ added
         CaseObj(cs.cond, nbody).setPos(cs.pos)
       })
-      val (ndefault, defAdded) = insertEnds(default, mods -- addAfter)
+      val (ndefault, defAdded) = insertEnds(default, mods -- addAfter, resedBefore)
       allAdded = allAdded ++ defAdded
       val cp = CSplit(ncases, ndefault).setPos(c.pos)
       val cpAdded = addLockEnds(addAfter, cp)
