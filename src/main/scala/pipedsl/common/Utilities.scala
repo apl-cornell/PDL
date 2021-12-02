@@ -494,7 +494,7 @@ object Utilities {
       {
         case FError => e1 match
         {
-          case EInt(v, _, _) => val sign: TSignedNess =
+          case EInt(v, _, bits) => val sign: TSignedNess =
             e1.typ match {
               case Some(TSizedInt(_, sign)) => sign match
               {
@@ -504,18 +504,18 @@ object Utilities {
               case Some(_) => TSigned()
               case None => TSigned() //TODO error
             }
-            e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
+            e1.typ = Some(TSizedInt(TBitWidthLen(bits), sign))
           case _ => throw LackOfConstraints(e1)
         }
         case t => e1.typ = t.toOptionUnsafe
       }
       e1 match
       {
-        case e@EInt(v, _, _) =>
+        case e@EInt(v, _, bits) =>
           if(e.typ.isEmpty)
-            e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
+            e.typ = Some(TSizedInt(TBitWidthLen(bits), TSigned()))
           e.copy(bits = e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
-            {case t :TSizedInt => t}.len.getLen).copyMeta(e)
+                      {case t :TSizedInt => t}.len.getLen).copyMeta(e)
         case e@EIsValid(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EFromMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EToMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)

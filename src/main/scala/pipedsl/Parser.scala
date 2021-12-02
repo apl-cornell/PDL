@@ -72,7 +72,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val stringVal: P[EString] =
     "\"" ~> "[^\"]*".r <~ "\"" ^^ {n => EString(n)}
 
-  private def toInt(n: Int, base: Int, bits: Option[Int], isUnsigned: Boolean): EInt = {
+  private def toInt(n: String, base: Int, bits: Option[Int], isUnsigned: Boolean): EInt = {
     val e = EInt(n, base, if (bits.isDefined) bits.get else  -1)
     e.typ = bits match {
       case Some(b) => Some(TSizedInt(TBitWidthLen(b), SignFactory.ofBool(!isUnsigned)))
@@ -87,16 +87,16 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
 
   // Atoms
   lazy val dec: P[EInt] = positioned { "u".? ~ "-?[0-9]+".r ~ angular(posint).? ^^ {
-    case u ~ n ~ bits => toInt(n.toInt, 10, bits, u.isDefined)
+    case u ~ n ~ bits => toInt(n, 10, bits, u.isDefined)
   }}
   lazy val hex: P[EInt] = positioned { "u".? ~ "0x-?[0-9a-fA-F]+".r ~ angular(posint).? ^^ {
-    case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 16), 16, bits, u.isDefined)
+    case u ~ n ~ bits => toInt(n.substring(2), 16, bits, u.isDefined)
   }}
   lazy val octal: P[EInt] = positioned { "u".? ~ "0-?[0-7]+".r ~ angular(posint).? ^^ {
-    case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(1), 8), 8, bits, u.isDefined)
+    case u ~ n ~ bits => toInt(n.substring(1), 8, bits, u.isDefined)
   }}
   lazy val binary: P[EInt] = positioned { "u".? ~ "0b-?[0-1]+".r ~ angular(posint).? ^^ {
-    case u ~ n ~ bits => toInt(Integer.parseInt(n.substring(2), 2), 2, bits, u.isDefined)
+    case u ~ n ~ bits => toInt(n.substring(2), 2, bits, u.isDefined)
   }}
 
   lazy val num: P[EInt] = binary | hex | octal | dec ^^

@@ -185,7 +185,7 @@ object BluespecGeneration {
         //TODO better for externs
         val interface = if (modMap.contains(mod)) bsInts.getInterface(modMap(mod)) else extMap(mod)
         val modName =   if (modMap.contains(mod)) bsInts.getModuleName(modMap(mod)) else "mk" + mod.v
-        val szParams = params.map(p => BUnsizedInt(p.v))
+        val szParams = params.map(p => BUnsizedInt(p.v.toInt))
         (interface, BModule(name = modName, args = mods.map(m => env(m)) ++ szParams))
       case CirCall(_, _) => throw UnexpectedExpr(c)
     }
