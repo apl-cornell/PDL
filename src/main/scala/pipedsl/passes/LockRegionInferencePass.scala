@@ -29,7 +29,16 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
   override def run(p: Prog): Prog = p.copy(exts = p.exts, fdefs = p.fdefs,
     moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
+  private var unlockedMems = Set[Id]()
   override def run(m: ModuleDef): ModuleDef = {
+    unlockedMems = Set()
+    m.modules.foreach(p => {
+      p.typ match {
+        case TMemType(elem, addrSize, readLatency, writeLatency, readPorts, writePorts) =>
+          unlockedMems = unlockedMems + p.name
+        case _ => ()
+      }
+    })
     val modIds = m.modules.map(p => p.name).toSet
     val starts = insertStarts(m.body, modIds, Set())._1
     val ends = insertEnds(starts, modIds, Set())._1
@@ -213,6 +222,7 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
     case EUop(_, ex) => getAtomicAccessIds(ex)
     case EBinop(_, e1, e2) => getAtomicAccessIds(e1) ++ getAtomicAccessIds(e2)
     case EMemAccess(mem, _, _, _, _, isAtomic) if isAtomic => Set(mem)
+    case EMemAccess(mem, _, _, _, _, _) if unlockedMems.contains(mem) => Set(mem)
     case EBitExtract(num, _, _) => getAtomicAccessIds(num)
     case ETernary(cond, tval, fval) => getAtomicAccessIds(cond) ++ getAtomicAccessIds(tval) ++ getAtomicAccessIds(fval)
     case EApp(_, args) => args.foldLeft(Set[Id]())((b, a) => b ++ getAtomicAccessIds(a))
