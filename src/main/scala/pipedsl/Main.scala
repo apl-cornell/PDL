@@ -74,7 +74,10 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
     val pinfo = new ProgInfo(prog)
     try {
-      val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(prog))
+      //First: add lock regions + checkpoints, then do other things
+      val inferredProg = new LockRegionInferencePass().run(prog)
+
+      val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(inferredProg))
       val canonProg2 = new CanonicalizePass().run(verifProg)
       val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
       val basetypes = BaseTypeChecker.check(canonProg, None)
@@ -107,6 +110,7 @@ object Main {
         writer.write("Passed")
         writer.close()
       }
+      ctx.close()
       (lock_prog, pinfo)
     } catch {
       case t: Throwable => {

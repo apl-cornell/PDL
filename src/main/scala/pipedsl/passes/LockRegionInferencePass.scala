@@ -1,6 +1,5 @@
 package pipedsl.passes
 
-import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
 import pipedsl.common.Locks.Reserved
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
@@ -25,53 +24,140 @@ import pipedsl.passes.Passes.{ModulePass, ProgPass}
  *
  * @param ctx
  */
-class LockRegionInferencePass(val ctx: Z3Context)
-  extends ModulePass[ModuleDef] with ProgPass[Prog] {
+class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog] {
 
   override def run(p: Prog): Prog = p.copy(exts = p.exts, fdefs = p.fdefs,
     moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
   override def run(m: ModuleDef): ModuleDef = {
-    val modIds = m.modules.map(p => p.name)
-    val starts = insertStarts(m.body, modIds.toSet)
-    val ends = insertEnds(starts, modIds)
+    val modIds = m.modules.map(p => p.name).toSet
+    val starts = insertStarts(m.body, modIds)._1
+    val ends = insertEnds(starts, modIds)._1
     val checks = insertChecks(ends, modIds)
     m.copy(body = checks).setPos(m.pos)
   }
 
-  //TODO this is very wrong
-  private def insertStarts(c: Command, mods: Set[Id]): Command = c match {
+  /**
+   * Add in the [[pipedsl.common.Syntax.CLockStart]] commands for the modules
+   * specified in `mods` as late as possible such that it still occurs before
+   * any atomic memory accesses for the given mem, or reservations for the given mem.
+   * @param c The command to modify
+   * @param mods The set of lock regions we plan to add by module name
+   * @return (Modified command, set of START regions added)
+   */
+  private def insertStarts(c: Command, mods: Set[Id]): (Command, Set[Id]) = c match {
     case CSeq(c1, c2) =>
-      val addLhsIds = getImmediateResRegionIds(c1).intersect(mods)
-      val addRhsIds = getImmediateResRegionIds(c2).intersect(mods)
-      if (addLhsIds.nonEmpty) {
-        CSeq(addLockStarts(addLhsIds, c1), insertStarts(c2, mods -- addLhsIds)).setPos(c.pos)
-      } else if (addRhsIds.nonEmpty) {
-        CSeq(c1, )
-      } else {
-        c
-      }
-      //replace with CSeq(CSeq(startlist, c1), insertStarts(c2, mods - startlist)))
-    case CSeq(c1, c2) if getImmediateResRegionIds(c2).nonEmpty =>
-      //replace with CSeq(c1, CSeq(start, c2))
-    case CTBar(c1, c2) if getImmediateResRegionIds(c1).nonEmpty =>
-    //replace with CTBar(CSeq(start, c1), c2)
-    case CTBar(c1, c2) if getImmediateResRegionIds(c1).nonEmpty =>
-    //replace with CTBar(c1, CSeq(start, c2))
+      val (c1p, addedLeft) = insertStarts(c1, mods)
+      val (c2p, addedRight) = insertStarts(c2, mods -- addedLeft)
+      val cp = CSeq(c1p, c2p).setPos(c.pos)
+      (cp, addedLeft ++ addedRight)
+    case CTBar(c1, c2) =>
+      val (c1p, addedLeft) = insertStarts(c1, mods)
+      val (c2p, addedRight) = insertStarts(c2, mods -- addedLeft)
+      val cp = CTBar(c1p, c2p).setPos(c.pos)
+      (cp, addedLeft ++ addedRight)
     case CIf(cond, cons, alt) =>
-      //if ID in cond OR anywhere in cons & alt
-      //replace with CSeq(start, c)
-      //else if id anywhere in cons
-      //replace with CIf(cond, insertStarts(cons, mods), alt)
-      //else
-      //replace with CIf(cond, cons, insertStarts(alt, mods))
+      val addedInCond = getAtomicAccessIds(cond).intersect(mods)
+      val consIds = getResRegionIds(cons).intersect(mods)
+      val altIds = getResRegionIds(alt).intersect(mods)
+      //if ID reserved/atomic accessed in cond OR in both cons & alt, then add before
+      val addBefore = addedInCond ++ consIds.intersect(altIds)
+      val (consp, addedCons) = insertStarts(cons, mods -- addBefore)
+      val (altp, addedAlt) = insertStarts(alt, mods -- addBefore)
+      val cp = CIf(cond, consp, altp).setPos(c.pos)
+      val cpAdded = addLockStarts(addBefore, cp)
+      (cpAdded, addBefore ++ addedCons ++ addedAlt)
     case CSplit(cases, default) =>
-    case _ => c
+      val addedInConds = cases.foldLeft(Set[Id]())((s, cs) => {
+        s ++ getAtomicAccessIds(cs.cond)
+      }).intersect(mods)
+      val addedInBranch = (cases.map(cs => cs.body) :+ default).map(cmd => getResRegionIds(cmd).intersect(mods))
+      //if ID reserved/atomic accessed in any cond OR in any two branches, then add before
+      var addBefore = addedInConds
+      //for each branch, check if it intersects with union of all others (i know it's n^2...sad)
+      for (i <- addedInBranch.indices) {
+        val rest = addedInBranch.drop(i).reduce((s1, s2) => s1 ++ s2)
+        addBefore = addBefore ++ addedInBranch(i).intersect(rest)
+      }
+      var allAdded = addBefore
+      val ncases = cases.map(cs => {
+        val (nbody, added) = insertStarts(cs.body, mods -- addBefore)
+        allAdded = allAdded ++ added
+        CaseObj(cs.cond, nbody).setPos(cs.pos)
+      })
+      val (ndefault, defAdded) = insertStarts(default, mods -- addBefore)
+      allAdded = allAdded ++ defAdded
+      val cp = CSplit(ncases, ndefault).setPos(c.pos)
+      val cpAdded = addLockStarts(addBefore, cp)
+      (cpAdded, allAdded)
+      //if there already is a start, just say we added it
+    case CLockStart(mem) => (c, Set(mem))
+    case _ =>
+      val toAdd = getImmediateResRegionIds(c).intersect(mods)
+      (addLockStarts(toAdd, c), toAdd)
   }
 
-  private def insertEnds(command: Command, value: List[Id]): Command = ???
+  /**
+   * Add in the [[pipedsl.common.Syntax.CLockEnd]] commands for the modules
+   * specified in `mods` as early as possible such that it still occurs after
+   * any atomic memory accesses for the given mem, or reservations for the given mem.
+   * @param c The command to modify
+   * @param mods The set of lock regions we plan to add by module name
+   * @return (Modified command, set of END regions added)
+   */
+  private def insertEnds(c: Command, mods: Set[Id]): (Command, Set[Id]) = c match {
+    //this one recurses on the right first and adds things afterwards (opposite of insertStarts)
+    case CSeq(c1, c2) =>
+      val (c2p, addedRight) = insertEnds(c2, mods)
+      val (c1p, addedLeft) = insertEnds(c1, mods -- addedRight)
+      val cp = CSeq(c1p, c2p).setPos(c.pos)
+      (cp, addedLeft ++ addedRight)
+    case CTBar(c1, c2) =>
+      val (c2p, addedRight) = insertEnds(c2, mods)
+      val (c1p, addedLeft) = insertEnds(c1, mods -- addedRight)
+      val cp = CTBar(c1p, c2p).setPos(c.pos)
+      (cp, addedLeft ++ addedRight)
+    case CIf(cond, cons, alt) =>
+      val usedInCond = getAtomicAccessIds(cond).intersect(mods)
+      val consIds = getResRegionIds(cons).intersect(mods)
+      val altIds = getResRegionIds(alt).intersect(mods)
+      val addedAfter = usedInCond ++ consIds.intersect(altIds)
+      val (consp, addedCons) = insertEnds(cons, mods -- addedAfter)
+      val (altp, addedAlt) = insertEnds(alt, mods -- addedAfter)
+      val cp = CIf(cond, consp, altp).setPos(c.pos)
+      val cpAdded = addLockEnds(addedAfter, cp)
+      (cpAdded, addedAfter ++ addedCons ++ addedAlt)
+    case CSplit(cases, default) =>
+      val addedInConds = cases.foldLeft(Set[Id]())((s, cs) => {
+        s ++ getAtomicAccessIds(cs.cond)
+      }).intersect(mods)
+      val addedInBranch = (cases.map(cs => cs.body) :+ default).map(cmd => getResRegionIds(cmd).intersect(mods))
+      //if ID reserved/atomic accessed in any cond OR in any two branches, then add after
+      var addAfter = addedInConds
+      //for each branch, check if it intersects with union of all others (i know it's n^2...sad)
+      for (i <- addedInBranch.indices) {
+        val rest = addedInBranch.drop(i).reduce((s1, s2) => s1 ++ s2)
+        addAfter = addAfter ++ addedInBranch(i).intersect(rest)
+      }
+      var allAdded = addAfter
+      val ncases = cases.map(cs => {
+        val (nbody, added) = insertEnds(cs.body, mods -- addAfter)
+        allAdded = allAdded ++ added
+        CaseObj(cs.cond, nbody).setPos(cs.pos)
+      })
+      val (ndefault, defAdded) = insertEnds(default, mods -- addAfter)
+      allAdded = allAdded ++ defAdded
+      val cp = CSplit(ncases, ndefault).setPos(c.pos)
+      val cpAdded = addLockEnds(addAfter, cp)
+      (cpAdded, allAdded)
+    //if there already is an end, just say we added it
+    case CLockEnd(mem) => (c, Set(mem))
+    case _ =>
+      val toAdd = getImmediateResRegionIds(c).intersect(mods)
+      (addLockEnds(toAdd, c), toAdd)
+  }
 
-  private def insertChecks(value: Command, value1: List[Id]): Command = ???
+  private def insertChecks(c: Command, mods: Set[Id]): Command = c
 
   /**
    *
@@ -96,14 +182,14 @@ class LockRegionInferencePass(val ctx: Z3Context)
   private def getImmediateResRegionIds(c: Command): Set[Id] = c match {
     case CAssign(lhs, rhs) => getAtomicAccessIds(lhs) ++ getAtomicAccessIds(rhs)
     case CRecv(lhs, rhs) => getAtomicAccessIds(lhs) ++ getAtomicAccessIds(rhs)
-    case CSpecCall(_, pipe, args) => args.foldLeft(Set[Id]())((s, a) => s ++ getAtomicAccessIds(a))
+    case CSpecCall(_, _, args) => args.foldLeft(Set[Id]())((s, a) => s ++ getAtomicAccessIds(a))
     case CVerify(_, args, _, _, _) => args.foldLeft(Set[Id]())((s, a) => s ++ getAtomicAccessIds(a))
     case CUpdate(_, _, args, _, _) =>
       args.foldLeft(Set[Id]())((s, a) => s ++ getAtomicAccessIds(a))
     case CPrint(args) => args.foldLeft(Set[Id]())((s, a) => s ++ getAtomicAccessIds(a))
     case COutput(exp) => getAtomicAccessIds(exp)
     case CExpr(exp) => getAtomicAccessIds(exp)
-    case CLockOp(mem, op, _, _, _) if op == Reserved => Set(mem)
+    case CLockOp(mem, op, _, _, _) if op == Reserved => Set(mem.id)
     case _ => Set()
   }
 
@@ -119,7 +205,7 @@ class LockRegionInferencePass(val ctx: Z3Context)
     case EUop(_, ex) => getAtomicAccessIds(ex)
     case EBinop(_, e1, e2) => getAtomicAccessIds(e1) ++ getAtomicAccessIds(e2)
     case EMemAccess(mem, _, _, _, _, isAtomic) if isAtomic => Set(mem)
-    case EBitExtract(num, _, -) => getAtomicAccessIds(num)
+    case EBitExtract(num, _, _) => getAtomicAccessIds(num)
     case ETernary(cond, tval, fval) => getAtomicAccessIds(cond) ++ getAtomicAccessIds(tval) ++ getAtomicAccessIds(fval)
     case EApp(_, args) => args.foldLeft(Set[Id]())((b, a) => b ++ getAtomicAccessIds(a))
     case ECall(_, _, args) => args.foldLeft(Set[Id]())((b, a) => b ++ getAtomicAccessIds(a))
@@ -130,6 +216,11 @@ class LockRegionInferencePass(val ctx: Z3Context)
   private def addLockStarts(ids: Set[Id], before: Command): Command = {
     ids.foldLeft(before)((c, i) => {
       CSeq(CLockStart(i).setPos(before.pos), c).setPos(before.pos)
+    })
+  }
+  private def addLockEnds(ids: Set[Id], after: Command): Command = {
+    ids.foldLeft(after)((c, i) => {
+      CSeq(c, CLockEnd(i).setPos(after.pos)).setPos(after.pos)
     })
   }
 }

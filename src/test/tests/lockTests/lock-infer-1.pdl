@@ -1,0 +1,31 @@
+pipe ex1(in: bool)[r1: int<32>[5]<a,a>(Queue), r2: int<32>[5]<a,a>(Queue)] :bool {
+    uint<5> addr = u1<5>;
+    if (in) {
+        reserve(r1[addr], W);
+    } else {
+        reserve(r2[addr], W);
+    }
+    ---
+    if (in) {
+        block(r1[addr]);
+        r1[addr] <- 32<32>;
+        release(r1[addr]);
+    }
+    ---
+    if (!in) {
+        block(r2[addr]);
+        r2[addr] <- 32<32>;
+        release(r2[addr]);
+    }
+    print(in);
+    output(in);
+}
+
+circuit {
+    t1 = memory(int<32>, 5);
+    r1 = Queue(t1);
+    t2 = memory(int<32>, 5);
+    r2 = Queue(t2);
+    e = new ex1[r1, r2];
+    call e(false);
+}
