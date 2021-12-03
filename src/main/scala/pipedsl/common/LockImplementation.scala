@@ -23,6 +23,7 @@ object LockImplementation {
   private val lsq = new LoadStoreQueue()
   private val chkq = new CheckpointLockQueue()
   private val chkRf = new CheckpointRF()
+  private val modLock = new ModLock()
 
   //Stand-in Type Variables for Address, Data and Lock Handle
   private val addrType = TNamedType(Id("addr"))
@@ -346,8 +347,7 @@ object LockImplementation {
       val mtyp = mem.typ.get
       mtyp.matchOrError(mem.pos, "Lock Argument", "Memory") {
         case TLockedMemType(_,_,limpl)=> limpl
-          //TODO remove this and make memories + modules the same
-        case _:TModType => getDefaultLockImpl //modules only use the default lock impl for now
+        case _:TModType => modLock
       }
     }
   }
@@ -358,7 +358,7 @@ object LockImplementation {
       case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory")
       {
         case TLockedMemType(_, _, limpl) => limpl
-        case _ :TModType => getDefaultLockImpl
+        case _ :TModType => modLock
       }
       case None => throw MissingType(mem.pos, mem.v)
     }
@@ -463,7 +463,7 @@ object LockImplementation {
 
   private class CheckpointLockQueue extends LockQueue {
 
-    private val queueLockName = Id("CheckpointQueueLock")
+    protected val queueLockName = Id("CheckpointQueueLock")
 
     override def getType: TObject = {
       val parent = super.getType
@@ -485,6 +485,12 @@ object LockImplementation {
 
     //Checkpoint id must equal the lock id size
     override def getChkIdSize(lidSize: Int): Int = lidSize
+  }
+
+  //This class should only be used to mediate calls to PDL pipelines
+  private class ModLock extends CheckpointLockQueue {
+    override def getModuleName(m: TMemType): String = queueLockName.v
+    override def hasLockSubInterface = false
   }
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once
