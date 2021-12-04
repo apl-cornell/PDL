@@ -166,7 +166,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           } else {
             env
           }
-        case (_, ECall(_, _, args)) =>
+        case (_, ECall(_, _, args, _)) =>
           args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
         case _ => throw UnexpectedCase(c.pos)
       }
@@ -211,7 +211,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       val env2 = checkExpr(tval, env1, predicates)
       checkExpr(fval, env2, predicates)
     case EApp(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
-    case ECall(_, _, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
+    case ECall(_, _, args, _) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
     case ECast(_, exp) => checkExpr(exp, env, predicates)
     case _ => env
   }

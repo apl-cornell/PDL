@@ -684,11 +684,11 @@ object TypeInferenceWrapper
         val retEnv = runningEnv.apply_subst_typeenv(retSubst)
         val retTyp = apply_subst_typ(retSubst, retType)
         (retSubst, retTyp, retEnv, ap.copy(args = fixed_arg_list).copyMeta(ap))
-       case ca@ECall(mod, name, args) if name.isEmpty =>
+       case ca@ECall(mod, name, args, isAtomic) if name.isEmpty =>
         if (!env(mod).isInstanceOf[TModType]) throw UnexpectedType(e.pos, "Module Call", "TModType", env(mod))
         val expectedType = getArrowModType(env(mod).asInstanceOf[TModType])
         substIntoCall(expectedType, ca, args, env)
-       case ca@ECall(mod, method, args) if method.isDefined =>
+       case ca@ECall(mod, method, args, isAtomic) if method.isDefined =>
         if (!env(mod).isInstanceOf[TObject]) throw UnexpectedType(e.pos, "Object Call", "TObject", env(mod))
         val expectedType = env(mod).asInstanceOf[TObject].methods(method.get)._1
         substIntoCall(expectedType, ca, args, env)

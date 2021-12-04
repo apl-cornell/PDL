@@ -90,7 +90,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
             e.memOpType = Some(LockRead)
             e.granularity = getLockGranularity(mem)
         }
-      case (_, ECall(_, _, _)) =>
+      case (_, ECall(_, _, _, _)) =>
       case _ => throw UnexpectedCase(c.pos)
     }
     case CAssign(_, rhs) => checkExpr(rhs)
@@ -121,7 +121,7 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
       checkExpr(tval)
       checkExpr(fval)
     case EApp(_, args) => args.foreach(a => checkExpr(a))
-    case ECall(_, _, args) => args.foreach(a => checkExpr(a))
+    case ECall(_, _, args, _) => args.foreach(a => checkExpr(a))
     case ECast(_, exp) => checkExpr(exp)
     case _ =>
   }
