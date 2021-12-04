@@ -444,7 +444,7 @@ object Syntax {
   case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
-  case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr]) extends Expr
+  case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr], isAtomic: Boolean) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
   {

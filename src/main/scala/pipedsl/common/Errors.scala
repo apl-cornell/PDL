@@ -87,6 +87,9 @@ object Errors {
   case class IllegalLockAcquisition(pos: Position) extends TypeError(
     s"Cannot acquire or reserve locks inside multiple branches", pos)
 
+  case class RecursiveCallLockAcquisition(pos: Position) extends TypeError(
+    s"Cannot acquire or reserve locks for recursive calls", pos)
+
   case class IllegalOOOLockRelease(pos: Position) extends TypeError(
     s"Cannot release locks inside multiple branches", pos)
 

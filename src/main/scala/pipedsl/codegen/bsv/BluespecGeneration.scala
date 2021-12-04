@@ -719,7 +719,7 @@ object BluespecGeneration {
       case EApp(_, args) => args.foldLeft(List[BExpr]())((l, a) => {
         l ++ getBlockConds(a)
       })
-      case ECall(_, _, args) => args.foldLeft(List[BExpr]())((l, a) => {
+      case ECall(_, _, args, isAtomic) => args.foldLeft(List[BExpr]())((l, a) => {
         l ++ getBlockConds(a)
       })
       case ECast(_, exp) => getBlockConds(exp)

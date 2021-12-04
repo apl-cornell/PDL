@@ -115,7 +115,15 @@ object BSVSyntax {
       case TRequestHandle(n, rtyp) => rtyp match {
         //These are passed in the modmap rather than the handle map
         case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType] =>
+          if(n.typ.get.isInstanceOf[TModType]) {
+            n.typ.get match {
+              case TModType(_, _, _, Some(n)) => modmap(n)
+              case _ => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
+            }
+          }
+          else {
             modmap(n)
+          }
         case pipedsl.common.Syntax.RequestType.Checkpoint =>
           lockIdToCheckId(modmap(n))
         //TODO allow this to be specified somewhere
@@ -191,7 +199,7 @@ object BSVSyntax {
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
       case EToMaybe(ex) => BTaggedValid(toExpr(ex))
-      case ECall(mod, method, args) if method.isDefined =>
+      case ECall(mod, method, args, isAtomic) if method.isDefined =>
         //type doesn't matter on the var
         BMethodInvoke(BVar(mod.v, BVoid), method.get.v, args.map(a => toExpr(a)))
       case _ => throw UnexpectedExpr(e)
