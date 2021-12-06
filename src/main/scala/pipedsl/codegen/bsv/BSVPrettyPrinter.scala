@@ -61,6 +61,7 @@ object BSVPrettyPrinter {
     case BNumericType(sz) => sz.toString
     case BTypeParam(name, _) => name
     case BString => "String"
+    case BInteger() => "Integer"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -126,6 +127,7 @@ object BSVPrettyPrinter {
     case BOne => "1"
     case BAllOnes => "'1"
     case BTime => "$time()"
+    case BValueOf(s) => s"valueOf($s)"
   }
 
   def getFilePrinter(name: File): BSVPretyPrinterImpl = {

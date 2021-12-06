@@ -1,0 +1,33 @@
+def error(inpt :int<10>) :bool
+{
+   shamt = cast(inpt{4:0}, uint<5>);
+   return true;
+}
+
+
+def iden<U>(a :int<U>) :int<U>
+{
+   return a;
+}
+
+
+def adder<T>(x :int<T>, y :int<T>) :int<T>
+{
+   return x + iden(y);
+}
+
+def my_concat<W, X>(a :int<W>, b :int<X>) :int<W + X>
+{
+   return a ++ b;
+}
+
+pipe test1(inpt: int<32>)[rf: int<32>[32]] :int<100>
+{
+   output (adder(3, 4));
+}
+
+
+
+circuit {
+   r = memory(int<32>, 32);
+}

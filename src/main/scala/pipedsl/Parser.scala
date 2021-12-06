@@ -333,9 +333,22 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
     seqCmd } )
 
-  lazy val bitWidth :P[TBitWidth] = dlog(iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
+  lazy val bitWidthAtom :P[TBitWidth] = dlog(iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
     posint ^^ {i => TBitWidthLen(i)})("parsed bit width")
 
+  lazy val bitWidth :P[TBitWidth] =
+      repsep(bitWidthAtom, "+") ^^
+        { lst =>
+          {
+            var tmp = lst.head
+            for (i <- lst.tail)
+              {
+                tmp = TBitWidthAdd(tmp, i)
+              }
+            tmp
+          }
+        } |
+    bitWidthAtom
 
   lazy val sizedInt: P[Type] = "int" ~> angular(bitWidth) ^^ { bits => TSizedInt(bits, TSigned() ) } |
   "uint" ~> angular(bitWidth) ^^ { bits =>  TSizedInt(bits, TUnsigned() ) }

@@ -25,6 +25,7 @@ object BSVSyntax {
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedType(name: String, sizeParams: List[Integer] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
+  case class BInteger() extends  BSVType
   case class BVarSizedInt(unsigned :Boolean, size :String) extends BSVType
   case class BTypeParam(name: String, provisos: List[Proviso]) extends BSVType
   case object BBool extends BSVType
@@ -86,6 +87,7 @@ object BSVSyntax {
         getLockedMemType(mem, mtyp, lidSz, lidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(TBitWidthVar(name), sign) => BVarSizedInt(sign.unsigned(), name.v)
       case TSizedInt(len :TBitWidthLen, sign) => BSizedInt(sign.unsigned(), len.getLen)
+      case TInteger() => BInteger();
       case TBitWidthLen(len) => BNumericType(len)
       case TBool() => BBool
       case TString() => BString
@@ -297,8 +299,26 @@ object BSVSyntax {
       val params = b.args.foldLeft(List[BVar]())((ps, arg) => {
         ps :+ BVar(arg.name.v, toType(arg.typ))
       })
-      val fdef = BFuncDef(b.name.v, rettype, params, translateFuncBody(b.body))
+      val fdef = BFuncDef(b.name.v, rettype, params,
+        getFuncGenIntDecls(b) ++ translateFuncBody(b.body),
+        getProvisos(b))
       fdef
+    }
+
+    private def getProvisos(b :FuncDef) :List[BProvisos] =
+    {
+      b.adds.map()//todo implement
+    }
+
+    private def getFuncGenIntDecls(b :FuncDef): List[BStatement] =
+    {
+      b.templateTypes.map(id =>
+        {
+          val tmp = Id(id.v + "_val")
+          tmp.typ = Some(TInteger())
+          BDecl(toVar(tmp),
+            Some(BValueOf(id.v)))
+        })
     }
 
     private def translateFuncBody(c: Command): List[BStatement] = c match {
@@ -382,6 +402,9 @@ object BSVSyntax {
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
+  case class BValueOf(s :String) extends BExpr
+
+  case class BProvisos(kind :String, args :List[String])
 
   sealed trait BStatement {
     var useLet: Boolean = false
@@ -422,7 +445,9 @@ object BSVSyntax {
 
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
 
-  case class BFuncDef(name: String, rettyp: BSVType, params: List[BVar], body: List[BStatement])
+  case class BFuncDef(name: String, rettyp: BSVType,
+                      params: List[BVar], body: List[BStatement],
+                      provisos: List[BProvisos])
 
   case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
 

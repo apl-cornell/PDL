@@ -1,6 +1,6 @@
 extern BHT<T> {
-       method req(pc: int<16>, skip: int<16>, take: int<16>): int<16>;
-       method upd(pc: int<16>, taken: bool): ();
+       method req(pc: int<T>, skip: int<T>, take: int<T>): int<T>;
+       method upd(pc: int<T>, taken: bool): ();
 }
 
 def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
@@ -332,7 +332,7 @@ circuit {
     td = memory(int<32>, 16);
     rf = rflock(int<32>, 5, 64);
     div = new multi_stg_div[];
-    b = new BHT[](4);
+    b = new BHT<16>[](4);
     c = new cpu[rf, ti, td, div, b];
     call c(0<16>);
 }

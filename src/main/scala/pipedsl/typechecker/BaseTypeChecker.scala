@@ -6,7 +6,7 @@ import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, is_generic, specialise}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, is_generic, specialize}
 
 import scala.collection.mutable
 
@@ -192,7 +192,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       (ltyp, tenv)
     }
     case CirNew(mod, specialized, mods, _) => {
-      val mtyp = specialise(tenv(mod), specialized)
+      val mtyp = specialize(tenv(mod), specialized)
       mtyp match {
         case TModType(_, refs, _, _) => {
           if(refs.length != mods.length) {

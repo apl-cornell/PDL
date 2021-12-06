@@ -7,6 +7,8 @@ import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
 import pipedsl.typechecker.Subtypes
 
+import scala.collection.mutable
+
 
 
 
@@ -38,6 +40,10 @@ object Syntax {
     sealed trait PortAnnotation
     {
       var portNum :Option[Int] = None
+    }
+    sealed trait Provisos
+    {
+      val adds: mutable.Map[(String, String), Id] = mutable.HashMap[(String, String), Id]()
     }
   }
 
@@ -266,6 +272,7 @@ object Syntax {
         super.setPos(newpos)
       }
   }
+  case class TInteger() extends Type with IntType
   // Use case class instead of case object to get unique positions
   case class TString() extends Type
   case class TVoid() extends Type
@@ -305,11 +312,25 @@ object Syntax {
   {
     def getLen :Int = this.matchOrError(this.pos, "bit width", "bit width len")
     { case l : TBitWidthLen => l.len}
+
+    def stringRep() :String
   }
   case class TBitWidthVar(name: Id) extends TBitWidth
+  {
+    override def stringRep(): String = name.v
+  }
   case class TBitWidthLen(len: Int) extends TBitWidth
+  {
+    override def stringRep(): String = len.toString
+  }
   case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  {
+    override def stringRep(): String = b1.stringRep() + "_plus_" + b2.stringRep()
+  }
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  {
+    override def stringRep(): String = b1.stringRep() + "_max_" + b2.stringRep()
+  }
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
   def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
@@ -528,7 +549,7 @@ object Syntax {
     args: List[Param],
     ret: Type,
     body: Command,
-    templateTypes :List[Id]) extends Definition
+    templateTypes :List[Id]) extends Definition with Provisos
 
   case class MethodDef(
                       name :Id,

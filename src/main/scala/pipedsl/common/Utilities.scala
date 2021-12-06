@@ -506,14 +506,16 @@ object Utilities {
       {
         case FError => e1 match
         {
+          // If we can't decide the type of an int literal, choose the smallest
+          // sized integer with the appropriate sign (default: unsigned)
           case EInt(v, _, _) => val sign: TSignedNess =
             e1.typ match {
               case Some(TSizedInt(_, sign)) => sign match
               {
-                case TSignVar(_) => TSigned()
+                case TSignVar(_) => TUnsigned()
                 case defined => defined
               }
-              case Some(_) => TSigned()
+              case Some(_) => TUnsigned()
             }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
           case t =>
@@ -525,7 +527,10 @@ object Utilities {
       {
         case e@EInt(v, _, _) =>
           if(e.typ.isEmpty)
-            e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
+            {
+              assert(false)
+              e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
+            }
           e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
           {
             case t: TSizedInt => t.len.matchOrError(e.pos, "TSizedInt", "len or var")
@@ -732,12 +737,14 @@ object Utilities {
     case name:String => name.startsWith(generic_type_prefix) && !name.endsWith("*")
   }
 
-  val not_gen_pref = "__NOT_GEN"
+  val not_gen_pref = "__NOT"
 
   /**
-   * take a generic type, and turn it into not a generic type
+   * take a generic type, and turn it into not a generic type (as recognized by
+   * the above is_generic and is_my_generic
    */
   def degenerify(t :Type) :Type =
+  //  not currently used. might be helpful in future with more complicated type inference
     {
       def _degenerify(t :Type) :Type = t match
       {
@@ -771,10 +778,10 @@ object Utilities {
    * BHT&lt;T&gt;, and you specialise it with the list 16::[], then you will
    * get back a BHT&lt;16&gt;
    *
-   * For anythign that isn't an object, return it unchanged. This is just
+   * For anything that isn't an object, return it unchanged. This is just
    * convenient for where this is used
    */
-  def specialise(t :Type, s :List[Int]) :Type = t match {
+  def specialize(t:Type, s:List[Int]) :Type = t match {
     case t :TObject =>
     val new_types = s.map(l => TBitWidthLen(l))
     t.copy(typParams = new_types,
@@ -784,7 +791,7 @@ object Utilities {
           case TBitWidthVar(v) => v.v
           case TNamedType(v) => v.v
           case _ => ""
-        }).zip(new_types)
+        }).zip(new_types) //TODO more descriptive error when length mismatch
         val map = assoc_list.toMap
         val new_args = old_fun.args.map
         { case ts@TSizedInt(len@TBitWidthVar(name), sign) =>

@@ -4,7 +4,7 @@ import pipedsl.common.Errors
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, is_my_generic, specialise, typeMap, typeMapFunc, typeMapModule}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, is_my_generic, specialize, typeMap, typeMapFunc, typeMapModule}
 import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 
@@ -14,6 +14,8 @@ object TypeInferenceWrapper
  {
   type Subst = List[(Id, Type)]
   type bool = Boolean
+
+  private val add_map = mutable.HashMap[(String, String), Id]()
 
   def apply_subst_typ(subst: Subst, t: Type): Type = subst.foldLeft[Type](t)((t1, s) => subst_into_type(s._1, s._2, t1))
 
@@ -39,6 +41,7 @@ object TypeInferenceWrapper
     val width = subst_into_type(typevar, toType, len) |> to_width
     val sign = subst_into_type(typevar, toType, signedness) |> to_sign
     TSizedInt(width, sign).setPos(inType.pos)
+   case TInteger() => inType
    case TString() => inType
    case TBool() => inType
    case TVoid() => inType
@@ -116,9 +119,19 @@ object TypeInferenceWrapper
      }
      case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp, templated))
      case TBitWidthAdd(b1, b2) =>
-      val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
-      val len2 = type_subst_map(b2, tp_mp, templated) |> to_len
-      TBitWidthLen(len1 + len2)
+      val len1 = type_subst_map(b1, tp_mp, templated)
+      val len2 = type_subst_map(b2, tp_mp, templated)
+      (len1, len2) match {
+       case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
+       case (l1:TBitWidth, l2:TBitWidth) =>
+        {
+         val lst = (l1.stringRep()::l2.stringRep()::Nil).sorted
+         val id = Id(lst.head + "_ADD_" + lst(1))
+         add_map.addOne((lst.head, lst(1)), id)
+         //add_map.getOrElse((lst.head, lst(1)),
+         TBitWidthVar(id)
+        }
+      }
      case TBitWidthMax(b1, b2) =>
       val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
       val len2 = type_subst_map(b2, tp_mp, templated) |> to_len
@@ -215,11 +228,18 @@ object TypeInferenceWrapper
       val funType = TFun(inputTypes, f.ret)
       val funEnv = env.add(f.name, funType)
       val templated = mutable.HashSet.from(f.templateTypes)
-      val inEnv = f.args.foldLeft[Environment[Id, Type]](funEnv)((env, a) => env.add(a.name, a.typ))
+      val template_vals_env = templated.foldLeft(funEnv)((env, a) => env.add(Id(a.v + "_val"), TInteger()))
+      val inEnv = f.args.foldLeft[Environment[Id, Type]](template_vals_env)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
 
       val hash = mutable.HashMap.from(subst)
-      val newFunc = typeMapFunc(f.copy(body = fixed_cmd).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash, templated)))
+      add_map.clear()
+      val newFunc = typeMapFunc(f.copy(body = fixed_cmd,
+       args = f.args.map(p => p.copy(typ = type_subst_map(p.typ, hash, templated))),
+       ret = type_subst_map(f.ret, hash, templated)).setPos(f.pos), fopt_func(type_subst_map_fopt(_, hash, templated)))
+      /*TODO: add another pass over the types to make substitutions for bit expressions.
+              Collect them as provisos*/
+      newFunc.adds.addAll(add_map)
       (funEnv, newFunc)
      }
 
@@ -550,7 +570,7 @@ object TypeInferenceWrapper
       val ltyp = TLockedMemType(mtyp, idsz, impl)
       c.typ = Some(ltyp)
       (ltyp, tenv, c)
-     case CirNew(mod, specialized, mods, _) => val mtyp = specialise(tenv(mod), specialized)
+     case CirNew(mod, specialized, mods, _) => val mtyp = specialize(tenv(mod), specialized)
       mtyp match
       {
        case TModType(_, refs, _, _) => if (refs.length != mods.length) throw ArgLengthMismatch(c.pos, mods.length, refs.length)
