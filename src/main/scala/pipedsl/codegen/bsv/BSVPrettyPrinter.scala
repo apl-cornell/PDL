@@ -17,6 +17,8 @@ object BSVPrettyPrinter {
 
   private def toProvisoString(name: String, p: Proviso): String = p match {
     case PBits(szName) => "Bits#(" + name + "," + szName +")"
+    case PAdd(num1, num2, sum) => s"Add#($num1, $num2, $sum)"
+    case PMin(name, min) => s"Min#($name, $min, $min)"
   }
 
   private def getTypeParams(typ: BSVType): Set[BTypeParam] = typ match {
@@ -264,7 +266,16 @@ object BSVPrettyPrinter {
 
     def printBSVFunc(func: BFuncDef): Unit = {
       val paramstr = func.params.map(p => toDeclString(p)).mkString(", ")
-      w.write(mkStatementString("function", toBSVTypeStr(func.rettyp), func.name, "(", paramstr, ")"))
+      w.write(mkStatementString("function", toBSVTypeStr(func.rettyp),
+        func.name, "(", paramstr, ")",
+        if(func.provisos.nonEmpty)
+        {
+          " provisos(" +
+            func.provisos.tail.foldLeft(toProvisoString("", func.provisos.head))((str, proviso) =>
+              str + ", " + toProvisoString("", proviso)) +
+          ")"
+        } else ""
+      ))
       incIndent()
       func.body.foreach(s => printBSVStatement(s))
       decIndent()

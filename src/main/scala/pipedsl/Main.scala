@@ -76,6 +76,7 @@ object Main {
     try {
       val verifProg = AddVerifyValuesPass.run(prog)
       val canonProg2 = new CanonicalizePass().run(verifProg)
+      //new PrettyPrinter(None).printProgram(canonProg2)
       val canonProg1 = new TypeInference(autocast).checkProgram(canonProg2)
       val canonProg = canonProg1//LockOpTranslationPass.run(canonProg1)
       //new PrettyPrinter(None).printProgram(canonProg)

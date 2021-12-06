@@ -16,9 +16,28 @@ def adder<T>(x :int<T>, y :int<T>) :int<T>
    return x + iden(y);
 }
 
-def my_concat<W, X>(a :int<W>, b :int<X>) :int<W + X>
+def my_concat<W, X, Z>(a :int<W>, b :int<X>, c :int<Z>) :int<W + X + Z>
 {
-   return a ++ b;
+   tmp = a ++ b ++ c;
+   other = b ++ a ++ c;
+   return tmp + other;
+}
+
+def indexing<G, H>(x :int<G>, y :int<H>) :int<5>
+{
+  tmp = (x ++ y){4:0};
+  return (x ++ y){4:0};
+}
+
+def in_scope<I>(x :int<I>) :int<1>
+{
+  return x{I - 1:I - 1};
+}
+
+
+def infty(x :int<5>, y :int<5>) :int<10>
+{
+  return x ++ y;
 }
 
 pipe test1(inpt: int<32>)[rf: int<32>[32]] :int<100>

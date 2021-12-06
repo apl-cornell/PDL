@@ -17,3 +17,9 @@ the number four as an unsigned, 16 bit number, it would be `u4<16>`
 
 You do not have to specify these types, as they can be inferred. However, if you
 have a multiplication of constants, one of them will need to be annotated
+
+# Generics
+
+You can parameterize both external modules as well as functions on named
+types. You can write down expressions in type variables, though for now the only
+supported operation is addition. 

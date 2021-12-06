@@ -44,6 +44,7 @@ object Syntax {
     sealed trait Provisos
     {
       val adds: mutable.Map[(String, String), Id] = mutable.HashMap[(String, String), Id]()
+      val mins: mutable.Map[String, Int] = mutable.HashMap[String, Int]()
     }
   }
 
@@ -323,13 +324,49 @@ object Syntax {
   {
     override def stringRep(): String = len.toString
   }
-  case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  case class TBitWidthAdd(var b1: TBitWidth, var b2: TBitWidth) extends TBitWidth
   {
-    override def stringRep(): String = b1.stringRep() + "_plus_" + b2.stringRep()
+    if(b1.stringRep() < b2.stringRep())
+      {
+        println("SHOULDN'T BE HERE")
+        val tmp = b1
+        b1 = b2
+        b2 = tmp
+      }
+    override def stringRep(): String =
+      {
+        val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
+        lst.head + "_ADD_" + lst(1)
+      }
   }
+  object TBitWidthAdd
+  {
+    def apply(b1 :TBitWidth, b2 :TBitWidth) :TBitWidth =
+    {
+      (b1, b2) match {
+        case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
+        case _ if (b1.stringRep() < b2.stringRep()) => new TBitWidthAdd(b2, b1)
+        case _ => new TBitWidthAdd(b1, b2)
+      }
+    }
+  }
+
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   {
-    override def stringRep(): String = b1.stringRep() + "_max_" + b2.stringRep()
+    override def stringRep(): String =
+      b1.stringRep() + "_max_" + b2.stringRep()
+  }
+  object TBitWidthMax
+  {
+    def apply(b1 :TBitWidth, b2 :TBitWidth) :TBitWidth =
+      {
+        (b1, b2) match {
+          case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(math.max(l1, l2))
+          case (TBitWidthVar(l1), TBitWidthVar(l2)) if l1 == l2 => b1
+          case _ if b1.stringRep() < b2.stringRep() => new TBitWidthMax(b2, b1)
+          case _ => new TBitWidthMax(b1, b2)
+        }
+      }
   }
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 

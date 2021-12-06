@@ -152,7 +152,13 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case EMemAccess(mem, index, None, inHandle, outHandle, isAtomic) => val (ne, nc) = extractCastVars(index)
         (EMemAccess(mem, ne, None, inHandle, outHandle, isAtomic).setPos(e.pos), nc)
       case EBitExtract(num, start, end) => val (ne, nc) = extractCastVars(num)
-        (EBitExtract(ne, start, end).setPos(e.pos), nc)
+        ne match {
+          case _:EVar => (EBitExtract(ne, start, end).setPos(e.pos), nc)
+          case _ => val asn = freshTmp(ne)
+            (EBitExtract(asn.lhs, start, end).setPos(e.pos), CSeq(nc, asn).setPos(e.pos))
+
+        }
+
       case ETernary(cond, tval, fval) => val (ncond, nc) = extractCastVars(cond)
         val (net, nct) = extractCastVars(tval)
         val (nef, ncf) = extractCastVars(fval)

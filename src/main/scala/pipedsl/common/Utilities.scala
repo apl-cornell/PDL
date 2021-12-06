@@ -711,12 +711,17 @@ object Utilities {
 
   val generic_type_prefix = "__GEN_"
 
+  def without_prefix(id :Id): Id =
+    Id(id.v.substring(generic_type_prefix.length))
+
+
   /**
    * check if a type represents a generic
    */
-  @tailrec def is_generic(t:Any) :Boolean = t match {
+  def is_generic(t:Any) :Boolean = t match {
     case TNamedType(name) => name.v.startsWith(generic_type_prefix)
     case TSizedInt(l, _) => is_generic(l)
+    case TBitWidthAdd(b1, b2) => is_generic(b1) || is_generic(b2)
     case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix)
     case _:Type => false
     case id:Id => id.v.startsWith(generic_type_prefix)
@@ -728,9 +733,10 @@ object Utilities {
    * current function. (There are generic types of other called functions, but
    * they are specialized, and can be distinguished)
    */
-  @tailrec def is_my_generic(t :Any) :Boolean = t match {
+  def is_my_generic(t :Any) :Boolean = t match {
     case TNamedType(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
     case TSizedInt(l, _) => is_my_generic(t)
+    case TBitWidthAdd(b1, b2) => is_my_generic(b1) || is_my_generic(b2)
     case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
     case _:Type => false
     case name:Id => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")

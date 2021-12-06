@@ -16,6 +16,8 @@ object BSVSyntax {
 
   sealed trait Proviso
   case class PBits(szName: String) extends Proviso
+  case class PAdd(num1 :String, num2 :String, sum :String) extends Proviso
+  case class PMin(name :String, min :Int) extends Proviso
 
   sealed trait BSVType
   case class BNumericType(sz: Int) extends BSVType
@@ -305,9 +307,11 @@ object BSVSyntax {
       fdef
     }
 
-    private def getProvisos(b :FuncDef) :List[BProvisos] =
+    private def getProvisos(b :FuncDef) :List[Proviso] =
     {
-      b.adds.map()//todo implement
+      val tmp = (b.adds.toList.map(pairid => PAdd(pairid._1._1, pairid._1._2, pairid._2.v)) ++
+        b.mins.toList.map(pair => PMin(pair._1, pair._2))).distinct
+      tmp
     }
 
     private def getFuncGenIntDecls(b :FuncDef): List[BStatement] =
@@ -404,8 +408,6 @@ object BSVSyntax {
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
   case class BValueOf(s :String) extends BExpr
 
-  case class BProvisos(kind :String, args :List[String])
-
   sealed trait BStatement {
     var useLet: Boolean = false
     def setUseLet(b: Boolean): BStatement = { this.useLet = b; this }
@@ -447,7 +449,7 @@ object BSVSyntax {
 
   case class BFuncDef(name: String, rettyp: BSVType,
                       params: List[BVar], body: List[BStatement],
-                      provisos: List[BProvisos])
+                      provisos: List[Proviso])
 
   case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
 
