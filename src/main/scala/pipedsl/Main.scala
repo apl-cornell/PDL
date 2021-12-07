@@ -4,7 +4,6 @@ import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.typesafe.scalalogging.Logger
 
-import scala.util.parsing.combinator._
 import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
@@ -74,6 +73,7 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
     val pinfo = new ProgInfo(prog)
     try {
+      MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
       val inferredProg = new LockRegionInferencePass().run(prog)
 //      new PrettyPrinter(None).printProgram(inferredProg)
@@ -83,7 +83,6 @@ object Main {
       val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
       val basetypes = BaseTypeChecker.check(canonProg, None)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
-      MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)
       LockRegionChecker.check(recvProg, None)
       val lockWellformedChecker = new LockWellformedChecker()

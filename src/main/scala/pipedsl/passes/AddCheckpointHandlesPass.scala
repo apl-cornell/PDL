@@ -26,7 +26,7 @@ object AddCheckpointHandlesPass extends CommandPass[Command] with ModulePass[Mod
     nc
   }
 
-  override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).setPos(m.pos)
+  override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).copyMeta(m)
 
   override def run(p: Prog): Prog = p.copy(exts = p.exts, fdefs = p.fdefs,
     moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)

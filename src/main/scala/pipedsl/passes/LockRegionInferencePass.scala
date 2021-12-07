@@ -2,6 +2,7 @@ package pipedsl.passes
 
 import pipedsl.common.Locks.Reserved
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities.{andExpr, orExpr}
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
 
 /**
@@ -30,11 +31,14 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
     moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
 
   private var unlockedMems = Set[Id]()
+  private var checkpointConds = Map[Id, Option[Expr]]()
+
   override def run(m: ModuleDef): ModuleDef = {
     unlockedMems = Set()
+    checkpointConds = Map()
     m.modules.foreach(p => {
       p.typ match {
-        case TMemType(elem, addrSize, readLatency, writeLatency, readPorts, writePorts) =>
+        case TMemType(_, _, _, _, _, _) =>
           unlockedMems = unlockedMems + p.name
         case _ => ()
       }
@@ -42,8 +46,12 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
     val modIds = m.modules.map(p => p.name).toSet
     val starts = insertStarts(m.body, modIds, Set())._1
     val ends = insertEnds(starts, modIds, Set())._1
-    val checks = insertChecks(ends, modIds)
-    m.copy(body = checks).setPos(m.pos)
+    findInvalidateConds(m.body, None, (Set(), Set())) //update the checkpointConds map
+    //don't try inference for any mods that already have a checkpoint or don't need one
+    checkpointConds = checkpointConds.removedAll(haveCheckpoint(m.body))
+    val (memsThatNeedChks, _) = needsCheckpoint(m.body, m.maybeSpec)
+    val checks = insertChecks(ends, modIds.intersect(checkpointConds.keySet).intersect(memsThatNeedChks))
+    m.copy(body = checks._1).copyMeta(m)
   }
 
   /**
@@ -174,8 +182,135 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
       (addLockEnds(toAdd, c), toAdd)
   }
 
-  private def insertChecks(c: Command, mods: Set[Id]): Command = c
+  private def checkHandle(lid: Id): EVar = {
+    val cid = Id("_checkpoint_" + lid.v)
+    val handleVar = EVar(cid)
+    handleVar.typ = Some(TRequestHandle(lid, RequestType.Checkpoint))
+    cid.typ = handleVar.typ
+    handleVar
+  }
 
+  //add checkpoint right before `end(rf)` if not already added
+  private def insertChecks(c: Command, mods: Set[Id]): (Command, Set[Id]) = c match {
+    case CSeq(c1, c2) =>
+      val (c1p, addedleft) = insertChecks(c1, mods)
+      val (c2p, addedRight) = insertChecks(c2, mods -- addedleft)
+      (CSeq(c1p, c2p).setPos(c.pos), addedleft ++ addedRight)
+    case CTBar(c1, c2) =>
+      val (c1p, addedleft) = insertChecks(c1, mods)
+      val (c2p, addedRight) = insertChecks(c2, mods -- addedleft)
+      (CTBar(c1p, c2p).setPos(c.pos), addedleft ++ addedRight)
+    case CIf(cond, cons, alt) =>
+      val (c1p, addedleft) = insertChecks(cons, mods)
+      val (c2p, addedRight) = insertChecks(alt, mods)
+      (CIf(cond, c1p, c2p).setPos(c.pos), addedleft ++ addedRight)
+    case CSplit(cases, default) =>
+      var ncases = List[CaseObj]()
+      var added = Set[Id]()
+      cases.foreach(cs => {
+        val (nc, cadd) = insertChecks(cs.body, mods)
+        ncases = ncases :+ CaseObj(cs.cond, nc).setPos(cs.pos)
+        added = added ++ cadd
+      })
+      val (ndef, nadd) = insertChecks(default, mods)
+      (CSplit(ncases, ndef).setPos(c.pos), added ++ nadd)
+    case CLockEnd(mod) if mods.contains(mod) =>
+      val chk = CCheckpoint(checkHandle(mod), mod).setPos(c.pos)
+      val condChk = checkpointConds(mod) match {
+        case Some(value) => CIf(value, chk, CEmpty()).setPos(c.pos)
+        case None => chk
+      }
+      (CSeq(condChk, c).setPos(c.pos), Set(mod))
+    case _ => (c, Set())
+  }
+
+  //MEnv._1 == mems we're currently looking for
+  //MEnv._2 == mems we're looking for next cycle
+  type MEnv = (Set[Id], Set[Id])
+  /**
+   *
+   * @param c
+   * @param mods
+   * @return
+   */
+  private def findInvalidateConds(c: Command, currentCond: Option[Expr], mems: MEnv): MEnv = c match {
+    case CSeq(c1, c2) =>
+      val lenv = findInvalidateConds(c1, currentCond, mems)
+      findInvalidateConds(c2, currentCond, lenv)
+    case CTBar(c1, c2) =>
+      val lenv = findInvalidateConds(c1, currentCond, mems)
+      findInvalidateConds(c2, currentCond, (lenv._1 ++ lenv._2, Set()))
+    //TODO this copies some of the logic in PredicateGenerator (but that only produces Z3 info and we
+    //don't have the logic to return from the abstractly interpreted Z3 conditions back into PDL Expressions
+    case CIf(cond, cons, alt) =>
+      val tenv = findInvalidateConds(cons, andExpr(Some(cond), currentCond), mems)
+      val fenv = findInvalidateConds(alt, andExpr(Some(EUop(NotOp(), cond)), currentCond), mems)
+      (tenv._1 ++ fenv._1, tenv._2 ++ fenv._2)
+    case CSplit(cases, default) =>
+      var res: MEnv = (Set(), Set())
+      var lastCond: Option[Expr] = None
+      cases.foreach(cs => {
+        val nextCond = lastCond match {
+          case Some(value) => AndOp(cs.cond, EUop(NotOp(), value))
+          case None => cs.cond
+        }
+        lastCond = Some(nextCond)
+        val nenv = findInvalidateConds(cs.body, lastCond, mems)
+        res = (res._1 ++ nenv._1, res._2 ++ nenv._2)
+      })
+      val dEnv = findInvalidateConds(default, lastCond.map(e => EUop(NotOp(), e)), mems)
+      (res._1 ++ dEnv._1, res._2 ++ dEnv._2)
+    case CVerify(_, _, _, _, _) | CUpdate(_, _, _, _, _) | CInvalidate(_, _)=>
+      //add to the condition for each module that needs checkpoint
+      mems._1.foreach(m => {
+        if (checkpointConds.contains(m)) {
+          checkpointConds = checkpointConds + (m -> orExpr(checkpointConds(m), currentCond))
+        } else {
+          checkpointConds = checkpointConds + (m -> currentCond)
+        }
+      })
+      mems
+    case CLockEnd(mod) => (mems._1, mems._2 + mod) //start looking for mod the cycle after we see the lock end
+    case _ => mems
+  }
+
+  private def haveCheckpoint(c: Command): Set[Id] = c match {
+    case CSeq(c1, c2) => haveCheckpoint(c1) ++ haveCheckpoint(c2)
+    case CTBar(c1, c2) => haveCheckpoint(c1) ++ haveCheckpoint(c2)
+    case CIf(_, cons, alt) => haveCheckpoint(cons) ++ haveCheckpoint(alt)
+    case CCheckpoint(_, lock) => Set(lock)
+    case CSplit(cases, default) =>
+      cases.foldLeft(haveCheckpoint(default))((s, cs) => {
+        haveCheckpoint(cs.body) ++ s
+      })
+    case _ => Set()
+  }
+
+  //needs a checkpoint only if it actually does a reservation
+  //TODO copies some logic from SpeculationChecker (when stages might possible be speculative)
+  private def needsCheckpoint(c: Command, isMaybeSpec: Boolean): (Set[Id], Boolean) = c match {
+    case CSeq(c1, c2) =>
+      val (chk1, s1) = needsCheckpoint(c1, isMaybeSpec)
+      val (chk2, s2) = needsCheckpoint(c2, s1)
+      (chk1 ++ chk2, s2)
+    case CTBar(c1, c2) =>
+      val (chk1, s1) = needsCheckpoint(c1, isMaybeSpec)
+      val (chk2, s2) = needsCheckpoint(c2, s1)
+      (chk1 ++ chk2, s2)
+    case CIf(_, cons, alt) =>
+      val (chkt, s1) = needsCheckpoint(cons, isMaybeSpec)
+      val (chkf, s2) = needsCheckpoint(alt, isMaybeSpec)
+      (chkt ++ chkf, s1 || s2)
+      //only need when we have _speculative_ reservations
+    case CLockOp(mem, op, lockType, _, _) if isMaybeSpec && op == Reserved => (Set(mem.id), isMaybeSpec)
+    case CSplit(cases, default) =>
+      cases.foldLeft(needsCheckpoint(default, isMaybeSpec))((s, cs) => {
+        val (chks, specStatus) = needsCheckpoint(cs.body, isMaybeSpec)
+        (chks ++ s._1, specStatus || s._2) //or since we don't know which branch executed, so maybe spec if either maybe
+      })
+    case CCheckSpec(true) => (Set(), false)
+    case _ => (Set(), isMaybeSpec)
+  }
   /**
    *
    * @param c
