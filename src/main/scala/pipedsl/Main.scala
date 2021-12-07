@@ -76,8 +76,6 @@ object Main {
       MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
       val inferredProg = new LockRegionInferencePass().run(prog)
-//      new PrettyPrinter(None).printProgram(inferredProg)
-
       val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(inferredProg))
       val canonProg2 = new CanonicalizePass().run(verifProg)
       val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
