@@ -112,11 +112,11 @@ object LockImplementation {
   }
 
   private def getAccessName(op: Option[LockType], isAtomic: Boolean = false): Id = {
-      Id(op match {
-        case Some(Syntax.LockRead) => if (isAtomic) atomicReadName else readName
-        case Some(Syntax.LockWrite) => if (isAtomic) atomicWriteName else writeName
-        case None => if (isAtomic) atomicAccessName else accessName
-      })
+    Id(op match {
+      case Some(Syntax.LockRead) => if (isAtomic) atomicReadName else readName
+      case Some(Syntax.LockWrite) => if (isAtomic) atomicWriteName else writeName
+      case None => if (isAtomic) atomicAccessName else accessName
+    })
   }
 
   def getAccess(l: LockInterface, op: Option[LockType], isAtomic: Boolean = false): Option[(TFun, Latency)] = {
@@ -155,6 +155,7 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar)
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getCanReserveName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -167,6 +168,7 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar)
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getReserveName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -179,6 +181,7 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar, Some(l.inHandle))
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getBlockName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -230,11 +233,11 @@ object LockImplementation {
   }
 
   def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
-      val interface = getLockImplFromMemTyp(mem)
-      val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
-      val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
-      val methodName = getAccessName(Some(LockWrite), isAtomic).v + toPortString(portNum)
-      Some(MethodInfo(methodName, latency != Combinational, args))
+    val interface = getLockImplFromMemTyp(mem)
+    val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
+    val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
+    val methodName = getAccessName(Some(LockWrite), isAtomic).v + toPortString(portNum)
+    Some(MethodInfo(methodName, latency != Combinational, args))
   }
 
   def getRequestInfo(mem: Id, addr: Expr, inHandle: Option[Expr],
@@ -252,6 +255,7 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar , Some(l.inHandle))
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
+          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getReleaseName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -262,7 +266,8 @@ object LockImplementation {
     val interface = getLockImplFromMemTyp(mem)
     getCheckpoint(interface) match {
       case Some(_) =>
-        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + checkpointName
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "")
+        (if(mem.typ.get.isInstanceOf[TModType]) mem + lockIntStr else "") + checkpointName
         Some(MethodInfo(methodName, doesModify = true, List()))
       case None => None
     }
@@ -272,7 +277,8 @@ object LockImplementation {
     val interface = getLockImplFromMemTyp(mem)
     getRollback(interface) match {
       case Some(_) =>
-        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + rollbackName
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "")
+        (if(mem.typ.get.isInstanceOf[TModType]) mem + lockIntStr else "") + rollbackName
         //TODO do we put the booleans in as named arguments too? kinda unnecessary
         Some(MethodInfo(methodName, doesModify = true, List(cid, EBool(doRollback), EBool(doRelease))))
       case None => None
@@ -287,10 +293,10 @@ object LockImplementation {
     e
   }
   private def getArgs(fun: TFun, addr: Option[Expr] = None,
-              handle: Option[Expr] = None, data: Option[Expr] = None): List[Expr] = {
+                      handle: Option[Expr] = None, data: Option[Expr] = None): List[Expr] = {
     fun.args.foldLeft(List[Expr]())((l, argTyp) => {
       argTyp match {
-          //TODO throw better exception if missing arg
+        //TODO throw better exception if missing arg
         case t: TNamedType if t == dataType => l :+ data.get
         case t: TNamedType if t == addrType => l :+ addr.get
         case t: TNamedType if t == handleType => l :+ extractHandle(handle.get)
@@ -553,7 +559,7 @@ object LockImplementation {
     override def shortName: String = "BypassQueue"
 
     override def getModuleName(m: TMemType): String = "BypassLockCombMem"
-}
+  }
 
   /**
    * This implementation is a bypassing register file with separate cycle reserves and reads
