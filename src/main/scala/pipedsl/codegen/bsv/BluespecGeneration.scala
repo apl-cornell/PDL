@@ -937,11 +937,20 @@ object BluespecGeneration {
         )
       )
       methods = methods :+ handleMethodCheck
+
+      val modLocksParams = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
+        if(m.typ.isInstanceOf[TModType]){
+          val params = List(BVar("modlock_param_1", bsInts.getDefaultLockHandleType), BVar("modlock_param_1", bsInts.getDefaultChkHandleType))
+          vars + (Id(m.name+"lock") -> BVar(m.name.v + "lock", BInterface("CheckpointQueueLock", params)))
+        } else{
+          vars
+        }})
+
       BModuleDef(name = "mk" + mod.name.v.capitalize,
         typ = Some(modInterfaceDef.typ),
         params = {
-          println(modParams)
-          modParams.values.toList
+          val newParams = modLocksParams ++ modParams
+          newParams.values.toList
         },
         body = stmts,
         rules = stgrules,
