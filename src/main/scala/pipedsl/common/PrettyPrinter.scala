@@ -107,6 +107,7 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
+      case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
       case _ => "TODO PRINTING COMMAND"
     }
   }
