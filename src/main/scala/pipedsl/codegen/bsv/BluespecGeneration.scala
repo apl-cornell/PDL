@@ -19,6 +19,7 @@ object BluespecGeneration {
   private val memLib = "Memories"
   private val specLib = "Speculation"
   private val fifoLib = "FIFOF"
+  private val queueLib = "SpecialQueues"
   private val combLib = "RegFile"
   private val asyncLib = "BRAMCore"
   private val verilogLib = "VerilogLibs"
@@ -445,7 +446,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(lockLib), BImport(memLib),
+        imports = List(BImport(fifoLib), BImport(queueLib), BImport(lockLib), BImport(memLib),
           BImport(verilogLib), BImport(specLib), BImport(combLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
