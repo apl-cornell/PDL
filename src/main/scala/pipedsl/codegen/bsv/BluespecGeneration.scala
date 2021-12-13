@@ -376,16 +376,8 @@ object BluespecGeneration {
     //Registers for external communication
     private val busyReg = BVar("busyReg", bsInts.getRegType(BBool))
     private val threadIdVar = BVar(threadIdName, getThreadIdType)
-    private val outputStructHandle = BVar("handle", getThreadIdType)
-    private val outputStructData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
-    private val outQueueStructName = "OutputQueueInfo"
-    private val outputQueueElem = if (mod.ret.isDefined) {
-      BStruct(outQueueStructName, List(outputStructHandle, outputStructData))
-    } else {
-      BStruct(outQueueStructName, List(outputStructHandle))
-    }
-    private val outputQueueStruct = BStructDef(outputQueueElem, List("Bits", "Eq"))
-    private val outputQueue = BVar("outputQueue", bsInts.getFifoType(outputQueueElem))
+    private val outputData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
+    private val outputQueue = BVar("outputQueue", bsInts.getOutputQType(threadIdVar.typ, outputData.typ))
 
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
@@ -450,7 +442,7 @@ object BluespecGeneration {
           BImport(verilogLib), BImport(specLib), BImport(combLib), funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
-        structs = firstStageStruct +: edgeStructInfo.values.toList :+ outputQueueStruct,
+        structs = firstStageStruct +: edgeStructInfo.values.toList,
         interfaces = List(modInterfaceDef),
         modules = List())
     }
@@ -671,7 +663,7 @@ object BluespecGeneration {
         //these are just to find EMemAccesses that are also atomic
         case CAssign(_, rhs) => l ++ getBlockConds(rhs)
         case CRecv(_, rhs) => l ++ getBlockConds(rhs)
-        case COutput(_) => if (mod.isRecursive) l :+ busyReg else l
+        case COutput(_) => l :+ bsInts.getOutCanWrite(outputQueue, translator.toBSVVar(threadIdVar))
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
         case CCheckSpec(isBlocking) if isBlocking => l ++ List(
@@ -828,7 +820,7 @@ object BluespecGeneration {
           //if value is expected to come in on that edge, use that
           //else we're not going to use the value later, send a dont care
           val edgeValue = if (edge.values.contains(v)) {
-            val paramExpr = bsInts.getFifoPeek(edgeParams(edge))
+            val paramExpr = bsInts.getFifoFirst(edgeParams(edge))
             BStructAccess(paramExpr, BVar(v.v, translator.toType(v.typ.get)))
           } else {
             BDontCare
@@ -876,7 +868,7 @@ object BluespecGeneration {
       //Instantiate the registers that describes when the module is busy/ready for inputs
       //And how it returns outputs
       val busyInst = BModInst(busyReg, bsInts.getReg(BBoolLit(false)))
-      val outputInst = BModInst(outputQueue, bsInts.getFifo)
+      val outputInst = BModInst(outputQueue, bsInts.getOutputQ(BZero))
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
       //Instantiate the speculation table if the module is speculative
@@ -903,7 +895,7 @@ object BluespecGeneration {
       methods = methods :+ reqMethodDef
       val respMethodDef = BMethodDef(
         sig = bsInts.getResponseMethod(modInterfaceDef),
-        cond = None, //implicit condition of outputqueue being non empty means we don't need this
+        cond = None,
         body = List(
           BExprStmt(bsInts.getFifoDeq(outputQueue))
         )
@@ -914,9 +906,8 @@ object BluespecGeneration {
           sig = bsInts.getPeekMethod(modInterfaceDef),
           cond = None, //implicit condition of outputqueue being non empty means we don't need this
           body = List(
-            BReturnStmt(
-              BStructAccess(bsInts.getFifoPeek(outputQueue), outputStructData)
-            ))
+            BReturnStmt(bsInts.getFifoFirst(outputQueue))
+          )
         ))
       } else { None }
       if (peekMethodDef.isDefined) { methods = methods :+ peekMethodDef.get}
@@ -925,10 +916,9 @@ object BluespecGeneration {
         sig = handleMethodSig,
         cond = None,
         body = List(
-          BReturnStmt(BBOp("==",
-            handleMethodSig.params.head,
-            BStructAccess(bsInts.getFifoPeek(outputQueue), outputStructHandle)
-          ))
+          BReturnStmt(
+            bsInts.getOutCanRead(outputQueue, handleMethodSig.params.head)
+          )
         )
       )
       methods = methods :+ handleMethodCheck
@@ -1188,19 +1178,16 @@ object BluespecGeneration {
       case IRecv(_, sender, _) =>
         Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
       case COutput(exp) =>
-        val outstruct = if (mod.ret.isDefined) {
-          BStructLit(outputQueueElem,
-            Map(outputStructData -> translator.toExpr(exp),
-              outputStructHandle -> translator.toBSVVar(threadIdVar))
-          )
+        val outval = if (mod.ret.isDefined) {
+          translator.toExpr(exp)
         } else {
-          BStructLit(outputQueueElem, Map(outputStructHandle -> translator.toBSVVar(threadIdVar)))
+          BDontCare
         }
         Some(BStmtSeq(List(
           //we're done processing the current request
           if (mod.isRecursive) BModAssign(busyReg, BBoolLit(false)) else BEmpty,
           //place the result in the output queue
-          BExprStmt(bsInts.getFifoEnq(outputQueue, outstruct))
+          BExprStmt(bsInts.getFifoEnq(outputQueue, outval))
         )))
       case cl@IReserveLock(outHandle, mem) =>
         val methodInfo = LockImplementation.getReserveInfo(cl)

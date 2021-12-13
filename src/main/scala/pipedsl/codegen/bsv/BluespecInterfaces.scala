@@ -265,17 +265,26 @@ class BluespecInterfaces() {
   def getFifoType(typ: BSVType): BInterface = {
     BInterface(fifoType, List(BVar("elemtyp", typ)))
   }
-
+  def getOutputQType(ttyp: BSVType, dtyp: BSVType): BInterface = {
+    BInterface("OutputQ", List(BVar("tagtyp", ttyp), BVar("datatyp", dtyp)));
+  }
   def getFifo: BModule = BModule(fifoModuleName, List())
   def getNBFifo: BModule = BModule(fifoNBModuleName, List())
+  def getOutputQ(init: BExpr): BModule = BModule("mkOutputFIFOF", List(init))
   def getFifoDeq(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoDequeuMethodName, List())
   }
   def getFifoEnq(f: BVar, data: BExpr): BMethodInvoke = {
     BMethodInvoke(f, fifoEnqueueMethodName, List(data))
   }
-  def getFifoPeek(f: BVar): BMethodInvoke = {
+  def getFifoFirst(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoFirstMethodName, List())
+  }
+  def getOutCanWrite(q: BVar, tag: BExpr): BMethodInvoke = {
+    BMethodInvoke(q, "canWrite", List(tag));
+  }
+  def getOutCanRead(q: BVar, tag: BExpr): BMethodInvoke = {
+    BMethodInvoke(q, "canRead", List(tag));
   }
 
   private val specHandleName = "SpecId"
