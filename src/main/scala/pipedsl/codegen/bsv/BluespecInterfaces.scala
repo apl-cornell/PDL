@@ -270,6 +270,7 @@ class BluespecInterfaces() {
   }
   def getFifo: BModule = BModule(fifoModuleName, List())
   def getNBFifo: BModule = BModule(fifoNBModuleName, List())
+  def getBypassFifo: BModule = BModule("mkBypassFIFOF", List())
   def getOutputQ(init: BExpr): BModule = BModule("mkOutputFIFOF", List(init))
   def getFifoDeq(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoDequeuMethodName, List())

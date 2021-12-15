@@ -1,6 +1,7 @@
 package SpecialQueues;
 
 import Ehr :: *;
+import ConfigReg :: *;
 import FIFOF :: *;
 
 export OutputQ(..);
@@ -21,22 +22,22 @@ module mkOutputFIFOF(ttyp initT, OutputQ#(ttyp, dtyp) res) provisos
    (Bits#(ttyp, szttyp),Bits#(dtyp, szdtyp), Arith#(ttyp), Eq#(ttyp));
 
    Ehr#(2, ttyp) nextTag <- mkEhr(initT);
-   Ehr#(2, Maybe#(dtyp)) val <- mkEhr(tagged Invalid);
+   Reg#(Maybe#(dtyp)) val <- mkConfigReg(tagged Invalid);
    
    method dtyp first();
-      if (val[0] matches tagged Valid.x)
+      if (val matches tagged Valid.x)
 	 return x;
       else
 	 return ?;
    endmethod
    
    method Bool canRead(ttyp t);
-      return nextTag[0] == t && isValid(val[0]);
+      return nextTag[0] == t && isValid(val);
    endmethod
    
    method Action deq();
       nextTag[0] <= nextTag[0] + 1;
-      val[0] <= tagged Invalid;
+      val <= tagged Invalid;
    endmethod
    //Order write operations _after_ read operations
    //to allow concurrent deq and enq
@@ -45,7 +46,7 @@ module mkOutputFIFOF(ttyp initT, OutputQ#(ttyp, dtyp) res) provisos
    endmethod
    
    method Action enq(dtyp d);
-      val[1] <= tagged Valid d;
+      val <= tagged Valid d;
    endmethod   
    
 endmodule

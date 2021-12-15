@@ -19,10 +19,14 @@ object BluespecGeneration {
   private val memLib = "Memories"
   private val specLib = "Speculation"
   private val fifoLib = "FIFOF"
+  private val specFifoLib = "SpecialFIFOs"
   private val queueLib = "SpecialQueues"
   private val combLib = "RegFile"
   private val asyncLib = "BRAMCore"
   private val verilogLib = "VerilogLibs"
+
+  private def getRequiredTopLibs: List[BImport] = List(clientLib, connLib, lockLib, memLib, verilogLib, combLib, asyncLib).map(l => BImport(l))
+  private def getRequiredModLibs: List[BImport] = List(fifoLib, specFifoLib, queueLib, lockLib, memLib, verilogLib, specLib, combLib).map(l => BImport(l))
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
                                  debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
@@ -278,7 +282,7 @@ object BluespecGeneration {
     private val circuitstart = initCircuit(prog.circ, intargs)
 
     private val topProgram: BProgram = BProgram(name = "Circuit", topModule = topLevelModule,
-      imports = List(BImport(clientLib), BImport(connLib), BImport(lockLib), BImport(memLib), BImport(verilogLib), BImport(combLib), BImport(asyncLib)) ++
+      imports = getRequiredTopLibs ++
         modMap.values.map(p => BImport(p.name)).toList :+ funcImport, exports = List(),
       structs = List(), interfaces = List(topInterface),
       modules = List(bsInts.tbModule(
@@ -438,8 +442,7 @@ object BluespecGeneration {
     def getBSV: BProgram = {
       BProgram(name = mod.name.v.capitalize,
         topModule = topModule,
-        imports = List(BImport(fifoLib), BImport(queueLib), BImport(lockLib), BImport(memLib),
-          BImport(verilogLib), BImport(specLib), BImport(combLib), funcImport) ++
+        imports = (getRequiredModLibs :+ funcImport) ++
           bsvMods.values.map(bint => BImport(bint.name)).toList,
         exports = List(BExport(modInterfaceDef.typ.name, expFields = true), BExport(topModule.name, expFields = false)),
         structs = firstStageStruct +: edgeStructInfo.values.toList,
@@ -844,7 +847,8 @@ object BluespecGeneration {
 
       //start fifo uses our 'nonblocking' queue impl
       val startEdge = firstStage.inEdges.head
-      val startFifo = BModInst(edgeParams(startEdge), bsInts.getNBFifo)
+      val startFifo = BModInst(edgeParams(startEdge),
+        if (mod.isRecursive) { bsInts.getNBFifo } else { bsInts.getBypassFifo })
       val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
         if (e != startEdge) {
           m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
