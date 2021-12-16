@@ -74,6 +74,13 @@ object BSVPrettyPrinter {
     case _ => throw BaseError(base)
   }
 
+  private def toBSVIndString(index: BIndex) :String = index match {
+    case BIndConst(n) => n.toString
+    case BIndVar(v) => v
+    case BIndSub(l, r) => s"(${toBSVIndString(l)} - ${toBSVIndString(r)})"
+    case BIndAdd(l, r) => s"(${toBSVIndString(l)} + ${toBSVIndString(r)})"
+  }
+
   private def toBSVExprStr(expr: BExpr): String = expr match {
     case BIsValid(exp) => mkExprString("isValid(",toBSVExprStr(exp), ")")
     case BFromMaybe(d, exp) => mkExprString("fromMaybe(",toBSVExprStr(d), ",", toBSVExprStr(exp), ")")
@@ -107,7 +114,7 @@ object BSVPrettyPrinter {
     //TODO incorporate bit types into the typesystem properly
     //and then remove the custom pack/unpack operations
     case BBitExtract(expr, start, end) => mkExprString(toBSVExprStr(expr),
-      "[", end.toString, ":", start.toString, "]"
+      "[", toBSVIndString(end), ":", toBSVIndString(start), "]"
     )
     case BConcat(first, rest) =>
       val exprstr = rest.foldLeft[String](toBSVExprStr(first))((s, e) => {

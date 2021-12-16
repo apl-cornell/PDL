@@ -4,7 +4,7 @@ import common.Syntax._
 import common.Locks._
 import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.Latency
-import pipedsl.common.Utilities.generic_type_prefix
+import pipedsl.common.Utilities.{generic_type_prefix, opt_func}
 
 import scala.util.matching.Regex
 
@@ -126,8 +126,29 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     iden ~ angular("atomic" | "a").? ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ a ~ (i ~ n) => EMemAccess(m, i, n, None, None, a.isDefined) }
   }
 
+
+  lazy val indexAtom :P[EIndex] = dlog(positioned
+  {
+    iden ^^ { id => EIndVar(id).setType(TInteger()) } |
+    posint ^^ { n => EIndConst(n).setType(TInteger()) }
+
+  })("index atom")
+
+
+  lazy val index :P[EIndex] = positioned(
+    indexAtom ~ rep(("+" | "-") ~ indexAtom) ^^ {case fst ~ lst =>
+      //1 + 2 - 3
+      //1
+      //(1 + 2)
+      //(1 + 2) - 3
+      lst.foldLeft(fst)((idx, op) =>
+      if (op._1 == "+") EIndAdd(idx, op._2).setType(TInteger())
+      else EIndSub(idx, op._2).setType(TInteger()))
+    }
+  )
+
   lazy val bitAccess: P[Expr] = positioned {
-    expr ~ braces(posint ~ ":" ~ posint) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
+    expr ~ braces(index ~ ":" ~ index) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
   }
 
 
@@ -231,9 +252,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
      
   lazy val lhs: Parser[Expr] = memAccess | variable
 
-  lazy val simpleCmd: P[Command] = dlog(positioned {
+  lazy val simpleCmd: P[Command] = positioned {
     speccall |
-    dlog(typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) })("assign") |
+      typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
@@ -247,7 +268,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => { COutput(e)}) |
       expr ^^ (e => { CExpr(e)})
-  })("simple command")
+  }
   
   lazy val lockArg: P[LockArg] = positioned { 
     iden ~ brackets(variable).? ^^ {case i ~ v => LockArg(i, v)}
@@ -333,8 +354,8 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
     seqCmd } )
 
-  lazy val bitWidthAtom :P[TBitWidth] = dlog(iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
-    posint ^^ {i => TBitWidthLen(i)})("parsed bit width")
+  lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
+    posint ^^ {i => TBitWidthLen(i)}
 
   lazy val bitWidth :P[TBitWidth] =
       repsep(bitWidthAtom, "+") ^^

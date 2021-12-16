@@ -34,7 +34,7 @@ object Errors {
     withPos(s"$i is not a valid lock implementation name", i.pos)
   )
 
-  case class InvalidBitExtraction(s: Int, e: Int) extends RuntimeException(
+  case class InvalidBitExtraction(s: Any, e: Any) extends RuntimeException(
     s"Start: $s must be less than or equal to End: $e"
   )
   case class AlreadySetException(id: Id) extends RuntimeException(

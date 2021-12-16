@@ -525,7 +525,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     case EBitExtract(num, start, end) => {
       val (ntyp, nenv) = checkExpression(num, tenv, None)
-      val bitsLeft = math.abs(end - start) + 1
+      val bitsLeft = EIndAdd(EIndSub(start, end), EIndConst(1)).asInstanceOf[EIndConst].v
       ntyp.matchOrError(e.pos, "bit extract", "sized number") {
         case TSizedInt(l, u) if l.getLen >= bitsLeft => (TSizedInt(TBitWidthLen(bitsLeft), u), nenv)
         case _ => throw UnexpectedType(e.pos, "bit extract", "sized number larger than extract range", ntyp)

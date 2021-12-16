@@ -7,7 +7,9 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, is_my_generic, specialize, typeMap, typeMapFunc, typeMapModule, without_prefix}
 import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
+import com.microsoft.z3.{Status, AST => Z3AST, ArithExpr => Z3ArithExpr, BoolExpr => Z3BoolExpr, Context => Z3Context, IntExpr => Z3IntExpr, Solver => Z3Solver}
 
+import TBitWidthImplicits._
 import scala.collection.mutable
 
 object TypeInferenceWrapper
@@ -15,8 +17,6 @@ object TypeInferenceWrapper
   type Subst = List[(Id, Type)]
   type bool = Boolean
 
-  private val add_map = mutable.HashMap[(String, String), Id]()
-  private val min_map = mutable.HashMap[String, Int]()
 
   def apply_subst_typ(subst: Subst, t: Type): Type = subst.foldLeft[Type](t)((t1, s) => subst_into_type(s._1, s._2, t1))
 
@@ -85,77 +85,84 @@ object TypeInferenceWrapper
    }
   }
 
-  private def type_subst_map_fopt(t :Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id] = mutable.HashSet.empty) :Option[Type] = try
-    {
-     Some(type_subst_map(t, tp_mp, templated))
-    } catch
-   {
-    case IntWidthNotSpecified() => None
-   }
-
-  private def type_subst_map(t: Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id]): Type =
-   {
-    t match
-    {
-     case TSignVar(nm) => tp_mp.get(nm) match
-     {
-      case Some(value) => type_subst_map(value, tp_mp, templated)
-     }
-     case sz@TSizedInt(len, sign) =>
-      val width = type_subst_map(len, tp_mp, templated).copyMeta(sz) |> to_width
-      val sn = type_subst_map(sign, tp_mp, templated).copyMeta(sign) |> to_sign
-      sz.copy(len = width, sign = sn)
-     case f@TFun(args, ret) => f.copy(args = args.map(type_subst_map(_, tp_mp, templated)), ret = type_subst_map(ret, tp_mp, templated)).copyMeta(f)
-     case r@TRecType(_, fields) => r.copy(fields = fields.map(idtp => (idtp._1, type_subst_map(idtp._2, tp_mp, templated)))).copyMeta(r)
-     case m: TMemType => m.copy(elem = type_subst_map(m.elem, tp_mp, templated)).copyMeta(m)
-     case m@TModType(inputs, refs, _, _) => m.copy(inputs = inputs.map(type_subst_map(_, tp_mp, templated)), refs = refs.map(type_subst_map(_, tp_mp, templated))).copyMeta(m)
-     case l@TLockedMemType(mem, _, _) => l.copy(mem = type_subst_map(mem, tp_mp, templated).asInstanceOf[TMemType]).copyMeta(l)
-     case TNamedType(name) if /*templated.contains(name)*/ is_my_generic(name) => t
-     case TNamedType(name)  => tp_mp.get(name) match
-     {
-      case Some(value) => type_subst_map(value, tp_mp, templated)
-      case None => throw IntWidthNotSpecified()
-     }
-     case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp, templated))
-     case TBitWidthAdd(b1, b2) =>
-      val len1 = type_subst_map(b1, tp_mp, templated)
-      val len2 = type_subst_map(b2, tp_mp, templated)
-      (len1, len2) match {
-       case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
-       case (l1:TBitWidth, l2:TBitWidth) =>
-        {
-         val lst = (l1.stringRep()::l2.stringRep()::Nil).sorted
-         val id = Id(lst.head + "_ADD_" + lst(1))
-         add_map.addOne((lst.head, lst(1)), id)
-         //add_map.getOrElse((lst.head, lst(1)),
-         TBitWidthVar(id)
-        }
-      }
-     case TBitWidthMax(b1, b2) =>
-      val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
-      val len2 = type_subst_map(b2, tp_mp, templated) |> to_len
-      TBitWidthLen(Math.max(len1, len2))
-     case TBitWidthVar(name) if /*templated.contains(name)*/ is_my_generic(name) => t
-     case TBitWidthVar(name) => tp_mp.get(name) match
-     {
-      case Some(value) => type_subst_map(value, tp_mp, templated)
-      case None =>
-       throw IntWidthNotSpecified()
-     }
-     case o@TObject(name, typParams, methods) =>
-      val tmp = o.copy(typParams = typParams.map(type_subst_map(_, tp_mp, templated)),
-       methods = methods.map(id_funlat =>
-        (id_funlat._1, (type_subst_map(id_funlat._2._1, tp_mp, templated).asInstanceOf[TFun], id_funlat._2._2))))
-        .copyMeta(o)
-      tmp
-     case _ => t
-    }
-   }
 
   class TypeInference(autocast: bool)
    {
     private var currentDef: Id = Id("-invalid-")
     private var counter = 0
+
+    private val add_map = mutable.HashMap[(String, String), Id]()
+    private val min_map = mutable.HashMap[String, Int]()
+    private var context = new Z3Context()
+    private var solver = context.mkSolver()
+
+    private def type_subst_map_fopt(t :Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id] = mutable.HashSet.empty) :Option[Type] = try
+     {
+      Some(type_subst_map(t, tp_mp, templated))
+     } catch
+     {
+      case IntWidthNotSpecified() => None
+     }
+
+    private def type_subst_map(t: Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id]): Type =
+     {
+      t match
+      {
+       case TSignVar(nm) => tp_mp.get(nm) match
+       {
+        case Some(value) => type_subst_map(value, tp_mp, templated)
+       }
+       case sz@TSizedInt(len, sign) =>
+        val width = type_subst_map(len, tp_mp, templated).copyMeta(sz) |> to_width
+        val sn = type_subst_map(sign, tp_mp, templated).copyMeta(sign) |> to_sign
+        sz.copy(len = width, sign = sn)
+       case f@TFun(args, ret) => f.copy(args = args.map(type_subst_map(_, tp_mp, templated)), ret = type_subst_map(ret, tp_mp, templated)).copyMeta(f)
+       case r@TRecType(_, fields) => r.copy(fields = fields.map(idtp => (idtp._1, type_subst_map(idtp._2, tp_mp, templated)))).copyMeta(r)
+       case m: TMemType => m.copy(elem = type_subst_map(m.elem, tp_mp, templated)).copyMeta(m)
+       case m@TModType(inputs, refs, _, _) => m.copy(inputs = inputs.map(type_subst_map(_, tp_mp, templated)), refs = refs.map(type_subst_map(_, tp_mp, templated))).copyMeta(m)
+       case l@TLockedMemType(mem, _, _) => l.copy(mem = type_subst_map(mem, tp_mp, templated).asInstanceOf[TMemType]).copyMeta(l)
+       case TNamedType(name) if /*templated.contains(name)*/ is_my_generic(name) => t
+       case TNamedType(name)  => tp_mp.get(name) match
+       {
+        case Some(value) => type_subst_map(value, tp_mp, templated)
+        case None => throw IntWidthNotSpecified()
+       }
+       case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp, templated))
+       case TBitWidthAdd(b1, b2) =>
+        val len1 = type_subst_map(b1, tp_mp, templated)
+        val len2 = type_subst_map(b2, tp_mp, templated)
+        (len1, len2) match {
+         case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
+         case (l1:TBitWidth, l2:TBitWidth) =>
+          {
+           val lst = (l1.stringRep()::l2.stringRep()::Nil).sorted
+           val id = Id(lst.head + "_ADD_" + lst(1))
+           add_map.addOne((lst.head, lst(1)), id)
+           TBitWidthVar(id)
+          }
+        }
+       case TBitWidthMax(b1, b2) =>
+        val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
+        val len2 = type_subst_map(b2, tp_mp, templated) |> to_len
+        TBitWidthLen(Math.max(len1, len2))
+       case TBitWidthVar(name) if /*templated.contains(name)*/ is_my_generic(name) => t
+       case TBitWidthVar(name) => tp_mp.get(name) match
+       {
+        case Some(value) => type_subst_map(value, tp_mp, templated)
+        case None =>
+         throw IntWidthNotSpecified()
+       }
+       case o@TObject(name, typParams, methods) =>
+        val tmp = o.copy(typParams = typParams.map(type_subst_map(_, tp_mp, templated)),
+         methods = methods.map(id_funlat =>
+          (id_funlat._1, (type_subst_map(id_funlat._2._1, tp_mp, templated).asInstanceOf[TFun], id_funlat._2._2))))
+          .copyMeta(o)
+        tmp
+       case _ => t
+      }
+     }
+
+
 
     def checkProgram(p: Prog): Prog =
      {
@@ -225,6 +232,8 @@ object TypeInferenceWrapper
      {
       add_map.clear()
       min_map.clear()
+      context = new Z3Context()
+      solver = context.mkSolver()
       val inputTypes = f.args.map(a => a.typ)
       val funType = TFun(inputTypes, f.ret)
       val funEnv = env.add(f.name, funType)
@@ -677,6 +686,23 @@ object TypeInferenceWrapper
       TBitWidthVar(Id("__BITWIDTH__" + counter))
      }
 
+
+    private def z3_of_index(index: EIndex) :Z3ArithExpr = index match
+    {
+     case EIndConst(v) => context.mkInt(v)
+     case EIndAdd(l, r) => context.mkAdd(z3_of_index(l), z3_of_index(r))
+     case EIndSub(l, r) => context.mkSub(z3_of_index(l), z3_of_index(r))
+     case EIndVar(id) => context.mkIntConst(id.v)
+    }
+
+    private def z3_of_width(width: TBitWidth) :Z3ArithExpr = width match
+    {
+     case TBitWidthVar(name) => context.mkIntConst(name.v)
+     case TBitWidthLen(len) => context.mkInt(len)
+     case TBitWidthAdd(b1, b2) => context.mkAdd(z3_of_width(b1), z3_of_width(b2))
+     case TBitWidthMax(b1, b2) => ???
+    }
+
     /** Updating the type environment with the new substitution whenever you generate one allows errors to be found :D
      * The environment returned is guaratneed to already have been substituted into with the returned substitution */
     private def infer(env: TypeEnv, e: Expr): (Subst, Type, TypeEnv, Expr) =
@@ -747,15 +773,25 @@ object TypeInferenceWrapper
        case b@EBitExtract(num, start, end) => val (s, t, en, fixed_num) = infer(env, num)
         t match
         {
-         case TSizedInt(TBitWidthLen(len), signedness) if len >= (math.abs(end - start) + 1) =>
-          (s, TSizedInt(TBitWidthLen(math.abs(end - start) + 1), signedness), en, b.copy(num = fixed_num).copyMeta(b))
-         case TSizedInt(widthvar, signedNess: TSignedNess) =>
-          val width = widthvar.stringRep()
-          val len = math.abs(end - start) + 1
-          min_map.addOne((width, len))
-          if(!is_my_generic(widthvar))
-           throw LackOfConstraints(e)
-          (s, TSizedInt(TBitWidthLen(len), signedNess), en, b.copy(num = fixed_num).copyMeta(b))
+         case TSizedInt(bitwidth, signedness) =>
+          solver.push()
+          solver.add(context.mkLt(context.mkSub(z3_of_index(end), z3_of_index(start)), z3_of_width(bitwidth)))
+          solver.add(context.mkGe(z3_of_index(start), context.mkInt(0)))
+          solver.add(context.mkGe(z3_of_index(end), context.mkInt(0)))
+          val sat = solver.check()
+          solver.pop()
+          if (sat != Status.SATISFIABLE)
+           throw InvalidBitExtraction(s"$end - $start", bitwidth)
+
+          (s, TSizedInt(TBitWidthAdd(TBitWidthSub(end,start), 1), signedness), en, b.copy(num = fixed_num).copyMeta(b))
+          //NOTE: old implementation. Not getting rid of until confident in Z3
+//         case TSizedInt(widthvar, signedNess: TSignedNess) =>
+//          val width = widthvar.stringRep()
+//          val len = math.abs(end - start) + 1
+//          min_map.addOne((width, len))
+//          if(!is_my_generic(widthvar))
+//           throw LackOfConstraints(e)
+//          (s, TSizedInt(TBitWidthLen(len), signedNess), en, b.copy(num = fixed_num).copyMeta(b))
          case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), TUnsigned())) //TODO Add better error message
         } //TODO
        case trn@ETernary(cond, tval, fval) => val (sc, tc, env1, fixed_cond) = infer(env, cond)

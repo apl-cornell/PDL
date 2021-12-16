@@ -140,6 +140,14 @@ object BSVSyntax {
       toVar(v.id)
     }
 
+    def toBSVIndex(index: EIndex) :BIndex = index match
+    {
+      case EIndConst(v) => BIndConst(v)
+      case EIndAdd(l, r) => BIndAdd(toBSVIndex(l), toBSVIndex(r))
+      case EIndSub(l, r) => BIndSub(toBSVIndex(l), toBSVIndex(r))
+      case EIndVar(id) => BIndVar(id.v)
+    }
+
     def toExpr(e: Expr): BExpr = e match {
       case EInt(v, base, bits) => BIntLit(v, base, bits)
       case EBool(v) => BBoolLit(v)
@@ -150,8 +158,8 @@ object BSVSyntax {
           val bnum = toExpr(num)
           //remove nested pack/unpacks
           bnum match {
-            case BUnpack(e) => BUnpack(BBitExtract(e, start, end))
-            case e => BUnpack(BBitExtract(BPack(e), start, end))
+            case BUnpack(e) => BUnpack(BBitExtract(e, toBSVIndex(start), toBSVIndex(end)))
+            case e => BUnpack(BBitExtract(BPack(e), toBSVIndex(start), toBSVIndex(end)))
           }
       case ETernary(cond, tval, fval) => BTernaryExpr(toExpr(cond), toExpr(tval), toExpr(fval))
       case e@EVar(_) => toVar(e)
@@ -401,12 +409,18 @@ object BSVSyntax {
   case class BVar(name: String, typ: BSVType) extends BExpr
   case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
-  case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
+  case class BBitExtract(expr: BExpr, start: BIndex, end: BIndex) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
   case class BValueOf(s :String) extends BExpr
+
+  sealed trait BIndex
+  case class BIndConst(n :Int) extends BIndex
+  case class BIndVar(v :String) extends BIndex
+  case class BIndAdd(l :BIndex, r :BIndex) extends BIndex
+  case class BIndSub(l :BIndex, r :BIndex) extends BIndex
 
   sealed trait BStatement {
     var useLet: Boolean = false

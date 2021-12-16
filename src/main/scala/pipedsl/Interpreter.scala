@@ -22,6 +22,13 @@ class Interpreter(val maxIterations: Int) {
     var moduleCalls: ModuleCalls = immutable.Queue[Unit => Environment]()
     var iterations: Int = 1
 
+    def interp_index(idx: EIndex, env:this.Environment) :Int = idx match {
+        case EIndConst(c) => c
+        case EIndVar(id) => env(id).asInstanceOf[Int]
+        case EIndAdd(l, r) => interp_index(l, env) + interp_index(r, env)
+        case EIndSub(l, r) => interp_index(l, env) - interp_index(r, env)
+    }
+
     def interp_expr(e: Expr, env:Environment): Any = e match {
         case i: EInt => i.v
         case b: EBool => b.v
@@ -54,8 +61,8 @@ class Interpreter(val maxIterations: Int) {
         }
         case be: EBitExtract => {
             val n = interp_expr(be.num, env).asInstanceOf[Int]
-            val start = be.start
-            val end = be.end
+            val start = interp_index(be.start, env)
+            val end = interp_index(be.end, env)
             if (start > end) throw Errors.InvalidBitExtraction(start, end)
             val mask = (~0) << (31 - end) >>> (31 - (end-start)) << start
             (mask & n) >>> start

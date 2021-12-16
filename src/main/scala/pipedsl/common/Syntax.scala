@@ -5,9 +5,11 @@ import Security._
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
+import pipedsl.common.Syntax.EIndConst
 import pipedsl.typechecker.Subtypes
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 
 
@@ -20,6 +22,12 @@ object Syntax {
   object Annotations {
     trait TypeAnnotation {
       var typ: Option[Type] = None
+
+      def setType(t :Type) :this.type =
+      {
+        this.typ = Some(t)
+        this
+      }
     }
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
@@ -127,6 +135,7 @@ object Syntax {
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
       case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")"
+      case TBitWidthSub(b1, b2) => s"sub($b1, $b2)"
       case TBitWidthLen(len) => len.toString
       case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")"
       case TBitWidthVar(name) => "bitVar(" + name + ")"
@@ -320,10 +329,22 @@ object Syntax {
   {
     override def stringRep(): String = name.v
   }
+  object TBitWidthImplicits
+  {
+    implicit def fromIndex(idx :EIndex) :TBitWidth = idx match
+    {
+      case EIndConst(v) => TBitWidthLen(v)
+      case EIndAdd(l, r) => TBitWidthAdd(fromIndex(l), fromIndex(r))
+      case EIndSub(l, r) => TBitWidthSub(fromIndex(l), fromIndex(r))
+      case EIndVar(id) => TBitWidthVar(id)
+    }
+    implicit def fromInt(i :Int) :TBitWidthLen = TBitWidthLen(i)
+  }
   case class TBitWidthLen(len: Int) extends TBitWidth
   {
     override def stringRep(): String = len.toString
   }
+
   case class TBitWidthAdd(var b1: TBitWidth, var b2: TBitWidth) extends TBitWidth
   {
     if(b1.stringRep() < b2.stringRep())
@@ -350,6 +371,26 @@ object Syntax {
       }
     }
   }
+  case class TBitWidthSub(var b1: TBitWidth, var b2: TBitWidth) extends TBitWidth
+    {
+      override def stringRep(): String =
+        {
+          val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
+          lst.head + "_SUB_" + lst(1)
+        }
+    }
+  object TBitWidthSub
+    {
+      def apply(b1 :TBitWidth, b2 :TBitWidth) :TBitWidth =
+        {
+          (b1, b2) match {
+            case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(math.abs(l1 - l2))
+            case _ => new TBitWidthSub(b1, b2)
+          }
+        }
+    }
+
+
 
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   {
@@ -493,7 +534,7 @@ object Syntax {
         this
       }
   }
-  case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
+  case class EBitExtract(num: Expr, start: EIndex, end :EIndex) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr]) extends Expr
@@ -503,6 +544,26 @@ object Syntax {
     typ = Some(ctyp)
   }
 
+
+  sealed trait EIndex extends Positional with TypeAnnotation
+  case class EIndConst(v :Int) extends EIndex
+  case class EIndAdd(l :EIndex, r :EIndex) extends EIndex
+  case class EIndSub(l :EIndex, r :EIndex) extends EIndex
+  case class EIndVar(id :Id) extends EIndex
+  object EIndAdd
+  {
+    def apply(l :EIndex, r :EIndex) :EIndex = (l, r ) match {
+      case (EIndConst(lc), EIndConst(rc)) => EIndConst(lc + rc)
+      case _ => new EIndAdd(l, r)
+    }
+  }
+  object EIndSub
+    {
+      def apply(l :EIndex, r :EIndex) :EIndex = (l, r ) match {
+        case (EIndConst(lc), EIndConst(rc)) => EIndConst(math.abs(lc - rc))
+        case _ => new EIndSub(l, r)
+      }
+    }
 
   sealed trait Command extends Positional with SMTPredicate with PortAnnotation with HasCopyMeta
   {
