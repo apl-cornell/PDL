@@ -174,6 +174,10 @@ class BluespecInterfaces() {
     }
   }
 
+  def getRegister(initVal: Int): BModule = {
+    BModule("mkRegister", List(BUnsizedInt(initVal)))
+  }
+
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
     memtyp.name match {
       case `asyncMemPortType` =>
