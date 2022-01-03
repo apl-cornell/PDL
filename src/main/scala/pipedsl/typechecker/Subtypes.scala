@@ -37,7 +37,7 @@ object Subtypes {
         case (TMemType(e1, as1, r1, w1, rp1, wp1),
         TMemType(e2, as2, r2, w2, rp2, wp2)) =>
             areEqual(e1, e2) && as1 == as2 && r1 == r2 && w1 == w2 &&
-              rp1 >= rp2 && wp1 >= wp2
+              (rp1 >= rp2 || rp1 == 0) && (wp1 >= wp2 || wp1 == 0)
         case _ => areEqual(t1, t2)
     }
 

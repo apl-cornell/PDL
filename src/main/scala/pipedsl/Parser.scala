@@ -122,7 +122,10 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   // int<32> w;
   // m[a, 0b1100] <- w;
   lazy val memAccess: P[Expr] = positioned {
-    iden ~ angular("atomic" | "a").? ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ a ~ (i ~ n) => EMemAccess(m, i, n, None, None, a.isDefined) }
+    iden ~ angular("atomic" | "a").? ~ brackets(expr ~ ("," ~> expr).?) ^^ {
+      case m ~ a ~ (i ~ n) => EMemAccess(m, i, n, None, None, a.isDefined) } |
+      iden ~ angular("atomic" | "a").? <~ brackets(parseEmpty) ^^ {
+        case m ~ a => EMemAccess(m, EInt(0), None, None, None, a.isDefined) }
   }
 
   lazy val bitAccess: P[Expr] = positioned {
@@ -472,6 +475,13 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     }
   }
 
+  lazy val creg: P[CirExpr] = positioned {
+    "register" ~> parens(sizedInt ~ ("," ~> posint).?)^^ { case elem ~ init =>
+      val initval = if (init.isDefined) { init.get } else { 0 }
+      CirRegister(elem, initval)
+    }
+  }
+
   lazy val cmem: P[CirExpr] = positioned {
     "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^
       { case elem ~ _ ~
@@ -503,7 +513,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf | clockrf | clockmem | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | creg | cmem | crf | clockrf | clockmem | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cexpr: P[Circuit] = positioned {

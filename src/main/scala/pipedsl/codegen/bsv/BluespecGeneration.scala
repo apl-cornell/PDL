@@ -166,6 +166,11 @@ object BluespecGeneration {
         val modInstName = impl.getModuleInstName(mtyp)
         val largs = getLockModArgs(mtyp, impl, szParams)
         (lockMemTyp, BModule(modInstName, largs))
+      case CirRegister(elemTyp, initVal) =>
+        val bElemTyp = translator.toType(elemTyp)
+        val memtyp = bsInts.getBaseMemType(isAsync = false,
+          translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, 0), bElemTyp, 0)
+        (memtyp, bsInts.getRegister(initVal))
       case CirRegFile(elemTyp, addrSize) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,

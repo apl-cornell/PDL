@@ -1,0 +1,18 @@
+//Expected Success
+pipe unlock(tinput: int<32>)[rf: int<32>[0]<c,s>] {
+    spec_check();
+    s <- speccall unlock(tinput + 1<32>);
+    ---
+    start(rf);
+    int<32> x = rf[] + tinput;
+    end(rf);
+    ---
+    spec_barrier();
+    verify(s, tinput);
+}
+
+circuit {
+      r = register(int<32>, 0);
+      un = new unlock[r];
+      call un(0<32>);
+}

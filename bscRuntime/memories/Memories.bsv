@@ -29,6 +29,7 @@ export AddrLockAsyncMem(..);
 export AddrLockAsyncMem2(..);
 export LSQ(..);
 
+export mkRegister;
 export mkRegFile;
 export mkBramPort;
 export mkBramPort2;
@@ -184,6 +185,19 @@ interface LSQ#(type addr, type elem, type name, numeric type nsz);
    method Action rel_w1(name n);
 endinterface
 
+
+module mkRegister#(elem init)(RegFile#(addr, elem)) provisos (Bits#(addr, szAddr), Bits#(elem, szElem));
+   Reg#(elem) data <- mkReg(init);   
+
+   method Action upd(addr a, elem d);
+      data <= d;
+   endmethod
+   
+   method elem sub(addr a);
+      return data;
+   endmethod
+   
+endmodule
 
 module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr, elem))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Bounded#(addr));
