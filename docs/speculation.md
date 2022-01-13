@@ -99,3 +99,7 @@ updates to any state _those_ pipelines write. This describes the protocol for im
 and the restrictions on use.
 
 
+## Protocol
+
+We need to communicate the speculation identifier that the outer pipeline generates to the inner
+pipeline so that it can track the speculative status of requests it is handling.
