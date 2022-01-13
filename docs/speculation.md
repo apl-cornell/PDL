@@ -20,6 +20,8 @@ act as both a _parent_ and a _child_ simultaneously; since any thread that was s
 
 - **Invalidate**(sid): Updates the speculation status of the prediction tracked with id `sid` to "misspeculated". This can be used to unconditionally mark a prediction as incorrect - it is safe to do this even if the prediction may have been correct. This invalidation marks _all speculation entries as new as `sid`_ as misspeculated. In this way, misspeculated threads do not need to update the speculative status of their child threads; it only takes 1 cycle to invalidate all levels of nested speculation derived from the original prediction.
 
+- **Update**(sid, newpred): Updates the prediction to the `newpred` value if it differs from the original prediction, killing the speculative thread in the process.
+
 - **Verify**(sid, real vals): The parent thread checks that the speculated values (stored in pipeline registers)  match the `real vals`; if they do then it updates the speculation table entry, `sid`, with Valid, else it updates that entry with Misspeculated (following the same 'nesting' protocol as described in Invalidate).
 
 ## Child Ops
@@ -36,7 +38,7 @@ and misspeculated threads are re-executed.
 
 - `call` or speculative `call` operations: A thread may _not_ spawn another thread (speculatively or not), if it is _definitely_ misspeculated. Any stage which executes these operations must unequivocally be non-speculative or must have a non-blocking speculation check.
 
-- `write lock` operations: _Current Version ONLY_. A potentially speculative thread may **not** execute any _write_ lock operations and therefore cannot mutate any shared memory. We allow read lock acquisition (for now) to allow for behavior that does not mutate shared state; reads may happen speculatively.
+- `release write lock` and `atomic/unlocked write` operations: Threads may not release write locks or commit unlocked writes until they are non-speculative, since releasing write locks is an irreversible operation.
 
 - `output` operations: If a pipeline eventually produces a value with an `output` command (as opposed to non-termination); it must be in an explicitly non-speculative state to do so.
 
@@ -50,18 +52,15 @@ When a thread discovers that it has been misspeculated, it needs to terminate it
 This involves the following operations:
 
 1. Flush its state from pipeline registers (dequeing inputs but not sending them anywhere, in our implementation).
-2. Release all held locks (this can cause problems if our implementation can't support releasing enough locks concurrently).
+2. Free its entry in the speculation table.
 
 This protocol is _so simple_ thanks to the fact that nested speculation is handled in one fell-swoop.
 A killed thread never needs to notify _its_ children about this fact.
 
+The only current bug in this is tracked in an issue; if the thread is in a pipeline branch then there is no
+way to dequeue the appropriate entry in the control queue that the join point will read.
 
 # Extensions To Write Ops
-
-In the future, to support speculative writes (and speculative non-interference of microarchitectural state),
-we need the lock API and the speculation API to interact.
-Specifically, this involves locks supporting `checkpoint`, and `rollback` operations, in addition to `commit`.
-While we will not include the full details here yet, the simplest explanation for how this works is:
 
 1. Threads create checkpoints after reserving locks, but before any other thread can reserve new ones
 (essentially this can be viewed as simultaneous).
@@ -73,9 +72,9 @@ state used to represent the checkpoint can be freed. It is possible that this ma
 
 
 
-# Checkpoint and RollBack
+## Checkpoint and RollBack
 
-The current actual implementation of checkpoint and rollback will establish the following:
+The current implementation of checkpoint and rollback works as follows:
 
 1. Only 1 checkpoint per memory may be made and it must be made in the same cycle
 as the `end(mem)` statement. The semantics are that it captures the effects of all reserves
@@ -86,8 +85,17 @@ after the checkpoint stage. The condition must also be implied by all paths that
 speculate (otherwise some thread may speculate but not make a checkpoint) after the checkpoint.
 3. A checkpoint is only necessary if a stage speculatively reserves (any op)
 or atomically writes a memory. In this case, if no checkpoint is ever made it is an error.
-4. Rollback operations are automatically inserted at the relevant `verify`, `update`, and `invalidate` statements:
+4. *Checkpoints are inserted automatically by the compiler*.
+5. Rollback operations are automatically inserted at the relevant `verify`, `update`, and `invalidate` statements:
  - `verify` conditionally rollsback the lock state and releases checkpoint
  - `update` rollsback the lock state but _does not_ release the checkpoint
  - `invalidate` rollsback the lock state and releases the checkpoint
-5. It is an error if a checkpoint is not released by the end of the pipeline.
+6. It is an error if the supplied lock implementation doesn't implement the checkpoint or rollback interface.
+
+# Nested Speculation
+
+We would like to enable speculative calls into sub pipelines and properly handling speculative
+updates to any state _those_ pipelines write. This describes the protocol for implementing this,
+and the restrictions on use.
+
+
