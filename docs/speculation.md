@@ -103,3 +103,46 @@ and the restrictions on use.
 
 We need to communicate the speculation identifier that the outer pipeline generates to the inner
 pipeline so that it can track the speculative status of requests it is handling.
+
+This means requests to inner pipelines now have the signature:
+`req(arg1, arg2,...., argn, Maybe<specid>)`
+
+If the specid is a `None` then the request is not speculative.
+
+### Child Threads
+
+Threads _inside nested pipelines_ are treated basicaly like _child threads_ from the normal speculation protocol.
+This means that they are not responsible for cleaning up speculative state at all; they are just responsible
+for checking their status before accessing locks or writing data, and terminating their own execution
+when they find that they have misspeculated.
+
+When a child thread _does check its speculative status_ via `spec_barrier()` or `spec_check()` it
+normally `frees` the associated entry in the speculation table. However, the speculation table
+is associated with the _outer pipeline_, which also has some thread that plans to `free` the same entry.
+
+#### Spec Table Freeing Solutions:
+
+1. Each entry has a reference counter, which is decremented by each "free-er". Once this reaches 0,
+the speculation table can simply free the entry.This must also be incremented whenever
+a speculative thread calls into another stateful pipeline. The increment part seems the most worrying to me.
+
+2. Keep a local table for the inner pipeline; it adds an entry whenever a speculative request is made,
+and whenever that speculative status is updates the local table as well. This could lead to extra
+area overhead, but likely a much simpler design.
+
+I personally like (2) better, as it is simpler to implement, and low-level optimizations
+could likely negate the overhead.
+
+### Parent Threads
+
+Parent threads normally just update the status of the pipeline's speculation table for their request.
+Additionally, they need to notify inner pipelines of the fact that a speculative thread has been killed;
+then the inner pipeline can execute a "misspeculated" protocol:
+
+#### Misspeculated Protocol
+
+1. Update status of local speculation table (see option 2 for freeing solutions),
+including all speculation events _ordered after_ the given identifier.
+2. Rollback status of local locks to checkpoint ordered _before_ the given speculation event.
+This second point means that each thread needs to know how far (or if) to rollback its memories.
+Complicated. Currently thinking of a different protocol.
