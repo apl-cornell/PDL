@@ -146,3 +146,20 @@ including all speculation events _ordered after_ the given identifier.
 2. Rollback status of local locks to checkpoint ordered _before_ the given speculation event.
 This second point means that each thread needs to know how far (or if) to rollback its memories.
 Complicated. Currently thinking of a different protocol.
+
+### Parent Threads Alternate
+
+For checkpoints, we could treat subpipelines _just like normal memories_ and force parent
+threads to take checkpoints whenever they own the lock for a subpipeline and could have speculative children.
+The definition of `checkpoint` for pipelines would be to create checkpoints for _all of its memories and subpipelines, recursively_,
+returning a single checkpoint identifier to the parent pipeline.
+
+Then, the "misspeculated protocol" is _no different_ than when rolling back locks normally (i.e., the non-speculative parent
+notifies the subpipeline, the speculative child does not need to do anything).
+
+The downside of this approach is that it could cause many checkpoints to be made (e.g. even when
+a child thread isn't going to actually access the given subpipeline); however, this means that we can instantiate
+less efficient or smaller checkpoints and offset the cost of calling the checkpoint function frequently.
+
+I *prefer this approach to checkpointing* because it requires less modification to the existing protocol, it simply
+requires that we define `checkpoint` and `rollback` operations on pipelines themselves and then otherwise treat them *just like normal locks*.
