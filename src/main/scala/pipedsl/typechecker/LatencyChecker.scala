@@ -69,7 +69,7 @@ object LatencyChecker
    case EBitExtract(num, start, end) =>
    case ETernary(cond, tval, fval) =>
    case EApp(func, args) =>
-   case ECall(mod, method, args) =>
+   case ECall(mod, method, args, isAtomic) =>
    case EVar(id) =>
    case ECast(ctyp, exp) =>
    case expr: CirExpr =>

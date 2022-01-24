@@ -54,7 +54,7 @@ object MarkNonRecursiveModulePass extends ModulePass[ModuleDef] with ProgPass[Pr
   //no other subexpressions - the Timing Type Checker ensures this
   @tailrec
   private def hasRecCall(e: Expr, m: Id): Boolean = e match {
-    case ECall(mod, _, _) => mod == m
+    case ECall(mod, _, _, _) => mod == m
     case ECast(_, exp) => hasRecCall(exp, m)
     case _ => false
   }

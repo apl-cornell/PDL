@@ -103,7 +103,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
         case _ => throw UnexpectedType(mem.pos, "Memory Write Statement", "Memory Type", mem.typ.get)
       }
       //module calls
-      case (lhs@EVar(_), call@ECall(_, _, _)) =>
+      case (lhs@EVar(_), call@ECall(_, _, _, _)) =>
         val send = convertCall(call)
         val recv = IRecv(send.handle, send.receiver, lhs)
         (send, recv)
@@ -133,7 +133,7 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
   private def getCalls(stg: PStage): List[ECall] = {
     stg.getCmds.foldLeft(List[ECall]())((l, c) => {
       c match {
-        case CExpr(call@ECall(_,_,_)) => l :+ call
+        case CExpr(call@ECall(_,_,_,_)) => l :+ call
         case _ => l
       }
     })

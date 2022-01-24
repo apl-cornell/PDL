@@ -166,8 +166,14 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           } else {
             env
           }
-        case (_, ECall(_, _, args)) =>
-          args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
+        case (_, ECall(mod, _, args, isAtomic)) =>
+          val env2 = args.foldLeft(env)((e, a) => checkExpr(a, e, c.predicateCtx.get))
+          if (!isAtomic && mod != this.currentMod && isLockedModule(mod)) { // don't need for atomic or recursive calls
+            //expr is empty here
+            checkAcquired(mod, EInt(0), env2, c.predicateCtx.get)
+          } else {
+            env
+          }
         case _ => throw UnexpectedCase(c.pos)
       }
       case c@CLockOp(mem, op, _, _, _) =>
@@ -211,7 +217,14 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
       val env2 = checkExpr(tval, env1, predicates)
       checkExpr(fval, env2, predicates)
     case EApp(_, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
-    case ECall(_, _, args) => args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
+    case ECall(mod, _, args, isAtomic) =>
+      val env2 = args.foldLeft(env)((e, a) => checkExpr(a, e, predicates))
+      if (!isAtomic && mod != this.currentMod && isLockedModule(mod)) { // don't need for atomic or recursive calls
+        //expr is empty here
+        checkAcquired(mod, EInt(0), env2, predicates)
+      } else {
+        env2
+      }
     case ECast(_, exp) => checkExpr(exp, env, predicates)
     case _ => env
   }

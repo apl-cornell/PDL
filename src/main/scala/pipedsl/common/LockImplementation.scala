@@ -23,6 +23,7 @@ object LockImplementation {
   private val lsq = new LoadStoreQueue()
   private val chkq = new CheckpointLockQueue()
   private val chkRf = new CheckpointRF()
+  private val modLock = new ModLock()
 
   //Stand-in Type Variables for Address, Data and Lock Handle
   private val addrType = TNamedType(Id("addr"))
@@ -111,11 +112,11 @@ object LockImplementation {
   }
 
   private def getAccessName(op: Option[LockType], isAtomic: Boolean = false): Id = {
-      Id(op match {
-        case Some(Syntax.LockRead) => if (isAtomic) atomicReadName else readName
-        case Some(Syntax.LockWrite) => if (isAtomic) atomicWriteName else writeName
-        case None => if (isAtomic) atomicAccessName else accessName
-      })
+    Id(op match {
+      case Some(Syntax.LockRead) => if (isAtomic) atomicReadName else readName
+      case Some(Syntax.LockWrite) => if (isAtomic) atomicWriteName else writeName
+      case None => if (isAtomic) atomicAccessName else accessName
+    })
   }
 
   def getAccess(l: LockInterface, op: Option[LockType], isAtomic: Boolean = false): Option[(TFun, Latency)] = {
@@ -229,11 +230,11 @@ object LockImplementation {
   }
 
   def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
-      val interface = getLockImplFromMemTyp(mem)
-      val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
-      val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
-      val methodName = getAccessName(Some(LockWrite), isAtomic).v + toPortString(portNum)
-      Some(MethodInfo(methodName, latency != Combinational, args))
+    val interface = getLockImplFromMemTyp(mem)
+    val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
+    val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
+    val methodName = getAccessName(Some(LockWrite), isAtomic).v + toPortString(portNum)
+    Some(MethodInfo(methodName, latency != Combinational, args))
   }
 
   def getRequestInfo(mem: Id, addr: Expr, inHandle: Option[Expr],
@@ -286,10 +287,10 @@ object LockImplementation {
     e
   }
   private def getArgs(fun: TFun, addr: Option[Expr] = None,
-              handle: Option[Expr] = None, data: Option[Expr] = None): List[Expr] = {
+                      handle: Option[Expr] = None, data: Option[Expr] = None): List[Expr] = {
     fun.args.foldLeft(List[Expr]())((l, argTyp) => {
       argTyp match {
-          //TODO throw better exception if missing arg
+        //TODO throw better exception if missing arg
         case t: TNamedType if t == dataType => l :+ data.get
         case t: TNamedType if t == addrType => l :+ addr.get
         case t: TNamedType if t == handleType => l :+ extractHandle(handle.get)
@@ -346,11 +347,12 @@ object LockImplementation {
       val mtyp = mem.typ.get
       mtyp.matchOrError(mem.pos, "Lock Argument", "Memory") {
         case TLockedMemType(_,_,limpl)=> limpl
-          //TODO remove this and make memories + modules the same
-        case _:TModType => getDefaultLockImpl //modules only use the default lock impl for now
+        case _:TModType => modLock
       }
     }
   }
+
+  def getModLockImpl: LockInterface = modLock
 
   private def getLockImplFromMemTyp(mem: Id): LockInterface = {
     mem.typ match
@@ -358,7 +360,7 @@ object LockImplementation {
       case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory")
       {
         case TLockedMemType(_, _, limpl) => limpl
-        case _ :TModType => getDefaultLockImpl
+        case _ :TModType => modLock
       }
       case None => throw MissingType(mem.pos, mem.v)
     }
@@ -420,7 +422,11 @@ object LockImplementation {
 
     def getModuleName(m: TMemType): String
 
+    def getModuleName(m: Option[TMemType]): String = getModuleName(m.get)
+
     def getModuleInstName(m: TMemType): String =  "mk" + getModuleName(m)
+
+    def getModuleInstName(m: Option[TMemType]): String =  getModuleInstName(m.get)
 
     def getClientName: String = ".mem.bram_client"
 
@@ -463,7 +469,7 @@ object LockImplementation {
 
   private class CheckpointLockQueue extends LockQueue {
 
-    private val queueLockName = Id("CheckpointQueueLock")
+    protected val queueLockName = Id("CheckpointQueueLock")
 
     override def getType: TObject = {
       val parent = super.getType
@@ -485,6 +491,15 @@ object LockImplementation {
 
     //Checkpoint id must equal the lock id size
     override def getChkIdSize(lidSize: Int): Int = lidSize
+  }
+
+  //This class should only be used to mediate calls to PDL pipelines
+  private class ModLock extends CheckpointLockQueue {
+
+    override def getModuleName(m: Option[TMemType]): String = queueLockName.v
+    override def getModuleName(m: TMemType): String = queueLockName.v
+    override def getModuleInstName(m: Option[TMemType]): String = "mk" + getModuleName(m)
+    override def hasLockSubInterface = false
   }
   //This is a different implementation which uses the address in some parameters
   //since it allows locking distinct addresses at once
@@ -547,7 +562,7 @@ object LockImplementation {
     override def shortName: String = "BypassQueue"
 
     override def getModuleName(m: TMemType): String = "BypassLockCombMem"
-}
+  }
 
   /**
    * This implementation is a bypassing register file with separate cycle reserves and reads

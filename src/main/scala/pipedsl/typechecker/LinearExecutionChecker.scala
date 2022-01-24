@@ -87,7 +87,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
     case EApp(_, args) =>
       args.foreach(e => checkExpr(e, predicate))
     case ECast(_, exp) => checkExpr(exp, predicate)
-    case ECall(mod, name, args) =>
+    case ECall(mod, name, args, isAtomic) =>
       args.foreach(a => checkExpr(a, predicate))
       if(mod == currentPipe)
         verifyRecursive(predicate, e.pos)

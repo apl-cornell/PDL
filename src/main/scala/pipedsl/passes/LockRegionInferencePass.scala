@@ -361,7 +361,7 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
     case EBitExtract(num, _, _) => getAtomicAccessIds(num)
     case ETernary(cond, tval, fval) => getAtomicAccessIds(cond) ++ getAtomicAccessIds(tval) ++ getAtomicAccessIds(fval)
     case EApp(_, args) => args.foldLeft(Set[Id]())((b, a) => b ++ getAtomicAccessIds(a))
-    case ECall(_, _, args) => args.foldLeft(Set[Id]())((b, a) => b ++ getAtomicAccessIds(a))
+    case ECall(_, _, args, _) => args.foldLeft(Set[Id]())((b, a) => b ++ getAtomicAccessIds(a))
     case ECast(_, exp) => getAtomicAccessIds(exp)
     case _ => Set()
   }

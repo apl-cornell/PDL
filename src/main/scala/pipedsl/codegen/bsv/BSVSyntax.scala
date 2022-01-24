@@ -3,7 +3,7 @@ package pipedsl.codegen.bsv
 import pipedsl.codegen.Translations.Translator
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.LockImplementation
-import pipedsl.common.LockImplementation.{LockInterface, supportsCheckpoint}
+import pipedsl.common.LockImplementation.{LockInterface, getDefaultLockImpl, supportsCheckpoint}
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
 
@@ -113,14 +113,17 @@ object BSVSyntax {
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TMaybe(btyp) => BMaybe(toType(btyp))
       case TRequestHandle(n, rtyp) => rtyp match {
-        //These are passed in the modmap rather than the handle map
-        case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType] =>
-            modmap(n)
         case pipedsl.common.Syntax.RequestType.Checkpoint =>
           lockIdToCheckId(modmap(n))
         //TODO allow this to be specified somewhere
         case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
-        case _ => //pipedsl.common.Syntax.RequestType.Module =>
+        case pipedsl.common.Syntax.RequestType.Lock => {
+          //if its a type variable it'll be in the modmap, else use default lockid size
+          if (modmap.contains(n)) { modmap(n) } else {
+            bsints.getLockHandleType(getDefaultLockImpl.getLockIdSize)
+          }
+        }
+        case pipedsl.common.Syntax.RequestType.Module => //pipedsl.common.Syntax.RequestType.Module =>
           val modtyp = toType(n.typ.get)
           if (handleMap.contains(modtyp)) {
             handleMap(modtyp)
@@ -191,7 +194,7 @@ object BSVSyntax {
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
       case EToMaybe(ex) => BTaggedValid(toExpr(ex))
-      case ECall(mod, method, args) if method.isDefined =>
+      case ECall(mod, method, args, isAtomic) if method.isDefined =>
         //type doesn't matter on the var
         BMethodInvoke(BVar(mod.v, BVoid), method.get.v, args.map(a => toExpr(a)))
       case _ => throw UnexpectedExpr(e)
@@ -265,6 +268,14 @@ object BSVSyntax {
       }
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
+
+    //TODO make these parameters passable and no just linked to the static lockimpl definition
+    def getLockedModType(limpl: LockInterface): BInterface = {
+      val lid = BVar("lidtyp", bsints.getLockHandleType(limpl.getLockIdSize))
+      val chkid = BVar("chkidtyp", bsints.getChkHandleType(limpl.getChkIdSize(limpl.getLockIdSize)))
+      BInterface(limpl.getModuleName(None), List(lid, chkid))
+    }
+
 
     private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType, chkIdTyp: Option[BSVType],
                                  limpl: LockInterface, useTypeVars: Boolean = false, paramId: Option[Id]): BInterface = {

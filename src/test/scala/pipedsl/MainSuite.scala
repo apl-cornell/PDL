@@ -14,6 +14,7 @@ class MainSuite extends AnyFunSuite {
   private val histBram = histFolder + "/histogram_bram.pdl"
   private val histBram2 = histFolder + "/histogram_bram2.pdl"
   private val histShort = histFolder + "/histogram_short.pdl"
+  private val histNest = histFolder + "/histogram_nested.pdl"
   private val histInputs = histFolder + "/memInputs"
   private val inputH = histInputs + "/h"
   private val inputF = histInputs + "/f"
@@ -117,6 +118,26 @@ class MainSuite extends AnyFunSuite {
   test("Histogram SHORT Simulation Test") {
     testBlueSpecSim(new File( histFolder),
       new File(histShort),
+      None,
+      inputMap)
+  }
+
+  test("Histogram Nested Typecheck Test") {
+    testTypecheck(new File(histFolder),
+      new File(histNest))
+  }
+
+  test("Histogram Nested Compilation Test") {
+    testBlueSpecCompile(new File(histFolder),
+      new File(histNest),
+      None,
+      inputMap
+    )
+  }
+
+  test("Histogram Nested Simulation Test") {
+    testBlueSpecSim(new File( histFolder),
+      new File(histNest),
       None,
       inputMap)
   }

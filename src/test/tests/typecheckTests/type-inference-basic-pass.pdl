@@ -135,18 +135,18 @@ pipe test9()[rf: int<32>[32]] {
   call test9();
 }
 
-pipe test10(a: bool, b: int<32>)[rf: int<32>[32]]: int<32> {
+pipe test10(a: bool, b: int<32>)[]: int<32> {
   output(5<32>);
 }
 
-pipe test11()[rf: int<32>[32]] {
+pipe test11()[rf: int<32>[32], t10:test10] {
   a = 5<32>;
   b = 10<32>;
   c = a + b;
   d = false;
   e = true;
   f = e || d;
-  g <- call test10(f, c);
+  g <- call t10(f, c);
   ---
   h = g == b;
   call test11();

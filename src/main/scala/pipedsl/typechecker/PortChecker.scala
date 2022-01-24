@@ -59,6 +59,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         case TMemType(_, _, _, _, r, w) => modLims.addOne((mod.name, (r, w)))
         case TLockedMemType(TMemType(_, _, _, _, r, w), _, _) =>
           modLims.addOne((mod.name, (r, w)))
+        case _ : TModType => modLims.addOne((mod.name, (1, 1)))
         case _ =>
       })
       val port_map = checkPipe(m.body, emptyEnv())
@@ -298,7 +299,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         .union(checkExpr(fval, cond_env, start_env))
     case EApp(_, args) =>
       args.foldLeft(env)((acc, e) => checkExpr(e, acc, start_env))
-    case ECall(mod, _, args) =>
+    case ECall(mod, _, args, _) =>
       /*perhaps we should have some restrictions on calling the same module*/
       /*twice in a single cycle. I think I said that should be a nono*/
       //callees += mod

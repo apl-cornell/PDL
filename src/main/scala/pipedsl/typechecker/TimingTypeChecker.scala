@@ -83,8 +83,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           case None => Set()
         }
         assignReadLocks(id, e, vars, nextVars)
-      case (EVar(id), ECall(_,_,_)) if isRecv => (vars, nextVars + id)
-      case (EVar(id), ECall(mod, Some(method), args)) =>
+      case (EVar(id), ECall(_,_,_,_)) if isRecv => (vars, nextVars + id)
+      case (EVar(id), ECall(mod, Some(method), args, _)) =>
         args.foreach(a => checkExpr(a, vars))
         mod.typ.get match {
           case TObject(_, _, methods) => methods(method)._2 match {
@@ -93,7 +93,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           }
           case t@_ => throw UnexpectedType(mod.pos, "External Call", "Object Type", t)
         }
-      case (EVar(_), ECall(_, None, _)) => //this is calling another PDL pipeline, not allowed in assign
+      case (EVar(_), ECall(_, None, _, _)) => //this is calling another PDL pipeline, not allowed in assign
         throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
       case (EVar(id), _) =>
         val (t1, nt1) = if (isRecv) { (vars, nextVars + id) } else { (vars + id, nextVars) }
@@ -313,7 +313,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Combinational
-    case ECall(mod, name, args) =>
+    case ECall(mod, name, args, isAtomic) =>
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
