@@ -5,7 +5,7 @@ import TypeChecker._
 import Environments._
 import pipedsl.common.Errors.{AlreadyResolvedSpeculation, IllegalSpeculativeOperation, MismatchedSpeculationState, UnresolvedSpeculation}
 import pipedsl.common.Syntax._
-import pipedsl.common.Locks.{Released}
+import pipedsl.common.Locks.Released
 import pipedsl.common.Utilities.{mkAnd, mkImplies}
 
 class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
@@ -35,7 +35,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
 
   override def checkModule(m: ModuleDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
     //reset state (don't call this concurrently)
-    memsWithCheckpoints = Set()
+    memsWithCheckpoints = getCheckMems(m.body, Set())
     //end reset
     if (m.maybeSpec) {
       val finalSpec = checkSpecOps(m.body, Unknown)
@@ -119,11 +119,8 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
     case CLockStart(_) => s //this should be OK to do speculatively or not
     case CLockEnd(_) => s
-    case CCheckpoint(_, lock) => //mark lock as having a checkpoint
-      memsWithCheckpoints = memsWithCheckpoints + lock
-      s
       //can only release READ-ONLY locks speculatively
-      //any lock that _might_ allow writes needs to be Non-Speculatively
+      //any lock that _might_ allow writes needs to be released Non-Speculatively
     case CLockOp(mem, op, t, _, _) => {
       if (s != NonSpeculative && !memsWithCheckpoints.contains(mem.id)) {
         //TODO error that actually says something about checkpoints
@@ -311,5 +308,16 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CCheckpoint(handle, _) => env + handle.id
     case _ => env
   }
-
+  private def getCheckMems(c: Command, env: Set[Id]): Set[Id] = c match {
+    case CSeq(c1, c2) => getCheckMems(c2, getCheckMems(c1, env))
+    case CTBar(c1, c2) => getCheckMems(c2, getCheckMems(c1, env))
+    case CIf(_, cons, alt) =>
+      getCheckMems(cons, env) ++ getCheckMems(alt, env)
+    case CSplit(cases, default) =>
+      cases.foldLeft[Set[Id]](getCheckMems(default, env))((menv, cobj) => {
+        getCheckMems(cobj.body, menv)
+      })
+    case CCheckpoint(_, mod) => env + mod
+    case _ => env
+  }
 }

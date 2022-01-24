@@ -41,7 +41,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         removeCEmpty(nc)
       }
 
-    override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).setPos(m.pos)
+    override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).copyMeta(m)
 
     override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
 

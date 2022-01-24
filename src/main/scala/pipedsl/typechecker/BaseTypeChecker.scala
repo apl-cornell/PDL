@@ -178,6 +178,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(newtyp)
       (newtyp, tenv)
     }
+    case CirRegister(elemTyp, _) => {
+      val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
     case CirRegFile(elemTyp, addrSize) => {
       val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)

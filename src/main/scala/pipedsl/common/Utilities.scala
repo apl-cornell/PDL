@@ -389,6 +389,24 @@ object Utilities {
     case (None, Some(_)) => condR
   }
 
+  /**
+   * Produces a new Expression object that
+   * represents the disjunction of the arguments.
+   * If either argument is missing then the result
+   * is just the other argument. If neither are provided, the result
+   * is of None type.
+   *
+   * @param condL The left expression
+   * @param condR The right expression
+   * @return Some(The disjunction of left and right) or None if neither are provided
+   */
+  def orExpr(condL: Option[Expr], condR: Option[Expr]): Option[Expr] = (condL, condR) match {
+    case (None, None) => None
+    case (Some(e1), Some(e2)) => Some(OrOp(e1, e2))
+    case (Some(_), None) => condL
+    case (None, Some(_)) => condR
+  }
+
   def updateSetMap[K, V](m: Map[K, Set[V]], k: K, v: V): Map[K, Set[V]] = {
     if (m.contains(k)) {
       m.updated(k, m(k) + v)
