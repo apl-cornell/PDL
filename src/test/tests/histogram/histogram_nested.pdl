@@ -1,0 +1,63 @@
+/*
+n = 128
+void histogram ( int feature [] , float weight [] , float hist [] , int n ) {
+    for (int i =0; i < n ; ++ i ) {
+        int m = feature [ i ];
+        float wt = weight [ i ];
+        float x = hist [ m ];
+        hist [ m ] = x + wt ;
+    }
+}
+*/
+
+
+pipe hist(counter: uint<10>)[feature: uint<16>[10]<c,s>(FAQueue), weight: uint<32>[10]<c,s>(FAQueue), h: uint<32>[10]<c,s>(FAQueue)]: bool {
+        start(feature);
+        start(weight);
+        uint<16> m = feature<a>[counter];
+	uint<10> m1 = m{9:0};	
+        uint<32> wt = weight<a>[counter];
+        end(feature);	
+        end(weight);	
+        ---
+        uint<10> mcp = m1;
+        start(h);
+        uint<32> nm = h<a>[m1] + wt;	
+        reserve(h[mcp]);
+        end(h);
+        print(nm);
+        ---
+	block(h[mcp]);
+        h[mcp] <- nm;
+        release(h[mcp]);
+        ---
+	output(true);
+   }
+
+pipe outer(counter: uint<10>)[h: hist] {
+    bool done = counter >= u1000<10>;
+    if (!done) {
+       call outer(counter + u1<10>);
+       start(h);
+       reserve(h);
+       end(h);
+       ---
+       block(h);
+       bool x <- call h(counter);
+       release(h);
+    } else {
+      output(true);
+    }
+}
+
+   circuit {
+       tf = regfile(uint<16>, 10);
+       f = FAQueue(tf);
+       tw = regfile(uint<32>, 10);
+       w = FAQueue(tw);
+       th = regfile(uint<32>, 10);
+       h = FAQueue(th);
+       hg = new hist[f, w, h];
+       o = new outer[hg];
+       call o(u0<10>);
+   }
