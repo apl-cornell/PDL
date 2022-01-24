@@ -312,7 +312,14 @@ object Syntax {
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
+  //returns false only if it represents an unlocked memory type
   def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+  //returns false only if it represents an external (Verilog) module or a pipeline with no internal mems/submodules
+  def isLockedModule(mod: Id): Boolean = mod.typ.get match {
+    case TModType(_, refs, _, _) => refs.nonEmpty
+    case TObject(_, _, _) => false
+    case _ => true
+  }
   def isSynchronousAccess(mem: Id, isWrite: Boolean): Boolean = mem.typ.get match {
     case TMemType(_, _, readLatency, writeLatency, _, _) =>
       val latency: Latency = if (isWrite) writeLatency else readLatency

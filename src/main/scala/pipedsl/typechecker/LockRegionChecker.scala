@@ -28,9 +28,8 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     val nenv = m.modules.foldLeft[Environment[Id, LockState]](env)( (e, m) => m.typ match {
       case TLockedMemType(_, _, _) => e.add(m.name, Free)
       case TMemType(_, _, _,_ ,_ ,_) => e.add(m.name, Free)
-        //TODO eventually do need locks here
       case TModType(_, _, _, _) => e.add(m.name, Free)
-      case TObject(_, _, _) => e //no locks here either
+      case TObject(_, _, _) => e //no locks here
       case _ => throw UnexpectedCase(m.pos)
     })
 
