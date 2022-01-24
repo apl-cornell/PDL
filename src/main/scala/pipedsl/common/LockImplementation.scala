@@ -155,7 +155,6 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar)
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
-          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getCanReserveName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -168,7 +167,6 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar)
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
-          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getReserveName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -181,7 +179,6 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar, Some(l.inHandle))
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
-          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getBlockName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -255,7 +252,6 @@ object LockImplementation {
       case Some((funTyp, latency)) =>
         val args = getArgs(funTyp, l.mem.evar , Some(l.inHandle))
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") +
-          (if(l.mem.id.typ.get.isInstanceOf[TModType]) l.mem.id + lockIntStr else "") +
           getReleaseName(interface, l.memOpType).v + toPortString(l.portNum)
         Some(MethodInfo(methodName, latency != Combinational, args))
       case None => None
@@ -266,8 +262,7 @@ object LockImplementation {
     val interface = getLockImplFromMemTyp(mem)
     getCheckpoint(interface) match {
       case Some(_) =>
-        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "")
-        (if(mem.typ.get.isInstanceOf[TModType]) mem + lockIntStr else "") + checkpointName
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + checkpointName
         Some(MethodInfo(methodName, doesModify = true, List()))
       case None => None
     }
@@ -277,8 +272,7 @@ object LockImplementation {
     val interface = getLockImplFromMemTyp(mem)
     getRollback(interface) match {
       case Some(_) =>
-        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "")
-        (if(mem.typ.get.isInstanceOf[TModType]) mem + lockIntStr else "") + rollbackName
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + rollbackName
         //TODO do we put the booleans in as named arguments too? kinda unnecessary
         Some(MethodInfo(methodName, doesModify = true, List(cid, EBool(doRollback), EBool(doRelease))))
       case None => None
@@ -358,6 +352,8 @@ object LockImplementation {
     }
   }
 
+  def getModLockImpl: LockInterface = modLock
+
   private def getLockImplFromMemTyp(mem: Id): LockInterface = {
     mem.typ match
     {
@@ -426,7 +422,11 @@ object LockImplementation {
 
     def getModuleName(m: TMemType): String
 
+    def getModuleName(m: Option[TMemType]): String = getModuleName(m.get)
+
     def getModuleInstName(m: TMemType): String =  "mk" + getModuleName(m)
+
+    def getModuleInstName(m: Option[TMemType]): String =  getModuleInstName(m.get)
 
     def getClientName: String = ".mem.bram_client"
 
@@ -495,7 +495,10 @@ object LockImplementation {
 
   //This class should only be used to mediate calls to PDL pipelines
   private class ModLock extends CheckpointLockQueue {
+
+    override def getModuleName(m: Option[TMemType]): String = queueLockName.v
     override def getModuleName(m: TMemType): String = queueLockName.v
+    override def getModuleInstName(m: Option[TMemType]): String = "mk" + getModuleName(m)
     override def hasLockSubInterface = false
   }
   //This is a different implementation which uses the address in some parameters

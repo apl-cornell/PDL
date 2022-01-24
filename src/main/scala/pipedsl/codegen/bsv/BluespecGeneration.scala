@@ -410,6 +410,17 @@ object BluespecGeneration {
       vars + (m.name -> BVar(m.name.v, translator.toTypeForMod(m.typ, m.name)))
     })
 
+    //Generate map from submodules (not memories) to the locks we generate for them
+    private val modLocks: ModInfo = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
+      m.typ match {
+        case TModType(_, _, _, _) =>
+          val limpl = LockImplementation.getModLockImpl
+          val nvar = BVar("_lock_" + m.name, translator.getLockedModType(limpl))
+          vars + (m.name -> nvar)
+        case _ => vars
+      }
+    })
+
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
       locks + (m.name -> BVar(genLockRegionName(m.name),
         bsInts.getLockRegionType))
@@ -628,6 +639,15 @@ object BluespecGeneration {
       BMethodInvoke(mod, mi.name, mi.usesArgs.map(a => translator.toExpr(a)))
     }
 
+    private def getLockName(m: Id): BVar = {
+      m.typ.get match {
+        case TLockedMemType(_, _, _) => modParams(m)
+        case TMemType(_, _, _, _, _, _) => modParams(m)
+        case TModType(_, _, _, _) => modLocks(m)
+        case _ => //TODO better error
+         throw new RuntimeException("getlockname bad type")
+      }
+    }
     /**
      * If any commands could cause blocking conditions that prevent
      * the rule from running, place those here (e.g. checking if locks can be acquired)
@@ -643,33 +663,27 @@ object BluespecGeneration {
           val methodInfo = LockImplementation.getCanReserveInfo(cl)
           if (methodInfo.isDefined) {
             l :+ translateMethod(modParams(mem.id), methodInfo.get)
-          } else if(methodInfo.isDefined && mem.id.typ.get.isInstanceOf[TModType]) {
-            val mi = methodInfo.get
-            l :+ BFuncCall(mi.name, mi.usesArgs.map(a => translator.toExpr(a)))
           } else {
             l
           }
         case cl@ICheckLockOwned(mem, _, _) =>
           val methodInfo = LockImplementation.getBlockInfo(cl)
-          if (methodInfo.isDefined && !mem.id.typ.get.isInstanceOf[TModType]) {
-            l :+ translateMethod(modParams(mem.id), methodInfo.get)
-          } else if(methodInfo.isDefined && mem.id.typ.get.isInstanceOf[TModType]) {
-            val mi = methodInfo.get
-            l :+ BFuncCall(mi.name, mi.usesArgs.map(a => translator.toExpr(a)))
+          if (methodInfo.isDefined) {
+            l :+ translateMethod(getLockName(mem.id), methodInfo.get)
           } else {
             l
           }
         case im@IMemWrite(mem, addr, data, _, _, isAtomic) if isAtomic =>
           val methodInfo = LockImplementation.getCanAtomicWrite(mem, addr, data, im.portNum)
           if (methodInfo.isDefined) {
-            l :+ translateMethod(modParams(mem), methodInfo.get)
+            l :+ translateMethod(getLockName(mem), methodInfo.get)
           } else {
             l
           }
         case im@IMemSend(_, _, mem, data, addr, _, _, isAtomic) if isAtomic =>
           val methodInfo = LockImplementation.getCanAtomicAccess(mem, addr, data, im.portNum)
           if (methodInfo.isDefined) {
-            l :+ translateMethod(modParams(mem), methodInfo.get)
+            l :+ translateMethod(getLockName(mem), methodInfo.get)
           } else {
             l
           }
@@ -717,7 +731,7 @@ object BluespecGeneration {
       case em@EMemAccess(mem, index, _, _, _, isAtomic) if isAtomic =>
         val methodInfo = LockImplementation.getCanAtomicRead(mem, index, em.portNum)
         if (methodInfo.isDefined) {
-          List(translateMethod(modParams(mem), methodInfo.get))
+          List(translateMethod(getLockName(mem), methodInfo.get))
         } else List()
       case EBitExtract(num, _, _) => getBlockConds(num)
       //can't appear in cond of ternary
@@ -871,6 +885,13 @@ object BluespecGeneration {
         m + (id -> BModInst(lockRegions(id), bsInts.getLockRegionModule))
       })
 
+      //Instantiate a lock for each module
+      val modLockInsts = modLocks.keys.foldLeft(List[BModInst]())((l, id) => {
+        val linst = BModInst(modLocks(id),
+          BModule(LockImplementation.getModLockImpl.getModuleInstName(None), List()))
+        l :+ linst
+      })
+
       //Instantiate each stage module
       val stgStmts = stgMap.keys.foldLeft(List[BStatement]())((l, s) => {
         l ++ stgMap(s)._1
@@ -886,7 +907,8 @@ object BluespecGeneration {
         bsInts.getReg(BZero))
       //Instantiate the speculation table if the module is speculative
       val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
-      var stmts: List[BStatement] = startFifo +: (edgeFifos.values.toList ++ memRegions.values.toList)
+      var stmts: List[BStatement] = startFifo +:
+        (edgeFifos.values.toList ++ memRegions.values.toList ++ modLockInsts)
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
@@ -938,20 +960,9 @@ object BluespecGeneration {
       )
       methods = methods :+ handleMethodCheck
 
-      val modLocksParams = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
-        if(m.typ.isInstanceOf[TModType]){
-          val params = List(BVar("modlock_param_1", bsInts.getDefaultLockHandleType), BVar("modlock_param_1", bsInts.getDefaultChkHandleType))
-          vars + (Id(m.name+"lock") -> BVar(m.name.v + "lock", BInterface("CheckpointQueueLock", params)))
-        } else{
-          vars
-        }})
-
       BModuleDef(name = "mk" + mod.name.v.capitalize,
         typ = Some(modInterfaceDef.typ),
-        params = {
-          val newParams = modLocksParams ++ modParams
-          newParams.values.toList
-        },
+        params = modParams.values.toList,
         body = stmts,
         rules = stgrules,
         methods = methods)
@@ -1050,10 +1061,7 @@ object BluespecGeneration {
       case il@IReserveLock(outHandle, mem) =>
         val mi = LockImplementation.getReserveInfo(il)
         if (mi.isDefined && !mi.get.doesModify) {
-          val resMethod = translateMethod(modParams(mem.id), mi.get)
-          Some(BAssign(translator.toVar(outHandle), BTaggedValid(resMethod)))
-        } else if (mi.isDefined && mem.id.typ.get.isInstanceOf[TModType]) {
-          val resMethod = BFuncCall(mi.get.name, mi.get.usesArgs.map(a => translator.toExpr(a)))
+          val resMethod = translateMethod(getLockName(mem.id), mi.get)
           Some(BAssign(translator.toVar(outHandle), BTaggedValid(resMethod)))
         } else {
           None
@@ -1062,10 +1070,7 @@ object BluespecGeneration {
       case il@IReleaseLock(mem, _) =>
         val mi = LockImplementation.getReleaseInfo(il)
         if (mi.isDefined && !mi.get.doesModify) {
-          val relMethod = translateMethod(modParams(mem.id), mi.get)
-          Some(BExprStmt(relMethod))
-        } else if (mi.isDefined && mem.id.typ.get.isInstanceOf[TModType]) {
-          val relMethod = BFuncCall(mi.get.name, mi.get.usesArgs.map(a => translator.toExpr(a)))
+          val relMethod = translateMethod(getLockName(mem.id), mi.get)
           Some(BExprStmt(relMethod))
         } else {
           None
@@ -1231,20 +1236,10 @@ object BluespecGeneration {
         )))
       case cl@IReserveLock(outHandle, mem) =>
         val methodInfo = LockImplementation.getReserveInfo(cl)
-        if (methodInfo.isDefined && methodInfo.get.doesModify && !mem.id.typ.get.isInstanceOf[TModType]) {
-          val resMethod = translateMethod(modParams(mem.id), methodInfo.get)
+        if (methodInfo.isDefined && methodInfo.get.doesModify) {
+          val resMethod = translateMethod(getLockName(mem.id), methodInfo.get)
           //can't just apply TaggedValid( resMethod) if it is an Action method (i.e., uses <-).
           //Need to assign to a fresh variable and then tag that.
-          val handletyp = outHandle.typ.get.matchOrError(
-            outHandle.pos, "Extract Lock Handle", "Maybe(Handle)") { case TMaybe(t) => t }
-          val fresh = freshTmp(translator.toType(handletyp))
-          Some(BStmtSeq(List(
-            BInvokeAssign(fresh, resMethod).setUseLet(true),
-            BAssign(translator.toVar(outHandle), BTaggedValid(fresh))
-          )))
-        } else if (methodInfo.isDefined && methodInfo.get.doesModify && mem.id.typ.get.isInstanceOf[TModType]) {
-          val mi = methodInfo.get
-          val resMethod = BFuncCall(mi.name, mi.usesArgs.map(a => translator.toExpr(a)))
           val handletyp = outHandle.typ.get.matchOrError(
             outHandle.pos, "Extract Lock Handle", "Maybe(Handle)") { case TMaybe(t) => t }
           val fresh = freshTmp(translator.toType(handletyp))
@@ -1260,16 +1255,8 @@ object BluespecGeneration {
       )
       case cl@IReleaseLock(mem, _) =>
         val methodInfo = LockImplementation.getReleaseInfo(cl)
-        if (methodInfo.isDefined && methodInfo.get.doesModify && !mem.id.typ.get.isInstanceOf[TModType]) {
-          Some(
-            BExprStmt(translateMethod(modParams(mem.id), methodInfo.get))
-          )
-        } else if (methodInfo.isDefined && methodInfo.get.doesModify && mem.id.typ.get.isInstanceOf[TModType]) {
-          val mi = methodInfo.get
-          val resMethod = BFuncCall(mi.name, mi.usesArgs.map(a => translator.toExpr(a)))
-          Some(
-            BExprStmt(resMethod)
-          )
+        if (methodInfo.isDefined && methodInfo.get.doesModify) {
+          Some(BExprStmt(translateMethod(getLockName(mem.id), methodInfo.get)))
         } else {
           None
         }
@@ -1279,7 +1266,7 @@ object BluespecGeneration {
         val methodInfo = LockImplementation.getCheckpointInfo(mod)
         if (methodInfo.isDefined && methodInfo.get.doesModify) {
           Some(
-            BInvokeAssign(translator.toVar(handle), translateMethod(modParams(mod), methodInfo.get))
+            BInvokeAssign(translator.toVar(handle), translateMethod(getLockName(mod), methodInfo.get))
           )
         } else { None }
       case CPrint(args) => Some(BDisplay(None, args.map(a => translator.toExpr(a))))
@@ -1302,12 +1289,12 @@ object BluespecGeneration {
         val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
           val mod = getMemFromRequest(c.typ.get)
           val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = true)
-          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+          s :+ BExprStmt(translateMethod(getLockName(mod), methodInfo.get))
         })
         val releases = cHandles.foldLeft(List[BStatement]())((s, c) => {
           val mod = getMemFromRequest(c.typ.get)
           val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = false, doRelease = true)
-          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+          s :+ BExprStmt(translateMethod(getLockName(mod), methodInfo.get))
         })
         val updCmd = translator.toExpr(upd)
         val specCmd = BIf(correct,
@@ -1333,7 +1320,7 @@ object BluespecGeneration {
         val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
           val mod = getMemFromRequest(c.typ.get)
           val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = false)
-          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+          s :+ BExprStmt(translateMethod(getLockName(mod), methodInfo.get))
         })
         //order update invalidate AFTER a CInvalidate or CVerify command
         val invalidate =  BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder))
@@ -1350,7 +1337,7 @@ object BluespecGeneration {
         val rollbacks = cHandles.foldLeft(List[BStatement]())((s, c) => {
           val mod = getMemFromRequest(c.typ.get)
           val methodInfo = LockImplementation.getRollbackInfo(mod, c, doRollback = true, doRelease = true)
-          s :+ BExprStmt(translateMethod(modParams(mod), methodInfo.get))
+          s :+ BExprStmt(translateMethod(getLockName(mod), methodInfo.get))
         })
         Some(BStmtSeq(rollbacks :+
           BExprStmt(bsInts.getSpecInvalidate(specTable, translator.toVar(handle), stgSpecOrder))))
