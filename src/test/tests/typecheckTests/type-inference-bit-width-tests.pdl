@@ -12,14 +12,14 @@ def helper2(a:bool, b: bool): bool {
   return c;
 }
 
-pipe test1(input: int<32>)[rf: int<32>[32]] {
+pipe test1(inpt: int<32>)[rf: int<32>[32]] {
   a = 6 * 6<5>;
   int<32> b = a;
   int<32> c = a + b;
   call test1(c);
 }
 
-pipe test2(input: int<32>)[rf: int<32>[32]<a,a>(Queue)] {
+pipe test2(inpt: int<32>)[rf: int<32>[32]<a,a>(Queue)] {
   a = 1;
   start(rf);
   b <- rf<a>[a];
@@ -28,14 +28,14 @@ pipe test2(input: int<32>)[rf: int<32>[32]<a,a>(Queue)] {
   call test2(b);
 }
 
-pipe test3(input: int<32>)[rf: int<32>[32]] {
+pipe test3(inpt: int<32>)[rf: int<32>[32]] {
   a = 1<32>;
   int<32> b = a << 4;
   c = a << 4;
   call test3(c);
 }
 
-pipe test4(input: int<32>)[rf: int<32>[32]] {
+pipe test4(inpt: int<32>)[rf: int<32>[32]] {
   a = 15<32>;
   int<32> b = cast(a{0:8}, int<32>);
   call test4(a);

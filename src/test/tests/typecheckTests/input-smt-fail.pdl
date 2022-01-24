@@ -1,13 +1,13 @@
-pipe should_fail(input : int<32>)[]
+pipe should_fail(inpt : int<32>)[]
 {
-  if(input{1:1} == 1)
+  if(inpt{1:1} == 1)
   {
-     call should_fail(input);
+     call should_fail(inpt);
   }
   ---
-  if(input{2:2} == 1)
+  if(inpt{2:2} == 1)
   {
-    call should_fail(input);
+    call should_fail(inpt);
   }
 }
 

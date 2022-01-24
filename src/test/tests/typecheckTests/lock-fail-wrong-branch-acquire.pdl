@@ -1,4 +1,4 @@
-pipe test18(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
+pipe test18(inpt: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
     bool a = true;
     bool b = false;
     start(rf);
@@ -14,7 +14,7 @@ pipe test18(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]]
         }
     }
     end(rf);
-    call test18(input, randomBool2, randomBool);
+    call test18(inpt, randomBool2, randomBool);
 }
 
 circuit {

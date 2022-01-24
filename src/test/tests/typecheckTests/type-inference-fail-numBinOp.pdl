@@ -1,4 +1,4 @@
-pipe test1(input: int<32>)[rf: int<32>[32]] {
+pipe test1(inpt: int<32>)[rf: int<32>[32]] {
   a = true;
   b = a + a;
 }

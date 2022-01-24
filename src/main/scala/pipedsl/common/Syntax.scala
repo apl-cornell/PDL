@@ -452,6 +452,10 @@ object Syntax {
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr], isAtomic: Boolean) extends Expr
   case class EVar(id: Id) extends Expr
+  {
+    if(id.v == "input")
+      throw ExtremelyCriticalExceptionFailure("Do not under any circumstances even THINK about naming a variable input", id.pos)
+  }
   case class ECast(ctyp: Type, exp: Expr) extends Expr
   {
     typ = Some(ctyp)

@@ -1,21 +1,21 @@
 //Expected Success
-pipe test1(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
-    uint<5> rs1 = input{0:4};
-    uint<5> rs2 = input{5:9};
+pipe test1(inpt: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
+    uint<5> rs1 = inpt{0:4};
+    uint<5> rs2 = inpt{5:9};
     start(rf);
     int<32> arg1 <- rf<a>[rs1]; 
     int<32> arg2 <- rf<a>[rs2]; 
     end(rf);
     ---
-    call test1(input);
+    call test1(inpt);
 } 
 
 //Expected Success
-pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
-    uint<5> rs1 = input{0:4};
-    uint<5> rs2 = input{5:9};
+pipe test2(inpt: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
+    uint<5> rs1 = inpt{0:4};
+    uint<5> rs2 = inpt{5:9};
     start(rf);
-    bool doR1 = (input{0:0} == u1);
+    bool doR1 = (inpt{0:0} == u1);
     if (doR1) {
         reserve(rf[rs1],R);
     }
@@ -30,17 +30,17 @@ pipe test2(input: uint<32>)[rf: int<32>[5]<c2, s>(Queue)] {
     block(rf[rs2]);
     int<32> arg2 <- rf[rs2];
     release(rf[rs2]);
-    call test2(input);
+    call test2(inpt);
     ---
 }
 
 
 //Expected Success
-pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c2, s>(Queue)] {
+pipe test5(inpt: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c2, s>(Queue)] {
     bool a = true;
     bool b = false;
-    uint<5> rs1 = input{0:4};
-    uint<5> rs2 = input{5:9};
+    uint<5> rs1 = inpt{0:4};
+    uint<5> rs2 = inpt{5:9};
     start(rf);
     reserve(rf[rs2],R);
     if (randomBool == a) {
@@ -60,7 +60,7 @@ pipe test5(input: uint<32>, randomBool: bool, randomBool2: bool)[rf:int<32>[5]<c
     block(rf[rs2]);
     y = rf[rs2];
     release(rf[rs2]);
-    call test5(input, randomBool2, randomBool);
+    call test5(inpt, randomBool2, randomBool);
 }
 circuit {
     r = memory(int<32>, 5);

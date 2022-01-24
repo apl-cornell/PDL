@@ -1,5 +1,5 @@
-pipe test1(input: int<32>)[rf: int<32>[32]] {
-  a = input + 2<32>;
+pipe test1(inpt: int<32>)[rf: int<32>[32]] {
+  a = inpt + 2<32>;
   if (a) {
     
   }
