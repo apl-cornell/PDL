@@ -28,7 +28,7 @@ pipe cpu(pc: int<32>)[cache1: cache, imem: int<32>[16]<a,a>]: bool {
     reserve(cache1);
     end(cache1);
     ---
-    uint<5> addr = cast(insn{36:32}, uint<5>);
+    uint<5> addr = cast(insn{31:27}, uint<5>);
 
     block(cache1);
     cs <- call cache1(addr, 1<32>);
