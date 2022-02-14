@@ -15,10 +15,12 @@ object BSVPrettyPrinter {
     mkExprString(toBSVTypeStr(v.typ), v.name)
   }
 
-  private def toProvisoString(name: String, p: Proviso): String = p match {
+  def toProvisoString(name: String, p: Proviso): String = p match {
     case PBits(szName) => "Bits#(" + name + "," + szName +")"
     case PAdd(num1, num2, sum) => s"Add#($num1, $num2, $sum)"
     case PMin(name, min) => s"Min#($name, $min, $min)"
+    case PMax(num1, num2, max) => s"Max#($num1, $num2, $max)"
+    case PEq(num1, num2) => s"Add#($num1, 0, $num2)"
   }
 
   private def getTypeParams(typ: BSVType): Set[BTypeParam] = typ match {
@@ -277,9 +279,9 @@ object BSVPrettyPrinter {
         func.name, "(", paramstr, ")",
         if(func.provisos.nonEmpty)
         {
-          " provisos(" +
+          "\n\tprovisos(" +
             func.provisos.tail.foldLeft(toProvisoString("", func.provisos.head))((str, proviso) =>
-              str + ", " + toProvisoString("", proviso)) +
+              str + ",\n\t\t" + toProvisoString("", proviso)) +
           ")"
         } else ""
       ))

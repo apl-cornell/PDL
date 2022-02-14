@@ -1,6 +1,11 @@
-def adder<T>(x :int<T>, y :int<T>) :int<T>
+def indexing<I, J>(x :int<I>, y :int<J>) :int<6>
 {
-   return x + y + 1<1>;
+   return x{J - 1:0};
+}
+
+def error(x :int<3>, y :int<6>) :int<6>
+{
+   return indexing(x, y);
 }
 
 circuit {

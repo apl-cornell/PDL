@@ -1,16 +1,20 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Errors
+import pipedsl.common.{Errors, Syntax}
 import pipedsl.common.Errors._
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
+import pipedsl.common.Constraints._
+import pipedsl.common.Constraints.ImplicitConstraints._
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, is_my_generic, specialize, typeMap, typeMapFunc, typeMapModule, without_prefix}
 import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 import com.microsoft.z3.{Status, AST => Z3AST, ArithExpr => Z3ArithExpr, BoolExpr => Z3BoolExpr, Context => Z3Context, IntExpr => Z3IntExpr, Solver => Z3Solver}
-
 import TBitWidthImplicits._
+import pipedsl.codegen.bsv.ConstraintsToBluespec.to_provisos
+
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 object TypeInferenceWrapper
  {
@@ -68,6 +72,10 @@ object TypeInferenceWrapper
      val w1 = subst_into_type(typevar, toType, b1) |> to_width
      val w2 = subst_into_type(typevar, toType, b2) |> to_width
      TBitWidthAdd(w1, w2).setPos(inType.pos)
+    case TBitWidthSub(b1, b2) =>
+     val w1 = subst_into_type(typevar, toType, b1) |> to_width
+     val w2 = subst_into_type(typevar, toType, b2) |> to_width
+     TBitWidthSub(w1, w2).setPos(inType.pos)
     case TBitWidthMax(b1, b2) =>
      val t1 = TBitWidthMax(subst_into_type(typevar, toType, b1) |> to_width,
       subst_into_type(typevar, toType, b2) |> to_width)
@@ -95,6 +103,10 @@ object TypeInferenceWrapper
     private val min_map = mutable.HashMap[String, Int]()
     private var context = new Z3Context()
     private var solver = context.mkSolver()
+
+
+    private var constraints = List[Constraint]()
+    //we'll keep a local list of the statements, and check it at the end w/ z3
 
     private def type_subst_map_fopt(t :Type, tp_mp: mutable.HashMap[Id, Type], templated :mutable.HashSet[Id] = mutable.HashSet.empty) :Option[Type] = try
      {
@@ -128,18 +140,29 @@ object TypeInferenceWrapper
         case None => throw IntWidthNotSpecified()
        }
        case m@TMaybe(btyp) => m.copy(btyp = type_subst_map(btyp, tp_mp, templated))
-       case TBitWidthAdd(b1, b2) =>
+       case tba@TBitWidthAdd(b1, b2) =>
         val len1 = type_subst_map(b1, tp_mp, templated)
         val len2 = type_subst_map(b2, tp_mp, templated)
         (len1, len2) match {
          case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
          case (l1:TBitWidth, l2:TBitWidth) =>
-          {
-           val lst = (l1.stringRep()::l2.stringRep()::Nil).sorted
-           val id = Id(lst.head + "_ADD_" + lst(1))
-           add_map.addOne((lst.head, lst(1)), id)
+           val id = Id(tba.stringRep())
+           //val id = Id("_A" + lst.head + "_ADD_" + lst(1))
+           //add_map.addOne((lst.head, lst(1)), id)
+           constraints = constraints.prepended(
+            ReEq(IntAdd(IntVar(Id(l1.stringRep())), IntVar(Id(l2.stringRep()))), IntVar(id)))
            TBitWidthVar(id)
-          }
+        }
+       case tbs@TBitWidthSub(b1, b2) =>
+        val len1 = type_subst_map(b1, tp_mp, templated)
+        val len2 = type_subst_map(b2, tp_mp, templated)
+        (len1, len2) match {
+         case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
+         case (l1 :TBitWidth, l2 :TBitWidth) =>
+          val id = Id(tbs.stringRep())
+          constraints = constraints.prepended(
+           ReEq(IntSub(IntVar(Id(l1.stringRep())), IntVar(Id(l2.stringRep()))), IntVar(id)))
+           TBitWidthVar(id)
         }
        case TBitWidthMax(b1, b2) =>
         val len1 = type_subst_map(b1, tp_mp, templated) |> to_len
@@ -234,6 +257,7 @@ object TypeInferenceWrapper
       min_map.clear()
       context = new Z3Context()
       solver = context.mkSolver()
+      constraints = List()
       val inputTypes = f.args.map(a => a.typ)
       val funType = TFun(inputTypes, f.ret)
       val funEnv = env.add(f.name, funType)
@@ -242,6 +266,17 @@ object TypeInferenceWrapper
       val inEnv = f.args.foldLeft[Environment[Id, Type]](template_vals_env)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
 
+      constraints = reduce_constraint_list(constraints)
+      solver.push()
+      constraints.foreach(c => solver.add(to_z3(context, c)))
+      val stat = solver.check()
+      solver.pop()
+      stat match
+      {
+       case Status.UNSATISFIABLE |
+            Status.UNKNOWN => throw new RuntimeException("YOU HAVE FUCKED UP IN THE GRANDEST OF WAYS")
+       case Status.SATISFIABLE =>
+      }
       val hash = mutable.HashMap.from(subst)
       val newFunc = typeMapFunc(f.copy(body = fixed_cmd,
        args = f.args.map(p => p.copy(typ = type_subst_map(p.typ, hash, templated))),
@@ -249,6 +284,7 @@ object TypeInferenceWrapper
       /*TODO: add another pass over the types to make substitutions for bit expressions.
               Collect them as provisos*/
       newFunc.adds.addAll(add_map)
+      newFunc.constraints = newFunc.constraints ++ constraints
       newFunc.mins.addAll(min_map)
       (funEnv, newFunc)
      }
@@ -461,7 +497,7 @@ object TypeInferenceWrapper
       })
       val newEnv = lhs match
       {
-       case EVar(id) => rhsEnv.add(id, tlhs)
+       case EVar(id) => rhsEnv.remove(id).add(id, tlhs)
        case _ => rhsEnv
       }
       lhs.typ = Some(apply_subst_typ(s1, lhstyp))
@@ -528,20 +564,23 @@ object TypeInferenceWrapper
        case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_my_generic(t1) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
        case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_generic(t2) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
        case (t1 :TBitWidthVar, t2 :TBitWidthVar) if is_generic(t1) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
-       case (t1: TBitWidthVar, t2: TBitWidth) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
-       case (t1: TBitWidth, t2: TBitWidthVar) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
+
        case (TBitWidthAdd(a1: TBitWidthLen, a2), TBitWidthLen(len)) => unify(a2, TBitWidthLen(len - a1.len), binop)
        case (TBitWidthAdd(a2, a1: TBitWidthLen), TBitWidthLen(len)) => unify(a2, TBitWidthLen(len - a1.len), binop)
        case (TBitWidthLen(len), TBitWidthAdd(a1: TBitWidthLen, a2)) => unify(a2, TBitWidthLen(len - a1.len), binop)
        case (TBitWidthLen(len), TBitWidthAdd(a2, a1: TBitWidthLen)) => unify(a2, TBitWidthLen(len - a1.len), binop)
-       case (TBitWidthAdd(a1: TBitWidthVar, a2: TBitWidthVar), TBitWidthLen(len)) => if (len % 2 != 0) throw new RuntimeException(s"result of bitwidthadd should be even. Consider multiply. Found $len")
-        val (s1, c1) = unify(a1, TBitWidthLen(len / 2), binop)
-        val (s2, c2) = unify(a2, TBitWidthLen(len / 2), binop)
-        (compose_subst(s1, s2), c1 || c2)
-       case (TBitWidthLen(len), TBitWidthAdd(a1: TBitWidthVar, a2: TBitWidthVar)) => if (len % 2 != 0) throw new RuntimeException(s"result of bitwidthadd should be even. Consider multiply. Found $len")
-        val (s1, c1) = unify(a1, TBitWidthLen(len / 2), binop)
-        val (s2, c2) = unify(a2, TBitWidthLen(len / 2), binop)
-        (compose_subst(s1, s2), c1 || c2)
+
+       case (t1: TBitWidthVar, t2: TBitWidth) => if (!occursIn(t1.name, t2)) (List((t1.name, t2)), false) else (List(), false)
+       case (t1: TBitWidth, t2: TBitWidthVar) => if (!occursIn(t2.name, t1)) (List((t2.name, t1)), false) else (List(), false)
+//       case (TBitWidthAdd(a1: TBitWidthVar, a2: TBitWidthVar), TBitWidthLen(len)) => if (len % 2 != 0) throw new RuntimeException(s"result of bitwidthadd should be even. Consider multiply. Found $len")
+//        val (s1, c1) = unify(a1, TBitWidthLen(len / 2), binop)
+//        val (s2, c2) = unify(a2, TBitWidthLen(len / 2), binop)
+//        (compose_subst(s1, s2), c1 || c2)
+//       case (TBitWidthLen(len), TBitWidthAdd(a1: TBitWidthVar, a2: TBitWidthVar)) => if (len % 2 != 0) throw new RuntimeException(s"result of bitwidthadd should be even. Consider multiply. Found $len")
+//        val (s1, c1) = unify(a1, TBitWidthLen(len / 2), binop)
+//        val (s2, c2) = unify(a2, TBitWidthLen(len / 2), binop)
+//        (compose_subst(s1, s2), c1 || c2)
+
 
        case (t1: TBitWidthLen, t2: TBitWidthLen) => if (autocast)
         {
@@ -550,6 +589,9 @@ object TypeInferenceWrapper
         {
          if (t2.len != t1.len) throw UnificationError(t1, t2) else (List(), false)
         }
+       case (t1 :TBitWidth, t2 :TBitWidth) =>
+        constraints = constraints.prepended(ReEq(t1, t2))
+        (List(), binop)
        case (other1, other2) if other1 == other2 =>
         (List(), false)
        case _ => throw UnificationError(a, b)
@@ -628,6 +670,7 @@ object TypeInferenceWrapper
      case TSignVar(name1) => name1 == name
      case TBitWidthVar(name1) => name1 == name
      case TBitWidthAdd(b1, b2) => occursIn(name, b1) || occursIn(name, b2)
+     case TBitWidthSub(b1, b2) => occursIn(name, b1) || occursIn(name, b2)
      case TBitWidthMax(b1, b2) => occursIn(name, b1) || occursIn(name, b2)
      case TBitWidthLen(_) => false
      case _: TSignedNess => false
@@ -774,24 +817,13 @@ object TypeInferenceWrapper
         t match
         {
          case TSizedInt(bitwidth, signedness) =>
-          solver.push()
-          solver.add(context.mkLt(context.mkSub(z3_of_index(end), z3_of_index(start)), z3_of_width(bitwidth)))
-          solver.add(context.mkGe(z3_of_index(start), context.mkInt(0)))
-          solver.add(context.mkGe(z3_of_index(end), context.mkInt(0)))
-          val sat = solver.check()
-          solver.pop()
-          if (sat != Status.SATISFIABLE)
-           throw InvalidBitExtraction(s"$end - $start", bitwidth)
+          constraints = constraints.prepended(ReGe(toConstraint(end), toConstraint(0)))
+          constraints = constraints.prepended(ReGe(toConstraint(start), toConstraint(0)))
+          constraints = constraints.prepended(RelLt(toConstraint(end), toConstraint(bitwidth)))
+          constraints = constraints.prepended(RelLt(toConstraint(start), toConstraint(bitwidth)))
+          constraints = constraints.prepended(RelLt(IntSub(toConstraint(end), toConstraint(start)), toConstraint(bitwidth)))
 
           (s, TSizedInt(TBitWidthAdd(TBitWidthSub(end,start), 1), signedness), en, b.copy(num = fixed_num).copyMeta(b))
-          //NOTE: old implementation. Not getting rid of until confident in Z3
-//         case TSizedInt(widthvar, signedNess: TSignedNess) =>
-//          val width = widthvar.stringRep()
-//          val len = math.abs(end - start) + 1
-//          min_map.addOne((width, len))
-//          if(!is_my_generic(widthvar))
-//           throw LackOfConstraints(e)
-//          (s, TSizedInt(TBitWidthLen(len), signedNess), en, b.copy(num = fixed_num).copyMeta(b))
          case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), TUnsigned())) //TODO Add better error message
         } //TODO
        case trn@ETernary(cond, tval, fval) => val (sc, tc, env1, fixed_cond) = infer(env, cond)

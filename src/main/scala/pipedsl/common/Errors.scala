@@ -198,9 +198,16 @@ object Errors {
     withPos(s"Not enough constraints provided to infer types. Found error at $e", e.pos)
   )
 
+  case class UnsatisfiableConstraint(c :Any) extends RuntimeException(
+    s"Cannot satisfy constraint $c"
+  )
+
   case class IntWidthNotSpecified() extends RuntimeException
 
   case class NotSoGenericAreWe(id :Id, needed :Type) extends RuntimeException(
     withPos(s"Generic type $id should not need to be set to ${needed}.", id.pos)
+  )
+  case class BadConstraintsAtCall(app :EApp) extends RuntimeException(
+    withPos(s"Constraints for $app not satisfied", app.pos)
   )
 }

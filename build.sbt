@@ -24,6 +24,8 @@ libraryDependencies ++= Seq(
   "org.scalactic" %% "scalactic" % "3.2.2",
 )
 
+scalacOptions += "-language:implicitConversions"
+
 //Deployment Options
 assemblyJarName in assembly := "pdl.jar"
 test in assembly := {}

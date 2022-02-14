@@ -728,20 +728,37 @@ object Utilities {
     case s:String => s.startsWith(generic_type_prefix)
   }
 
+  def string_is_int (s :String)  :Boolean=
+    {
+      try
+        {
+          s.toInt; true
+        } catch
+        {
+          case _: Throwable => false
+        }
+    }
+
   /**
    * check if a type represents a generic, and is one of THE generics of the
    * current function. (There are generic types of other called functions, but
    * they are specialized, and can be distinguished)
    */
-  def is_my_generic(t :Any) :Boolean = t match {
-    case TNamedType(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
-    case TSizedInt(l, _) => is_my_generic(t)
-    case TBitWidthAdd(b1, b2) => is_my_generic(b1) || is_my_generic(b2)
-    case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
-    case _:Type => false
-    case name:Id => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
-    case name:String => name.startsWith(generic_type_prefix) && !name.endsWith("*")
-  }
+  def is_my_generic(t :Any, accept_lit :Boolean = false) :Boolean =
+    {
+      val tmp = t match {
+        case TNamedType(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+        case TSizedInt(l, _) => is_my_generic(l, accept_lit)
+        case TBitWidthAdd(b1, b2) => is_my_generic(b1, accept_lit) || is_my_generic(b2, accept_lit)
+        case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+        case _:Type => accept_lit
+        case name:Id => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+        case name:String if string_is_int(name) => accept_lit
+        case name:String => name.startsWith(generic_type_prefix) && !name.endsWith("*")
+      }
+      tmp
+    }
+
 
   val not_gen_pref = "__NOT"
 

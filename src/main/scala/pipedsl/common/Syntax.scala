@@ -6,6 +6,7 @@ import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
 import pipedsl.common.Syntax.EIndConst
+import pipedsl.common.Utilities.{generic_type_prefix, is_my_generic}
 import pipedsl.typechecker.Subtypes
 
 import scala.collection.mutable
@@ -53,6 +54,7 @@ object Syntax {
     {
       val adds: mutable.Map[(String, String), Id] = mutable.HashMap[(String, String), Id]()
       val mins: mutable.Map[String, Int] = mutable.HashMap[String, Int]()
+      var constraints: List[Constraints.Constraint] = List()
     }
   }
 
@@ -357,7 +359,11 @@ object Syntax {
     override def stringRep(): String =
       {
         val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
-        lst.head + "_ADD_" + lst(1)
+        val tmp = "A" + lst.head + "_" + lst(1) + "A"
+        if (is_my_generic(lst.head, accept_lit = true) && is_my_generic(lst(1), accept_lit = true))
+          generic_type_prefix + tmp
+        else
+          tmp
       }
   }
   object TBitWidthAdd
@@ -375,8 +381,11 @@ object Syntax {
     {
       override def stringRep(): String =
         {
-          val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
-          lst.head + "_SUB_" + lst(1)
+          val tmp = "S" + b1.stringRep() + "_" + b2.stringRep() + "S"
+          if (is_my_generic(b1, accept_lit = true) && is_my_generic(b2, accept_lit = true))
+            generic_type_prefix + tmp
+          else
+            tmp
         }
     }
   object TBitWidthSub
@@ -395,7 +404,15 @@ object Syntax {
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
   {
     override def stringRep(): String =
-      b1.stringRep() + "_max_" + b2.stringRep()
+      {
+        val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
+        val tmp = "M" + lst.head + "_" + lst(1) + "M"
+        if (is_my_generic(lst.head, accept_lit = true) && is_my_generic(lst(1), accept_lit = true))
+          generic_type_prefix + tmp
+        else
+          tmp
+      }
+
   }
   object TBitWidthMax
   {

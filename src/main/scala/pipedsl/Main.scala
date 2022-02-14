@@ -78,9 +78,11 @@ object Main {
       val canonProg2 = new CanonicalizePass().run(verifProg)
       //new PrettyPrinter(None).printProgram(canonProg2)
       val canonProg1 = new TypeInference(autocast).checkProgram(canonProg2)
+
       val canonProg = canonProg1//LockOpTranslationPass.run(canonProg1)
       //new PrettyPrinter(None).printProgram(canonProg)
       val basetypes = BaseTypeChecker.check(canonProg, None)
+      FunctionConstraintChecker.check(canonProg)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
       MarkNonRecursiveModulePass.run(nprog)
       val recvProg = SimplifyRecvPass.run(nprog)

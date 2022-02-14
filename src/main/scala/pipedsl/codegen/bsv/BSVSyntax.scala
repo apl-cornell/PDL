@@ -1,11 +1,13 @@
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
+import pipedsl.codegen.bsv.ConstraintsToBluespec.to_provisos
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.{LockImplementation, Syntax}
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities.generic_type_prefix
 
 object BSVSyntax {
 
@@ -18,6 +20,8 @@ object BSVSyntax {
   case class PBits(szName: String) extends Proviso
   case class PAdd(num1 :String, num2 :String, sum :String) extends Proviso
   case class PMin(name :String, min :Int) extends Proviso
+  case class PMax(num1 :String, num2 :String, max :String) extends Proviso
+  case class PEq(num1 :String, num2 :String) extends Proviso
 
   sealed trait BSVType
   case class BNumericType(sz: Int) extends BSVType
@@ -145,7 +149,7 @@ object BSVSyntax {
       case EIndConst(v) => BIndConst(v)
       case EIndAdd(l, r) => BIndAdd(toBSVIndex(l), toBSVIndex(r))
       case EIndSub(l, r) => BIndSub(toBSVIndex(l), toBSVIndex(r))
-      case EIndVar(id) => BIndVar(id.v)
+      case EIndVar(id) => BIndVar("val" + id.v)
     }
 
     def toExpr(e: Expr): BExpr = e match {
@@ -318,7 +322,8 @@ object BSVSyntax {
     private def getProvisos(b :FuncDef) :List[Proviso] =
     {
       val tmp = (b.adds.toList.map(pairid => PAdd(pairid._1._1, pairid._1._2, pairid._2.v)) ++
-        b.mins.toList.map(pair => PMin(pair._1, pair._2))).distinct
+        b.mins.toList.map(pair => PMin(pair._1, pair._2))).distinct ++
+        to_provisos(b.constraints)
       tmp
     }
 
@@ -326,7 +331,7 @@ object BSVSyntax {
     {
       b.templateTypes.map(id =>
         {
-          val tmp = Id(id.v + "_val")
+          val tmp = Id("val" + id.v)
           tmp.typ = Some(TInteger())
           BDecl(toVar(tmp),
             Some(BValueOf(id.v)))

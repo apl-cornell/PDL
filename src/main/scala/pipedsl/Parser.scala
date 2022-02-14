@@ -129,7 +129,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
 
   lazy val indexAtom :P[EIndex] = dlog(positioned
   {
-    iden ^^ { id => EIndVar(id).setType(TInteger()) } |
+    iden ^^ { id => EIndVar(Id(generic_type_prefix + id.v)).setType(TInteger()) } |
     posint ^^ { n => EIndConst(n).setType(TInteger()) }
 
   })("index atom")
