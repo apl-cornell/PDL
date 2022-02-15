@@ -427,7 +427,7 @@ object Syntax {
   case class EIsValid(ex: Expr) extends Expr
   case class EFromMaybe(ex: Expr) extends Expr
   case class EToMaybe(ex: Expr) extends Expr
-  case class EInt(v: Int, base: Int = 10, bits: Int = 32) extends Expr
+  case class EInt(v: String, base: Int = 10, bits: Int = 32) extends Expr
   case class EString(v: String) extends Expr
   case class EBool(v: Boolean) extends Expr
   case class EUop(op: UOp, ex: Expr) extends Expr

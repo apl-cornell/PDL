@@ -159,7 +159,7 @@ object BSVSyntax {
     }
 
     def toExpr(e: Expr): BExpr = e match {
-      case EInt(v, base, bits) => BIntLit(v, base, bits)
+      case EInt(v, base, bits) => BIntLit(v.toInt, base, bits)
       case EBool(v) => BBoolLit(v)
       case EString(v) => BStringLit(v)
       case eu@EUop(_, _) => translateUOp(eu)

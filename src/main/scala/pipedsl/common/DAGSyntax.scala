@@ -242,17 +242,17 @@ object DAGSyntax {
     val intSize = log2(defaultNum)
     condVar.typ = Some(TSizedInt(TBitWidthLen(intSize), TUnsigned()))
     condVar.id.typ = condVar.typ
-    var eTernary = ETernary(conds(defaultNum - 1), EInt(defaultNum - 1, bits = intSize), EInt(defaultNum, bits = intSize))
+    var eTernary = ETernary(conds(defaultNum - 1), EInt((defaultNum - 1).toString, bits = intSize), EInt(defaultNum.toString, bits = intSize))
     for(i <- defaultNum-2 to 0 by -1 ) {
-      eTernary = ETernary(conds(i), EInt(i, bits = intSize), eTernary.copy())
+      eTernary = ETernary(conds(i), EInt(i.toString, bits = intSize), eTernary.copy())
     }
     this.addCmd(CAssign(condVar, eTernary))
     for (i <- 0 until defaultNum) {
-      this.addEdgeTo(condStages(i).head, condSend = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))
-      condStages(i).last.addEdgeTo(joinStage, condRecv = Some (EBinop(EqOp("=="), condVar, EInt(i, bits = intSize))))
+      this.addEdgeTo(condStages(i).head, condSend = Some (EBinop(EqOp("=="), condVar, EInt(i.toString, bits = intSize))))
+      condStages(i).last.addEdgeTo(joinStage, condRecv = Some (EBinop(EqOp("=="), condVar, EInt(i.toString, bits = intSize))))
     }
-    this.addEdgeTo(defaultStages.head, condSend = Some( EBinop(EqOp("=="), condVar, EInt(defaultNum, bits = intSize))))
-    defaultStages.last.addEdgeTo(joinStage, condRecv = Some( EBinop(EqOp("=="), condVar, EInt(defaultNum, bits = intSize))))
+    this.addEdgeTo(defaultStages.head, condSend = Some( EBinop(EqOp("=="), condVar, EInt(defaultNum.toString, bits = intSize))))
+    defaultStages.last.addEdgeTo(joinStage, condRecv = Some( EBinop(EqOp("=="), condVar, EInt(defaultNum.toString, bits = intSize))))
   }
 
   class PMemory(n: Id, t: TMemType) extends Process(n) {

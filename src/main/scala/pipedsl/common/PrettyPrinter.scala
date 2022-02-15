@@ -115,10 +115,10 @@ class PrettyPrinter(output: Option[File]) {
   def printExpr(e: Expr): Unit = pline(printExprToString(e))
   def printExprToString(e: Expr): String = e match {
     case Syntax.EInt(v, base, bits) => (base match {
-      case 2 => "0b" + v.toBinaryString
-      case 8 => "0" + v.toOctalString
-      case 10 => v.toString
-      case 16 => "0x" + v.toHexString
+      case 2 => "0b" + v
+      case 8 => "0" + v
+      case 10 => v
+      case 16 => "0x" + v
     }) + "<" + bits.toString + ">"
     case Syntax.EBool(v) => v.toString
     case Syntax.EUop(op, ex) => op.op + "(" + printExprToString(ex) + ")"
