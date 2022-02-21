@@ -53,7 +53,6 @@ object ConstraintsToBluespec
     memo.get(c) match
     {
      case Some(value) =>
-      println(s"looking up: $c, found: $value")
       (List(), value)
      case None => val tmp = c match
      {
@@ -64,7 +63,6 @@ object ConstraintsToBluespec
       case IntMax(a, b) => helper(a, b, PMax)
      }
      memo.addOne(c, tmp._2)
-      println(s"setting home of $c to ${tmp._2}")
      tmp
     }
   }

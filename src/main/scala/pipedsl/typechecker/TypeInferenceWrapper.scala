@@ -265,11 +265,7 @@ object TypeInferenceWrapper
       val template_vals_env = templated.foldLeft(funEnv)((env, a) => env.add(without_prefix(a), TInteger()))
       val inEnv = f.args.foldLeft[Environment[Id, Type]](template_vals_env)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
-
-       constraints = reduce_constraint_list(constraints)
-       println(f.name)
-       constraints.foreach(println)
-       println("++++++++++++++++++++++++++++++++++++++")
+      constraints = reduce_constraint_list(constraints)
       solver.push()
       constraints.foreach(c => solver.add(to_z3(context, c)))
       val stat = solver.check()
