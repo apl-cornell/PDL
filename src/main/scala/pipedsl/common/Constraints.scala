@@ -30,6 +30,18 @@ object Constraints
   case class IntSub(a :IntExpr, b :IntExpr) extends IntExpr
   case class IntMax(a :IntExpr, b :IntExpr) extends IntExpr
 
+  object IntAdd
+   {
+    def apply(b1 :IntExpr, b2 :IntExpr) :IntAdd =
+     {
+      (b1, b2) match {
+       case _ if (b1.toString < b2.toString) => new IntAdd(b2, b1)
+       case _ => new IntAdd(b1, b2)
+      }
+     }
+   }
+
+
   case class RelLt(a :IntExpr, b :IntExpr) extends Constraint
   case class ReGe(a :IntExpr, b :IntExpr) extends  Constraint
   case class ReEq(a :IntExpr, b :IntExpr) extends Constraint

@@ -266,7 +266,10 @@ object TypeInferenceWrapper
       val inEnv = f.args.foldLeft[Environment[Id, Type]](template_vals_env)((env, a) => env.add(a.name, a.typ))
       val (fixed_cmd, _, subst) = checkCommand(f.body, inEnv.asInstanceOf[TypeEnv], List())
 
-      constraints = reduce_constraint_list(constraints)
+       constraints = reduce_constraint_list(constraints)
+       println(f.name)
+       constraints.foreach(println)
+       println("++++++++++++++++++++++++++++++++++++++")
       solver.push()
       constraints.foreach(c => solver.add(to_z3(context, c)))
       val stat = solver.check()
@@ -274,7 +277,7 @@ object TypeInferenceWrapper
       stat match
       {
        case Status.UNSATISFIABLE |
-            Status.UNKNOWN => throw new RuntimeException("YOU HAVE FUCKED UP IN THE GRANDEST OF WAYS")
+            Status.UNKNOWN => throw new RuntimeException("Too many constraints!!")//todo throw too many constraints!!
        case Status.SATISFIABLE =>
       }
       val hash = mutable.HashMap.from(subst)
@@ -817,11 +820,13 @@ object TypeInferenceWrapper
         t match
         {
          case TSizedInt(bitwidth, signedness) =>
-          constraints = constraints.prepended(ReGe(toConstraint(end), toConstraint(0)))
+          //constraints = constraints.prepended(ReGe(toConstraint(end), toConstraint(0)))
           constraints = constraints.prepended(ReGe(toConstraint(start), toConstraint(0)))
-          constraints = constraints.prepended(RelLt(toConstraint(end), toConstraint(bitwidth)))
-          constraints = constraints.prepended(RelLt(toConstraint(start), toConstraint(bitwidth)))
-          constraints = constraints.prepended(RelLt(IntSub(toConstraint(end), toConstraint(start)), toConstraint(bitwidth)))
+          constraints = constraints.prepended(ReGe(toConstraint(end), toConstraint(start)))
+          constraints = constraints.prepended(ReGe(toConstraint(bitwidth), toConstraint(end)))
+//          constraints = constraints.prepended(RelLt(toConstraint(end), toConstraint(bitwidth)))
+//          constraints = constraints.prepended(RelLt(toConstraint(start), toConstraint(bitwidth)))
+//          constraints = constraints.prepended(RelLt(IntSub(toConstraint(end), toConstraint(start)), toConstraint(bitwidth)))
 
           (s, TSizedInt(TBitWidthAdd(TBitWidthSub(end,start), 1), signedness), en, b.copy(num = fixed_num).copyMeta(b))
          case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), TUnsigned())) //TODO Add better error message
