@@ -405,7 +405,7 @@ object TypeInferenceWrapper
       val retS = compose_subst(sub, s)
       (ce.copy(exp = fixed).copyMeta(ce), e.apply_subst_typeenv(retS), retS)
      case CCheckSpec(_) => (c, env, sub)
-     case c@CVerify(handle, args, preds, update) =>
+     case c@CVerify(handle, args, preds, update, _) =>
       update.map(c =>
       {
        infer(env, c)
@@ -418,7 +418,7 @@ object TypeInferenceWrapper
        (tempSub, fixed::sublst._2)
       })
       (c.copy(args = a.reverse), env, s)
-     case c@CUpdate(_, _, args, _) =>
+     case c@CUpdate(_, _, args, _, _) =>
       val (s, a) = args.foldLeft(sub, List[Expr]())((sublst, exp) => {
        val (s, t, e, fixed) = infer(env, exp)
        val tempSub = compose_subst(sublst._1, s)
@@ -426,7 +426,7 @@ object TypeInferenceWrapper
        (tempSub, fixed::sublst._2)
       })
       (c.copy(args = a.reverse), env, s)
-     case CInvalidate(_) => (c, env, sub)
+     case CInvalidate(_, _) => (c, env, sub)
      case ct@CTBar(c1, c2) => val (fixed1, e, s) = checkCommand(c1, env, sub)
       val (fixed2, e2, s2) = checkCommand(c2, e, s)
       (ct.copy(c1 = fixed1, c2 = fixed2).copyMeta(ct), e2, s2)
@@ -825,14 +825,9 @@ object TypeInferenceWrapper
         t match
         {
          case TSizedInt(bitwidth, signedness) =>
-          //constraints = constraints.prepended(ReGe(toConstraint(end), toConstraint(0)))
           constraints = constraints.prepended(ReGe(toConstraint(start), toConstraint(0)))
           constraints = constraints.prepended(ReGe(toConstraint(end), toConstraint(start)))
           constraints = constraints.prepended(ReGe(toConstraint(bitwidth), toConstraint(end)))
-//          constraints = constraints.prepended(RelLt(toConstraint(end), toConstraint(bitwidth)))
-//          constraints = constraints.prepended(RelLt(toConstraint(start), toConstraint(bitwidth)))
-//          constraints = constraints.prepended(RelLt(IntSub(toConstraint(end), toConstraint(start)), toConstraint(bitwidth)))
-
           (s, TSizedInt(TBitWidthAdd(TBitWidthSub(end,start), 1), signedness), en, b.copy(num = fixed_num).copyMeta(b))
          case b => throw UnificationError(b, TSizedInt(TBitWidthLen(32), TUnsigned())) //TODO Add better error message
         } //TODO

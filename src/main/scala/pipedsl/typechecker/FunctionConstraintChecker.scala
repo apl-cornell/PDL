@@ -48,8 +48,8 @@ object FunctionConstraintChecker
      case CAssign(lhs, rhs) => _checkExpr(rhs)
      case CRecv(lhs, rhs) => _checkExpr(rhs)
      case CSpecCall(handle, pipe, args) => args.foreach(_checkExpr)
-     case CVerify(handle, args, preds, update) => args.foreach(_checkExpr)
-     case CUpdate(newHandle, handle, args, preds) => args.foreach(_checkExpr)
+     case CVerify(handle, args, preds, update, _) => args.foreach(_checkExpr)
+     case CUpdate(newHandle, handle, args, preds, _) => args.foreach(_checkExpr)
      case CPrint(args) => args.foreach(_checkExpr)
      case COutput(exp) => _checkExpr(exp)
      case CReturn(exp) => _checkExpr(exp)
@@ -120,7 +120,7 @@ object FunctionConstraintChecker
        }
        solv.pop()
       }
-     case ECall(_, _, args) => args.foreach(_checkExpr)
+     case ECall(_, _, args, _) => args.foreach(_checkExpr)
      case ECast(_, exp) => _checkExpr(exp)
      case _ => ()
     }
