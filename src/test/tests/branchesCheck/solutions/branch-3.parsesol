@@ -1,0 +1,19 @@
+pipe test(cond:int<2>,addr:int<16>)[mem:sint<32>[16]<a1, a1>] {
+  start(mem);
+  if ( (cond == 0<-1>) ) {
+      sint<32> wdata <- mem[addr]<, >;
+  } else {
+      sint<32> wdata <- 3<-1>;
+  }
+  end(mem);
+  ---
+  x = (cond == 0<-1>) ? wdata : (wdata + 1<-1>);
+  print(x);
+  output true;
+}
+circuit {
+  ti = memory(sint<32>,16,1);
+  tr = regfile(sint<32>, 5,1);
+  c = new test[ti];
+call c(0<2>,10<16>);
+}

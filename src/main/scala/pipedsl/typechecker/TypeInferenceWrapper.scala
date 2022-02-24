@@ -52,6 +52,8 @@ object TypeInferenceWrapper
    case TVoid() => inType
    case TSigned() => inType
    case TUnsigned() => inType
+   case TMaybe(btyp) => TMaybe(subst_into_type(typevar, toType, btyp))
+   case TRecType(_,_) => inType //TODO
    case TFun(args, ret) => TFun(args.map(a => subst_into_type(typevar, toType, a)), subst_into_type(typevar, toType, ret)).setPos(inType.pos)
    case TNamedType(name) => if (name == typevar) toType else inType
    case TSignVar(name) => if (name == typevar) toType else inType
@@ -92,7 +94,6 @@ object TypeInferenceWrapper
      }
    }
   }
-
 
   class TypeInference(autocast: bool)
    {
@@ -433,6 +434,9 @@ object TypeInferenceWrapper
      case CSpecCall(h,_,_) => //TODO maybe wrong?
       //add spec handle type to env
       (c, env.add(h.id, h.typ.get).asInstanceOf[TypeEnv], sub)
+     case CCheckpoint(handle, lock) =>
+      //add checkpoint handle type to env
+      (c, env.add(handle.id, handle.typ.get).asInstanceOf[TypeEnv], sub)
      case co@COutput(exp) =>
       val (s, t, e, fixed) = infer(env, exp)
       val tempSub = compose_subst(sub, s)
@@ -614,6 +618,9 @@ object TypeInferenceWrapper
       val ltyp = TLockedMemType(mtyp, None, impl)
       c.typ = Some(ltyp)
       (ltyp, tenv, c)
+     case CirRegister(elemTyp, _) => val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
+      c.typ = Some(mtyp)
+      (mtyp, tenv, c)
      case CirRegFile(elemTyp, addrSize) => val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)
       (mtyp, tenv, c)
@@ -661,6 +668,7 @@ object TypeInferenceWrapper
      case TString() => false
      case TVoid() => false
      case TBool() => false
+     case TMaybe(t) => occursIn(name, t)
      case TFun(args, ret) => args.foldLeft[bool](false)((b, t) => b || occursIn(name, t)) || occursIn(name, ret)
      case _: TRecType => false
      case _: TMemType => false
@@ -675,6 +683,7 @@ object TypeInferenceWrapper
      case _: TSignedNess => false
      case _: TObject => false //TODO need?
      case _: TRequestHandle => false //TODO need?
+     case TLockedMemType(_, _, _) => false
     }
 
     private def apply_subst_substs(subst: Subst, inSubst: Subst): Subst = inSubst.foldLeft[Subst](List())((s, c) => s :+ ((c._1, apply_subst_typ(subst, c._2))))
@@ -866,11 +875,11 @@ object TypeInferenceWrapper
         val retTyp = apply_subst_typ(retSubst, retType)
         ap.typ = Some(retTyp)
         (retSubst, retTyp, retEnv, ap.copy(args = fixed_arg_list).copyMeta(ap))
-       case ca@ECall(mod, name, args) if name.isEmpty =>
+       case ca@ECall(mod, name, args, isAtomic) if name.isEmpty =>
         if (!env(mod).isInstanceOf[TModType]) throw UnexpectedType(e.pos, "Module Call", "TModType", env(mod))
         val expectedType = getArrowModType(env(mod).asInstanceOf[TModType])
         substIntoCall(expectedType, ca, args, env)
-       case ca@ECall(mod, method, args) if method.isDefined =>
+       case ca@ECall(mod, method, args, isAtomic) if method.isDefined =>
         if (!env(mod).isInstanceOf[TObject]) throw UnexpectedType(e.pos, "Object Call", "TObject", env(mod))
         val expectedType = env(mod).asInstanceOf[TObject].methods(method.get)._1
         substIntoCall(expectedType, ca, args, env)

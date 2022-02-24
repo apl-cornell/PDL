@@ -123,7 +123,10 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   // int<32> w;
   // m[a, 0b1100] <- w;
   lazy val memAccess: P[Expr] = positioned {
-    iden ~ angular("atomic" | "a").? ~ brackets(expr ~ ("," ~> expr).?) ^^ { case m ~ a ~ (i ~ n) => EMemAccess(m, i, n, None, None, a.isDefined) }
+    iden ~ angular("atomic" | "a").? ~ brackets(expr ~ ("," ~> expr).?) ^^ {
+      case m ~ a ~ (i ~ n) => EMemAccess(m, i, n, None, None, a.isDefined) } |
+      iden ~ angular("atomic" | "a").? <~ brackets(parseEmpty) ^^ {
+        case m ~ a => EMemAccess(m, EInt(0), None, None, None, a.isDefined) }
   }
 
 
@@ -173,13 +176,14 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val methodCall: P[ECall] = positioned {
-    iden ~ "." ~ iden ~ parens(repsep(expr, ",")) ^^ { case i ~ _  ~ n ~ args => ECall(i, Some(n), args) }
+    iden ~ "." ~ iden ~ parens(repsep(expr, ",")) ^^ { case i ~ _  ~ n ~ args => ECall(i, Some(n), args, false) }
   }
 
   lazy val simpleAtom: P[Expr] = positioned {
-    "call" ~> iden ~ parens(repsep(expr, ",")) ^^ { case i ~ args => ECall(i, None, args) } |
+     "call" ~> angular("atomic" | "a").? ~ iden ~ parens(repsep(expr, ",")) ^^ { case a ~ i ~ args => ECall(i, None, args, a.isDefined) } |
       methodCall |
       not ~ simpleAtom ^^ { case n ~ e => EUop(n, e) } |
+      binv ~ simpleAtom ^^ { case n ~ e => EUop(n, e) } |
       neg |
       cast |
       mag |
@@ -253,8 +257,8 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val lhs: Parser[Expr] = memAccess | variable
 
   lazy val simpleCmd: P[Command] = positioned {
-    speccall |
-      typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
+    speccall | checkPoint |
+    typ.? ~ variable ~ "=" ~ expr ^^ { case t ~ n ~ _ ~ r =>  n.typ = t; CAssign(n, r) } |
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
@@ -285,7 +289,17 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     block | conditional | split
   }
 
-  //TODO better syntax for these
+  lazy val checkPoint: P[Command] = positioned {
+   "checkpoint" ~> parens(iden) ^^ {
+      case lid => {
+        val cid = Id("_checkpoint_" + lid.v)
+        val handleVar = EVar(cid)
+        handleVar.typ = Some(TRequestHandle(lid, RequestType.Checkpoint))
+        cid.typ = handleVar.typ
+        CCheckpoint(handleVar, lid)
+      }
+    }
+  }
   lazy val check: P[Command] = positioned {
     "spec_barrier()" ^^ { _ => CCheckSpec(true) } |
     "spec_check()" ^^ { _ => CCheckSpec(false) }
@@ -300,13 +314,13 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
         CSpecCall(sv, i, args)
     } |
     iden ~ "<-" ~ "update" ~ parens(variable ~ "," ~ repsep(methodCall | expr, ",")) ^^ {
-      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List()) }
+      case ni ~ _ ~ _ ~ (oi ~ _ ~ e) => CUpdate(EVar(ni), oi, e, List(), List()) }
   }
 
   lazy val resolveSpec: P[Command] = positioned {
     "verify" ~> parens(variable ~ "," ~ repsep(expr,",")) ~ braces(methodCall).? ^^ {
-      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u) } |
-    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i))
+      case i ~ _ ~ e ~ u => CVerify(i, e, List(), u, List()) } |
+    "invalidate" ~> parens(variable) ^^ (i => CInvalidate(i, List()))
   }
 
   lazy val casestmt: P[CaseObj] = positioned {
@@ -503,6 +517,13 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
     }
   }
 
+  lazy val creg: P[CirExpr] = positioned {
+    "register" ~> parens(sizedInt ~ ("," ~> posint).?)^^ { case elem ~ init =>
+      val initval = if (init.isDefined) { init.get } else { 0 }
+      CirRegister(elem, initval)
+    }
+  }
+
   lazy val cmem: P[CirExpr] = positioned {
     "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^
       { case elem ~ _ ~
@@ -534,7 +555,7 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
   }
 
   lazy val cconn: P[Circuit] = positioned {
-    iden ~ "=" ~ (cnew | cmem | crf | clockrf | clockmem | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
+    iden ~ "=" ~ (cnew | creg | cmem | crf | clockrf | clockmem | clock | ccall) ^^ { case i ~ _ ~ n => CirConnect(i, n)}
   }
 
   lazy val cexpr: P[Circuit] = positioned {

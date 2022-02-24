@@ -5,6 +5,7 @@ import pipedsl.common.Syntax._
 import Subtypes._
 import TypeChecker.TypeChecks
 import Environments.Environment
+import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, is_generic, specialize}
 
@@ -34,6 +35,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   /**
    * This does the base type checking and well-fomedness checking for a given function with
    * an environment (that may have other function types defined already).
+   * NOTE: THIS NO LONGER CHECKS ANYTHING. Type Inference effectively does the type checking (it
+   * isn't safe to call the checking code here again due to polymorphic types).
    * @param f - The function definition to check.
    * @param tenv - The current type environment (which only includes already defined functions)
    * @return - tenv plus a new mapping from f's name to f's type
@@ -42,13 +45,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
     val fenv = f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
     val ftyp = TFun(typList, f.ret)
-//    val e1 = checkCommand(f.body, fenv)
-//    val rt = checkFuncWellFormed(f.body, e1)
-//    if (rt.isEmpty) {
-//      throw MalformedFunction(f.pos, "Missing return statement")
-//    } else if (!areEqual(ftyp.ret, rt.get)) {
-//      throw UnexpectedType(f.pos, s"${f.name} return type", ftyp.toString(), rt.get)
-//    }
     tenv.add(f.name, ftyp)
   }
 
@@ -99,7 +95,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
-    checkCommand(m.body, bodyEnv)
+    checkCommand(m.name, m.body, bodyEnv)
     outEnv
   }
 
@@ -179,6 +175,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(newtyp)
       (newtyp, tenv)
     }
+    case CirRegister(elemTyp, _) => {
+      val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
     case CirRegFile(elemTyp, addrSize) => {
       val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)
@@ -239,21 +240,21 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
    * @param tenv
    * @return
    */
-  def checkCommand(c: Command, tenv: Environment[Id, Type]): Environment[Id, Type] = c match {
+  def checkCommand(modId: Id, c: Command, tenv: Environment[Id, Type]): Environment[Id, Type] = c match {
     case CSeq(c1, c2) => {
-      val e2 = checkCommand(c1, tenv)
-      checkCommand(c2, e2)
+      val e2 = checkCommand(modId, c1, tenv)
+      checkCommand(modId, c2, e2)
     }
     case CTBar(c1, c2) => {
-      val e2 = checkCommand(c1, tenv)
-      checkCommand(c2, e2)
+      val e2 = checkCommand(modId, c1, tenv)
+      checkCommand(modId, c2, e2)
     }
     case CSplit(cases, default) => {
-      var endEnv = checkCommand(default, tenv)
+      var endEnv = checkCommand(modId, default, tenv)
       for (c <- cases) {
         val (condTyp, cenv) = checkExpression(c.cond, tenv, None)
         condTyp.matchOrError(c.cond.pos, "case condition", "boolean") { case _: TBool => () }
-        val benv = checkCommand(c.body, cenv)
+        val benv = checkCommand(modId, c.body, cenv)
         endEnv = endEnv.intersect(benv)
       }
       endEnv
@@ -261,8 +262,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case CIf(cond, cons, alt) => {
       val (condTyp, cenv) = checkExpression(cond, tenv, None)
       condTyp.matchOrError(cond.pos, "if condition", "boolean") { case _: TBool => () }
-      val etrue = checkCommand(cons, cenv)
-      val efalse = checkCommand(alt, cenv)
+      val etrue = checkCommand(modId, cons, cenv)
+      val efalse = checkCommand(modId, alt, cenv)
       etrue.intersect(efalse)
     }
     case CAssign(lhs, rhs) => {
@@ -294,6 +295,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               }
           }
         }
+        case _ => throw UnexpectedType(c.pos, "SpecCall Mod", "Module Type", mtyp)
       }
       //add spec handle type to env
       tenv.add(h.id, h.typ.get)
@@ -302,11 +304,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       {
         case _: TMemType => tenv
         case _: TLockedMemType => tenv
+        case _: TModType => tenv
       }
     case CLockEnd(mod) => tenv(mod).matchOrError(mod.pos, "lock reservation start", "Locked Memory or Module Type")
       {
         case _: TMemType => tenv
         case _: TLockedMemType => tenv
+        case _: TModType => tenv
       }
     case CLockOp(mem, _, _, _, _) =>
       tenv(mem.id).matchOrError(mem.pos, "lock operation", "Locked Memory or Module Type")
@@ -322,12 +326,24 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
               case _ => throw UnexpectedType(mem.pos, s"lock operation $c", "ubit<" + memt.addrSize + ">", idxt)
             }
           }
+        case t: TModType =>
+          mem.id.typ = Some(t)
+          if(mem.id == modId){
+            throw RecursiveCallLockAcquisition(mem.pos)
+          }
+          tenv
       }
-    case CVerify(handle, args, preds, upd) =>
+    case CVerify(handle, args, preds, upd, cHandles) =>
       //if there's an update clause check that stuff:
       if (upd.isDefined) {
         checkExpression(upd.get, tenv, None)
       }
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -355,11 +371,18 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                     throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
                   }
               }
+            case _ =>  throw UnexpectedType(c.pos, "Spec Verify", "Module Type", mtyp)
           }
           tenv
       }
-    case CUpdate(newHandle, handle, args, preds) =>
+    case CUpdate(newHandle, handle, args, preds, cHandles) =>
       //TODO solve the fact that this is just verify copypasta-ed
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       //check that handle has been created via speccall and that arg types line up
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
@@ -387,18 +410,33 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
                     throw UnexpectedSubtype(c.pos, p.toString, expectedT, atyp)
                   }
               }
+            case _ =>  throw UnexpectedType(c.pos, "Spec Update", "Module Type", mtyp)
           }
           newHandle.typ = Some(htyp)
           newHandle.id.typ = Some(htyp)
           tenv.add(newHandle.id, htyp)
       }
-    case CInvalidate(handle) =>
+    case CInvalidate(handle, cHandles) =>
       val (htyp, _) = checkExpression(handle, tenv, None)
       htyp.matchOrError(handle.pos, "Spec Verify Op", "Speculation Handle") {
         case TRequestHandle(_, RequestType.Speculation) => ()
       }
+      cHandles.foreach(c => {
+        val (ctyp, _) = checkExpression(c, tenv, None)
+        ctyp.matchOrError(handle.pos, "Spec Verify Op", "Checkpiont Handle") {
+          case TRequestHandle(_, RequestType.Checkpoint) => ()
+        }
+      })
       tenv
     case CCheckSpec(_) => tenv
+    case CCheckpoint(handle, mod) => tenv(mod).matchOrError(mod.pos, "lock checkpoint",
+      "Locked Memory or Module Type that supports Checkpoint Functionality ")
+      {
+        case t: TLockedMemType if LockImplementation.getCheckpoint(t.limpl).isDefined &&
+          LockImplementation.getRollback(t.limpl).isDefined =>
+          mod.typ = Some(t)
+      }
+      tenv.add(handle.id, handle.typ.get)
     case COutput(exp) => {
       checkExpression(exp, tenv, None)
       tenv
@@ -460,9 +498,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         }
         case BitOp("<<", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "shift left", "sized number", t1)
         }
         case BitOp(">>", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(_, _)) => (TSizedInt(l1, u1), env2)
+          case (_, _) => throw UnexpectedType(e.pos, "shift right", "sized number", t1)
         }
         case NumOp("*", _) => (t1, t2) match {
           case (TSizedInt(l1, u1), TSizedInt(l2, u2)) if u1 == u2 =>
@@ -574,7 +614,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }
     }
-    case ECall(mod, name, args) => {
+    case ECall(mod, name, args, isAtomic) => {
       val mtyp = tenv(mod)
       mod.typ = Some(mtyp)
       mtyp match

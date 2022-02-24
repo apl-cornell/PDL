@@ -83,8 +83,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           case None => Set()
         }
         assignReadLocks(id, e, vars, nextVars)
-      case (EVar(id), ECall(_,_,_)) if isRecv => (vars, nextVars + id)
-      case (EVar(id), ECall(mod, Some(method), args)) =>
+      case (EVar(id), ECall(_,_,_,_)) if isRecv => (vars, nextVars + id)
+      case (EVar(id), ECall(mod, Some(method), args, _)) =>
         args.foreach(a => checkExpr(a, vars))
         mod.typ.get match {
           case TObject(_, _, methods) => methods(method)._2 match {
@@ -93,7 +93,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           }
           case t@_ => throw UnexpectedType(mod.pos, "External Call", "Object Type", t)
         }
-      case (EVar(_), ECall(_, None, _)) => //this is calling another PDL pipeline, not allowed in assign
+      case (EVar(_), ECall(_, None, _, _)) => //this is calling another PDL pipeline, not allowed in assign
         throw UnexpectedAsyncReference(rhs.pos, "no calls in assign")
       case (EVar(id), _) =>
         val (t1, nt1) = if (isRecv) { (vars, nextVars + id) } else { (vars + id, nextVars) }
@@ -185,7 +185,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           throw UnexpectedAsyncReference(a.pos, a.toString)
         })
         (vars, nextVars + handle.id)
-      case CVerify(handle, args, preds, upd) =>
+      case CVerify(handle, args, preds, upd, _) =>
         //handle and args must be available this cycle
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
@@ -200,7 +200,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
           }
         }
         (vars, nextVars)
-      case CUpdate(nh, handle, args, preds) =>
+      case CUpdate(nh, handle, args, preds, _) =>
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
@@ -209,11 +209,12 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         })
         //just don't check preds they get inserted by the compiler automatically
         (vars, nextVars + nh.id)
-      case CInvalidate(handle) =>
+      case CInvalidate(handle, _) =>
         if(checkExpr(handle, vars) != Combinational) {
           throw UnexpectedAsyncReference(handle.pos, handle.toString)
         }
         (vars, nextVars)
+      case CCheckpoint(handle,_) => (vars, nextVars + handle.id)
       case CCheckSpec(_) => (vars, nextVars)
       case COutput(exp) =>
         if (checkExpr(exp, vars) != Combinational) {
@@ -265,6 +266,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         case (Combinational, Combinational) => Combinational
         case (Combinational, _) => throw UnexpectedAsyncReference(e2.pos, e2.toString)
         case (_, Combinational) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
+        case (_,_) => throw UnexpectedAsyncReference(e1.pos, e1.toString)
       }
     case ERecAccess(rec, _) => checkExpr(rec, vars, isRhs) match {
       case Combinational => Combinational
@@ -311,7 +313,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })
       Combinational
-    case ECall(mod, name, args) =>
+    case ECall(mod, name, args, isAtomic) =>
       args.foreach(a => if(checkExpr(a, vars) != Combinational) {
         throw UnexpectedAsyncReference(a.pos, a.toString)
       })

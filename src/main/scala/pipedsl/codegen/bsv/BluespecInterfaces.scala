@@ -2,6 +2,7 @@ package pipedsl.codegen.bsv
 
 import BSVSyntax._
 import pipedsl.common.Errors.UnexpectedBSVType
+import pipedsl.common.LockImplementation
 
 class BluespecInterfaces() {
 
@@ -82,17 +83,20 @@ class BluespecInterfaces() {
   private val fifoFirstMethodName = "first"
 
   private val lockHandleName = "LockId"
-  val defaultLockHandleSize = 4
+  private val chkpointHandleName = "LockId"
 
-  def getDefaultLockHandleType: BSizedType = getLockHandleType(defaultLockHandleSize)
+  def getDefaultLockHandleType: BSizedType = getLockHandleType(LockImplementation.defaultLockHandleSize)
+  def getDefaultChkHandleType: BSizedType = getChkHandleType(LockImplementation.defaultChkHandleSize)
 
   def getLockHandleType(sz: Integer): BSizedType = {
     BSizedType(lockHandleName, List(sz))
   }
+  def getChkHandleType(sz: Integer): BSizedType = {
+    BSizedType(chkpointHandleName, List(sz))
+  }
 
   private val lockRegionType = "Reg"
   private val lockRegionModule = "mkReg"
-  private val lockType = "Lock"
 
   def getLockRegionType: BInterface = {
     BInterface(lockRegionType, List(BVar("busy", BBool)))
@@ -168,6 +172,10 @@ class BluespecInterfaces() {
     } else {
       BInterface(combMemType,  List(BVar("addrtyp", addr), BVar("elemtyp", data)))
     }
+  }
+
+  def getRegister(initVal: Int): BModule = {
+    BModule("mkRegister", List(BUnsizedInt(initVal)))
   }
 
   def getMem(memtyp: BInterface, initFile: Option[String]): BModule = {
@@ -261,17 +269,27 @@ class BluespecInterfaces() {
   def getFifoType(typ: BSVType): BInterface = {
     BInterface(fifoType, List(BVar("elemtyp", typ)))
   }
-
+  def getOutputQType(ttyp: BSVType, dtyp: BSVType): BInterface = {
+    BInterface("OutputQ", List(BVar("tagtyp", ttyp), BVar("datatyp", dtyp)));
+  }
   def getFifo: BModule = BModule(fifoModuleName, List())
   def getNBFifo: BModule = BModule(fifoNBModuleName, List())
+  def getBypassFifo: BModule = BModule("mkBypassFIFOF", List())
+  def getOutputQ(init: BExpr): BModule = BModule("mkOutputFIFOF", List(init))
   def getFifoDeq(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoDequeuMethodName, List())
   }
   def getFifoEnq(f: BVar, data: BExpr): BMethodInvoke = {
     BMethodInvoke(f, fifoEnqueueMethodName, List(data))
   }
-  def getFifoPeek(f: BVar): BMethodInvoke = {
+  def getFifoFirst(f: BVar): BMethodInvoke = {
     BMethodInvoke(f, fifoFirstMethodName, List())
+  }
+  def getOutCanWrite(q: BVar, tag: BExpr): BMethodInvoke = {
+    BMethodInvoke(q, "canWrite", List(tag));
+  }
+  def getOutCanRead(q: BVar, tag: BExpr): BMethodInvoke = {
+    BMethodInvoke(q, "canRead", List(tag));
   }
 
   private val specHandleName = "SpecId"

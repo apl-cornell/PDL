@@ -67,13 +67,14 @@ object Utilities {
       val ret_vars = ret match { case Some(value) => Set(value.id) case None => Set() }
       mem_vars ++ arg_vars ++ ret_vars
     case CSpecCall(handle, pipe, args) => args.foldLeft(Set(pipe, handle.id))((s, a) => s ++ getUsedVars(a))
-    case CVerify(handle, args, preds, upd) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
+    case CVerify(handle, args, preds, upd, cHandles) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
-      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
-    case CUpdate(nh, handle, args, preds) =>
+      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) ++ cHandles.map(v => v.id) + handle.id
+    case CUpdate(nh, handle, args, preds, cHandles) =>
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
-        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id + nh.id
-    case CInvalidate(handle) => Set(handle.id)
+        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id + nh.id ++ cHandles.map(v => v.id)
+    case CInvalidate(handle, cHandles) => Set(handle.id) ++ cHandles.map(v => v.id)
+    case CCheckpoint(handle, _) => Set(handle.id)
     case CCheckSpec(_) => Set()
     case COutput(exp) => getUsedVars(exp)
     case CReturn(exp) => getUsedVars(exp)
@@ -125,7 +126,8 @@ object Utilities {
     case IAssignLock(handle, _, _) => Set(handle.id)
     case ICheckLockOwned(_, _, outHandle) => Set(outHandle.id)
     case CSpecCall(handle, _, _) => Set(handle.id)
-    case CUpdate(newHandle, _, _, _) => Set(newHandle.id)
+    case CUpdate(newHandle, _, _, _, _) => Set(newHandle.id)
+    case CCheckpoint(handle, _) => Set(handle.id)
     case _ => Set()
   }
 
@@ -194,17 +196,17 @@ object Utilities {
       case None => Set()
     })
     case ILockNoOp(_) => Set()
-    case ICheckLockFree(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
-    case CVerify(handle, args, preds, upd) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
+    case CCheckpoint(_, _) => Set()
+    case CVerify(handle, args, preds, upd, cHandles) => (if (upd.isDefined) getUsedVars(upd.get) else Set()) ++
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
-      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
-    case CUpdate(nh, handle, args, preds) =>
+      preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) ++ cHandles.map(v => v.id) + handle.id
+    case CUpdate(_, handle, args, preds, cHandles) =>
       args.foldLeft(Set[Id]())((s, a) => s ++ getUsedVars(a)) ++
-        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id
-    case CInvalidate(handle) => Set(handle.id)
+        preds.foldLeft(Set[Id]())((s, p) => s ++ getUsedVars(p)) + handle.id ++ cHandles.map(v => v.id)
+    case CInvalidate(handle, cHandles) => Set(handle.id) ++ cHandles.map(v => v.id)
     case CCheckSpec(_) => Set()
     case CEmpty() => Set()
   }
@@ -231,7 +233,7 @@ object Utilities {
       s ++ getUsedVars(a)
     })
     //functions are also externally defined
-    case ECall(id, _, args) => args.foldLeft[Set[Id]](Set(id))((s, a) => {
+    case ECall(id, _, args, _) => args.foldLeft[Set[Id]](Set[Id]())((s, a) => {
       s ++ getUsedVars(a)
     })
     case EVar(id) => id.typ = e.typ; Set(id)
@@ -311,9 +313,9 @@ object Utilities {
       case CIf(_, cons, alt) => hasSpecCmd(cons) || hasSpecCmd(alt)
       case CSpecCall(_, _, _) => true
       case CCheckSpec(_) => true
-      case CVerify(_, _, _, _) => true
-      case CUpdate(_, _, _, _) => true
-      case CInvalidate(_) => true
+      case CVerify(_, _, _, _, _) => true
+      case CUpdate(_, _, _, _, _) => true
+      case CInvalidate(_, _) => true
       case CSplit(cases, default) => cases.exists(c => hasSpecCmd(c.body)) || hasSpecCmd(default)
       case ICondCommand(_, cs) => cs.exists(hasSpecCmd)
       case _: IUpdate => true
@@ -384,6 +386,24 @@ object Utilities {
   def andExpr(condL: Option[Expr], condR: Option[Expr]): Option[Expr] = (condL, condR) match {
     case (None, None) => None
     case (Some(e1), Some(e2)) => Some(AndOp(e1, e2))
+    case (Some(_), None) => condL
+    case (None, Some(_)) => condR
+  }
+
+  /**
+   * Produces a new Expression object that
+   * represents the disjunction of the arguments.
+   * If either argument is missing then the result
+   * is just the other argument. If neither are provided, the result
+   * is of None type.
+   *
+   * @param condL The left expression
+   * @param condR The right expression
+   * @return Some(The disjunction of left and right) or None if neither are provided
+   */
+  def orExpr(condL: Option[Expr], condR: Option[Expr]): Option[Expr] = (condL, condR) match {
+    case (None, None) => None
+    case (Some(e1), Some(e2)) => Some(OrOp(e1, e2))
     case (Some(_), None) => condL
     case (None, Some(_)) => condR
   }
@@ -561,7 +581,7 @@ object Utilities {
             fval = typeMapExpr(fval, f_opt)).copyMeta(e)
         case e@EApp(func, args) =>
           e.copy(func = typeMapId(func, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
-        case e@ECall(mod, _, args) =>
+        case e@ECall(mod, _, args, _) =>
           e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
         case e@EVar(id) =>
           val ret = e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
@@ -618,11 +638,11 @@ object Utilities {
           c.copy(handle = typeMapEVar(handle, f_opt),
             pipe = typeMapId(pipe, f_opt),
             args = args.map(typeMapExpr(_, f_opt))).copyMeta(c)
-        case c@CVerify(handle, args, preds, _) =>
+        case c@CVerify(handle, args, preds, _, _) =>
           c.copy(handle = typeMapEVar(handle, f_opt),
             args = args.map(typeMapExpr(_, f_opt)),
             preds = preds.map(typeMapVar(_, f_opt))).copyMeta(c)
-        case c@CInvalidate(handle) => c.copy(typeMapEVar(handle, f_opt)).copyMeta(c)
+        case c@CInvalidate(handle, _) => c.copy(typeMapEVar(handle, f_opt)).copyMeta(c)
         case c@CPrint(args) => c.copy(args = args.map(typeMapExpr(_, f_opt))).copyMeta(c)
         case c@COutput(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
         case c@CReturn(exp) => c.copy(exp = typeMapExpr(exp, f_opt)).copyMeta(c)
@@ -698,7 +718,7 @@ object Utilities {
     case EBitExtract(num, _, _) => getMemReads(num)
     case ETernary(cond, tval, fval) => getMemReads(cond) ++ getMemReads(tval) ++ getMemReads(fval)
     case EApp(_, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
-    case ECall(_, _, args) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
+    case ECall(_, _, args, _) => args.foldLeft(List[EMemAccess]())((l, a) => l ++ getMemReads(a))
     case ECast(_, exp) => getMemReads(exp)
     case _ => List()
   }

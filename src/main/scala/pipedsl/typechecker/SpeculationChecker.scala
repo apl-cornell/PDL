@@ -5,7 +5,7 @@ import TypeChecker._
 import Environments._
 import pipedsl.common.Errors.{AlreadyResolvedSpeculation, IllegalSpeculativeOperation, MismatchedSpeculationState, UnresolvedSpeculation}
 import pipedsl.common.Syntax._
-import pipedsl.common.Locks.{Released, Reserved}
+import pipedsl.common.Locks.Released
 import pipedsl.common.Utilities.{mkAnd, mkImplies}
 
 class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
@@ -19,22 +19,27 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
 
   private val solver: Z3Solver = ctx.mkSolver()
 
+  //TODO should pass this as recursive argument instead, but it's OK
+  private var memsWithCheckpoints: Set[Id] = Set()
+
   override def emptyEnv(): Environment[Id, Z3AST] = ConditionalEnv(ctx = ctx)
 
   override def checkExt(e: ExternDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
-
-  //No Speculation in Functions
   override def checkFunc(f: FuncDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+  override def checkCircuit(c: Circuit, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
 
-  type Status = Int;
+  type Status = Int
   private val INIT = 0
   private val STARTED = 1
   private val RESOLVED = 2
 
   override def checkModule(m: ModuleDef, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = {
+    //reset state (don't call this concurrently)
+    memsWithCheckpoints = getCheckMems(m.body, Set())
+    //end reset
     if (m.maybeSpec) {
       val finalSpec = checkSpecOps(m.body, Unknown)
-      if (finalSpec != NonSpeculative) throw UnresolvedSpeculation(m.pos)
+      if (finalSpec != NonSpeculative) throw UnresolvedSpeculation(m.pos, m.name)
       val specIds = getSpecIds(m.body, Set())
       val startEnv = specIds.foldLeft(env)((e, id) => {
         if (e.get(id).isEmpty) {
@@ -42,25 +47,28 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         } else { e }
       })
       val finalEnv = checkResolved(m.body, startEnv)
-      //check that all spechandles are definitely resolved
+      //check that all spechandles are definitely resolved or never started
       finalEnv.getMappedKeys().foreach(k => {
-        checkResolved(k, finalEnv, ctx.mkTrue(), expected = RESOLVED,INIT)
+        checkPossibleStates(k, finalEnv, ctx.mkTrue(), expected = RESOLVED,INIT)
       })
     }
+    //Once checking all of the speculation, now check checkpoints:
+    checkCheckpoints(m.body)
     env
   }
 
   /**
    * Speculation for the current thread must be completely resolved (via a blocking speccheck)
-   * before any of the following commands are executed:
-   *  - Writes to memories (CRECV with memories on LHS)
-   *  (TODO we can move this into nb. check once we update lock libraries)
+   * before any of the following commands are executed
    *  - Releasing any Write locks
+   *  - Unlocked Memory Writes
    *  - Updating the results of speculation made by this thread (CVerify)
    *
    *  The current stage must have a non-blocking spec check to run the following commands:
-   *  - Lock reservation
+   *  - Lock operations
    *  - Speculative Calls
+   *  - Killing child threads (CInvalidate, CUpdate)
+   *  - Locked Memory Writes (Reads??)
    *
    * @param c The command to check
    * @param s The speculative state of this thread at command c
@@ -86,8 +94,15 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       sdef
     case CRecv(lhs, _) => lhs match {
         //just match on mem writes
-      case _ :EMemAccess => if (s != NonSpeculative)
-        throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
+        //must be nonspeculative if unlocked, else must be at least not definitely misspeculated
+      case EMemAccess(m, _, _ ,_ ,_, _) =>
+        if (s != NonSpeculative && !isLockedMemory(m)) {
+          throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
+        }
+        if (s == Unknown && isLockedMemory(m)) {
+          throw IllegalSpeculativeOperation(lhs.pos, Speculative.toString)
+        }
+        ()
       case _ => ()
     }; s
     case CSpecCall(_, _, _) if s == Unknown =>
@@ -95,23 +110,35 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CCheckSpec(isBlocking) => if (s != Unknown)  throw IllegalSpeculativeOperation(c.pos, Unknown.toString)
       if (isBlocking) { NonSpeculative }
       else { Speculative }
-    case CVerify(_, _, _,_) if s != NonSpeculative =>
+    case CVerify(_, _, _,_, _) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-    case CUpdate(_, _, _, _) if s == Unknown =>
+    case CUpdate(_, _, _, _, _) if s == Unknown =>
       throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
-    case CInvalidate(_) => s // can always invalidate speculation
+    case CInvalidate(_, _) => s // can always invalidate speculation
     case COutput(_) if s != NonSpeculative =>
       throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
     case CLockStart(_) => s //this should be OK to do speculatively or not
-    case CLockEnd(_) => s //same
-      //can only release READ-ONLY locks non-speculatively
-    case CLockOp(_, op, t, _, _) if op == Released && (t.isEmpty || t.get == LockWrite ) && s != NonSpeculative =>
-      throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-    case CLockOp(_, op, _, _, _)  if op == Reserved && s == Unknown=>
-      throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
+    case CLockEnd(_) => s
+      //can only release READ-ONLY locks speculatively
+      //any lock that _might_ allow writes needs to be released Non-Speculatively
+    case CLockOp(mem, op, t, _, _) => {
+      if (s != NonSpeculative && !memsWithCheckpoints.contains(mem.id)) {
+        //TODO error that actually says something about checkpoints
+        throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
+      }
+      if (op == Released && (t.isEmpty || t.get == LockWrite) && s != NonSpeculative) {
+        throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
+      }
+      //shouldn't do any potentially speculative lock ops w/o checking first
+      if (s == Unknown) {
+        throw IllegalSpeculativeOperation(c.pos, Speculative.toString)
+      }
+      s
+    }
     case _ => s
   }
 
+  //Return all of the Ids representing speculation handles produced by speccall or used by verify et al. statements
   private def getSpecIds(c: Command, env: Set[Id] ): Set[Id] = c match {
     case CSeq(c1, c2) => getSpecIds(c2, getSpecIds(c1, env))
     case CTBar(c1, c2) => getSpecIds(c2, getSpecIds(c1, env))
@@ -123,14 +150,15 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
       })
     case CSpecCall(handle, _, _) =>
       env + handle.id
-    case CVerify(handle, _, _, _) =>
+    case CVerify(handle, _, _, _, _) =>
       env + handle.id
-    case CUpdate(nh, handle, _, _) =>
+    case CUpdate(nh, handle, _, _, _) =>
       env + handle.id + nh.id
-    case CInvalidate(handle) =>
+    case CInvalidate(handle, _) =>
       env + handle.id
     case _ => env
   }
+
   /**
    * This checks whether or not a parent that creates speculative events
    * actually resolves them later or not. And it must resolve them exactly once
@@ -146,39 +174,45 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     case CIf(_, cons, alt) =>
       val lt = checkResolved(cons, env)
       val rt = checkResolved(alt, env)
-      lt.intersect(rt)
+      val lenv = mapConditionalContext(lt, cons)
+      val renv = mapConditionalContext(rt, alt)
+      lenv.intersect(renv)
     case CSplit(cases, default) =>
-      cases.foldLeft[Environment[Id,Z3AST]](checkResolved(default, env))((menv, cobj) => {
+      val startEnv = mapConditionalContext(env, default)
+      cases.foldLeft[Environment[Id,Z3AST]](checkResolved(default, startEnv))((menv, cobj) => {
         //merge logic lives in Environments (conjunction of branches)
-        menv.intersect(checkResolved(cobj.body, env))
+        val condenv = mapConditionalContext(checkResolved(cobj.body, env), cobj.body)
+        menv.intersect(condenv)
       })
     case CSpecCall(handle, _, _) =>
-      checkResolved(handle.id, env, c.predicateCtx.get, expected = INIT)
-      env.add(handle.id,
-      mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = STARTED)))
-    case CVerify(handle, _, _, _) =>
-      checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
-    case CUpdate(nh, handle, _, _) =>
+      checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = INIT)
+      env.add(handle.id,makeEquals(handle.id, state = STARTED))
+    case CVerify(handle, _, _, _, _) =>
+      checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = STARTED)
+      env.add(handle.id, makeEquals(handle.id, state = RESOLVED))
+    case CUpdate(nh, handle, _, _, _) =>
       //"reolves" the current spec but starts a new one
-      checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
-      checkResolved(nh.id, env, c.predicateCtx.get, expected = INIT)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED))).add(
-        nh.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(nh.id, state = STARTED))
+      checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = STARTED)
+      checkPossibleStates(nh.id, env, c.predicateCtx.get, expected = INIT)
+      env.add(handle.id, makeEquals(handle.id, state = RESOLVED)).add(
+        nh.id, makeEquals(nh.id, state = STARTED)
       )
-    case CInvalidate(handle) =>
-      checkResolved(handle.id, env, c.predicateCtx.get, expected = STARTED)
-      env.add(handle.id, mkImplies(ctx, c.predicateCtx.get, makeEquals(handle.id, state = RESOLVED)))
+    case CInvalidate(handle, _) =>
+      checkPossibleStates(handle.id, env, c.predicateCtx.get, expected = STARTED)
+      env.add(handle.id, makeEquals(handle.id, state = RESOLVED))
     case _ => env
   }
 
-  override def checkCircuit(c: Circuit, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = env
+  private def mapConditionalContext(lt: Environment[Id, Z3AST], c: Command): Environment[Id, Z3AST] = {
+    lt.map(n => { mkImplies(ctx, c.predicateCtx.get, n) }, emptyEnv())
+  }
 
   private def makeEquals(specId: Id, state: Status): Z3BoolExpr = {
     ctx.mkEq(ctx.mkIntConst(specId.v), ctx.mkInt(state))
   }
 
-  private def checkResolved(specId: Id, env: Environment[Id, Z3AST], preds: Z3BoolExpr, expected: Status*): Unit = {
+  //TODO make error messages talk about the right thing (checkpoints vs. speculation)
+  private def checkPossibleStates(specId: Id, env: Environment[Id, Z3AST], preds: Z3BoolExpr, expected: Status*): Unit = {
     //Prove that the UNexpected, CAN'T happen
     val expectedStates = expected.foldLeft(ctx.mkFalse())((ast, e) => {
       ctx.mkOr(ast, makeEquals(specId, e))
@@ -194,9 +228,9 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         //error! bad thing can happen
       case Z3Status.SATISFIABLE =>
         if (expected.contains(RESOLVED)) {
-          throw UnresolvedSpeculation(specId.pos)
+          throw UnresolvedSpeculation(specId.pos, specId)
         } else {
-          throw AlreadyResolvedSpeculation(specId.pos)
+          throw AlreadyResolvedSpeculation(specId.pos, specId)
         }
       case Z3Status.UNKNOWN =>
         throw new RuntimeException("An error occurred while attempting to check speculation resolution")
@@ -204,4 +238,86 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     }
   }
 
+  /**
+   * This class checks that checkpoints are instantiated in the correct context.
+   * - If a pipeline may speculatively reserve locks, then it must have a checkpoint for that memory
+   *   (computed and stored in memsWithCheckpoints).
+   * - Checkpoints must be instantiated in the context in which they are used (i.e., with the necessary branch conditions)
+   * - Checkpoints must be resolved by some Verify or Invalidate
+   */
+  private def checkCheckpoints(c: Command): Unit = {
+    val startEnv = getCheckIds(c, Set()).foldLeft(emptyEnv())((e, id) => {
+      e.add(id, makeEquals(id, state = INIT))
+    })
+    val endEnv = checkCheckpointsHelper(c, startEnv)
+    //check that all necessary checkpoints are resolved
+    endEnv.getMappedKeys().foreach(k => {
+      checkPossibleStates(k, endEnv, ctx.mkTrue(), expected = RESOLVED, INIT)
+    })
+    ()
+  }
+
+  private def checkCheckpointsHelper(c: Command, env: Environment[Id, Z3AST]): Environment[Id, Z3AST] = c match {
+    case CSeq(c1, c2) => checkCheckpointsHelper(c2, checkCheckpointsHelper(c1, env))
+    case CTBar(c1, c2) => checkCheckpointsHelper(c2, checkCheckpointsHelper(c1, env))
+    case CIf(_, cons, alt) =>
+      val lt = mapConditionalContext(checkCheckpointsHelper(cons, env), cons)
+      val rt = mapConditionalContext(checkCheckpointsHelper(alt, env), alt)
+      lt.intersect(rt)
+    case CSplit(cases, default) =>
+      cases.foldLeft[Environment[Id,Z3AST]](checkCheckpointsHelper(default,
+        mapConditionalContext(env, default)))((menv, cobj) => {
+        //merge logic lives in Environments (conjunction of branches)
+        menv.intersect(checkCheckpointsHelper(cobj.body, env))
+      })
+    case CVerify(_, _, _, _, checkHandles) =>
+      checkHandles.foldLeft(env)((e, chk) => {
+        //check that checkpoint has been made in this context
+        checkPossibleStates(chk.id, env, c.predicateCtx.get, expected = STARTED)
+        //add implication that chk is resolved
+        e.add(chk.id, makeEquals(chk.id, state = RESOLVED))
+      })
+    case CUpdate(_, _, _, _, checkHandles) =>
+      checkHandles.foldLeft(env)((e, chk) => {
+        //check that checkpoint has been made in this context
+        checkPossibleStates(chk.id, env, c.predicateCtx.get, expected = STARTED)
+        e
+      })
+    case CInvalidate(_, checkHandles) =>
+      checkHandles.foldLeft(env)((e, chk) => {
+        //check that checkpoint has been made in this context
+        checkPossibleStates(chk.id, env, c.predicateCtx.get, expected = STARTED)
+        //add implication that chk is resolved
+        e.add(chk.id, makeEquals(chk.id, state = RESOLVED))
+      })
+    case CCheckpoint(handle, _) => //set the checkpoint state to initialized in this context
+      env.add(handle.id, makeEquals(handle.id, state = STARTED))
+    case _ => env
+  }
+
+  //Return all of the Ids representing checkpoint handles used in the program
+  private def getCheckIds(c: Command, env: Set[Id] ): Set[Id] = c match {
+    case CSeq(c1, c2) => getCheckIds(c2, getCheckIds(c1, env))
+    case CTBar(c1, c2) => getCheckIds(c2, getCheckIds(c1, env))
+    case CIf(_, cons, alt) =>
+      getCheckIds(cons, env) ++ getCheckIds(alt, env)
+    case CSplit(cases, default) =>
+      cases.foldLeft[Set[Id]](getCheckIds(default, env))((menv, cobj) => {
+        getCheckIds(cobj.body, menv)
+      })
+    case CCheckpoint(handle, _) => env + handle.id
+    case _ => env
+  }
+  private def getCheckMems(c: Command, env: Set[Id]): Set[Id] = c match {
+    case CSeq(c1, c2) => getCheckMems(c2, getCheckMems(c1, env))
+    case CTBar(c1, c2) => getCheckMems(c2, getCheckMems(c1, env))
+    case CIf(_, cons, alt) =>
+      getCheckMems(cons, env) ++ getCheckMems(alt, env)
+    case CSplit(cases, default) =>
+      cases.foldLeft[Set[Id]](getCheckMems(default, env))((menv, cobj) => {
+        getCheckMems(cobj.body, menv)
+      })
+    case CCheckpoint(_, mod) => env + mod
+    case _ => env
+  }
 }

@@ -4,6 +4,15 @@ import pipedsl.common.Errors.MissingPredictionValues
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
+/**
+ * This pass propagates speculative predictions to
+ * the corresponding Verify statement which will then check
+ * those predictions against the "correct" values in the Verify statement.
+ *
+ * This also refactors SpecCall statements such that each of the arguments becomes
+ * an explicit variable, which can then be referenced by the Verify statement succinctly.
+ *
+ */
 object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDef] with ProgPass[Prog] {
 
   type VEnv = Map[Id, List[EVar]];
@@ -13,7 +22,7 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
     nc
   }
 
-  override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).setPos(m.pos)
+  override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).copyMeta(m)
 
   override def run(p: Prog): Prog =  p.copy(exts = p.exts, fdefs = p.fdefs,
     moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)
@@ -44,13 +53,13 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
       })
       val newSpec = CSpecCall(handle, p, assgnCmds._2).setPos(c.pos)
       (CSeq(assgnCmds._1, newSpec), env + (handle.id -> assgnCmds._2))
-    case CVerify(handle, args, _, upd) =>
+    case CVerify(handle, args, _, upd, cHandles) =>
       if (!env.contains(handle.id)) {
         throw MissingPredictionValues(c.pos, handle.id.v)
       }
-      val nc = CVerify(handle, args, env(handle.id), upd).setPos(c.pos)
+      val nc = CVerify(handle, args, env(handle.id), upd, cHandles).setPos(c.pos)
       (nc, env)
-    case CUpdate(nh, handle, args, _) =>
+    case CUpdate(nh, handle, args, _, cHandles) =>
       if (!env.contains(handle.id)) {
         throw MissingPredictionValues(c.pos, handle.id.v)
       }
@@ -62,7 +71,7 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
         val args = cm._2
         ( CSeq(priorCmds, assgn).setPos(c.pos), args :+ assgn.lhs )
       })
-      val nc = CUpdate(nh, handle, assgnCmds._2, env(handle.id)).setPos(c.pos)
+      val nc = CUpdate(nh, handle, assgnCmds._2, env(handle.id), cHandles).setPos(c.pos)
       (CSeq(assgnCmds._1, nc), env + (nh.id -> assgnCmds._2))
     case CSplit(cases, default) =>
       val venvs = cases.foldLeft(List[(CaseObj, VEnv)]())((l, b) => {
@@ -87,6 +96,8 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
 
   //if the values are defined in either branch, take those.
   //if defined in both branches, then only add if they match
+  //this allows us to correctly track the following:
+  //if (x) {
   private def intersectEnv(e1: VEnv, e2: VEnv): VEnv = {
     val keys = e1.keySet.union(e2.keySet)
     keys.foldLeft[VEnv](Map())((m, k) => {

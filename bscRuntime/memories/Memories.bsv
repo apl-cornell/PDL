@@ -20,6 +20,7 @@ export BramPort2(..);
 export AsyncMem(..);
 export AsyncMem2(..);
 export QueueLockCombMem(..);
+export CheckpointQueueLockCombMem(..);
 export QueueLockAsyncMem(..);
 export QueueLockAsyncMem2(..);
 export BypassLockCombMem(..);
@@ -28,12 +29,14 @@ export AddrLockAsyncMem(..);
 export AddrLockAsyncMem2(..);
 export LSQ(..);
 
+export mkRegister;
 export mkRegFile;
 export mkBramPort;
 export mkBramPort2;
 export mkAsyncMem;
 export mkAsyncMem2;
 export mkQueueLockCombMem;
+export mkCheckpointQueueLockCombMem;
 export mkQueueLockAsyncMem;
 export mkQueueLockAsyncMem2;
 export mkFAAddrLockCombMem;
@@ -98,6 +101,17 @@ interface QueueLockCombMem#(type addr, type elem, type id);
    method elem read(addr a);
    method Action write(addr a, elem b);
    interface QueueLock#(id) lock;
+   method Bool canAtom_r1(addr a);
+   method Bool canAtom_r2(addr a);   
+   method elem atom_r(addr a);
+   method Bool canAtom_w1(addr a);
+   method Action atom_w(addr a, elem b);
+endinterface
+
+interface CheckpointQueueLockCombMem#(type addr, type elem, type id, type cid);
+   method elem read(addr a);
+   method Action write(addr a, elem b);
+   interface CheckpointQueueLock#(id, cid) lock;
    method Bool canAtom_r1(addr a);
    method Bool canAtom_r2(addr a);   
    method elem atom_r(addr a);
@@ -171,6 +185,19 @@ interface LSQ#(type addr, type elem, type name, numeric type nsz);
    method Action rel_w1(name n);
 endinterface
 
+
+module mkRegister#(elem init)(RegFile#(addr, elem)) provisos (Bits#(addr, szAddr), Bits#(elem, szElem));
+   Reg#(elem) data <- mkReg(init);   
+
+   method Action upd(addr a, elem d);
+      data <= d;
+   endmethod
+   
+   method elem sub(addr a);
+      return data;
+   endmethod
+   
+endmodule
 
 module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr, elem))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Bounded#(addr));
@@ -363,29 +390,42 @@ module mkAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) _unused_)
    Wire#(elem) fromMem1 <- mkWire();
    Wire#(elem) fromMem2 <- mkWire();
    //this must be at least size 2 to work correctly (safe bet)
-   Vector#(inflight, Reg#(elem)) outData1 <- replicateM( mkConfigReg(unpack(0)) );
-   Vector#(inflight, Reg#(Bool)) valid1 <- replicateM( mkConfigReg(False) );
-   Vector#(inflight, Reg#(elem)) outData2 <- replicateM( mkConfigReg(unpack(0)) );
-   Vector#(inflight, Reg#(Bool)) valid2 <- replicateM( mkConfigReg(False) );
+   Vector#(inflight, Ehr#(2, elem)) outData1 <- replicateM( mkEhr(unpack(0)) );
+   Vector#(inflight, Ehr#(2, Bool)) valid1 <- replicateM( mkEhr(False) );
+   Vector#(inflight, Ehr#(2, elem)) outData2 <- replicateM( mkEhr(unpack(0)) );
+   Vector#(inflight, Ehr#(2, Bool)) valid2 <- replicateM( mkEhr(False) );
    
    Reg#(MemId#(inflight)) head1 <- mkReg(0);
-   Bool okToRequest1 = valid1[head1] == False;
+   Wire#(MemId#(inflight)) freeEntry1 <- mkWire();   
+   Bool okToRequest1 = valid1[head1][1] == False;
+   
    Reg#(MemId#(inflight)) head2 <- mkReg(0);
-   Bool okToRequest2 = valid2[head2] == False;
+   Wire#(MemId#(inflight)) freeEntry2 <- mkWire();   
+   Bool okToRequest2 = valid2[head2][1] == False;
    
    Reg#(Maybe#(MemId#(inflight))) nextData1 <- mkDReg(tagged Invalid);
    Reg#(Maybe#(MemId#(inflight))) nextData2 <- mkDReg(tagged Invalid);
    
    (* fire_when_enabled *)
    rule moveToOutFifo1 (nextData1 matches tagged Valid.idx);
-      outData1[idx] <= fromMem1;
-      valid1[idx] <= True;
+      outData1[idx][0] <= fromMem1;
+      valid1[idx][0] <= True;
    endrule
    
    (* fire_when_enabled *)
    rule moveToOutFifo2 (nextData2 matches tagged Valid.idx);
-      outData2[idx] <= fromMem2;
-      valid2[idx] <= True;
+      outData2[idx][0] <= fromMem2;
+      valid2[idx][0] <= True;
+   endrule
+
+   (* fire_when_enabled *)   
+   rule freeResp1;
+      valid1[freeEntry1][1] <= False;
+   endrule
+
+   (* fire_when_enabled *)   
+   rule freeResp2;
+      valid2[freeEntry2][1] <= False;
    endrule
    
    method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest1);
@@ -396,15 +436,15 @@ module mkAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) _unused_)
    endmethod
    
    method elem peekResp1(MemId#(inflight) a);
-      return outData1[a];
+      return outData1[a][1];
    endmethod
    
    method Bool checkRespId1(MemId#(inflight) a);
-      return valid1[a] == True;
+      return valid1[a][1] == True;
    endmethod
    
    method Action resp1(MemId#(inflight) a);
-      valid1[a] <= False;
+      freeEntry1 <= a;
    endmethod
    
    method ActionValue#(MemId#(inflight)) req2(addr a, elem b, Bit#(n) wmask) if (okToRequest2);
@@ -415,15 +455,15 @@ module mkAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) _unused_)
    endmethod
    
    method elem peekResp2(MemId#(inflight) a);
-      return outData2[a];
+      return outData2[a][1];
    endmethod
    
    method Bool checkRespId2(MemId#(inflight) a);
-      return valid2[a] == True;
+      return valid2[a][1] == True;
    endmethod
    
    method Action resp2(MemId#(inflight) a);
-      valid2[a] <= False;
+      freeEntry2 <= a;
    endmethod
    
    interface Client bram_client1;
@@ -460,6 +500,42 @@ endmodule
 module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem, LockId#(d)) _unused_);
 
    QueueLock#(LockId#(d)) l <- mkQueueLock();
+   
+   interface lock = l;
+   
+   method elem read(addr a);
+      return rf.sub(a);
+   endmethod
+      
+   method Action write(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+   
+   method Bool canAtom_r1(addr a);
+      return l.isEmpty;
+   endmethod
+
+   method Bool canAtom_r2(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method elem atom_r(addr a);
+      return rf.sub(a);
+   endmethod
+ 
+   method Bool canAtom_w1(addr a);
+      return l.isEmpty;
+   endmethod
+   
+   method Action atom_w(addr a, elem b);
+      rf.upd(a, b);
+   endmethod
+  
+endmodule
+
+module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLockCombMem#(addr, elem, LockId#(d), LockId#(d)) _unused_);
+
+   CheckpointQueueLock#(LockId#(d), LockId#(d)) l <- mkCheckpointQueueLock();
    
    interface lock = l;
    
@@ -736,7 +812,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
     * reserveWrite < everything -> reads beginning of cycle state
     * reserves < write -> can write in the same cycle as reserving, also forwards data to load q
     *
-    * reserveRead < commitRead < issueLd -> can free ld entry at any time -> will not issue mem request if freed in same cycle.
+    * reserveRead < commitRead < issueLd -> can fre led entry at any time -> will not issue mem request if freed in same cycle.
     * ld response is always 1 cycle, so an issued ld will always have a place to put its data.
     * (if issueLd; commitread next cycle, then data will be written, but just never used, won't overwrite anything important)
     *

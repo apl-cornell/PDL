@@ -50,6 +50,14 @@ running java with the command `java -jar pdl.jar <args>`.
 We also provide a script `pdl` in the `bin` directory that
 runs the executable jar with the provided arguments.
 
+#### Tab completion
+
+We provide a bash autocomplete script in the `bin` directory.
+To enable tab completion on `./bin/pdl` and `pdl`, simply source
+the script `pdl-completion.bash`. You can do this by adding it to
+the file `~/.bash_completion`, or whatever your preferred sourcing
+method may be.
+
 ### Generating Hardware
 
 PDL produces BSV code which can then be run via the BSV simulator,

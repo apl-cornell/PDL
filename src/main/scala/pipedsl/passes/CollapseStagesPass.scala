@@ -140,6 +140,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
   private def mergeStages(target: PStage, srcs: Iterable[PStage], isForward: Boolean): Unit = {
     var newstmts = List[Command]()
     srcs.foreach(src => {
+      // Check for each src, if there exists connection with other stages in the merging direction.
       val hasIncorrectEdges = if (isForward) {
         (s: PStage) => s.outEdges.exists(e => e.to != target) ||
           !s.outEdges.exists(e => e.to == target)
@@ -155,16 +156,18 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
       } else {
         target.outEdges.filter(e => e.to == src)
       }
+      // Check if multi-edge.
       if (existingedges.size > 1) {
         throw new RuntimeException(s"Cannot merge ${src.name.v} into ${target.name.v} since they have multiple edges")
       }
+      // Check if exists conditional statements for n1 in n1 -> n2
       val cond = if (isForward) {
         existingedges.head.condRecv
       } else {
         existingedges.head.condSend
       }
       //merge in the commands
-      var receivingStmts = List[Command]()
+      var receivingStmts = List[Command]() // Create empty receiving stmts list
       if (cond.isDefined) {
         val flattenedCmds = flattenCondStmts(cond.get, src.getCmds)
         val (recvstmts, normalstmts) = splitReceivingStmts(flattenedCmds)
@@ -214,7 +217,7 @@ object CollapseStagesPass extends StagePass[List[PStage]] {
           } else {
             receivingStmts
           }
-          e.to.addCmds(nstmts)
+          e.to.mergeStmts(nstmts, false)
         } // in else case, we're already moving receiving statements forward by merging with target
         val newedge = if (isForward) {
           PipelineEdge(e.condSend, andExpr(cond, e.condRecv), e.from, target, e.values)

@@ -86,7 +86,7 @@ object Syntax {
 
   object RequestType extends Enumeration {
     type RequestType = Value
-    val Lock, Module, Speculation = Value
+    val Lock, Module, Speculation, Checkpoint = Value
   }
 
   import RequestType._
@@ -164,6 +164,7 @@ object Syntax {
           lbl = from.lbl
           maybeSpec = from.maybeSpec
           this
+        case _ => this
       }
 
     /**
@@ -428,7 +429,14 @@ object Syntax {
   }
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
+  //returns false only if it represents an unlocked memory type
   def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+  //returns false only if it represents an external (Verilog) module or a pipeline with no internal mems/submodules
+  def isLockedModule(mod: Id): Boolean = mod.typ.get match {
+    case TModType(_, refs, _, _) => refs.nonEmpty
+    case TObject(_, _, _) => false
+    case _ => true
+  }
   def isSynchronousAccess(mem: Id, isWrite: Boolean): Boolean = mem.typ.get match {
     case TMemType(_, _, readLatency, writeLatency, _, _) =>
       val latency: Latency = if (isWrite) writeLatency else readLatency
@@ -437,6 +445,11 @@ object Syntax {
       val latency: Latency = if (isWrite) writeLatency else readLatency
       latency == Latency.Asynchronous
     case _ => false
+  }
+  def getMemFromRequest(r: Type): Id = {
+      r.matchOrError(r.pos, "Checkpoint Handle", "Checkpoint Request Type") {
+        case TRequestHandle(mod, _) => mod
+      }
   }
 
   /**
@@ -554,7 +567,7 @@ object Syntax {
   case class EBitExtract(num: Expr, start: EIndex, end :EIndex) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
-  case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr]) extends Expr
+  case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr], isAtomic: Boolean) extends Expr
   case class EVar(id: Id) extends Expr
   case class ECast(ctyp: Type, exp: Expr) extends Expr
   {
@@ -591,6 +604,7 @@ object Syntax {
         portNum = from.portNum
         predicateCtx = from.predicateCtx
         this
+        case _ => this
       }
   }
   case class CSeq(c1: Command, c2: Command) extends Command
@@ -604,15 +618,16 @@ object Syntax {
   }
   case class CSpecCall(handle: EVar, pipe: Id, args: List[Expr]) extends Command
   case class CCheckSpec(isBlocking: Boolean) extends Command
-  case class CVerify(handle: EVar, args: List[Expr], preds: List[EVar], update: Option[ECall]) extends Command
-  case class CUpdate(newHandle: EVar, handle: EVar, args: List[Expr], preds: List[EVar]) extends Command
-  case class CInvalidate(handle: EVar) extends Command
+  case class CVerify(handle: EVar, args: List[Expr], preds: List[EVar], update: Option[ECall], checkHandles: List[EVar]) extends Command
+  case class CUpdate(newHandle: EVar, handle: EVar, args: List[Expr], preds: List[EVar], checkHandles: List[EVar]) extends Command
+  case class CInvalidate(handle: EVar, checkHandles: List[EVar]) extends Command
   case class CPrint(args: List[Expr]) extends Command
   case class COutput(exp: Expr) extends Command
   case class CReturn(exp: Expr) extends Command
   case class CExpr(exp: Expr) extends Command
   case class CLockStart(mod: Id) extends Command
   case class CLockEnd(mod: Id) extends Command
+  case class CCheckpoint(handle: EVar, lock: Id) extends Command
   case class CLockOp(mem: LockArg, op: LockState, var lockType: Option[LockType], args :List[Expr], ret :Option[EVar]) extends Command with LockInfoAnnotation
   {
     override val copyMeta: HasCopyMeta => CLockOp =
@@ -647,7 +662,6 @@ object Syntax {
   //used for sequential memories that don't commit writes immediately but don't send a response
   case class IMemWrite(mem: Id, addr: EVar, data: EVar,
                        inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
-  case class ICheckLockFree(mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
   case class IAssignLock(handle: EVar, src: Expr, default: Option[Expr]) extends InternalCommand with LockInfoAnnotation
@@ -688,6 +702,7 @@ object Syntax {
           isRecursive = from.isRecursive
           pos = from.pos
           this
+          case _ => this
         }
     }
 
@@ -706,6 +721,7 @@ object Syntax {
   sealed trait CirExpr extends Expr
   case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int) extends CirExpr
   case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
+  case class CirRegister(elemTyp: Type, initVal: Int) extends CirExpr
   //TODO do these ever need other kinds of parameters besides ints?
   //this allows us to build a "locked" version of a memory
   case class CirLock(mem: Id, impl: LockInterface, szParams: List[Int]) extends CirExpr

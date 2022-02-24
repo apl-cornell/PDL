@@ -3,8 +3,8 @@ package pipedsl.codegen.bsv
 import pipedsl.codegen.Translations.Translator
 import pipedsl.codegen.bsv.ConstraintsToBluespec.to_provisos
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
-import pipedsl.common.{LockImplementation, Syntax}
-import pipedsl.common.LockImplementation.LockInterface
+import pipedsl.common.LockImplementation
+import pipedsl.common.LockImplementation.{LockInterface, getDefaultLockImpl, supportsCheckpoint}
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
 import pipedsl.common.Utilities.generic_type_prefix
@@ -48,16 +48,33 @@ object BSVSyntax {
 
     def setVariablePrefix(p: String): Unit = variablePrefix = p
 
+    //rename the type variable so that lockId and chkpointId can be independent
+    //otherwise leave it the same
+    private def lockIdToCheckId(l: BSVType): BSVType = l match {
+      case BTypeParam(name, provisos) => BTypeParam("chk" + name, provisos.map {
+        case PBits(szName) => PBits("chk" + szName)
+        case b => b
+      })
+      case _ => l
+    }
     //TODO it would be nice not to need two type translation methods
     def toTypeForMod(t: Type, n: Id): BSVType = t match {
       case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
+        val cidtyp = if (LockImplementation.supportsCheckpoint(limpl)) {
+          Some(if (idsz.isDefined) {
+            BSizedInt(unsigned = true, limpl.getChkIdSize(idsz.get))
+          } else {
+            lockIdToCheckId(modmap(n))
+          })
+        } else None
         val elemTyp = toType(mem.elem)
         val isAsync = mem.readLatency != Combinational
         val mtyp = bsints.getBaseMemType(isAsync,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, mem.addrSize), elemTyp,
           if (isAsync) Math.max(mem.readPorts, mem.writePorts) else 0)
-        getLockedMemType(mem, mtyp, None, lidtyp, limpl, useTypeVars = true, Some(n))
+        //TODO pass checkpoint ID
+        getLockedMemType(mem, mtyp, lidtyp, cidtyp, limpl, useTypeVars = true, Some(n))
       case _ => toType(t)
     }
 
@@ -76,37 +93,48 @@ object BSVSyntax {
     def toType(t: Type): BSVType = t match {
       case TObject(name, tparams, _) =>
         BInterface(name.toString, tparams.map(t => BVar( "nocare", toType(t))))
-      case TMemType(elem, addrSize, rlat, _, readPorts, writePorts) =>
+      case TMemType(elem, addrSize, rlat, _, readPorts, _) =>
         val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp, readPorts)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
-        val (lidSz, lidtyp) =  if (limpl.useUniqueLockId()) {
+        val lidtyp = if (limpl.useUniqueLockId()) {
           if (idsz.isDefined) {
-            (idsz, bsints.getLockHandleType(idsz.get))
-          } else (Some(bsints.defaultLockHandleSize), bsints.getDefaultLockHandleType)
+            bsints.getLockHandleType(idsz.get)
+          } else bsints.getDefaultLockHandleType
         } else {
           //re-use the rid from the memory
-          (None, mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ)
+          mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
-        getLockedMemType(mem, mtyp, lidSz, lidtyp, limpl, useTypeVars = false, None)
+        val cidtyp = if (LockImplementation.supportsCheckpoint(limpl)) {
+          Some(if (idsz.isDefined) {
+            bsints.getChkHandleType(limpl.getChkIdSize(idsz.get))
+          } else bsints.getDefaultChkHandleType)
+        } else { None }
+        //TODO pass checkpoint ID
+        getLockedMemType(mem, mtyp, lidtyp, cidtyp, limpl, useTypeVars = false, None)
       case TSizedInt(TBitWidthVar(name), sign) => BVarSizedInt(sign.unsigned(), name.v)
       case TSizedInt(len :TBitWidthLen, sign) => BSizedInt(sign.unsigned(), len.getLen)
       case TInteger() => BInteger();
-      case TBitWidthLen(len) => BNumericType(len)
+      case TBitWidthLen(len) => BNumericType(len)        
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
       case TModType(_, _, _, None) => throw UnexpectedType(t.pos, "Module type", "A Some(mod name) typ", t)
       case TMaybe(btyp) => BMaybe(toType(btyp))
       case TRequestHandle(n, rtyp) => rtyp match {
-        case pipedsl.common.Syntax.RequestType.Lock if !n.typ.get.isInstanceOf[TMemType]=>
-          //These are passed in the modmap rather than the handle map
-            modmap(n)
+        case pipedsl.common.Syntax.RequestType.Checkpoint =>
+          lockIdToCheckId(modmap(n))
         //TODO allow this to be specified somewhere
         case pipedsl.common.Syntax.RequestType.Speculation => bsints.getDefaultSpecHandleType
-        case _ => //pipedsl.common.Syntax.RequestType.Module =>
+        case pipedsl.common.Syntax.RequestType.Lock => {
+          //if its a type variable it'll be in the modmap, else use default lockid size
+          if (modmap.contains(n)) { modmap(n) } else {
+            bsints.getLockHandleType(getDefaultLockImpl.getLockIdSize)
+          }
+        }
+        case pipedsl.common.Syntax.RequestType.Module => //pipedsl.common.Syntax.RequestType.Module =>
           val modtyp = toType(n.typ.get)
           if (handleMap.contains(modtyp)) {
             handleMap(modtyp)
@@ -126,6 +154,7 @@ object BSVSyntax {
       case TFun(_, _) => throw new RuntimeException
       //TODO better error
       case TRecType(_, _) => throw new RuntimeException
+      case _ => throw UnexpectedType(t.pos, "type annotation", "Not Supported in BSV", t)
     }
 
     def toBSVVar(v: BVar): BVar = {
@@ -188,14 +217,14 @@ object BSVSyntax {
       case EInvalid => BInvalid
       case EFromMaybe(ex) => BFromMaybe(BDontCare, toExpr(ex))
       case EToMaybe(ex) => BTaggedValid(toExpr(ex))
-      case ECall(mod, method, args) if method.isDefined =>
+      case ECall(mod, method, args, isAtomic) if method.isDefined =>
         //type doesn't matter on the var
         BMethodInvoke(BVar(mod.v, BVoid), method.get.v, args.map(a => toExpr(a)))
       case _ => throw UnexpectedExpr(e)
     }
 
     private def translateUOp(e: EUop): BExpr = e.op match {
-      case NumUOp(op) if (op == "abs" || op == "signum") => BFuncCall(op, List(toExpr(e.ex)))
+      case NumUOp(op) if op == "abs" || op == "signum" => BFuncCall(op, List(toExpr(e.ex)))
       case _ => BUOp(e.op.op, toExpr(e.ex))
     }
     //TODO handle casts better
@@ -279,12 +308,20 @@ object BSVSyntax {
       case _ => BBOp(b.op.op, toExpr(b.e1), toExpr(b.e2))
     }
 
-    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdSz: Option[Int], lockIdTyp: BSVType,
-      limpl: LockInterface, useTypeVars:Boolean = false, paramId: Option[Id]): BInterface = {
+    //TODO make these parameters passable and no just linked to the static lockimpl definition
+    def getLockedModType(limpl: LockInterface): BInterface = {
+      val lid = BVar("lidtyp", bsints.getLockHandleType(limpl.getLockIdSize))
+      val chkid = BVar("chkidtyp", bsints.getChkHandleType(limpl.getChkIdSize(limpl.getLockIdSize)))
+      BInterface(limpl.getModuleName(None), List(lid, chkid))
+    }
+
+
+    private def getLockedMemType(m: TMemType, mtyp: BInterface, lockIdTyp: BSVType, chkIdTyp: Option[BSVType],
+                                 limpl: LockInterface, useTypeVars: Boolean = false, paramId: Option[Id]): BInterface = {
       val intName = limpl.getModuleName(m)
-      //TODO pass params better - requires passing ID first, if passing any
-      val szParams = if (lockIdSz.isDefined) List(lockIdSz.get) else List()
-      val lparams = limpl.getTypeArgs(szParams).zipWithIndex.map(a => {
+      //TODO allow these to come from somewhere - right now
+      // the call to getTypeArgs just sets default values
+      val lparams = limpl.getTypeArgs(List()).zipWithIndex.map(a => {
         val sz = a._1
         val idx = a._2
         if (useTypeVars) {
@@ -302,7 +339,10 @@ object BSVSyntax {
           if (bv.name == bsints.reqIdName) { newLid } else { bv }
         })
       }
-      val params = tmpparams ++ lparams
+      //add checkpoint id if used
+      val params = if (chkIdTyp.isDefined) {
+        tmpparams :+ BVar("cidtyp", chkIdTyp.get)
+      } else { tmpparams } ++ lparams
       BInterface(intName, params)
     }
 

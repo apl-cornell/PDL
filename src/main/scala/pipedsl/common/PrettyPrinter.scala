@@ -107,6 +107,7 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.IUpdate(specId, value, originalSpec) => ins + printTypeToString(originalSpec.typ.get) + " " +
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
+      case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
       case _ => "TODO PRINTING COMMAND"
     }
   }
@@ -131,13 +132,14 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EBitExtract(num, start, end) => printExprToString(num) + "{" + end.toString + ":" + start.toString + "}"
     case Syntax.ETernary(cond, tval, fval) => printExprToString(cond) + " ? " + printExprToString(tval) + " : " + printExprToString(fval)
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
-    case Syntax.ECall(id, name, args) => "call " + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
+    case Syntax.ECall(id, name, args, isAtomic) => "call" + (if(isAtomic) "<atomic> " else " ") + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.EVar(id) => id.v
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize, numPorts) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + "," + numPorts.toString + ")"
       case CirLockMem(elemTyp, addrSize, _, sz, numPorts) => "memlock(" +
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + "," + numPorts.toString + ")"
+      case CirRegister(elemTyp, initVal) => "register(" + printTypeToString(elemTyp) + "," + initVal.toString + ")"
       case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirLockRegFile(elemTyp, addrSize, _, sz) => "rflock(" +
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"

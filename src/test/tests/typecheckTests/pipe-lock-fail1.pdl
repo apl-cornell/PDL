@@ -1,0 +1,40 @@
+pipe cache(addr: uint<5>, data: int<32>)[dmem: int<32>[5]<a,a>(Queue)]: bool {
+    //spec_check();
+    start(dmem);
+    int<32> sdata <- dmem<a>[addr];
+    //checkpoint(dmem);
+    reserve(dmem[addr], W); //stupid to put here, but doing it just for the sake of things
+    end(dmem);
+    ---
+    //spec_check();
+    wdata = data + sdata;
+    block(dmem[addr]);
+    dmem[addr] <- wdata;
+    release(dmem[addr]);
+    print("ADDR: %d, DATA: %h", addr, wdata);
+    ---
+    //spec_check();
+    output(true);
+}
+
+pipe cpu(pc: int<32>)[cache1: cache, imem: int<32>[16]<a,a>]: bool {
+    start(imem);
+    int<32> insn <- imem[cast(pc, uint<16>)];
+    end(imem);
+
+    call cpu(pc + 1);
+    ---
+    uint<5> addr = cast(insn{31:27}, uint<5>);
+
+    cs <- call cache1(addr, 1<32>);
+    ---
+    nextPc = (addr{0:0} == 0) ? pc + 2 : pc + 1;
+}
+circuit {
+ ti = memory(int<32>, 16);
+ td = memory(int<32>, 5);
+ d = Queue(td);
+ s = new cache[d];
+ c = new cpu[s, ti];
+ call c(0<32>);
+}

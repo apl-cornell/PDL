@@ -76,7 +76,7 @@ class Interpreter(val maxIterations: Int) {
             }
             interp_function(func, newEnv)
         }
-        case ECall(id, name, args) => {
+        case ECall(id, name, args, _) => {
             var newEnv = new immutable.HashMap[Id, Any]()
             val moddef = modules(id)
             for (index <- 0 until args.length) {
@@ -176,7 +176,7 @@ class Interpreter(val maxIterations: Int) {
             for (i <- 0 until queueSize) {
                 val dequeuedCall = moduleCalls.dequeue
                 moduleCalls = dequeuedCall._2
-                dequeuedCall._1()
+                dequeuedCall._1.apply(())
             }
             iterations = iterations + 1
         }
