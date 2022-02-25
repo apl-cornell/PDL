@@ -5,6 +5,7 @@ import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{LackOfConstraints, UnexpectedCommand}
 import pipedsl.common.Syntax._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 
@@ -452,8 +453,15 @@ object Utilities {
     case None => FNone
   }
 
+  /**
+   * All of this is a re-implementation of the built in option type to include
+   * 1 more bit of information, allowing 2 different types of non-present
+   * states: None AND Error. Everything else should be self explanatory.
+   */
   sealed abstract class FOption[+A]() {
     def get: A
+
+    def getOrElse[B >: A](default: => B): B
 
     def toOptionOrThrow(x: Exception): Option[A]
 
@@ -472,6 +480,8 @@ object Utilities {
     override def isError: Boolean = false
 
     override def isEmpty: Boolean = false
+
+    override def getOrElse[B >: A](default: => B): B = value
   }
 
   case object FNone extends FOption[Nothing] {
@@ -482,6 +492,8 @@ object Utilities {
     override def isEmpty: Boolean = true
 
     override def isError: Boolean = false
+
+    override def getOrElse[B >: Nothing](default: => B): B = default
   }
 
   case object FError extends FOption[Nothing] {
@@ -492,6 +504,8 @@ object Utilities {
     override def isEmpty: Boolean = true
 
     override def isError: Boolean = true
+
+    override def getOrElse[B >: Nothing](default: => B): B = default
   }
 
   private def typeMapVar(v: EVar, f_opt: Option[Type] => FOption[Type]): EVar = typeMapExpr(v, f_opt) match {
@@ -512,18 +526,20 @@ object Utilities {
       {
         case FError => e1 match
         {
+          // If we can't decide the type of an int literal, choose the smallest
+          // sized integer with the appropriate sign (default: unsigned)
           case EInt(v, _, _) => val sign: TSignedNess =
             e1.typ match {
               case Some(TSizedInt(_, sign)) => sign match
               {
-                case TSignVar(_) => TSigned()
+                case TSignVar(_) => TUnsigned()
                 case defined => defined
               }
-              case Some(_) => TSigned()
-              case None => TSigned() //TODO error
+              case Some(_) => TUnsigned()
             }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
-          case _ => throw LackOfConstraints(e1)
+          case t =>
+            throw LackOfConstraints(e1)
         }
         case t => e1.typ = t.toOptionUnsafe
       }
@@ -531,9 +547,18 @@ object Utilities {
       {
         case e@EInt(v, _, _) =>
           if(e.typ.isEmpty)
-            e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
-          e.copy(bits = e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
-            {case t :TSizedInt => t}.len.getLen).copyMeta(e)
+            {
+              assert(false)
+              e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
+            }
+          e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
+          {
+            case t: TSizedInt => t.len.matchOrError(e.pos, "TSizedInt", "len or var")
+            {
+              case TBitWidthLen(l) => e.copy(bits = l).copyMeta(e)
+              case TBitWidthVar(v) if is_generic(v) => e
+            }
+          }
         case e@EIsValid(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EFromMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
         case e@EToMaybe(ex) => e.copy(ex = typeMapExpr(ex, f_opt)).copyMeta(e)
@@ -559,7 +584,8 @@ object Utilities {
         case e@ECall(mod, _, args, _) =>
           e.copy(mod = typeMapId(mod, f_opt), args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
         case e@EVar(id) =>
-          e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
+          val ret = e.copy(id = typeMapId(id, f_opt)).copyMeta(e)
+          ret
         case e@ECast(tp, exp) =>
           val ntp = f_opt(Some(tp)).get
           val tmp = e.copy(ctyp = ntp, exp = typeMapExpr(exp, f_opt)).copyMeta(e)
@@ -568,7 +594,7 @@ object Utilities {
         case expr: CirExpr => expr match
         {
           case e@CirLock(mem, _, _) => e.copy(mem = typeMapId(mem, f_opt)).copyMeta(e)
-          case e@CirNew(mod, mods, _) => e.copy(mod = typeMapId(mod, f_opt),
+          case e@CirNew(mod, specialized, mods, _) => e.copy(mod = typeMapId(mod, f_opt),
             mods = mods.map((i: Id) => typeMapId(i, f_opt))).copyMeta(e)
           case e@CirCall(mod, args) => e.copy(mod = typeMapId(mod, f_opt),
             args = args.map(typeMapExpr(_, f_opt))).copyMeta(e)
@@ -654,7 +680,10 @@ object Utilities {
   def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => FOption[Type]) :FuncDef =
     fun.copy(body = typeMapCmd(fun.body, f_opt))
   def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
-    mod.copy(body = typeMapCmd(mod.body, f_opt)).copyMeta(mod)
+    mod.copy(body = typeMapCmd(mod.body, f_opt),
+      modules = mod.modules.map(p =>
+        p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
+      )).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {
@@ -700,4 +729,124 @@ object Utilities {
   val is_handle_var :Id => Boolean =
     { id: Id => id.v.startsWith(lock_handle_prefix) }
 
+  val generic_type_prefix = "__GEN_"
+
+  def without_prefix(id :Id): Id =
+    Id(id.v.substring(generic_type_prefix.length))
+
+
+  /**
+   * check if a type represents a generic
+   */
+  def is_generic(t:Any) :Boolean = t match {
+    case TNamedType(name) => name.v.startsWith(generic_type_prefix)
+    case TSizedInt(l, _) => is_generic(l)
+    case TBitWidthAdd(b1, b2) => is_generic(b1) || is_generic(b2)
+    case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix)
+    case _:Type => false
+    case id:Id => id.v.startsWith(generic_type_prefix)
+    case s:String => s.startsWith(generic_type_prefix)
+  }
+
+  def string_is_int (s :String)  :Boolean=
+    {
+      try
+        {
+          s.toInt; true
+        } catch
+        {
+          case _: Throwable => false
+        }
+    }
+
+  /**
+   * check if a type represents a generic, and is one of THE generics of the
+   * current function. (There are generic types of other called functions, but
+   * they are specialized, and can be distinguished)
+   */
+  def is_my_generic(t :Any, accept_lit :Boolean = false) :Boolean =
+    {
+      val tmp = t match {
+        case TNamedType(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+        case TSizedInt(l, _) => is_my_generic(l, accept_lit)
+        case TBitWidthAdd(b1, b2) => is_my_generic(b1, accept_lit) || is_my_generic(b2, accept_lit)
+        case TBitWidthVar(name) => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+        case _:Type => accept_lit
+        case name:Id => name.v.startsWith(generic_type_prefix) && !name.v.endsWith("*")
+        case name:String if string_is_int(name) => accept_lit
+        case name:String => name.startsWith(generic_type_prefix) && !name.endsWith("*")
+      }
+      tmp
+    }
+
+
+  val not_gen_pref = "__NOT"
+
+  /**
+   * take a generic type, and turn it into not a generic type (as recognized by
+   * the above is_generic and is_my_generic
+   */
+  def degenerify(t :Type) :Type =
+  //  not currently used. might be helpful in future with more complicated type inference
+    {
+      def _degenerify(t :Type) :Type = t match
+      {
+        case TSignVar(nm) if (is_generic(nm)) =>
+          TSignVar(Id(not_gen_pref + nm.v).copyMeta(nm))
+        case TSizedInt(len, sign) =>
+          TSizedInt(degenerify(len).asInstanceOf[TBitWidth], degenerify(sign).asInstanceOf[TSignedNess])
+        case TFun(args, ret) =>
+          TFun(args.map(degenerify), degenerify(ret))
+        case TRecType(name, fields) =>
+          TRecType(name, fields.map((idtp) => (idtp._1, degenerify(idtp._2))))
+        case TModType(inputs, refs, retType, name) =>
+          TModType(inputs.map(degenerify), refs.map(degenerify), retType.map(degenerify), name)
+        case TReqHandle(tp, rtyp) => TReqHandle(degenerify(tp), rtyp)
+        case TNamedType(name) if is_generic(name) =>
+          TNamedType(Id(not_gen_pref + name.v).copyMeta(name))
+        case TMaybe(btyp) =>
+          TMaybe(degenerify(btyp))
+        case TBitWidthVar(nm) if is_generic(nm) =>
+          TBitWidthVar(Id(not_gen_pref + nm.v).copyMeta(nm))
+        case TObject(name, typParams, methods) =>
+          TObject(name, typParams.map(degenerify), methods.map(idtp => (idtp._1, (degenerify(idtp._2._1).asInstanceOf[TFun], idtp._2._2))))
+        case other => other
+      }
+      _degenerify(t).copyMeta(t)
+    }
+
+  /**
+   * take a type {@param t} and if it is an object, map the list of ints
+   * {@param s} over all the generic types. For example: if you have a
+   * BHT&lt;T&gt;, and you specialise it with the list 16::[], then you will
+   * get back a BHT&lt;16&gt;
+   *
+   * For anything that isn't an object, return it unchanged. This is just
+   * convenient for where this is used
+   */
+  def specialize(t:Type, s:List[Int]) :Type = t match {
+    case t :TObject =>
+    val new_types = s.map(l => TBitWidthLen(l))
+    t.copy(typParams = new_types,
+      methods = t.methods.map((id_funlat) => {
+        val old_fun = id_funlat._2._1
+        val assoc_list = t.typParams.map({
+          case TBitWidthVar(v) => v.v
+          case TNamedType(v) => v.v
+          case _ => ""
+        }).zip(new_types) //TODO more descriptive error when length mismatch
+        val map = assoc_list.toMap
+        val new_args = old_fun.args.map
+        { case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
+          TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+        case other => other }
+        val new_ret = old_fun.ret match {
+          case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
+            TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+          case other => other
+        }
+        (id_funlat._1, (TFun(new_args, new_ret).copyMeta(old_fun).asInstanceOf[TFun], id_funlat._2._2))
+      })).copyMeta(t)
+    case _ => t
+  }
 }

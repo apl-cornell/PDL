@@ -7,7 +7,9 @@ import TypeChecker.TypeChecks
 import Environments.Environment
 import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational, Latency, Sequential}
-import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts}
+import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, is_generic, specialize}
+
+import scala.collection.mutable
 
 
 //  This checks the 'Normal stuff' with base types.
@@ -33,6 +35,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   /**
    * This does the base type checking and well-fomedness checking for a given function with
    * an environment (that may have other function types defined already).
+   * NOTE: THIS NO LONGER CHECKS ANYTHING. Type Inference effectively does the type checking (it
+   * isn't safe to call the checking code here again due to polymorphic types).
    * @param f - The function definition to check.
    * @param tenv - The current type environment (which only includes already defined functions)
    * @return - tenv plus a new mapping from f's name to f's type
@@ -41,13 +45,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val typList = f.args.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ }) //TODO disallow memories as params
     val fenv = f.args.foldLeft[Environment[Id, Type]](tenv)((env, p) => { env.add(p.name, p.typ)})
     val ftyp = TFun(typList, f.ret)
-    val e1 = checkCommand(f.name, f.body, fenv)
-    val rt = checkFuncWellFormed(f.body, e1)
-    if (rt.isEmpty) {
-      throw MalformedFunction(f.pos, "Missing return statement")
-    } else if (!areEqual(ftyp.ret, rt.get)) {
-      throw UnexpectedType(f.pos, s"${f.name} return type", ftyp.toString(), rt.get)
-    }
     tenv.add(f.name, ftyp)
   }
 
@@ -195,8 +192,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(ltyp)
       (ltyp, tenv)
     }
-    case CirNew(mod, mods, _) => {
-      val mtyp = tenv(mod)
+    case CirNew(mod, specialized, mods, _) => {
+      val mtyp = specialize(tenv(mod), specialized)
       mtyp match {
         case TModType(_, refs, _, _) => {
           if(refs.length != mods.length) {
@@ -568,7 +565,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       }
     case EBitExtract(num, start, end) => {
       val (ntyp, nenv) = checkExpression(num, tenv, None)
-      val bitsLeft = math.abs(end - start) + 1
+      val bitsLeft = EIndAdd(EIndSub(start, end), EIndConst(1)).asInstanceOf[EIndConst].v
       ntyp.matchOrError(e.pos, "bit extract", "sized number") {
         case TSizedInt(l, u) if l.getLen >= bitsLeft => (TSizedInt(TBitWidthLen(bitsLeft), u), nenv)
         case _ => throw UnexpectedType(e.pos, "bit extract", "sized number larger than extract range", ntyp)
@@ -589,14 +586,30 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           if (targs.length != args.length) {
             throw ArgLengthMismatch(e.pos, targs.length, args.length)
           }
+          val this_app_templated = mutable.HashMap.empty[Id, Int]
           targs.zip(args).foreach {
             case (expectedT, a) =>
               val (atyp, aenv) = checkExpression(a, tenv, None)
-              if (!isSubtype(atyp, expectedT)) {
+              val act_exp :Type = expectedT match {
+                case TSizedInt(TBitWidthVar(name), sign) if is_generic(name) =>
+                this_app_templated.get(name) match {
+                  case Some(value) => TSizedInt(TBitWidthLen(value), sign)
+                  case None => this_app_templated.put(name, atyp.asInstanceOf[TSizedInt].len.getLen); atyp
+                }
+                case _ => expectedT
+              }
+              if (!isSubtype(atyp, act_exp)) {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
           }
-          (tret, tenv)
+          val act_ret = if(is_generic(tret))
+            {
+              val sign = tret.asInstanceOf[TSizedInt].sign
+              TSizedInt(TBitWidthLen(
+                this_app_templated.getOrElse(tret.asInstanceOf[TSizedInt].len
+                  .asInstanceOf[TBitWidthVar].name, -1)), sign)
+            } else tret
+          (act_ret, tenv)
         }
         case _ => throw UnexpectedType(func.pos, "function call", "function type", ftyp)
       }
@@ -604,37 +617,47 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     case ECall(mod, name, args, isAtomic) => {
       val mtyp = tenv(mod)
       mod.typ = Some(mtyp)
-      mtyp match {
-        case TModType(inputs, _, retType, _) => {
-          if (inputs.length != args.length) {
-            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
-          }
-          inputs.zip(args).foreach {
-            case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv, None)
-              if (!isSubtype(atyp, expectedT)) {
+      mtyp match
+      {
+        case TModType(inputs, _, retType, _) =>
+          {
+            if (inputs.length != args.length)
+            {
+              throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+            }
+            inputs.zip(args).foreach
+            { case (expectedT, a) => val (atyp, aenv) = checkExpression(a, tenv, None)
+              if (!isSubtype(atyp, expectedT))
+              {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
+            }
+            e.typ match {
+              case Some(t) => (t, tenv)
+              case None => (if (retType.isDefined) retType.get else TVoid(), tenv)
+            }
           }
-          (if (retType.isDefined) retType.get else TVoid(), tenv)
-        }
-        case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) => {
-          val mtyp = methods(name.get)._1
-          val inputs = mtyp.args
-          val retType = mtyp.ret
-          //TODO refactor and pull into function since it is same as above
-          if (inputs.length != args.length) {
-            throw ArgLengthMismatch(e.pos, inputs.length, args.length)
-          }
-          inputs.zip(args).foreach {
-            case (expectedT, a) =>
-              val (atyp, aenv) = checkExpression(a, tenv, None)
-              if (!isSubtype(atyp, expectedT)) {
+        case TObject(_, _, methods) if name.isDefined && methods.contains(name.get) =>
+          {
+            val mtyp = methods(name.get)._1
+            val inputs = mtyp.args
+            val retType = mtyp.ret //TODO refactor and pull into function since it is same as above
+            if (inputs.length != args.length)
+            {
+              throw ArgLengthMismatch(e.pos, inputs.length, args.length)
+            }
+            inputs.zip(args).foreach
+            { case (expectedT, a) => val (atyp, aenv) = checkExpression(a, tenv, None)
+              if (!isSubtype(atyp, expectedT))
+              {
                 throw UnexpectedSubtype(e.pos, a.toString, expectedT, atyp)
               }
+            }
+            e.typ match {
+              case Some(t) => (t, tenv)
+              case None =>  (retType, tenv)
+            }
           }
-          (retType, tenv)
-        }
         case _ => throw UnexpectedType(mod.pos, "module name", "module type", mtyp)
       }
     }

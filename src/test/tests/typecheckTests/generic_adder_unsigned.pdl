@@ -1,0 +1,9 @@
+def adder<T>(x :uint<T>, y :uint<T>) :int<T>
+{
+   return cast(x + y, int<T>);
+}
+
+
+circuit {
+   r = memory(int<32>, 32);
+}

@@ -1,7 +1,7 @@
 //Expected Success
 pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(RenameRF), m:int<32>[5]<c2,s>(RenameRF)] {
-    uint<5> rs1 = input{0:4};
-    uint<5> rs2 = input{5:9};
+    uint<5> rs1 = input{4:0};
+    uint<5> rs2 = input{9:5};
     start(rf);
     start(m);
     reserve(rf[rs1],R);
@@ -24,8 +24,8 @@ pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(RenameRF), m:int<32>[5]<c2,s>(R
 
 //Tests that modules are analyzed separately
 pipe test4(input: uint<32>)[rf: int<32>[5]<c2,s>(RenameRF), m:int<32>[5]<c2,s>(RenameRF)] :bool {
-    uint<5> rs1 = input{0:4};
-    uint<5> rs2 = input{5:9};
+    uint<5> rs1 = input{4:0};
+    uint<5> rs2 = input{9:5};
     start(rf);
     start(m);
     acquire(rf[rs1],R);

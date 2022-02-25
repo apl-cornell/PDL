@@ -1,11 +1,13 @@
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
+import pipedsl.codegen.bsv.ConstraintsToBluespec.to_provisos
 import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand, UnexpectedExpr, UnexpectedType}
 import pipedsl.common.LockImplementation
 import pipedsl.common.LockImplementation.{LockInterface, getDefaultLockImpl, supportsCheckpoint}
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
 import pipedsl.common.Syntax._
+import pipedsl.common.Utilities.generic_type_prefix
 
 object BSVSyntax {
 
@@ -16,6 +18,10 @@ object BSVSyntax {
 
   sealed trait Proviso
   case class PBits(szName: String) extends Proviso
+  case class PAdd(num1 :String, num2 :String, sum :String) extends Proviso
+  case class PMin(name :String, min :Int) extends Proviso
+  case class PMax(num1 :String, num2 :String, max :String) extends Proviso
+  case class PEq(num1 :String, num2 :String) extends Proviso
 
   sealed trait BSVType
   case class BNumericType(sz: Int) extends BSVType
@@ -25,6 +31,8 @@ object BSVSyntax {
   case class BInterface(name: String, tparams: List[BVar] = List()) extends BSVType
   case class BSizedType(name: String, sizeParams: List[Integer] = List()) extends BSVType
   case class BSizedInt(unsigned: Boolean, size: Int) extends BSVType
+  case class BInteger() extends  BSVType
+  case class BVarSizedInt(unsigned :Boolean, size :String) extends BSVType
   case class BTypeParam(name: String, provisos: List[Proviso]) extends BSVType
   case object BBool extends BSVType
   case object BString extends BSVType
@@ -106,7 +114,10 @@ object BSVSyntax {
         } else { None }
         //TODO pass checkpoint ID
         getLockedMemType(mem, mtyp, lidtyp, cidtyp, limpl, useTypeVars = false, None)
-      case TSizedInt(len, sign) => BSizedInt(sign.unsigned(), len.getLen)
+      case TSizedInt(TBitWidthVar(name), sign) => BVarSizedInt(sign.unsigned(), name.v)
+      case TSizedInt(len :TBitWidthLen, sign) => BSizedInt(sign.unsigned(), len.getLen)
+      case TInteger() => BInteger();
+      case TBitWidthLen(len) => BNumericType(len)        
       case TBool() => BBool
       case TString() => BString
       case TModType(_, _, _, Some(n)) => modmap(n)
@@ -151,11 +162,23 @@ object BSVSyntax {
     }
 
     def toVar(i: Id): BVar = {
+      if (i.typ.isEmpty)
+        {
+          println(s"$i at ${i.pos}")
+        }
       BVar(variablePrefix + i.v, toType(i.typ.get))
     }
 
     def toVar(v: EVar): BVar = {
       toVar(v.id)
+    }
+
+    def toBSVIndex(index: EIndex) :BIndex = index match
+    {
+      case EIndConst(v) => BIndConst(v)
+      case EIndAdd(l, r) => BIndAdd(toBSVIndex(l), toBSVIndex(r))
+      case EIndSub(l, r) => BIndSub(toBSVIndex(l), toBSVIndex(r))
+      case EIndVar(id) => BIndVar("val" + id.v)
     }
 
     def toExpr(e: Expr): BExpr = e match {
@@ -168,8 +191,8 @@ object BSVSyntax {
           val bnum = toExpr(num)
           //remove nested pack/unpacks
           bnum match {
-            case BUnpack(e) => BUnpack(BBitExtract(e, start, end))
-            case e => BUnpack(BBitExtract(BPack(e), start, end))
+            case BUnpack(e) => BUnpack(BBitExtract(e, toBSVIndex(start), toBSVIndex(end)))
+            case e => BUnpack(BBitExtract(BPack(e), toBSVIndex(start), toBSVIndex(end)))
           }
       case ETernary(cond, tval, fval) => BTernaryExpr(toExpr(cond), toExpr(tval), toExpr(fval))
       case e@EVar(_) => toVar(e)
@@ -224,9 +247,25 @@ object BSVSyntax {
     //automatically determine an output type
     private def translateIntCast(from: TSizedInt, to:TSizedInt, e: Expr): BExpr = {
       val baseExpr = toExpr(e)
-      val needsExtend = from.len.getLen < to.len.getLen
-      val needsTruncate = to.len.getLen < from.len.getLen
-      val needsPack = from.sign != to.sign
+      //val needsExtend = from.len.getLen < to.len.getLen
+      //val needsTruncate = to.len.getLen < from.len.getLen
+      val needsExtend = (to.len, from.len) match {
+        case (TBitWidthLen(lto), TBitWidthLen(lfrom)) => lfrom < lto
+        case _ => false
+      }
+      val needsTruncate = (to.len, from.len) match {
+        case (TBitWidthLen(lto), TBitWidthLen(lfrom)) => lto < lfrom
+        case _ => false
+      }
+
+
+      val needsPack = (to, from) match {
+        case (TSizedInt(_:TBitWidthLen, sto), TSizedInt(_:TBitWidthLen, sfrom)) =>
+          sto != sfrom
+        case _ => true
+      }
+
+        from.sign != to.sign
       val extended = if (needsExtend) {
         //If making a signed number, sign extend
         BExtend(baseExpr, useSign = to.sign.signed())
@@ -314,8 +353,29 @@ object BSVSyntax {
       val params = b.args.foldLeft(List[BVar]())((ps, arg) => {
         ps :+ BVar(arg.name.v, toType(arg.typ))
       })
-      val fdef = BFuncDef(b.name.v, rettype, params, translateFuncBody(b.body))
+      val fdef = BFuncDef(b.name.v, rettype, params,
+        getFuncGenIntDecls(b) ++ translateFuncBody(b.body),
+        getProvisos(b))
       fdef
+    }
+
+    private def getProvisos(b :FuncDef) :List[Proviso] =
+    {
+      val tmp = (b.adds.toList.map(pairid => PAdd(pairid._1._1, pairid._1._2, pairid._2.v)) ++
+        b.mins.toList.map(pair => PMin(pair._1, pair._2))).distinct ++
+        to_provisos(b.constraints)
+      tmp
+    }
+
+    private def getFuncGenIntDecls(b :FuncDef): List[BStatement] =
+    {
+      b.templateTypes.map(id =>
+        {
+          val tmp = Id("val" + id.v)
+          tmp.typ = Some(TInteger())
+          BDecl(toVar(tmp),
+            Some(BValueOf(id.v)))
+        })
     }
 
     private def translateFuncBody(c: Command): List[BStatement] = c match {
@@ -394,11 +454,18 @@ object BSVSyntax {
   case class BVar(name: String, typ: BSVType) extends BExpr
   case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
-  case class BBitExtract(expr: BExpr, start: Int, end: Int) extends BExpr
+  case class BBitExtract(expr: BExpr, start: BIndex, end: BIndex) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
   case class BModule(name: String, args: List[BExpr] = List()) extends BExpr
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
+  case class BValueOf(s :String) extends BExpr
+
+  sealed trait BIndex
+  case class BIndConst(n :Int) extends BIndex
+  case class BIndVar(v :String) extends BIndex
+  case class BIndAdd(l :BIndex, r :BIndex) extends BIndex
+  case class BIndSub(l :BIndex, r :BIndex) extends BIndex
 
   sealed trait BStatement {
     var useLet: Boolean = false
@@ -439,7 +506,9 @@ object BSVSyntax {
 
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
 
-  case class BFuncDef(name: String, rettyp: BSVType, params: List[BVar], body: List[BStatement])
+  case class BFuncDef(name: String, rettyp: BSVType,
+                      params: List[BVar], body: List[BStatement],
+                      provisos: List[Proviso])
 
   case class BMethodDef(sig: BMethodSig, cond: Option[BExpr] = None, body: List[BStatement])
 

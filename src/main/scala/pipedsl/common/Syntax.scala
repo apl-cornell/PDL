@@ -5,7 +5,12 @@ import Security._
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
+import pipedsl.common.Syntax.EIndConst
+import pipedsl.common.Utilities.{generic_type_prefix, is_my_generic}
 import pipedsl.typechecker.Subtypes
+
+import scala.collection.mutable
+import scala.language.implicitConversions
 
 
 
@@ -18,6 +23,12 @@ object Syntax {
   object Annotations {
     trait TypeAnnotation {
       var typ: Option[Type] = None
+
+      def setType(t :Type) :this.type =
+      {
+        this.typ = Some(t)
+        this
+      }
     }
     sealed trait LabelAnnotation {
       var lbl: Option[Label] = None
@@ -38,6 +49,12 @@ object Syntax {
     sealed trait PortAnnotation
     {
       var portNum :Option[Int] = None
+    }
+    sealed trait Provisos
+    {
+      val adds: mutable.Map[(String, String), Id] = mutable.HashMap[(String, String), Id]()
+      val mins: mutable.Map[String, Int] = mutable.HashMap[String, Int]()
+      var constraints: List[Constraints.Constraint] = List()
     }
   }
 
@@ -120,6 +137,7 @@ object Syntax {
       case TMaybe(btyp) => s"Maybe<${btyp}>"
       case TNamedType(n) => n.toString
       case TBitWidthAdd(b1, b2) => "add(" + b1 + ", " + b2 + ")"
+      case TBitWidthSub(b1, b2) => s"sub($b1, $b2)"
       case TBitWidthLen(len) => len.toString
       case TBitWidthMax(b1, b2) => "max(" + b1 + ", " + b2 + ")"
       case TBitWidthVar(name) => "bitVar(" + name + ")"
@@ -129,7 +147,8 @@ object Syntax {
         case TUnsigned() => "unsigned"
         case TSignVar(name) => "sign(" + name + ")"
       }
-      case TObject(name, tparams, methods) => "TODO"        
+      case TObject(name, tparams, methods) => s"$name <" + tparams + ">" +
+        methods.foldLeft("")((s, f) => s + s"\n{${f._2._1.toString}}")
     }
 
     /**
@@ -266,6 +285,7 @@ object Syntax {
         super.setPos(newpos)
       }
   }
+  case class TInteger() extends Type with IntType
   // Use case class instead of case object to get unique positions
   case class TString() extends Type
   case class TVoid() extends Type
@@ -305,11 +325,108 @@ object Syntax {
   {
     def getLen :Int = this.matchOrError(this.pos, "bit width", "bit width len")
     { case l : TBitWidthLen => l.len}
+
+    def stringRep() :String
   }
   case class TBitWidthVar(name: Id) extends TBitWidth
+  {
+    override def stringRep(): String = name.v
+  }
+  object TBitWidthImplicits
+  {
+    implicit def fromIndex(idx :EIndex) :TBitWidth = idx match
+    {
+      case EIndConst(v) => TBitWidthLen(v)
+      case EIndAdd(l, r) => TBitWidthAdd(fromIndex(l), fromIndex(r))
+      case EIndSub(l, r) => TBitWidthSub(fromIndex(l), fromIndex(r))
+      case EIndVar(id) => TBitWidthVar(id)
+    }
+    implicit def fromInt(i :Int) :TBitWidthLen = TBitWidthLen(i)
+  }
   case class TBitWidthLen(len: Int) extends TBitWidth
-  case class TBitWidthAdd(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  {
+    override def stringRep(): String = len.toString
+  }
+
+  case class TBitWidthAdd(var b1: TBitWidth, var b2: TBitWidth) extends TBitWidth
+  {
+    if(b1.stringRep() < b2.stringRep())
+      {
+        println("SHOULDN'T BE HERE")
+        val tmp = b1
+        b1 = b2
+        b2 = tmp
+      }
+    override def stringRep(): String =
+      {
+        val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
+        val tmp = "A" + lst.head + "_" + lst(1) + "A"
+        if (is_my_generic(lst.head, accept_lit = true) && is_my_generic(lst(1), accept_lit = true))
+          generic_type_prefix + tmp
+        else
+          tmp
+      }
+  }
+  object TBitWidthAdd
+  {
+    def apply(b1 :TBitWidth, b2 :TBitWidth) :TBitWidth =
+    {
+      (b1, b2) match {
+        case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(l1 + l2)
+        case _ if (b1.stringRep() < b2.stringRep()) => new TBitWidthAdd(b2, b1)
+        case _ => new TBitWidthAdd(b1, b2)
+      }
+    }
+  }
+  case class TBitWidthSub(var b1: TBitWidth, var b2: TBitWidth) extends TBitWidth
+    {
+      override def stringRep(): String =
+        {
+          val tmp = "S" + b1.stringRep() + "_" + b2.stringRep() + "S"
+          if (is_my_generic(b1, accept_lit = true) && is_my_generic(b2, accept_lit = true))
+            generic_type_prefix + tmp
+          else
+            tmp
+        }
+    }
+  object TBitWidthSub
+    {
+      def apply(b1 :TBitWidth, b2 :TBitWidth) :TBitWidth =
+        {
+          (b1, b2) match {
+            case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(math.abs(l1 - l2))
+            case _ => new TBitWidthSub(b1, b2)
+          }
+        }
+    }
+
+
+
   case class TBitWidthMax(b1: TBitWidth, b2: TBitWidth) extends TBitWidth
+  {
+    override def stringRep(): String =
+      {
+        val lst = (b1.stringRep() :: b2.stringRep() :: Nil).sorted
+        val tmp = "M" + lst.head + "_" + lst(1) + "M"
+        if (is_my_generic(lst.head, accept_lit = true) && is_my_generic(lst(1), accept_lit = true))
+          generic_type_prefix + tmp
+        else
+          tmp
+      }
+
+  }
+  object TBitWidthMax
+  {
+    def apply(b1 :TBitWidth, b2 :TBitWidth) :TBitWidth =
+      {
+        (b1, b2) match {
+          case (TBitWidthLen(l1), TBitWidthLen(l2)) => TBitWidthLen(math.max(l1, l2))
+          case (TBitWidthVar(l1), TBitWidthVar(l2)) if l1 == l2 => b1
+          case _ if b1.stringRep() < b2.stringRep() => new TBitWidthMax(b2, b1)
+          case _ => new TBitWidthMax(b1, b2)
+        }
+      }
+  }
   case class TObject(name: Id, typParams: List[Type], methods: Map[Id,(TFun, Latency)]) extends Type
 
   //returns false only if it represents an unlocked memory type
@@ -447,7 +564,7 @@ object Syntax {
         this
       }
   }
-  case class EBitExtract(num: Expr, start: Int, end: Int) extends Expr
+  case class EBitExtract(num: Expr, start: EIndex, end :EIndex) extends Expr
   case class ETernary(cond: Expr, tval: Expr, fval: Expr) extends Expr
   case class EApp(func: Id, args: List[Expr]) extends Expr
   case class ECall(mod: Id, method: Option[Id] = None, args: List[Expr], isAtomic: Boolean) extends Expr
@@ -457,6 +574,26 @@ object Syntax {
     typ = Some(ctyp)
   }
 
+
+  sealed trait EIndex extends Positional with TypeAnnotation
+  case class EIndConst(v :Int) extends EIndex
+  case class EIndAdd(l :EIndex, r :EIndex) extends EIndex
+  case class EIndSub(l :EIndex, r :EIndex) extends EIndex
+  case class EIndVar(id :Id) extends EIndex
+  object EIndAdd
+  {
+    def apply(l :EIndex, r :EIndex) :EIndex = (l, r ) match {
+      case (EIndConst(lc), EIndConst(rc)) => EIndConst(lc + rc)
+      case _ => new EIndAdd(l, r)
+    }
+  }
+  object EIndSub
+    {
+      def apply(l :EIndex, r :EIndex) :EIndex = (l, r ) match {
+        case (EIndConst(lc), EIndConst(rc)) => EIndConst(math.abs(lc - rc))
+        case _ => new EIndSub(l, r)
+      }
+    }
 
   sealed trait Command extends Positional with SMTPredicate with PortAnnotation with HasCopyMeta
   {
@@ -540,7 +677,8 @@ object Syntax {
     name: Id,
     args: List[Param],
     ret: Type,
-    body: Command) extends Definition
+    body: Command,
+    templateTypes :List[Id]) extends Definition with Provisos
 
   case class MethodDef(
                       name :Id,
@@ -590,6 +728,8 @@ object Syntax {
   //This is an already "locked" memory (i.e. one line instantiation, no reference to the unlocked memory)
   case class CirLockMem(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int], numPorts: Int) extends CirExpr
   case class CirLockRegFile(elemTyp: Type, addrSize: Int, impl: LockInterface, szParams: List[Int]) extends CirExpr
-  case class CirNew(mod: Id, mods: List[Id], params: List[EInt]) extends CirExpr
+  /* specialized is the list of ints which "specialize" the (potential) generics of mod */
+  /* invariant: length of specialized matches up with # of generics in mod */
+  case class CirNew(mod: Id, specialized :List[Int], mods: List[Id], params: List[EInt]) extends CirExpr
   case class CirCall(mod: Id, args: List[Expr]) extends CirExpr
 }

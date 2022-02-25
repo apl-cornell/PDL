@@ -1,0 +1,13 @@
+def indexing<I, J>(x :int<I>, y :int<J>) :int<6>
+{
+   return x{J - 1:0};
+}
+
+def error(x :int<3>, y :int<6>) :int<6>
+{
+   return indexing(x, y);
+}
+
+circuit {
+   r = memory(int<32>, 32);
+}

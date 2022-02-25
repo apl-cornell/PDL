@@ -140,10 +140,12 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(ForwardRenameRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(RenameRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT]: bool {
     spec_check();
+    start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
     int<32> insn <- imem[pcaddr];
+    end(imem);
     s <- speccall cpu(pc + 1<16>);
     ---
     //This OPCODE is J Self and thus we're using it to signal termination
@@ -189,11 +191,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(ForwardRenameRF), imem: int<32>[16]<a
 	      s2 <- s;
        } else {
        	 if (isBranch) {
-	       s2 <- update(s, bht.req(pc, immB, 1<16>));
+	       s2 <- update(s, cast(bht.req(pc, immB, 1), int<69>));
 	 } else {
 	   s2 <- s;
 	   invalidate(s);
     }}} else { s2 <- s; invalidate(s); }
+    start(rf);
     if (needrs1) {
        reserve(rf[rs1], R);
     }
@@ -203,6 +206,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(ForwardRenameRF), imem: int<32>[16]<a
     if (writerd) {
        reserve(rf[rd], W);
     }
+    end(rf);
     ---
     if (needrs1) {
        block(rf[rs1]);
@@ -244,80 +248,76 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(ForwardRenameRF), imem: int<32>[16]<a
 	      }
        }
     }
-    split {
-    	  case: (isDiv) {
-	  	---
-		int<32> sdividend = sign(rf1);
-		//For REM, ignore sign of divisor
-		int<32> sdivisor  = (funct3 == u6<3>) ? 1<32> : sign(rf2);
-		bool isSignedDiv = ((funct3 == u4<3>) || (funct3 == u6<3>));
-		uint<32> dividend = (isSignedDiv) ? cast(mag(rf1), uint<32>) : cast(rf1, uint<32>);
-		uint<32> divisor =  (isSignedDiv) ? cast(mag(rf2), uint<32>) : cast(rf2, uint<32>);
-		bool retQuot = funct3 <= u5<3>;
-		bool invertRes = isSignedDiv && (sdividend != sdivisor);       
-		uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
-		uint<2> boff = u0<2>;
-		int<32> rddata = 0<32>;		
-		int<32> wdata <- 0<32>;
-	  }
-	 default: {
-	     int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
-	     int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
-	     bool    alu_flip = (isStore || isLoad || isAui) ? false : flip;
-	     uint<3> alu_funct3 = (isStore || isLoad || isAui) ? doAdd : funct3;
-	     int<32> alu_res = alu(alu_arg1, alu_arg2, alu_funct3, alu_flip);
-	     int<16> tmppc = pc + 1<16>;
-	     int<32> linkpc = 0<16> ++ (tmppc << 2);
-	     int<32> mulres = mul(rf1, rf2, funct3);
-	     if (writerd && (!isLoad)) {
-	     	block(rf[rd]);
-		int<32> rddata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
-		rf[rd] <- rddata;
-	     } else {
-	        int<32> rddata = 0<32>;
-	     }
-	     ---
-	     uint<32> tmpaddr = cast(alu_res, uint<32>);
-	     uint<16> memaddr = (tmpaddr >> 2){15:0};		
-	     uint<2> boff = cast(alu_res{1:0}, uint<2>);
-		split {
-		      case: (isLoad) {
-		      	    uint<16> raddr = memaddr;
-			    int<32> wdata <- dmem[raddr];
-		      }
-		      case: (isStore) {
-		      	    uint<16> waddr = memaddr;
-			    //use bottom bits of data and place in correct offset
-			    //shift by boff*8
-			    uint<5> nboff = boff ++ u0<3>;
-			    dmem[waddr, storeMask(boff, funct3)] <- (rf2 << nboff);
-			    int<32> wdata <- 0<32>;
-		      }	
-		      default: {
-		       	   int<32> wdata <- 0<32>;
-		      }
-	        }
-		uint<32> udivout <- u0<32>;
-		bool invertRes = false;
-	  }
+
+    int<32> alu_arg1 = (isAui) ? ((0<16> ++ pc) << 2) : rf1;
+    int<32> alu_arg2 = (isAui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : rf2));
+    bool    alu_flip = (isStore || isLoad || isAui) ? false : flip;
+    uint<3> alu_funct3 = (isStore || isLoad || isAui) ? doAdd : funct3;
+    int<32> alu_res = alu(alu_arg1, alu_arg2, alu_funct3, alu_flip);
+    int<16> tmppc = pc + 1<16>;
+    int<32> linkpc = 0<16> ++ (tmppc << 2);
+    int<32> mulres = mul(rf1, rf2, funct3);
+    if (writerd && (!isLoad) && (!isDiv)) {
+       block(rf[rd]);
+       int<32> rddata = (isLui) ? immU : ((isMul) ? mulres : ((isJal || isJalr) ? linkpc : alu_res));
+       rf[rd] <- rddata;
+    } else {
+       int<32> rddata = 0<32>;
     }
     ---
     if (isDiv) {
-       int<32> divdata = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
-    } else {
-      int<32> divdata = 0<32>;
+       int<32> sdividend = sign(rf1);
+       //For REM, ignore sign of divisor
+       int<32> sdivisor  = (funct3 == u6<3>) ? 1<32> : sign(rf2);
+       bool isSignedDiv = ((funct3 == u4<3>) || (funct3 == u6<3>));
+       uint<32> dividend = (isSignedDiv) ? cast(mag(rf1), uint<32>) : cast(rf1, uint<32>);
+       uint<32> divisor =  (isSignedDiv) ? cast(mag(rf2), uint<32>) : cast(rf2, uint<32>);
+       bool retQuot = funct3 <= u5<3>;
+       bool invertRes <- isSignedDiv && (sdividend != sdivisor);       
+       uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
+   } else {
+       bool invertRes <- false;
+       uint<32> udivout <- u0<32>;
+   }
+   uint<32> tmpaddr = cast(alu_res, uint<32>);
+   uint<16> memaddr = (tmpaddr >> 2){15:0};
+   uint<2> boff = cast(alu_res{1:0}, uint<2>);   
+   start(dmem);
+   split {
+        case: (isLoad) {
+	   uint<16> raddr = memaddr;
+	   int<32> wdata <- dmem[raddr];
+	}
+	case: (isStore) {
+	      uint<16> waddr = memaddr;
+	      //use bottom bits of data and place in correct offset
+	      //shift by boff*8
+	      uint<5> nboff = boff ++ u0<3>;
+	      dmem[waddr, storeMask(boff, funct3)] <- (rf2 << nboff);
+	      int<32> wdata <- 0<32>;
+	}
+	default: {
+	    int<32> wdata <- 0<32>;
+	}
     }
+    end(dmem);
+    ---
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
-       if (isLoad || isDiv) {
-          block(rf[rd]);
-	  int<32> maskedLoad = maskLoad(wdata, funct3, boff);
-       	  int<32> insnout = (isLoad) ? maskedLoad : divdata;
+       if (isLoad) {
+          block(rf[rd]);       
+       	  int<32> insnout = maskLoad(wdata, funct3, boff);
 	  rf[rd] <- insnout;
        } else {
+       if (isDiv) {
+          block(rf[rd]);
+	  int<32> divout = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);  
+	  int<32> insnout = divout;
+	  rf[rd] <- insnout;	  
+       } else {
        	 int<32> insnout = rddata;
-       }
+       }}
        print("Writing %d to r%d", insnout, rd);
     }
     ---
@@ -330,7 +330,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(ForwardRenameRF), imem: int<32>[16]<a
 circuit {
     ti = memory(int<32>, 16);
     td = memory(int<32>, 16);
-    rf = rflock ForwardRenameRF(int<32>, 5, 64);
+    rf = rflock(int<32>, 5, 64);
     div = new multi_stg_div[];
     b = new BHT<16>[](4);
     c = new cpu[rf, ti, td, div, b];

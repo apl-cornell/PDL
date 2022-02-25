@@ -4,6 +4,7 @@ import common.Syntax._
 import common.Locks._
 import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.Latency
+import pipedsl.common.Utilities.{generic_type_prefix, opt_func}
 
 import scala.util.matching.Regex
 
@@ -128,8 +129,29 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
         case m ~ a => EMemAccess(m, EInt(0), None, None, None, a.isDefined) }
   }
 
+
+  lazy val indexAtom :P[EIndex] = dlog(positioned
+  {
+    iden ^^ { id => EIndVar(Id(generic_type_prefix + id.v)).setType(TInteger()) } |
+    posint ^^ { n => EIndConst(n).setType(TInteger()) }
+
+  })("index atom")
+
+
+  lazy val index :P[EIndex] = positioned(
+    indexAtom ~ rep(("+" | "-") ~ indexAtom) ^^ {case fst ~ lst =>
+      //1 + 2 - 3
+      //1
+      //(1 + 2)
+      //(1 + 2) - 3
+      lst.foldLeft(fst)((idx, op) =>
+      if (op._1 == "+") EIndAdd(idx, op._2).setType(TInteger())
+      else EIndSub(idx, op._2).setType(TInteger()))
+    }
+  )
+
   lazy val bitAccess: P[Expr] = positioned {
-    expr ~ braces(posint ~ ":" ~ posint) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
+    expr ~ braces(index ~ ":" ~ index) ^^ { case n ~ (e ~ _ ~ s) => EBitExtract(n, s, e) }
   }
 
 
@@ -158,7 +180,8 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val simpleAtom: P[Expr] = positioned {
-    "call" ~> angular("atomic" | "a").? ~ iden ~ parens(repsep(expr, ",")) ^^ { case a ~ i ~ args => ECall(i, None, args, a.isDefined) } |
+     "call" ~> angular("atomic" | "a").? ~ iden ~ parens(repsep(expr, ",")) ^^ { case a ~ i ~ args => ECall(i, None, args, a.isDefined) } |
+      methodCall |
       not ~ simpleAtom ^^ { case n ~ e => EUop(n, e) } |
       binv ~ simpleAtom ^^ { case n ~ e => EUop(n, e) } |
       neg |
@@ -345,9 +368,25 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
     seqCmd } )
 
+  lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
+    posint ^^ {i => TBitWidthLen(i)}
 
-  lazy val sizedInt: P[Type] = "int" ~> angular(posint) ^^ { bits => TSizedInt(TBitWidthLen(bits), TSigned() ) } |
-  "uint" ~> angular(posint) ^^ { bits =>  TSizedInt(TBitWidthLen(bits), TUnsigned() ) }
+  lazy val bitWidth :P[TBitWidth] =
+      repsep(bitWidthAtom, "+") ^^
+        { lst =>
+          {
+            var tmp = lst.head
+            for (i <- lst.tail)
+              {
+                tmp = TBitWidthAdd(tmp, i)
+              }
+            tmp
+          }
+        } |
+    bitWidthAtom
+
+  lazy val sizedInt: P[Type] = "int" ~> angular(bitWidth) ^^ { bits => TSizedInt(bits, TSigned() ) } |
+  "uint" ~> angular(bitWidth) ^^ { bits =>  TSizedInt(bits, TUnsigned() ) }
 
   lazy val latency: P[Latency.Latency] =
     "c" ^^ { _ => Latency.Combinational } |
@@ -439,9 +478,11 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     }
   }
 
+lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
+
   lazy val fdef: P[FuncDef] = positioned {
-    "def" ~> iden ~ parens(repsep(param, ",")) ~ ":" ~ typ ~ braces(cmd) ^^ {
-      case i ~ ps ~ _ ~ t ~ c => FuncDef(i, ps, t, c)
+    "def" ~> iden ~ angular(repsep(genericName, ",")).? ~ parens(repsep(param, ",")) ~ ":" ~ (typ) ~ braces(cmd) ^^ {
+      case i ~ tp ~ ps ~ _ ~ t ~ c => FuncDef(i, ps, t, c, tp.getOrElse(List()))
     }
   }
 
@@ -458,8 +499,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val cnew: P[CirExpr] = positioned {
-    "new" ~ iden ~ brackets(repsep(iden,",")).? ~ parens(repsep(num,",")).? ^^ {
-      case _ ~ i ~ mods ~ params => CirNew(i, if (mods.isDefined) mods.get else List(),
+    "new" ~ iden ~ angular(repsep(posint, ",")).? ~ brackets(repsep(iden,",")).?  ~ parens(repsep(num,",")).? ^^ {
+      case _ ~ i ~ mods ~ specialize ~ params =>
+        CirNew(i, if (mods.isDefined) mods.get else List(), specialize.getOrElse(List()),
         if (params.isDefined) params.get else List())
     }
   }
@@ -530,8 +572,8 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val extern: P[ExternDef] = positioned {
-    "extern" ~> iden ~ angular(repsep(typ, ",")).? ~ braces(methodDef.*) ^^ {
-      case i ~ t ~ f => ExternDef(i, if (t.isDefined) t.get else List(), f) }
+    "extern" ~> iden ~ angular(repsep(genericName, ",")).? ~ braces(methodDef.*) ^^ {
+      case i ~ t ~ f => ExternDef(i, t.getOrElse(List()).map(x => TNamedType(x)), f) }
   }
 
   lazy val prog: P[Prog] = positioned {

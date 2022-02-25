@@ -299,12 +299,12 @@ module mkCheckpointBypassRF#(Integer regnum, Bool init, String fileInit)(Checkpo
 endmodule
    
    
-interface BHT#(type addr);
-   method addr req(addr pc, addr skip, addr take);
-   method Action upd(addr pc, Bool take);
+interface BHT#(numeric type addr);
+   method Int#(addr) req(Int#(addr) pc, Int#(addr) skip, Int#(addr) take);
+   method Action upd(Int#(addr) pc, Bool take);
 endinterface
 
-import "BVI" BHT = module mkBHT#(Integer entries)(BHT#(addr)) provisos (Bits#(addr,szAddr));
+import "BVI" BHT = module mkBHT#(Integer entries)(BHT#(szAddr));
 		      parameter num_entries = entries;
 		      parameter addr_width = valueOf(szAddr);
 		      

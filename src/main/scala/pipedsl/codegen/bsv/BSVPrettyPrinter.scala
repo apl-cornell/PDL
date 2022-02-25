@@ -15,8 +15,12 @@ object BSVPrettyPrinter {
     mkExprString(toBSVTypeStr(v.typ), v.name)
   }
 
-  private def toProvisoString(name: String, p: Proviso): String = p match {
+  def toProvisoString(name: String, p: Proviso): String = p match {
     case PBits(szName) => "Bits#(" + name + "," + szName +")"
+    case PAdd(num1, num2, sum) => s"Add#($num1, $num2, $sum)"
+    case PMin(name, min) => s"Min#($name, $min, $min)"
+    case PMax(num1, num2, max) => s"Max#($num1, $num2, $max)"
+    case PEq(num1, num2) => s"Add#($num1, 0, $num2)"
   }
 
   private def getTypeParams(typ: BSVType): Set[BTypeParam] = typ match {
@@ -48,6 +52,9 @@ object BSVPrettyPrinter {
       } else {
         ""
       }) + "Int#(" + size + ")"
+    case BVarSizedInt(unsigned, size) =>
+      (if (unsigned) "U" else "") +
+      "Int#(" + size + ")"
     case BBool => "Bool"
     case BVoid => "void"
     case BCombMemType(elem, addrSize) => "MemCombRead#(" + toBSVTypeStr(elem) + "," +
@@ -58,6 +65,7 @@ object BSVPrettyPrinter {
     case BNumericType(sz) => sz.toString
     case BTypeParam(name, _) => name
     case BString => "String"
+    case BInteger() => "Integer"
   }
 
   private def toIntString(base: Int, value: Int): String = base match {
@@ -66,6 +74,13 @@ object BSVPrettyPrinter {
     case 8 => "o" + value.toOctalString
     case 2 => "b" + value.toBinaryString
     case _ => throw BaseError(base)
+  }
+
+  private def toBSVIndString(index: BIndex) :String = index match {
+    case BIndConst(n) => n.toString
+    case BIndVar(v) => v
+    case BIndSub(l, r) => s"(${toBSVIndString(l)} - ${toBSVIndString(r)})"
+    case BIndAdd(l, r) => s"(${toBSVIndString(l)} + ${toBSVIndString(r)})"
   }
 
   private def toBSVExprStr(expr: BExpr): String = expr match {
@@ -101,7 +116,7 @@ object BSVPrettyPrinter {
     //TODO incorporate bit types into the typesystem properly
     //and then remove the custom pack/unpack operations
     case BBitExtract(expr, start, end) => mkExprString(toBSVExprStr(expr),
-      "[", end.toString, ":", start.toString, "]"
+      "[", toBSVIndString(end), ":", toBSVIndString(start), "]"
     )
     case BConcat(first, rest) =>
       val exprstr = rest.foldLeft[String](toBSVExprStr(first))((s, e) => {
@@ -123,6 +138,7 @@ object BSVPrettyPrinter {
     case BOne => "1"
     case BAllOnes => "'1"
     case BTime => "$time()"
+    case BValueOf(s) => s"valueOf($s)"
   }
 
   def getFilePrinter(name: File): BSVPretyPrinterImpl = {
@@ -259,7 +275,16 @@ object BSVPrettyPrinter {
 
     def printBSVFunc(func: BFuncDef): Unit = {
       val paramstr = func.params.map(p => toDeclString(p)).mkString(", ")
-      w.write(mkStatementString("function", toBSVTypeStr(func.rettyp), func.name, "(", paramstr, ")"))
+      w.write(mkStatementString("function", toBSVTypeStr(func.rettyp),
+        func.name, "(", paramstr, ")",
+        if(func.provisos.nonEmpty)
+        {
+          "\n\tprovisos(" +
+            func.provisos.tail.foldLeft(toProvisoString("", func.provisos.head))((str, proviso) =>
+              str + ",\n\t\t" + toProvisoString("", proviso)) +
+          ")"
+        } else ""
+      ))
       incIndent()
       func.body.foreach(s => printBSVStatement(s))
       decIndent()

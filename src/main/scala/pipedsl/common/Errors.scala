@@ -34,7 +34,7 @@ object Errors {
     withPos(s"$i is not a valid lock implementation name", i.pos)
   )
 
-  case class InvalidBitExtraction(s: Int, e: Int) extends RuntimeException(
+  case class InvalidBitExtraction(s: Any, e: Any) extends RuntimeException(
     s"Start: $s must be less than or equal to End: $e"
   )
   case class AlreadySetException(id: Id) extends RuntimeException(
@@ -201,5 +201,16 @@ object Errors {
     withPos(s"Not enough constraints provided to infer types. Found error at $e", e.pos)
   )
 
+  case class UnsatisfiableConstraint(c :Any) extends RuntimeException(
+    s"Cannot satisfy constraint $c"
+  )
+
   case class IntWidthNotSpecified() extends RuntimeException
+
+  case class NotSoGenericAreWe(id :Id, needed :Type) extends RuntimeException(
+    withPos(s"Generic type $id should not need to be set to ${needed}.", id.pos)
+  )
+  case class BadConstraintsAtCall(app :EApp) extends RuntimeException(
+    withPos(s"Constraints for $app not satisfied", app.pos)
+  )
 }

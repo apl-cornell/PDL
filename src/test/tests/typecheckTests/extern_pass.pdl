@@ -1,0 +1,21 @@
+extern myExt {
+       method mySyncMethod<s>(a :int<32>) :int<32>;
+       method myCombMethod<c>(a :int<32>) :int<32>;
+}
+
+pipe test1(v :int<32>)[ext :myExt] :int<32>
+{
+     s <- ext.mySyncMethod(v);
+     ---
+     output(s + v);
+}
+pipe test2(v :int<32>)[ext :myExt] :int<32>
+{
+    c = ext.myCombMethod(v);
+    d = c + v;
+    ---
+    call test2(v + d);
+}
+circuit {
+	ext = new myExt[]();
+}
