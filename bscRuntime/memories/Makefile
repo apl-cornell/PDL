@@ -1,10 +1,4 @@
 BSC=bsc -no-show-timestamps -no-show-version --aggressive-conditions
-BMOD=Memories
-B_IN=$(BMOD).bsv
-B_LIB=$(BMOD).bo
-B_SIM=tb.bsv
-OUT=Top
-
 TOBUILD=Ehr.bo Locks.bo Memories.bo Speculation.bo SpecialQueues.bo
 
 ## Default simulator is iverilog
@@ -18,16 +12,6 @@ Locks.bo: Locks.bsv Ehr.bo
 	$(BSC) -show-schedule $<
 %.bo: %.bsv Ehr.bo Locks.bo
 	$(BSC) -show-schedule $<
-
-$(B_LIB): $(B_IN)
-	$(BSC) -show-schedule $<
-verilog: mk$(OUT).v
-
-%.v: %.bsv
-	$(BSC) -show-schedule -verilog $<
-
-mk$(OUT).v: $(B_IN)
-	$(BSC) -show-schedule -verilog $(B_IN)
 
 .PHONY: sim
 sim: $(B_LIB) $(B_SIM)
