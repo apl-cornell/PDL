@@ -12,7 +12,11 @@ VSIM = -vsim iverilog
 
 all: $(TOBUILD)
 
-%.bo: %.bsv
+Ehr.bo: Ehr.bsv
+	$(BSC) -show-schedule $<
+Locks.bo: Locks.bsv
+	$(BSC) -show-schedule $<
+%.bo: %.bsv Ehr.bo Locks.bo
 	$(BSC) -show-schedule $<
 
 $(B_LIB): $(B_IN)
