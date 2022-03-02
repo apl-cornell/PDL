@@ -14,7 +14,7 @@ all: $(TOBUILD)
 
 Ehr.bo: Ehr.bsv
 	$(BSC) -show-schedule $<
-Locks.bo: Locks.bsv
+Locks.bo: Locks.bsv Ehr.bo
 	$(BSC) -show-schedule $<
 %.bo: %.bsv Ehr.bo Locks.bo
 	$(BSC) -show-schedule $<
