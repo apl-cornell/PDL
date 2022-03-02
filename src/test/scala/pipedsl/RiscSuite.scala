@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.File
 
-class RiscSuite extends AnyFunSuite{
+class RiscSuite extends AnyFunSuite {
   private val folder = "src/test/tests/risc-pipe"
   private val testFiles = getListOfTests(folder)
   private val testFolder = new File(folder)
@@ -13,9 +13,12 @@ class RiscSuite extends AnyFunSuite{
   private val inputRF = inputFolder + "/rf"
   private val inputIMEM = inputFolder + "/ti"
   private val inputDMEM = inputFolder + "/td"
+  private val inputCmem = inputFolder + "/cmem"
+  private val mainMem = inputFolder + "/mm"
 
   private def getInputMap(s: String): Map[String, String] = {
-    Map("rf" -> inputRF, "ti" -> (inputIMEM + s), "td" -> (inputDMEM + s))
+    Map("rf" -> inputRF, "ti" -> (inputIMEM + s), "td" -> (inputDMEM + s), "cmem" -> inputCmem,
+      "mm" -> (mainMem +s) )
   }
 
   private val sims = getListOfSims(folder).map(s => getTestName(s))
