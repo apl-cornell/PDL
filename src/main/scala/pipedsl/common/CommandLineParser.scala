@@ -19,6 +19,7 @@ object CommandLineParser {
     memInit: Map[String, String] = Map(),
     port_warn: Boolean = false,
     autocast :Boolean = false,
+    printTimer : Boolean = false
   )
 
   private def buildParser(): OParser[Unit, Config] = {
@@ -79,6 +80,9 @@ object CommandLineParser {
             opt[Map[String, String]]("memInit")
               .valueName("<memName1>=<fileName1>,<memName2>=<fileName2>...")
               .action((x, c) => c.copy(memInit = x)),
+            opt[Unit](name = "printTimer")
+              .text("Add execution timer in generated testbench circuit")
+              .action((_, c) => c.copy(printTimer = true))
           ),
         cmd("typecheck") 
           .text("parses and type checks the resulting AST")

@@ -30,7 +30,8 @@ object Main {
           case ("interpret") => interpret(config.maxIterations, config.memoryInput, config.file, config.out,
             rfLockImpl = config.defaultRegLock)
           case ("gen") => gen(config.out, config.file, config.printStageGraph,
-            config.debug, config.memInit, config.port_warn, config.autocast, rfLockImpl = config.defaultRegLock)
+            config.debug, config.memInit, config.port_warn, config.autocast,
+            rfLockImpl = config.defaultRegLock, printTimer = config.printTimer)
           case ("typecheck") => runPasses(printOutput = true, config.file, config.out, config.port_warn,
             config.autocast, rfLockImpl = config.defaultRegLock)
           case _ =>
@@ -149,7 +150,8 @@ object Main {
   }
   
   def gen(outDir: File, inputFile: File, printStgInfo: Boolean = false, debug: Boolean = false,
-    memInit: Map[String, String],  portWarn: Boolean = false, autocast: Boolean, rfLockImpl: Option[String] = None): Unit = {
+    memInit: Map[String, String],  portWarn: Boolean = false, autocast: Boolean, rfLockImpl: Option[String] = None,
+          printTimer: Boolean = false): Unit = {
     val (prog_recv, prog_info) = runPasses(printOutput = false, inputFile, outDir, portWarn, autocast, rfLockImpl = rfLockImpl)
     val optstageInfo = getStageInfo(prog_recv, printStgInfo)
     //TODO better way to pass configurations to the BSInterfaces object
@@ -164,7 +166,7 @@ object Main {
 
     val bsints = new BluespecInterfaces()
     val bsvgen = new BluespecProgramGenerator(prog_recv, optstageInfo, prog_info,
-      debug, bsints, memInit = memInitFileNames)
+      debug, bsints, memInit = memInitFileNames, printTimer = printTimer)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
     funcWriter.close

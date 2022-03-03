@@ -30,7 +30,8 @@ object BluespecGeneration {
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
                                  debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
-                                 memInit:Map[String, String] = Map()) {
+                                 memInit:Map[String, String] = Map(),
+                                 printTimer: Boolean = false) {
 
 
     val funcModule: String = funcmodname
@@ -305,7 +306,8 @@ object BluespecGeneration {
         modDone = circuitstart._2,
         modInsts = mstmts ++ circuitstart._3 ++ makeConnections(prog.circ, memMap, intargs),
         bsInts = bsInts,
-        debug = debug
+        debug = debug,
+        printTimer = printTimer
       )))
 
     def getBSVPrograms: List[BProgram] = {

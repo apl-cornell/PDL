@@ -27,7 +27,7 @@ class BluespecInterfaces() {
     params = List())
 
   def tbModule(modName: String, testMod: BModule, initStmts: List[BStatement], modDone: List[BExpr], modInsts: List[BStatement],
-               bsInts: BluespecInterfaces, debug: Boolean): BModuleDef = {
+               bsInts: BluespecInterfaces, debug: Boolean, printTimer: Boolean = false): BModuleDef = {
     val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
       bsInts.getReg(BBoolLit(false)))
     val startedReg = startedRegInst.lhs
@@ -47,12 +47,18 @@ class BluespecInterfaces() {
       conds = List(),
       body = List(BModAssign(timerReg, BBOp("+", timerReg, BOne)))
     )
+    val timerDone = BBOp(">=", timerReg, BIntLit(1000000,10,32))
+    val doneConds = if (modDone.isEmpty) {
+      List(timerDone)
+    } else {
+      List(BBOp("||", timerDone, modDone.reduce((l, r) => {
+        BBOp("&&", l, r)}
+      )))
+    }
     val doneRule = BRuleDef(
       name = "stopTB",
-      conds = List(BBOp("||", BBOp(">=", timerReg, BIntLit(1000000,10,32)), modDone.reduce((l, r) => {
-        BBOp("&&", l, r)
-      }))),
-      body = List(BDisplay(Some("TIME %t"), List(BTime)), BFinish)
+      conds = doneConds,
+      body = List(if (printTimer) BDisplay(Some("TIME %t"), List(BTime)) else BEmpty, BFinish)
     )
     BModuleDef(
       name = "mkTB",
