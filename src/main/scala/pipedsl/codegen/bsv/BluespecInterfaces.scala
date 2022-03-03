@@ -31,6 +31,9 @@ class BluespecInterfaces() {
     val startedRegInst = BModInst(BVar("started", bsInts.getRegType(BBool)),
       bsInts.getReg(BBoolLit(false)))
     val startedReg = startedRegInst.lhs
+    val timerRegInst = BModInst(BVar("timer", bsInts.getRegType(BSizedInt(unsigned = true, 32))),
+      bsInts.getReg(BZero))
+    val timerReg = timerRegInst.lhs
     val initCond = BUOp("!", startedReg)
     val setStartReg = BModAssign(startedReg, BBoolLit(true))
     val debugStart = if (debug) { BDisplay(Some("Starting Pipeline %t"), List(BTime)) } else BEmpty
@@ -39,17 +42,24 @@ class BluespecInterfaces() {
       conds = List(initCond),
       body = initStmts :+ setStartReg :+ debugStart
     )
+    val timerRule = BRuleDef(
+      name = "timerCount",
+      conds = List(),
+      body = List(BModAssign(timerReg, BBOp("+", timerReg, BOne)))
+    )
     val doneRule = BRuleDef(
       name = "stopTB",
-      conds = modDone,
-      body = List(BFinish)
+      conds = List(BBOp("||", BBOp(">=", timerReg, BIntLit(1000000,10,32)), modDone.reduce((l, r) => {
+        BBOp("&&", l, r)
+      }))),
+      body = List(BDisplay(Some("TIME %t"), List(BTime)), BFinish)
     )
     BModuleDef(
       name = "mkTB",
       typ = None,
       params = List(),
-      body = List(startedRegInst, BModInst(BVar(modName, topModTyp), testMod)) ++ modInsts,
-      rules = List(initRule, doneRule),
+      body = List(startedRegInst, timerRegInst, BModInst(BVar(modName, topModTyp), testMod)) ++ modInsts,
+      rules = List(initRule, timerRule, doneRule),
       methods = List()
     )
   }
