@@ -362,11 +362,11 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       simpleCmd <~ ";" | blockCmd
   }
 
-  lazy val cmd: P[Command] = failRecord( positioned {
+  lazy val cmd: P[Command] = dlog(failRecord( positioned {
     seqCmd ~ "---" ~ cmd ^^ { case c1 ~ _ ~ c2 => CTBar(c1, c2) } |
     "---" ~> cmd ^^ {c => CTBar(CEmpty(), c)} |
     cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
-    seqCmd } )
+    seqCmd } ))("cmd")
 
   lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
     posint ^^ {i => TBitWidthLen(i)}
@@ -486,11 +486,11 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
     }
   }
 
-  lazy val moddef: P[ModuleDef] = positioned {
+  lazy val moddef: P[ModuleDef] = dlog(positioned {
     "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ (":" ~> typ).? ~ braces(cmd) ^^ {
       case i ~ ps ~ mods ~ rt ~ c => ModuleDef(i, ps, mods, rt, c)
     }
-  }
+  })("module")
 
   lazy val ccall: P[CirCall] = positioned {
     "call" ~ iden ~ parens(repsep(expr, ",")) ^^ {
@@ -562,14 +562,14 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
     ccall ^^ (c => CirExprStmt(c))
   }
 
-  lazy val cseq: P[Circuit] = positioned {
+  lazy val cseq: P[Circuit] = failRecord(positioned {
     cconn ~ ";" ~ cseq ^^ { case n ~ _ ~ c => CirSeq(n, c) } |
       cconn <~ ";" | cexpr <~ ";"
-  }
+  })
 
-  lazy val circuit: P[Circuit] = positioned {
+  lazy val circuit: P[Circuit] = dlog(positioned {
     "circuit" ~> braces(cseq)
-  }
+  })("circuit")
 
   lazy val extern: P[ExternDef] = positioned {
     "extern" ~> iden ~ angular(repsep(genericName, ",")).? ~ braces(methodDef.*) ^^ {
