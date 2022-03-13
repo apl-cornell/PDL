@@ -368,6 +368,17 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     cmd <~ "---" ^^ {c => CTBar(c, CEmpty())} |
     seqCmd } ))("cmd")
 
+  lazy val commital: P[Command] = positioned {
+    "commit:" ~> cmd ^^ (i => i)
+  }
+
+  lazy val except: P[Command] = positioned {
+    "except:" ~> cmd ^^ (i => i)
+  }
+
+  lazy val exn_body: P[(Command, Command, Command)] =
+    cmd ~ commital ~ except ^^ {case bod ~ com ~ ex => (bod, com, ex)}
+
   lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
     posint ^^ {i => TBitWidthLen(i)}
 
@@ -486,9 +497,13 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
     }
   }
 
-  lazy val moddef: P[ModuleDef] = dlog(positioned {
+  lazy val moddef: P[ModuleTrait] = dlog(positioned {
     "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ (":" ~> typ).? ~ braces(cmd) ^^ {
       case i ~ ps ~ mods ~ rt ~ c => ModuleDef(i, ps, mods, rt, c)
+    }
+  } | positioned {
+    "exn-pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ (":" ~> typ).? ~ braces(exn_body) ^^ {
+      case i ~ ps ~ mods ~ rt ~ c =>  ExceptingModule(i, ps, mods, rt, c._1, c._2, c._3)
     }
   })("module")
 
@@ -576,14 +591,14 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
       case i ~ t ~ f => ExternDef(i, t.getOrElse(List()).map(x => TNamedType(x)), f) }
   }
 
-  lazy val prog: P[Prog] = positioned {
+  lazy val prog: P[ExceptableProg] = positioned {
     extern.* ~ fdef.* ~ moddef.* ~ circuit ^^ {
-      case e ~ f ~ p ~ c => Prog(e, f, p, c)
+      case e ~ f ~ p ~ c => ExceptableProg(e, f, p, c)
     }
   }
 
 
-  def parseCode(code :String) :Prog = {
+  def parseCode(code :String) :ExceptableProg = {
     val r = parseAll(prog, code)
     r match {
       case Success(program, _) => program

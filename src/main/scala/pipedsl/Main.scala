@@ -3,12 +3,11 @@ package pipedsl
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.typesafe.scalalogging.Logger
-
 import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Syntax.{Id, Prog}
+import pipedsl.common.Syntax.{ExceptableProg, Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
 import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
@@ -42,7 +41,7 @@ object Main {
   }
   
   def parse(debug: Boolean, printOutput: Boolean, inputFile: File, outDir: File,
-            rfLockImpl: Option[String] = None): Prog = {
+            rfLockImpl: Option[String] = None): ExceptableProg = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }

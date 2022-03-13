@@ -688,12 +688,14 @@ object Syntax {
                       lat :Latency
                       ) extends Definition
 
+  sealed trait ModuleTrait extends Definition
+
   case class ModuleDef(
     name: Id,
     inputs: List[Param],
     modules: List[Param],
     ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+    body: Command) extends ModuleTrait with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
     {
       override val copyMeta: HasCopyMeta => ModuleDef =
         {
@@ -706,9 +708,35 @@ object Syntax {
         }
     }
 
+  case class ExceptingModule
+  (
+    name: Id,
+    inputs: List[Param],
+    modules: List[Param],
+    ret: Option[Type],
+    body: Command,
+    commit_block :Command,
+    exn_block :Command,
+  ) extends ModuleTrait with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+  {
+    override val copyMeta: HasCopyMeta => ExceptingModule =
+      {
+        case from :ModuleDef =>
+          maybeSpec = from.maybeSpec
+          isRecursive = from.isRecursive
+          pos = from.pos
+          this
+        case _ => this
+      }
+  }
+
   case class Param(name: Id, typ: Type) extends Positional
 
   case class ExternDef(name: Id, typParams: List[Type], methods: List[MethodDef]) extends Definition with TypeAnnotation
+
+
+  case class ExceptableProg(exts: List[ExternDef],
+                            fdefs: List[FuncDef], moddefs: List[ModuleTrait], circ: Circuit) extends Positional
 
   case class Prog(exts: List[ExternDef],
     fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional

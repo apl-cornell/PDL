@@ -87,7 +87,7 @@ interface AsyncMem2#(type addr, type elem, type mid, numeric type nsz);
    method Bool checkRespId1(mid a);
    method Action resp1(mid a);
    interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client1;
-   
+
    method ActionValue#(mid) req2(addr a, elem b, Bit#(nsz) wmask);
    method elem peekResp2(mid a);
    method Bool checkRespId2(mid a);
@@ -102,7 +102,7 @@ interface QueueLockCombMem#(type addr, type elem, type id);
    method Action write(addr a, elem b);
    interface QueueLock#(id) lock;
    method Bool canAtom_r1(addr a);
-   method Bool canAtom_r2(addr a);   
+   method Bool canAtom_r2(addr a);
    method elem atom_r(addr a);
    method Bool canAtom_w1(addr a);
    method Action atom_w(addr a, elem b);
@@ -113,7 +113,7 @@ interface CheckpointQueueLockCombMem#(type addr, type elem, type id, type cid);
    method Action write(addr a, elem b);
    interface CheckpointQueueLock#(id, cid) lock;
    method Bool canAtom_r1(addr a);
-   method Bool canAtom_r2(addr a);   
+   method Bool canAtom_r2(addr a);
    method elem atom_r(addr a);
    method Bool canAtom_w1(addr a);
    method Action atom_w(addr a, elem b);
@@ -123,7 +123,7 @@ interface QueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, t
    interface AsyncMem#(addr, elem, rid, nsz) mem;
    interface QueueLock#(lid) lock;
    method Bool canAtom1(addr a);
-   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);   
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
 endinterface
 
 interface QueueLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, type lid);
@@ -132,23 +132,23 @@ interface QueueLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, 
    method Bool canAtom1(addr a);
    method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
    method Bool canAtom2(addr a);
-   method ActionValue#(rid) atom_req2(addr a, elem b, Bit#(nsz) wmask);   
+   method ActionValue#(rid) atom_req2(addr a, elem b, Bit#(nsz) wmask);
 endinterface
 
 interface AddrLockCombMem#(type addr, type elem, type id, numeric type size);
    method elem read (addr a);
    method Action write(addr a, elem b);
    method Bool canAtom_r1(addr a);
-   method Bool canAtom_r2(addr a);   
+   method Bool canAtom_r2(addr a);
    method elem atom_r(addr a);
    method Bool canAtom_w1(addr a);
-   method Action atom_w(addr a, elem b);   
+   method Action atom_w(addr a, elem b);
    interface AddrLock#(id, addr, size) lock;
 endinterface
 
-interface BypassLockCombMem#(type addr, type elem, type id, numeric type size);  
+interface BypassLockCombMem#(type addr, type elem, type id, numeric type size);
    method Bool canAtom_r1(addr a);
-   method Bool canAtom_r2(addr a);   
+   method Bool canAtom_r2(addr a);
    method Bool canRes_w1(addr a);
    method ActionValue#(id) res_w1(addr a);
    method Bool owns_w1(id i);
@@ -161,7 +161,7 @@ interface AddrLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, ty
    interface AsyncMem#(addr, elem, rid, nsz) mem;
    interface AddrLock#(lid, addr, size) lock;
    method Bool canAtom1(addr a);
-   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);   
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
 endinterface
 
 interface AddrLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, type lid, numeric type size);
@@ -170,7 +170,7 @@ interface AddrLockAsyncMem2#(type addr, type elem, type rid, numeric type nsz, t
    method Bool canAtom1(addr a);
    method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
    method Bool canAtom2(addr a);
-   method ActionValue#(rid) atom_req2(addr a, elem b, Bit#(nsz) wmask);   
+   method ActionValue#(rid) atom_req2(addr a, elem b, Bit#(nsz) wmask);
 endinterface
 
 //TODO fix this "mem" interface part since they client type doesn't quite match up.
@@ -187,16 +187,16 @@ endinterface
 
 
 module mkRegister#(elem init)(RegFile#(addr, elem)) provisos (Bits#(addr, szAddr), Bits#(elem, szElem));
-   Reg#(elem) data <- mkReg(init);   
+   Reg#(elem) data <- mkReg(init);
 
    method Action upd(addr a, elem d);
       data <= d;
    endmethod
-   
+
    method elem sub(addr a);
       return data;
    endmethod
-   
+
 endmodule
 
 module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr, elem))
@@ -219,7 +219,7 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
       p <- mkBRAMCore1BELoad(memSize, hasOutputReg, file, False);
    else
       p <- mkBRAMCore1BE(memSize, hasOutputReg);
-   
+
    Reg#(Bool) doRead <- mkDReg(False);
    Wire#(elem) nextData <- mkWire();
 
@@ -227,7 +227,7 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
    rule moveToOutFifo (doRead);
       nextData <= p.read;
    endrule
-   
+
    interface Server bram_server;
       interface Put request;
 	 method Action put (Tuple3#(Bit#(nsz), addr, elem) req);
@@ -243,37 +243,37 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
 	 endmethod
       endinterface
    endinterface
-   
-   
+
+
 endmodule
-	    
+
 module mkBramPort2#(parameter Bool init, parameter String file)
    (BramPort2#(addr, elem, MemId#(inflight), nsz))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Mul#(TDiv#(szElem, nsz), nsz, szElem));
    BRAM_DUAL_PORT_BE#(addr, elem, nsz) dp;
    Integer maxMemSize = 2 ** 20; //1M mem words, or 4 MB for int32;
-   let memSize = min(maxMemSize, 2 ** valueOf(szAddr));   
+   let memSize = min(maxMemSize, 2 ** valueOf(szAddr));
    let hasOutputReg = False;
    if (init)
       dp <- mkBRAMCore2BELoad(memSize, hasOutputReg, file, False);
    else
       dp <- mkBRAMCore2BE(memSize, hasOutputReg);
-   
+
    Reg#(Bool) doRead1 <- mkDReg(False);
    Reg#(Bool) doRead2 <- mkDReg(False);
    Wire#(elem) nextData1 <- mkWire();
    Wire#(elem) nextData2 <- mkWire();
-   
+
    (* fire_when_enabled *)
    rule moveToOutFifo1 (doRead1);
       nextData1 <= dp.a.read;
    endrule
-   
+
    (* fire_when_enabled *)
    rule moveToOutFifo2 (doRead2);
       nextData2 <= dp.b.read;
    endrule
-   
+
       interface Server bram_server1;
       interface Put request;
 	 method Action put (Tuple3#(Bit#(nsz), addr, elem) req);
@@ -306,85 +306,85 @@ module mkBramPort2#(parameter Bool init, parameter String file)
       endinterface
    endinterface
 
-   
-   
+
+
 endmodule
 
 //data read from memory made available IMMEDIATELY
 //rep & resp can go in any order
 module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
-   
+
    let outDepth = valueOf(inflight);
-   
+
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
    Wire#(elem) fromMem <- mkWire();
-   
+
    //this must be at least size 2 to work correctly (safe bet)
    Vector#(inflight, Ehr#(2, elem)) outData <- replicateM( mkEhr(unpack(0)) );
    Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
-   
+
    Reg#(MemId#(inflight)) head <- mkReg(0);
    Wire#(MemId#(inflight)) freeEntry <- mkWire();
-      
+
    Bool okToRequest = valid[head][1] == False;
-   
+
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
-  
+
    (* fire_when_enabled *)
    rule moveToOutFifo (nextData matches tagged Valid.idx);
       outData[idx][0] <= fromMem;
       valid[idx][0] <= True;
    endrule
-   
+
    (*fire_when_enabled*)
    rule freeResp;
       valid[freeEntry][1] <= False;
    endrule
-   
+
    method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest);
       toMem <= tuple3(wmask, a, b);
       head <= head + 1;
       nextData <= tagged Valid head;
       return head;
    endmethod
-      
+
    method elem peekResp1(MemId#(inflight) a);
       return outData[a][1];
    endmethod
-      
+
    method Bool checkRespId1(MemId#(inflight) a);
       return valid[a][1] == True;
    endmethod
-      
+
    //Make this invisible to other ops this cycle but happen at any time
    method Action resp1(MemId#(inflight) a);
       freeEntry <= a;
    endmethod
-   
+
    interface Client bram_client;
       interface Get request;
 	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
 	    return toMem;
 	 endmethod
       endinterface
-   
+
       interface Put response;
 	 method Action put(elem);
 	    fromMem <= elem;
 	 endmethod
       endinterface
-   
+
    endinterface
 
-   
+
 endmodule
 
 module mkAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
-   
+
    let outDepth = valueOf(inflight);
-   
+
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem1 <- mkWire();
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem2 <- mkWire();
    Wire#(elem) fromMem1 <- mkWire();
@@ -394,123 +394,123 @@ module mkAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) _unused_)
    Vector#(inflight, Ehr#(2, Bool)) valid1 <- replicateM( mkEhr(False) );
    Vector#(inflight, Ehr#(2, elem)) outData2 <- replicateM( mkEhr(unpack(0)) );
    Vector#(inflight, Ehr#(2, Bool)) valid2 <- replicateM( mkEhr(False) );
-   
+
    Reg#(MemId#(inflight)) head1 <- mkReg(0);
-   Wire#(MemId#(inflight)) freeEntry1 <- mkWire();   
+   Wire#(MemId#(inflight)) freeEntry1 <- mkWire();
    Bool okToRequest1 = valid1[head1][1] == False;
-   
+
    Reg#(MemId#(inflight)) head2 <- mkReg(0);
-   Wire#(MemId#(inflight)) freeEntry2 <- mkWire();   
+   Wire#(MemId#(inflight)) freeEntry2 <- mkWire();
    Bool okToRequest2 = valid2[head2][1] == False;
-   
+
    Reg#(Maybe#(MemId#(inflight))) nextData1 <- mkDReg(tagged Invalid);
    Reg#(Maybe#(MemId#(inflight))) nextData2 <- mkDReg(tagged Invalid);
-   
+
    (* fire_when_enabled *)
    rule moveToOutFifo1 (nextData1 matches tagged Valid.idx);
       outData1[idx][0] <= fromMem1;
       valid1[idx][0] <= True;
    endrule
-   
+
    (* fire_when_enabled *)
    rule moveToOutFifo2 (nextData2 matches tagged Valid.idx);
       outData2[idx][0] <= fromMem2;
       valid2[idx][0] <= True;
    endrule
 
-   (* fire_when_enabled *)   
+   (* fire_when_enabled *)
    rule freeResp1;
       valid1[freeEntry1][1] <= False;
    endrule
 
-   (* fire_when_enabled *)   
+   (* fire_when_enabled *)
    rule freeResp2;
       valid2[freeEntry2][1] <= False;
    endrule
-   
+
    method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest1);
       toMem1 <= tuple3(wmask, a, b);
       head1 <= head1 + 1;
       nextData1 <= tagged Valid head1;
       return head1;
    endmethod
-   
+
    method elem peekResp1(MemId#(inflight) a);
       return outData1[a][1];
    endmethod
-   
+
    method Bool checkRespId1(MemId#(inflight) a);
       return valid1[a][1] == True;
    endmethod
-   
+
    method Action resp1(MemId#(inflight) a);
       freeEntry1 <= a;
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) req2(addr a, elem b, Bit#(n) wmask) if (okToRequest2);
       toMem2 <= tuple3(wmask, a, b);
       head2 <= head2 + 1;
       nextData2 <= tagged Valid head2;
       return head2;
    endmethod
-   
+
    method elem peekResp2(MemId#(inflight) a);
       return outData2[a][1];
    endmethod
-   
+
    method Bool checkRespId2(MemId#(inflight) a);
       return valid2[a][1] == True;
    endmethod
-   
+
    method Action resp2(MemId#(inflight) a);
       freeEntry2 <= a;
    endmethod
-   
+
    interface Client bram_client1;
       interface Get request;
 	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
 	    return toMem1;
 	 endmethod
       endinterface
-   
+
       interface Put response;
 	 method Action put(elem);
 	    fromMem1 <= elem;
 	 endmethod
       endinterface
    endinterface
-   
+
    interface Client bram_client2;
       interface Get request;
 	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
 	    return toMem2;
 	 endmethod
       endinterface
-   
+
       interface Put response;
 	 method Action put(elem);
 	    fromMem2 <= elem;
 	 endmethod
       endinterface
    endinterface
-   
+
 endmodule
 
 
 module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem, LockId#(d)) _unused_);
 
    QueueLock#(LockId#(d)) l <- mkQueueLock();
-   
+
    interface lock = l;
-   
+
    method elem read(addr a);
       return rf.sub(a);
    endmethod
-      
+
    method Action write(addr a, elem b);
       rf.upd(a, b);
    endmethod
-   
+
    method Bool canAtom_r1(addr a);
       return l.isEmpty;
    endmethod
@@ -518,35 +518,35 @@ module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem,
    method Bool canAtom_r2(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method elem atom_r(addr a);
       return rf.sub(a);
    endmethod
- 
+
    method Bool canAtom_w1(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method Action atom_w(addr a, elem b);
       rf.upd(a, b);
    endmethod
-  
+
 endmodule
 
 module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLockCombMem#(addr, elem, LockId#(d), LockId#(d)) _unused_);
 
    CheckpointQueueLock#(LockId#(d), LockId#(d)) l <- mkCheckpointQueueLock();
-   
+
    interface lock = l;
-   
+
    method elem read(addr a);
       return rf.sub(a);
    endmethod
-      
+
    method Action write(addr a, elem b);
       rf.upd(a, b);
    endmethod
-   
+
    method Bool canAtom_r1(addr a);
       return l.isEmpty;
    endmethod
@@ -554,19 +554,19 @@ module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLock
    method Bool canAtom_r2(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method elem atom_r(addr a);
       return rf.sub(a);
    endmethod
- 
+
    method Bool canAtom_w1(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method Action atom_w(addr a, elem b);
       rf.upd(a, b);
    endmethod
-  
+
 endmodule
 
 module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem, LockId#(d), numlocks) _unused_)
@@ -576,7 +576,7 @@ module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method elem read(addr a);
       return rf.sub(a);
    endmethod
-   
+
    method Bool canAtom_r1(addr a);
       return l.isEmpty(a);
    endmethod
@@ -584,7 +584,7 @@ module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method Bool canAtom_r2(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method elem atom_r(addr a);
       return rf.sub(a);
    endmethod
@@ -592,7 +592,7 @@ module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method Bool canAtom_w1(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method Action atom_w(addr a, elem b);
       rf.upd(a, b);
    endmethod
@@ -600,7 +600,7 @@ module mkFAAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method Action write(addr a, elem b);
       rf.upd(a, b);
    endmethod
-   
+
    interface lock = l;
 endmodule
 
@@ -611,7 +611,7 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method elem read(addr a);
       return rf.sub(a);
    endmethod
-   
+
    method Bool canAtom_r1(addr a);
       return l.isEmpty(a);
    endmethod
@@ -619,7 +619,7 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method Bool canAtom_r2(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method elem atom_r(addr a);
       return rf.sub(a);
    endmethod
@@ -627,7 +627,7 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method Bool canAtom_w1(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method Action atom_w(addr a, elem b);
       rf.upd(a, b);
    endmethod
@@ -635,80 +635,80 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    method Action write(addr a, elem b);
       rf.upd(a, b);
    endmethod
-   
+
    interface lock = l;
 endmodule
-   
+
 module mkQueueLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
-   
+
    QueueLock#(LockId#(d)) l <- mkQueueLock();
-      
+
    interface lock = l;
    interface mem = amem;
-   
+
    method Bool canAtom1(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
    endmethod
-   
+
 endmodule
 
 module mkFAAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
-   
+
    AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
-   
+
    interface mem = amem;
    interface lock = l;
 
    method Bool canAtom1(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
-   endmethod      
-   
+   endmethod
+
 endmodule
 
 module mkDMAddrLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
-   
+
    AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
-   
+
    interface mem = amem;
    interface lock = l;
 
    method Bool canAtom1(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
    endmethod
-   
+
 endmodule
 
 
 module mkQueueLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, QueueLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem));
-   
+
    QueueLock#(LockId#(d)) l <- mkQueueLock();
-   
+
    interface lock = l;
    interface mem = amem;
-   
+
    method Bool canAtom1(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
@@ -717,27 +717,27 @@ module mkQueueLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, Qu
    method Bool canAtom2(addr a);
       return l.isEmpty;
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req2(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req2(a, b, wmask);
       return r;
    endmethod
-   
-   
+
+
 endmodule
 
 module mkFAAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
-   
+
    AddrLock#(LockId#(d), addr, numlocks) l <- mkFAAddrLock();
-   
+
    interface mem = amem;
    interface lock = l;
 
    method Bool canAtom1(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
@@ -746,38 +746,38 @@ module mkFAAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, A
    method Bool canAtom2(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req2(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req2(a, b, wmask);
       return r;
-   endmethod   
+   endmethod
 endmodule
 
 module mkDMAddrLockAsyncMem2(AsyncMem2#(addr, elem, MemId#(inflight), n) amem, AddrLockAsyncMem2#(addr, elem, MemId#(inflight), n, LockId#(d), numlocks) _unused_)
    provisos(PrimIndex#(addr, szAddr), Bits#(addr, szAddr), Bits#(elem, szElem));
-   
+
    AddrLock#(LockId#(d), addr, numlocks) l <- mkDMAddrLock();
-   
+
    interface mem = amem;
    interface lock = l;
 
    method Bool canAtom1(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
-   endmethod   
-   
+   endmethod
+
    method Bool canAtom2(addr a);
       return l.isEmpty(a);
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) atom_req2(addr a, elem b, Bit#(n) wmask);
       let r <- amem.req1(a, b, wmask);
       return r;
-   endmethod   
+   endmethod
 endmodule
 
 
@@ -822,7 +822,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
 
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
    Wire#(elem) fromMem <- mkWire();
-   
+
    ///Store Stuff
    Reg#(MemId#(inflight)) stHead <- mkReg(unpack(0));
    Vector#(inflight, Ehr#(2, Bool)) stQValid <- replicateM(mkEhr(False));
@@ -843,15 +843,15 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
    function Bool isNewerStore(MemId#(inflight) a, MemId#(inflight) b);
       return isNewer(a, b, stHead);
    endfunction
-   
+
    function Bool isOlderLoad(MemId#(inflight) a, MemId#(inflight) b);
       return isOlder(a, b, ldHead);
    endfunction
-   
+
    //search starting at the _newest_ store
    //newest store is at head - 1 (and go backwards)
    function Maybe#(MemId#(inflight)) getMatchingStore(addr a);
-      
+
       Maybe#(MemId#(inflight)) result = tagged Invalid;
       for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 	 if (stQValid[i][0] && stQAddr[i] == a)
@@ -865,7 +865,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       end
       return result;
    endfunction
-   
+
    //search starting at the _oldest_ load
    //always read start of cycle values ([0] from Ehrs) -> loads will issue (no earlier than)
    //the first cycle that they can issue
@@ -884,7 +884,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       end
       return result;
    endfunction
-   
+
    //ldQStr[i][1] -> read & write _after_ reserves (write to [0])
    //ldQData[i][1] ->  write _after_ reserve
    function Action write(MemId#(inflight) n, elem b, Bit#(n) wmask);
@@ -894,7 +894,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
 				    for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
 				       if (ldQStr[i][1] matches tagged Valid.s &&& s == n)
 					  begin
-					     ldQStr[i][1] <= tagged Invalid;					     
+					     ldQStr[i][1] <= tagged Invalid;
 					     //order this after reserve (so reserve addr ;write addr forwards data appropriately)
 					     if (wmask == '1) ldQData[i][1] <= tagged Valid b;
 					     else ldQData[i][1] <= tagged Invalid;
@@ -917,16 +917,16 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
 
    //TODO avoid starvation between issueSt and issueLd (currently one always has precedence over the other)
    //this shouldn't cause liveness issues in real designs but we would need to deal w/ this
-   //when considering other memory models   
+   //when considering other memory models
    rule issueSt;
       let st = stIssueQ.first();
       toMem <= tuple3(st.m, st.a, st.d);
       stIssueQ.deq();
 //      $display("Issuing Memory Store for addr %d, data %d, %t", st.a, st.d, $time());
    endrule
-   
+
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
-   
+
    //run this _after_ commits so that we don't issue a load that's getting freed this cycle
    rule issueLd (getIssuingLoad matches tagged Valid.idx);
   //    $display("Issuing Memory Load for tag %d, addr %d, %t", idx, ldQAddr[idx], $time());
@@ -934,12 +934,12 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       nextData <= tagged Valid idx;
       ldQIssued[idx][1] <= True;
    endrule
-   
+
    rule moveLdData (nextData matches tagged Valid.idx);
       //schedule this last for simplicity (can change later)
       ldQData[idx][2] <= tagged Valid fromMem;
    endrule
-      
+
    method ActionValue#(MemId#(inflight)) res_r1(addr a) if (okToLd);
       Maybe#(MemId#(inflight)) matchStr = getMatchingStore(a);
       Maybe#(StReq#(elem, Bit#(n))) rreq = tagged Invalid;
@@ -955,16 +955,16 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
 	    matchStr = tagged Invalid;
 	    data = tagged Valid r.d;
 	 end
-      
+
       ldQValid[ldHead][0] <= True;
       ldQAddr[ldHead] <= a;
       ldQData[ldHead][0] <= data;
       ldQStr[ldHead][0] <= matchStr;
-      
+
       ldHead <= ldHead + 1;
       return ldHead;
    endmethod
-   
+
    method ActionValue#(MemId#(inflight)) res_w1(addr a) if (okToSt);
       //Using index [0] means these are the first writes -- [1] reads can combinationally observe these writes
       stQValid[stHead][0] <= True;
@@ -973,7 +973,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       stHead <= stHead + 1;
       return stHead;
    endmethod
-   
+
 
 
    //checks if it's safe to read data associated w/ ldq entry
@@ -991,7 +991,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       ldQStr[n][2] <= tagged Invalid;
       ldQIssued[n][0] <= False;
    endmethod
-   
+
    //Only Issue stores after committing
    method Action rel_w1(MemId#(inflight) n);
       stQValid[n][1] <= False;
@@ -1024,7 +1024,7 @@ module mkLSQ(LSQ#(addr, elem, MemId#(inflight), n) _unused_) provisos
       endmethod
 
    endinterface
-   
+
    interface Client bram_client;
       interface Get request;
 	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
@@ -1048,14 +1048,14 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
    provisos (Bits#(addr, szAddr), Bits#(elem, szElem), Eq#(addr));
 
    Vector#(n, Reg#(Maybe#(addr))) resVec <- replicateM(mkConfigReg(tagged Invalid));
-   Vector#(n, Reg#(Maybe#(elem))) dataVec <- replicateM(mkConfigReg(tagged Invalid));   
+   Vector#(n, Reg#(Maybe#(elem))) dataVec <- replicateM(mkConfigReg(tagged Invalid));
    Vector#(n, RWire#(elem)) bypassWire <- replicateM(mkRWireSBR());
 
    Reg#(LockId#(n)) head <- mkReg(0);
    Reg#(LockId#(n)) owner <- mkConfigReg(0);
 
    Wire#(LockId#(n)) toCommit <- mkWire();
-   
+
    function Maybe#(LockId#(n)) getMatchingEntry(addr a);
       Maybe#(LockId#(n)) result = tagged Invalid;
       for (Integer i = 0; i < valueOf(n); i = i + 1) begin
@@ -1070,17 +1070,17 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
 	 end
       return result;
    endfunction
-   
-   
+
+
    Bool headFree = !isValid(resVec[head]);
    Bool unowned = !isValid(resVec[owner]);
-   
+
    function Maybe#(elem) readBypassData(LockId#(n) ent);
       let vecData = dataVec[ent];
       let wData   = bypassWire[ent];
       Maybe#(elem) result = tagged Invalid;
-      if (wData.wget matches tagged Valid.bdata) result = tagged Valid bdata;      
-      else if (vecData matches tagged Valid.vdata) result = tagged Valid vdata;   
+      if (wData.wget matches tagged Valid.bdata) result = tagged Valid bdata;
+      else if (vecData matches tagged Valid.vdata) result = tagged Valid vdata;
 
       return result;
    endfunction
@@ -1093,14 +1093,14 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
 	    fromMaybe(?, readBypassData(fromInteger(j))), $time());
       end
    endrule **/
-   
+
    (*fire_when_enabled*)
    rule doCommit;
       let rfdata = fromMaybe(?, readBypassData(toCommit));
       let rfaddr = fromMaybe(?, resVec[toCommit]);
       rf.upd(rfaddr, rfdata);
    endrule
-   
+
    //can read THIS Cycle
    method Bool canAtom_r1(addr a);
       Bool canGo = False;
@@ -1123,39 +1123,39 @@ module mkBypassLockCombMem(RegFile#(addr, elem) rf, BypassLockCombMem#(addr, ele
       else canGo = True;
       return canGo;
    endmethod
-   
+
    method Bool canRes_w1(addr a);
       return headFree;
    endmethod
-   
+
    method ActionValue#(LockId#(n)) res_w1(addr a) if (headFree);
       head <= head + 1;
       resVec[head] <= tagged Valid a;
       dataVec[head] <= tagged Invalid;
       return head;
-   endmethod   
-   
+   endmethod
+
    method Bool owns_w1(LockId#(n) id);
       return True;
    endmethod
-   
+
    method Action rel_w1(LockId#(n) id);
       resVec[id] <= tagged Invalid;
       owner <= owner + 1;
       toCommit <= id;
    endmethod
-   
+
    method elem atom_r(addr a);
       elem outdata = rf.sub(a);
       let wdataEnt = getMatchingEntry(a);
       if (wdataEnt matches tagged Valid.id) outdata = fromMaybe(?, readBypassData(id));
       return outdata;
    endmethod
-   
+
    method Action write(LockId#(n) id, elem b);
       dataVec[id] <= tagged Valid b;
       bypassWire[id].wset(b);
    endmethod
-   
+
 endmodule
 endpackage

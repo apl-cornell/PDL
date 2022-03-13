@@ -30,6 +30,11 @@ class PrettyPrinter(output: Option[File]) {
     p.moddefs.foreach(m => printModule(m))
     printCircuit(p.circ)
   }
+  def printProgram(p :ExceptableProg) :Unit = {
+    p.fdefs.foreach(printFunction)
+    p.moddefs.foreach(printExModule)
+    printCircuit(p.circ)
+  }
 
   def printFunction(f: FuncDef): Unit = {
     pline("def " + f.name.v + "(" +
@@ -38,10 +43,24 @@ class PrettyPrinter(output: Option[File]) {
       printCmdToString(f.body, 2) + "\n}")
   }
 
+  def printExModule(m :ModuleTrait) : Unit = m match
+  {
+    case m:ModuleDef => printModule(m)
+    case m:ExceptingModule => printExceptingModule(m)
+  }
+
   def printModule(m: ModuleDef): Unit = {
     pline("pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
       ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
     printCmdToString(m.body, 2) + "\n}")
+  }
+
+  def printExceptingModule(m :ExceptingModule) :Unit = {
+    pline("exn-pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
+    ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
+    printCmdToString(m.body, 2) + "\n}\ncommit:\n" +
+    printCmdToString(m.commit_block, 2) + "\n}\nexcept:\n" +
+    printCmdToString(m.exn_block, 2) + "\n}")
   }
 
   def printCircuit(c: Circuit): Unit = pline("circuit {\n" + printCircuitToString(c, 2) + "\n}")
