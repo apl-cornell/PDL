@@ -230,6 +230,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(exp, vars)
         (vars, nextVars)
       case Syntax.CEmpty() => (vars, nextVars)
+      case CExcept() => (vars, nextVars)
       case CPrint(args) =>
         args.foreach(a => {
           checkExpr(a, vars)
@@ -328,7 +329,7 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         //calling another pipe
         case None => Asynchronous
       }
-    case EVar(id) => if(!vars(id) && isRhs) {
+    case EVar(id) => if(!vars(id) && isRhs && !(id == is_excepting_var)) {
       throw UnavailableArgUse(e.pos, id.toString) }
       //TODO make this error message more clear about what's wrong when these are lock handle vars
       else { Combinational }

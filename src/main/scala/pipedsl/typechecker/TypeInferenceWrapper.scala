@@ -187,7 +187,6 @@ object TypeInferenceWrapper
      }
 
 
-
     def checkProgram(p: Prog): Prog =
      {
       val extEnv = p.exts.foldLeft[Environment[Id, Type]](TypeEnv())((env, ext) => {
@@ -208,7 +207,8 @@ object TypeInferenceWrapper
         val (nenv, nfunc) = checkFunc(f, env.asInstanceOf[TypeEnv])
         (nenv, lst.prepended(nfunc))
        })
-      val (modEnvs, newMods) = p.moddefs.foldLeft[(Environment[Id, Type], List[ModuleDef])]((funcEnvs, List.empty[ModuleDef]))((envNlst, m) =>
+      val (modEnvs, newMods) = p.moddefs.foldLeft[(Environment[Id, Type],
+        List[ModuleDef])]((funcEnvs.add(is_excepting_var, TBool()), List.empty[ModuleDef]))((envNlst, m) =>
        {
         val env = envNlst._1
         val lst = envNlst._2
@@ -345,6 +345,7 @@ object TypeInferenceWrapper
       case b => throw UnexpectedType(mem.id.pos, c.toString, "Memory or Module Type", b)
      }
      case CEmpty() => (c, env, sub)
+     case CExcept() => (c, env, sub)
      case cr@CReturn(exp) =>
       val (s, t, e, fixed) = infer(env, exp)
       val tempSub = compose_subst(sub, s)

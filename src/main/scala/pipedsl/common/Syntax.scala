@@ -643,7 +643,7 @@ object Syntax {
   }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
-
+  case class CExcept() extends Command
 
   sealed trait InternalCommand extends Command
 
@@ -734,6 +734,8 @@ object Syntax {
 
   case class ExternDef(name: Id, typParams: List[Type], methods: List[MethodDef]) extends Definition with TypeAnnotation
 
+  val is_excepting_var: Id =
+    Id("__excepting").setType(TBool())
 
   case class ExceptableProg(exts: List[ExternDef],
                             fdefs: List[FuncDef], moddefs: List[ModuleTrait], circ: Circuit) extends Positional

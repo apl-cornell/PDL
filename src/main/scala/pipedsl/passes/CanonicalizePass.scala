@@ -112,6 +112,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case CLockEnd(_) => c
       case CLockOp(_, _, _, _, _) => c
       case CEmpty() => c
+      case CExcept() => c
       case _: InternalCommand => c
     }
 

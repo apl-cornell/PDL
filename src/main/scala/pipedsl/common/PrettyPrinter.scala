@@ -58,8 +58,8 @@ class PrettyPrinter(output: Option[File]) {
   def printExceptingModule(m :ExceptingModule) :Unit = {
     pline("exn-pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
     ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
-    printCmdToString(m.body, 2) + "\n}\ncommit:\n" +
-    printCmdToString(m.commit_block, 2) + "\n}\nexcept:\n" +
+    printCmdToString(m.body, 2) + "\ncommit:\n" +
+    printCmdToString(m.commit_block, 2) + "\nexcept:\n" +
     printCmdToString(m.exn_block, 2) + "\n}")
   }
 
@@ -127,6 +127,7 @@ class PrettyPrinter(output: Option[File]) {
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
+      case Syntax.CExcept() => ins + "except()"
       case _ => "TODO PRINTING COMMAND"
     }
   }
@@ -153,6 +154,7 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.ECall(id, name, args, isAtomic) => "call" + (if(isAtomic) "<atomic> " else " ") + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.EVar(id) => id.v
+    case Syntax.EString(v) => s""""${v}""""
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize, numPorts) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + "," + numPorts.toString + ")"

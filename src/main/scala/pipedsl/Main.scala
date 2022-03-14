@@ -57,7 +57,8 @@ object Main {
                 rfLockImpl: Option[String] = None): Unit = {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".interpret"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
-    val prog = parse(debug = false, printOutput = false, inputFile, outDir)
+    val ex_prog = parse(debug = false, printOutput = false, inputFile, outDir)
+    val prog = ExceptingToNormal.run(ex_prog)
     val i: Interpreter = new Interpreter(maxIterations)
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
@@ -70,9 +71,12 @@ object Main {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".typecheck"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
 
-    val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
-    val pinfo = new ProgInfo(prog)
+    val ex_prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
+
     try {
+      val prog = ExceptingToNormal.run(ex_prog)
+      new PrettyPrinter(None).printProgram(prog)
+      val pinfo = new ProgInfo(prog)
       MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
       val inferredProg = new LockRegionInferencePass().run(prog)

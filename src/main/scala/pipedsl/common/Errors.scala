@@ -213,4 +213,12 @@ object Errors {
   case class BadConstraintsAtCall(app :EApp) extends RuntimeException(
     withPos(s"Constraints for $app not satisfied", app.pos)
   )
+
+  case class ReleaseInExnBlock(p :Position) extends RuntimeException(
+    withPos(s"You may not release locks in the except block!", p)
+  )
+
+  case class ReleaseWhenMaybeExcepting(p :Position) extends RuntimeException(
+    withPos(s"No no no! No releasing when you might be excepting!!", p)
+  )
 }

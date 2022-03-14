@@ -262,6 +262,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
+      "except()" ^^ {_ => CExcept()} |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
       "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t, List(), None), CLockOp(i, Acquired, t, List(), None)) } |
@@ -376,8 +377,8 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
     "except:" ~> cmd ^^ (i => i)
   }
 
-  lazy val exn_body: P[(Command, Command, Command)] =
-    cmd ~ commital ~ except ^^ {case bod ~ com ~ ex => (bod, com, ex)}
+  lazy val exn_body: P[(Command, Command, Command)] = dlog(
+    cmd ~ commital ~ except ^^ {case bod ~ com ~ ex => (bod, com, ex)})("Exception body")
 
   lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
     posint ^^ {i => TBitWidthLen(i)}
