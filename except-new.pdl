@@ -25,6 +25,7 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>] :uint<4
       }
       case: (ex)
       {
+        cause = 4;
         except();
       }
     }
@@ -36,10 +37,10 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>] :uint<4
       call cpu(pc + 1);
     }
     end(acc);
+    ---
 commit:
     print("no exn here!");
 except:
-    ---
     print("exception!");
 }
 
