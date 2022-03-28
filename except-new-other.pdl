@@ -1,4 +1,4 @@
-exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>] :uint<4> {
+exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>, oth :uint<4>[0]<c,s>] :uint<4> {
     start(imem);
     uint<8> insn <- imem[pc];
     end(imem);
@@ -25,7 +25,7 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>] :uint<4
       }
       case: (ex)
       {
-        except();
+        except(4);
       }
     }
     if (done)
@@ -39,14 +39,16 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>] :uint<4
     ---
 commit:
     print("no exn here!");
-except:
-    print("exception!");
+except(arg :uint<4>):
+    oth[] <- arg;
+    ---
+    call cpu(0);
 }
 
 
 circuit {
    ti = memory(uint<8>, 16);
    acc = register(uint<4>, 1);
-   c = new cpu[ti, acc];
+   c = new cpu[ti, acc, acc];
    call c(u0<16>);
 }

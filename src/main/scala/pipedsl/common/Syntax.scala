@@ -643,7 +643,7 @@ object Syntax {
   }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
-  case class CExcept() extends Command
+  case class CExcept(arg: Option[Expr]) extends Command
 
   sealed trait InternalCommand extends Command
 
@@ -688,14 +688,38 @@ object Syntax {
                       lat :Latency
                       ) extends Definition
 
-  sealed trait ModuleTrait extends Definition
+  sealed trait ExceptBlock extends Positional with HasCopyMeta
+  {
+    def map(f : Command => Command) : ExceptBlock
+    def get :Command
+    def copyMeta(other :ExceptBlock) = this.setPos(other.pos)
+  }
 
-  case class ModuleDef(
-    name: Id,
-    inputs: List[Param],
-    modules: List[Param],
-    ret: Option[Type],
-    body: Command) extends ModuleTrait with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+
+  case class ExceptEmpty() extends ExceptBlock
+  {
+    override def map(f: Command => Command): ExceptBlock = this
+    override def get :Command = throw new NoSuchElementException("EmptyExcept")
+  }
+  case class ExceptNoArgs(c :Command) extends ExceptBlock
+  {
+    override def map(f: Command => Command): ExceptBlock = ExceptNoArgs(f(c)).copyMeta(this)
+    override def get :Command = c
+  }
+  case class ExceptFull(arg :Id, c :Command) extends ExceptBlock
+    {
+      override def map(f: Command => Command): ExceptBlock = ExceptFull(arg, f(c)).copyMeta(this)
+      override def get :Command = c
+    }
+
+
+  case class ModuleDef(name: Id, inputs: List[Param],
+                       modules: List[Param],
+                       ret: Option[Type],
+                       body: Command,
+                       commit_blk: Option[Command],
+                       except_blk: ExceptBlock)
+    extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
     {
       override val copyMeta: HasCopyMeta => ModuleDef =
         {
@@ -708,27 +732,7 @@ object Syntax {
         }
     }
 
-  case class ExceptingModule
-  (
-    name: Id,
-    inputs: List[Param],
-    modules: List[Param],
-    ret: Option[Type],
-    body: Command,
-    commit_block :Command,
-    exn_block :Command,
-  ) extends ModuleTrait with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
-  {
-    override val copyMeta: HasCopyMeta => ExceptingModule =
-      {
-        case from :ModuleDef =>
-          maybeSpec = from.maybeSpec
-          isRecursive = from.isRecursive
-          pos = from.pos
-          this
-        case _ => this
-      }
-  }
+  def is_excepting(m :ModuleDef) :Boolean = m.commit_blk.nonEmpty
 
   case class Param(name: Id, typ: Type) extends Positional
 
@@ -736,9 +740,6 @@ object Syntax {
 
   val is_excepting_var: Id =
     Id("__excepting").setType(TBool())
-
-  case class ExceptableProg(exts: List[ExternDef],
-                            fdefs: List[FuncDef], moddefs: List[ModuleTrait], circ: Circuit) extends Positional
 
   case class Prog(exts: List[ExternDef],
     fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional

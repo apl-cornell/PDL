@@ -30,11 +30,6 @@ class PrettyPrinter(output: Option[File]) {
     p.moddefs.foreach(m => printModule(m))
     printCircuit(p.circ)
   }
-  def printProgram(p :ExceptableProg) :Unit = {
-    p.fdefs.foreach(printFunction)
-    p.moddefs.foreach(printExModule)
-    printCircuit(p.circ)
-  }
 
   def printFunction(f: FuncDef): Unit = {
     pline("def " + f.name.v + "(" +
@@ -43,24 +38,31 @@ class PrettyPrinter(output: Option[File]) {
       printCmdToString(f.body, 2) + "\n}")
   }
 
-  def printExModule(m :ModuleTrait) : Unit = m match
-  {
-    case m:ModuleDef => printModule(m)
-    case m:ExceptingModule => printExceptingModule(m)
-  }
+  def printModule(m :ModuleDef) : Unit =
+    if (is_excepting(m)) printExceptingModule(m)
+    else _printModule(m)
 
-  def printModule(m: ModuleDef): Unit = {
+
+  def _printModule(m: ModuleDef): Unit = {
     pline("pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
       ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
     printCmdToString(m.body, 2) + "\n}")
   }
 
-  def printExceptingModule(m :ExceptingModule) :Unit = {
+  def printExceptingModule(m :ModuleDef) :Unit = {
     pline("exn-pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
-    ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
-    printCmdToString(m.body, 2) + "\ncommit:\n" +
-    printCmdToString(m.commit_block, 2) + "\nexcept:\n" +
-    printCmdToString(m.exn_block, 2) + "\n}")
+      ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
+      printCmdToString(m.body, 2) + "\ncommit:\n" +
+      printCmdToString(m.commit_blk.get, 2) + "\n" +
+      printExnBlock(m.except_blk, 2) + "\n}"
+    )
+  }
+
+  def printExnBlock(block: Syntax.ExceptBlock, ident: Int): String = block match
+  {
+    case ExceptEmpty() => ""
+    case ExceptFull(arg, c) => "except(" + arg.v + "):\n" + printCmdToString(c, ident)
+    case ExceptNoArgs(c) => "except:\n" + printCmdToString(c, ident)
   }
 
   def printCircuit(c: Circuit): Unit = pline("circuit {\n" + printCircuitToString(c, 2) + "\n}")
@@ -127,7 +129,7 @@ class PrettyPrinter(output: Option[File]) {
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
-      case Syntax.CExcept() => ins + "except()"
+      case Syntax.CExcept(arg) => ins + "except(" + arg.fold("")(printExprToString) + ");"
       case _ => "TODO PRINTING COMMAND"
     }
   }

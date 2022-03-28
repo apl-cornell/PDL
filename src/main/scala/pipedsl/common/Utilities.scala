@@ -83,7 +83,7 @@ object Utilities {
     case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty() => Set()
-    case CExcept() => Set()
+    case CExcept(arg) => arg.fold(Set[Id]())(getUsedVars)
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -681,10 +681,9 @@ object Utilities {
   def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => FOption[Type]) :FuncDef =
     fun.copy(body = typeMapCmd(fun.body, f_opt))
   def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
-    mod.copy(body = typeMapCmd(mod.body, f_opt),
-      modules = mod.modules.map(p =>
-        p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
-      )).copyMeta(mod)
+    mod.copy(modules = mod.modules.map(p =>
+                p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
+              ), body = typeMapCmd(mod.body, f_opt), commit_blk = None, except_blk = ExceptEmpty()).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {

@@ -64,7 +64,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
 
   override def run(m: ModuleDef): ModuleDef =
     {
-      val nm = m.copy(body = run(m.body))
+      val nm = m.copy(body = run(m.body), commit_blk = None, except_blk = ExceptEmpty())
       nm.isRecursive = m.isRecursive
       nm.maybeSpec = m.maybeSpec
       nm

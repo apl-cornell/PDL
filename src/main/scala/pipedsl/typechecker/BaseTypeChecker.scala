@@ -460,7 +460,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       })
       tenv
     case CEmpty() => tenv
-    case CExcept() => tenv
+    case CExcept(arg) => arg.foreach(checkExpression(_, tenv, None)); tenv
     case _ => throw UnexpectedCommand(c)
   }
 

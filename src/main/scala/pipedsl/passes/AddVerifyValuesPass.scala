@@ -22,7 +22,13 @@ object AddVerifyValuesPass extends CommandPass[Command] with ModulePass[ModuleDe
     nc
   }
 
-  override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).copyMeta(m)
+  override def run(m: ModuleDef): ModuleDef =
+    {
+      val (fixed_body, main_handles) = addVerifyValues(m.body, Map())
+      val fixed_commit = m.commit_blk.map(addVerifyValues(_, main_handles)._1)
+      val fixed_except = m.except_blk.map(addVerifyValues(_, main_handles)._1)
+      m.copy(body = fixed_body, commit_blk = fixed_commit, except_blk = fixed_except).copyMeta(m)
+    }
 
   override def run(p: Prog): Prog =  p.copy(exts = p.exts, fdefs = p.fdefs,
     moddefs = p.moddefs.map(m => run(m))).setPos(p.pos)

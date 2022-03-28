@@ -41,7 +41,9 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         removeCEmpty(nc)
       }
 
-    override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).copyMeta(m)
+    override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body),
+      commit_blk = m.commit_blk.map(run),
+      except_blk = m.except_blk.map(run)).copyMeta(m)
 
     override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
 
@@ -112,7 +114,11 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case CLockEnd(_) => c
       case CLockOp(_, _, _, _, _) => c
       case CEmpty() => c
-      case CExcept() => c
+      case CExcept(arg) => if (arg.isDefined)
+        {
+          val (nexp, nasgn) = extractCastVars(arg.get)
+          CSeq(nasgn, CExcept(Some(nexp)).setPos(c.pos)).setPos(c.pos)
+        } else c
       case _: InternalCommand => c
     }
 

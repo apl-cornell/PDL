@@ -7,7 +7,7 @@ import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Syntax.{ExceptableProg, Id, Prog}
+import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
 import pipedsl.passes._
 import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
@@ -41,7 +41,7 @@ object Main {
   }
   
   def parse(debug: Boolean, printOutput: Boolean, inputFile: File, outDir: File,
-            rfLockImpl: Option[String] = None): ExceptableProg = {
+            rfLockImpl: Option[String] = None): Prog = {
     if (!Files.exists(inputFile.toPath)) {
       throw new RuntimeException(s"File $inputFile does not exist")
     }
@@ -57,8 +57,7 @@ object Main {
                 rfLockImpl: Option[String] = None): Unit = {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".interpret"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
-    val ex_prog = parse(debug = false, printOutput = false, inputFile, outDir)
-    val prog = ExceptingToNormal.run(ex_prog)
+    val prog = parse(debug = false, printOutput = false, inputFile, outDir)
     val i: Interpreter = new Interpreter(maxIterations)
     i.interp_prog(RemoveTimingPass.run(prog), MemoryInputParser.parse(memoryInputs), outputFile)
   }
@@ -71,11 +70,11 @@ object Main {
     val outputName = FilenameUtils.getBaseName(inputFile.getName) + ".typecheck"
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
 
-    val ex_prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
+    val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
 
     try {
-      val prog = ExceptingToNormal.run(ex_prog)
-      new PrettyPrinter(None).printProgram(prog)
+      //val prog = ExceptingToNormal.run(ex_prog)
+      // new PrettyPrinter(None).printProgram(prog)
       val pinfo = new ProgInfo(prog)
       MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
@@ -83,6 +82,8 @@ object Main {
       val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(inferredProg))
       val canonProg2 = new CanonicalizePass().run(verifProg)
       val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
+      new PrettyPrinter(None).printProgram(canonProg)
+
       val basetypes = BaseTypeChecker.check(canonProg, None)
       FunctionConstraintChecker.check(canonProg)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
@@ -93,10 +94,8 @@ object Main {
       pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
       val lockOperationTypeChecker = new LockOperationTypeChecker(lockWellformedChecker.getModLockGranularityMap)
       lockOperationTypeChecker.check(recvProg)
-
       val portChecker = new PortChecker(port_warn)
       portChecker.check(recvProg, None)
-
       val predicateGenerator = new PredicateGenerator()
       val ctx = predicateGenerator.run(recvProg)
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)

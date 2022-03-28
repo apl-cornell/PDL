@@ -230,7 +230,9 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(exp, vars)
         (vars, nextVars)
       case Syntax.CEmpty() => (vars, nextVars)
-      case CExcept() => (vars, nextVars)
+      case CExcept(arg) =>
+        arg.foreach(checkExpr(_, vars))
+        (vars, nextVars)
       case CPrint(args) =>
         args.foreach(a => {
           checkExpr(a, vars)
