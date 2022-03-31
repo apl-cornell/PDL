@@ -1,4 +1,4 @@
-# SpecLang
+# PDL
 
 This language provides a high level, imperative-style programming model
 for building pipelined processors and accelerators.
