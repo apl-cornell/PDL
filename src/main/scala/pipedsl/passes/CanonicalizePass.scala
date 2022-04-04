@@ -114,11 +114,8 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case CLockEnd(_) => c
       case CLockOp(_, _, _, _, _) => c
       case CEmpty() => c
-      case CExcept(arg) => if (arg.isDefined)
-        {
-          val (nexp, nasgn) = extractCastVars(arg.get)
-          CSeq(nasgn, CExcept(Some(nexp)).setPos(c.pos)).setPos(c.pos)
-        } else c
+      case CExcept(args) => val (nargs, nc) = extractCastVars(args)
+        CSeq(nc, CExcept(nargs).setPos(c.pos))
       case _: InternalCommand => c
     }
 

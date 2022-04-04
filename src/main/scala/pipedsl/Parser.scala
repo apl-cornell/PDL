@@ -262,7 +262,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       typ.? ~ lhs ~ "<-" ~ expr ^^ { case t ~ l ~ _ ~ r =>   l.typ = t; CRecv(l, r) } |
       check |
       resolveSpec |
-      "except" ~> parens(expr.?) ^^ {arg => CExcept(arg)} |
+      "except" ~> parens(repsep(expr, ",")) ^^ {args => CExcept(args)} |
       "start" ~> parens(iden) ^^ { i => CLockStart(i) } |
       "end" ~> parens(iden) ^^ { i => CLockEnd(i) } |
       "acquire" ~> parens(lockArg ~ ("," ~> lockType).?) ^^ { case i ~ t => CSeq(CLockOp(i, Reserved, t, List(), None), CLockOp(i, Acquired, t, List(), None)) } |
@@ -374,10 +374,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }
 
   lazy val except: P[ExceptBlock] = positioned {
-    "except" ~> parens(iden ~ ":" ~ typ).? ~ (":" ~> cmd) ^^ {case id ~ cmd => id match
+    "except" ~> parens(repsep(iden ~ ":" ~ typ, ",")) ~ (":" ~> cmd) ^^ {case id ~ cmd => id match
     {
-      case Some(arg) => ExceptFull(arg._1._1.setType(arg._2), cmd)
-      case None => ExceptNoArgs(cmd)
+      case args => ExceptFull(args.map({ case id ~ _ ~ tp => id.setType(tp)}), cmd)
     }}
   }
 

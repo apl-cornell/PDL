@@ -31,7 +31,6 @@ object AddCheckpointHandlesPass extends CommandPass[Command] with ModulePass[Mod
       val (fixed_body, main_handles) = addCheckpointHandles(m.body, (Set(), Set()))
       val fixed_commit = m.commit_blk.map(addCheckpointHandles(_, main_handles)._1)
       val fixed_except = m.except_blk.map(addCheckpointHandles(_, main_handles)._1)
-      println(m.except_blk)
       m.copy(body = fixed_body, commit_blk = fixed_commit, except_blk = fixed_except).copyMeta(m)
     }
 

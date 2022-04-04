@@ -643,7 +643,7 @@ object Syntax {
   }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
-  case class CExcept(arg: Option[Expr]) extends Command
+  case class CExcept(args: List[Expr]) extends Command
 
   sealed trait InternalCommand extends Command
 
@@ -701,14 +701,9 @@ object Syntax {
     override def map(f: Command => Command): ExceptBlock = this
     override def get :Command = throw new NoSuchElementException("EmptyExcept")
   }
-  case class ExceptNoArgs(c :Command) extends ExceptBlock
-  {
-    override def map(f: Command => Command): ExceptBlock = ExceptNoArgs(f(c)).copyMeta(this)
-    override def get :Command = c
-  }
-  case class ExceptFull(arg :Id, c :Command) extends ExceptBlock
+  case class ExceptFull(args: List[Id], c: Command) extends ExceptBlock
     {
-      override def map(f: Command => Command): ExceptBlock = ExceptFull(arg, f(c)).copyMeta(this)
+      override def map(f: Command => Command): ExceptBlock = ExceptFull(args, f(c)).copyMeta(this)
       override def get :Command = c
     }
 
@@ -732,7 +727,11 @@ object Syntax {
         }
     }
 
-  def is_excepting(m :ModuleDef) :Boolean = m.commit_blk.nonEmpty
+  def is_excepting(m :ModuleDef) :Boolean = m.except_blk match
+  {
+    case ExceptEmpty() => false
+    case _ :ExceptFull => true
+  }
 
   case class Param(name: Id, typ: Type) extends Positional
 

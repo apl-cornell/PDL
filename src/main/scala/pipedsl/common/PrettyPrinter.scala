@@ -42,7 +42,6 @@ class PrettyPrinter(output: Option[File]) {
     if (is_excepting(m)) printExceptingModule(m)
     else _printModule(m)
 
-
   def _printModule(m: ModuleDef): Unit = {
     pline("pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
       ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
@@ -61,8 +60,7 @@ class PrettyPrinter(output: Option[File]) {
   def printExnBlock(block: Syntax.ExceptBlock, ident: Int): String = block match
   {
     case ExceptEmpty() => ""
-    case ExceptFull(arg, c) => "except(" + arg.v + "):\n" + printCmdToString(c, ident)
-    case ExceptNoArgs(c) => "except:\n" + printCmdToString(c, ident)
+    case ExceptFull(args, c) => "except(" + args.map((id) => id.v).reduce((acc, elem) => acc + "," + elem) + "):\n" + printCmdToString(c, ident)
   }
 
   def printCircuit(c: Circuit): Unit = pline("circuit {\n" + printCircuitToString(c, 2) + "\n}")
@@ -129,7 +127,7 @@ class PrettyPrinter(output: Option[File]) {
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
-      case Syntax.CExcept(arg) => ins + "except(" + arg.fold("")(printExprToString) + ");"
+      case Syntax.CExcept(args) => ins + "except(" + args.map(printExprToString).reduce((acc, elem) => acc + ", " + elem) + ");"
       case _ => "TODO PRINTING COMMAND"
     }
   }

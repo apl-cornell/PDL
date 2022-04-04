@@ -239,8 +239,8 @@ object TypeInferenceWrapper
       compose_subst(subst, unify(types._1.typ, types._2)._1))
       val modEnv = env.add(m.name, TModType(inputTypes, modTypes, m.ret, Some(m.name)))
       val inEnv = m.inputs.foldLeft[Environment[Id, Type]](modEnv)((env, p) => env.add(p.name, p.typ))
-      val pipeEnv = m.modules.zip(modTypes).foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m._1.name, m._2))
-      val (fixed_cmd, out_env, subst) = checkCommand(m.body, pipeEnv.asInstanceOf[TypeEnv], mod_subs)
+      val pipeEnv = m.modules.zip(modTypes).foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m._1.name, m._2)).asInstanceOf[TypeEnv]
+      val (fixed_cmd, out_env, subst) = checkCommand(m.body, pipeEnv, mod_subs)
       val (fixed_commit, _, subst1) = m.commit_blk match
       {
        case None => (None, out_env, subst)
@@ -249,15 +249,12 @@ object TypeInferenceWrapper
       val (fixed_except, final_subst) = m.except_blk match
       {
        case ExceptEmpty() => (ExceptEmpty(), subst1)
-       case ExceptNoArgs(c) => checkCommand(c, out_env, subst) |> {case (x, _, z) => (ExceptNoArgs(x), z)} //TODO IMPROVE PRECISION OF OUT_ENV, SUBST
-       case ExceptFull(arg, c) => checkCommand(c, out_env.add(arg, arg.typ.get).asInstanceOf[TypeEnv], subst) |> {case (cmd, _, s) => (ExceptFull(arg, cmd), s)}
+       //TODO IMPROVE PRECISION OF OUT_ENV, SUBST
+       case ExceptFull(args, c) => checkCommand(c, args.foldLeft(pipeEnv)((env, id) => env.add(id, id.typ.get).asInstanceOf[TypeEnv]), subst) |>
+         {case (cmd, _, s) => (ExceptFull(args, cmd), s)}
       }
       val hash = mutable.HashMap.from(final_subst)
       val newMod = typeMapModule(m.copy(body = fixed_cmd, commit_blk = fixed_commit, except_blk = fixed_except).copyMeta(m), fopt_func(type_subst_map_fopt(_, hash)))
-
-      println(fixed_commit)
-      println(fixed_except)
-
 
       val new_input = newMod.inputs.map(p => p.typ)
       val new_mod_tps = newMod.modules.map(m => replaceNamedType(m.typ, env))
