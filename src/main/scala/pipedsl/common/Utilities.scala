@@ -683,7 +683,9 @@ object Utilities {
   def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
     mod.copy(modules = mod.modules.map(p =>
                 p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
-              ), body = typeMapCmd(mod.body, f_opt)).copyMeta(mod)
+              ), body = typeMapCmd(mod.body, f_opt),
+      commit_blk = mod.commit_blk.map(typeMapCmd(_,  f_opt)),
+      except_blk = mod.except_blk.map(typeMapCmd(_, f_opt))).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {
