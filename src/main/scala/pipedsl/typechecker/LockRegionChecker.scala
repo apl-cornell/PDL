@@ -33,11 +33,37 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       case _ => throw UnexpectedCase(m.pos)
     })
 
-    val finalStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
-    finalStates.getMappedKeys().foreach(m => finalStates(m) match {
-      case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
-      case _ => ()
-    })
+    // let read lock release
+    m.commit_blk match {
+      case Some(commit_blk) =>
+        val postBodyStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+        postBodyStates.getMappedKeys().foreach(m => postBodyStates(m) match {
+          case Locks.Released => throw InvalidLockState(m.pos, m.v, postBodyStates(m), Locks.Released)
+          case _ => ()
+        })
+        val postCommitStates: Environment[Id, LockState] = checkLockRegions(commit_blk, nenv)
+        postCommitStates.getMappedKeys().foreach(m => postCommitStates(m) match {
+          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postCommitStates(m), Locks.Released)
+          case _ => ()
+        })
+      case _ =>
+        val postBodyStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+        postBodyStates.getMappedKeys().foreach(m => postBodyStates(m) match {
+          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postBodyStates(m), Locks.Released)
+          case _ => ()
+        })
+    }
+
+    m.except_blk match {
+      case ExceptEmpty() => ()
+      case ExceptFull(args, c) =>
+        nenv.getMappedKeys().foreach(m => nenv.add(m, Free))
+        val postExceptStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+        postExceptStates.getMappedKeys().foreach(m => postExceptStates(m) match {
+          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postExceptStates(m), Locks.Released)
+          case _ => ()
+        })
+    }
     env //no change to lock map after checking module
   }
 
@@ -91,7 +117,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, lock.v, env(lock), Acquired)
       }
       env
-    //can only reserve locks insisde of the relevant lock region
+    //can only reserve locks inside of the relevant lock region
     //other lock ops can be outside of this pass
     case CLockOp(mem, op, _, _, _) if op == Reserved =>
       if (env(mem.id) != Acquired) {
@@ -101,6 +127,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case CAssign(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case CRecv(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case Syntax.CEmpty() => env
+    case CExcept(args) => args.foreach(a => checkMemAccess(a, env)); env
     case _ => env
   }
 
@@ -137,7 +164,6 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case ECast(_, exp) => checkMemAccess(exp, env)
     case _ => ()
   }
-
 
   override def checkCircuit(c: Circuit, env: Environment[Id, LockState]): Environment[Id, LockState] = env
 }
