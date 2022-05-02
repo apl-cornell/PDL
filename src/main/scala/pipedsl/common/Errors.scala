@@ -221,4 +221,12 @@ object Errors {
   case class ReleaseWhenMaybeExcepting(p :Position) extends RuntimeException(
     withPos(s"No no no! No releasing when you might be excepting!!", p)
   )
+
+  case class MalformedExceptBlock(p :Position) extends RuntimeException(
+    withPos("Mistake in except block.", p)
+  )
+
+  case class IllegalThrowPlacement(p :Position) extends RuntimeException(
+    withPos("Throw not allowed here.", p)
+  )
 }

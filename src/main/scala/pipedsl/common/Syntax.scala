@@ -691,6 +691,7 @@ object Syntax {
   sealed trait ExceptBlock extends Positional with HasCopyMeta
   {
     def map(f : Command => Command) : ExceptBlock
+    def foreach(f : Command => Unit) :Unit
     def get :Command
     def copyMeta(other :ExceptBlock) = this.setPos(other.pos)
   }
@@ -699,11 +700,13 @@ object Syntax {
   case class ExceptEmpty() extends ExceptBlock
   {
     override def map(f: Command => Command): ExceptBlock = this
+    override def foreach(f: Command => Unit): Unit = ()
     override def get :Command = throw new NoSuchElementException("EmptyExcept")
   }
   case class ExceptFull(args: List[Id], c: Command) extends ExceptBlock
     {
       override def map(f: Command => Command): ExceptBlock = ExceptFull(args, f(c)).copyMeta(this)
+      override def foreach(f: Command => Unit): Unit = f(c)
       override def get :Command = c
     }
 
@@ -725,6 +728,14 @@ object Syntax {
           this
           case _ => this
         }
+
+      def command_map(f : Command => Command) :ModuleDef = copy(body = f(body),
+        commit_blk = commit_blk.map(f), except_blk = except_blk.map(f))
+
+      def extendedBody(): Command = commit_blk match {
+        case None => body
+        case Some(c) => CSeq(body, c)
+      }
     }
 
   def is_excepting(m :ModuleDef) :Boolean = m.except_blk match

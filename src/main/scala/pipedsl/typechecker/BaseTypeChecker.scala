@@ -95,7 +95,8 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
-    checkCommand(m.name, m.body, bodyEnv)
+    checkCommand(m.name, m.extendedBody(), bodyEnv)
+    m.except_blk.foreach(checkCommand(m.name, _, bodyEnv))
     outEnv
   }
 

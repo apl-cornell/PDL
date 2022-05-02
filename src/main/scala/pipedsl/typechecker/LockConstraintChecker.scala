@@ -62,32 +62,39 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
   override def checkFunc(f: FuncDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = env
 
   override def checkModule(m: ModuleDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
-    //Reads must go before writes, so the modes are initialized to read
-    lockGranularityMap(m.name)
-      .filter(l => l._2 == Specific)
-      .keys
-      .foreach(l => {
-        topLevelReserveModeMap += (l -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(READ))))
-        topLevelReleaseModeMap += (l -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(READ))))
-        SMTReserveModeListMap += (l -> Set())
-        SMTReleaseModeListMap += (l -> Set())
+    checkChunk(m.name, m.extendedBody(), env)
+    m.except_blk.foreach(checkChunk(m.name, _, env))
+    env
+  }
+
+  def checkChunk(name :Id, c :Command, env :Environment[LockArg, Z3AST]) :Environment[LockArg, Z3AST] =
+    {
+      //Reads must go before writes, so the modes are initialized to read
+      lockGranularityMap(name)
+        .filter(l => l._2 == Specific)
+        .keys
+        .foreach(l => {
+          topLevelReserveModeMap += (l -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReserveMode, ctx.mkInt(READ))))
+          topLevelReleaseModeMap += (l -> mkImplies(ctx, ctx.mkTrue(), ctx.mkEq(lockReleaseMode, ctx.mkInt(READ))))
+          SMTReserveModeListMap += (l -> Set())
+          SMTReleaseModeListMap += (l -> Set())
+        })
+      currentMod = name
+      writeDoMap.clear(); writeReserveMap.clear()
+      val nenv = lockMap(name).foldLeft[Environment[LockArg, Z3AST]](emptyEnv())((e, mem) => e.add(mem, makeEquals(mem, Free)))
+      val finalenv = checkCommand(c, nenv)
+      //At end of execution all locks must be free or released
+      finalenv.getMappedKeys().foreach(id => {
+        checkState(id, finalenv, ctx.mkTrue(), Released.order, Free.order) match {
+          case Z3Status.SATISFIABLE =>
+            throw new RuntimeException("We want everything at end to be free or released")
+          case _ =>
+        }
       })
-    currentMod = m.name
-    writeDoMap.clear(); writeReserveMap.clear()
-    val nenv = lockMap(m.name).foldLeft[Environment[LockArg, Z3AST]](emptyEnv())((e, mem) => e.add(mem, makeEquals(mem, Free)))
-    val finalenv = checkCommand(m.body, nenv)
-    //At end of execution all locks must be free or released
-    finalenv.getMappedKeys().foreach(id => {
-      checkState(id, finalenv, ctx.mkTrue(), Released.order, Free.order) match {
-        case Z3Status.SATISFIABLE =>
-          throw new RuntimeException("We want everything at end to be free or released")
-        case _ =>
-      }
-    })
-    writeReserveMap.foreachEntry((mem, when_reserved) =>
+      writeReserveMap.foreachEntry((mem, when_reserved) =>
       {
         solver.add(ctx.mkXor(when_reserved, writeDoMap.getOrElse(mem,
-        throw new RuntimeException("Some write locks are reserved without being used"))))
+          throw new RuntimeException("Some write locks are reserved without being used"))))
         solver.check() match
         {
           case Z3Status.UNSATISFIABLE =>
@@ -96,9 +103,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           case Z3Status.SATISFIABLE =>
             throw new RuntimeException("Some write locks are reserved without being used")
         }})
-
-    env //no change to lock map after checking module
-  }
+      env //no change to lock map after checking module
+    }
 
   def checkCommand(c: Command, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
     c match {
@@ -284,7 +290,6 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
   }
 
   private def checkState(mem: LockArg, env: Environment[LockArg, Z3AST], predicates: Z3BoolExpr, lockStateOrders: Int*): Z3Status = {
-
     // Makes an OR of all given lock states
     val stateAST = lockStateOrders.foldLeft(ctx.mkFalse())((ast, order) =>
       ctx.mkOr(ast, ctx.mkEq(ctx.mkIntConst(constructVarName(mem)), ctx.mkInt(order))))

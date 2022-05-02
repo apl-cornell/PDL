@@ -2,6 +2,7 @@ package pipedsl.typechecker
 
 import pipedsl.common.Errors.MalformedLockTypes
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
+import pipedsl.common.Syntax
 import pipedsl.common.Syntax.{CIf, CLockOp, CSeq, CSplit, CTBar, Command, Id, LockArg, ModuleDef, Prog}
 
 /**
@@ -40,7 +41,10 @@ class LockWellformedChecker() {
   
   private def checkModule(moduleDef: ModuleDef, set: Set[LockArg]): Set[LockArg] = {
     currentMod = moduleDef.name
-    checkCommand(moduleDef.body, set)
+    checkCommand(moduleDef.extendedBody(), set).union(moduleDef.except_blk match {
+      case Syntax.ExceptEmpty() => Set()
+      case Syntax.ExceptFull(_, c) => checkCommand(c, set)
+    })
   }
   
   private def checkCommand(command: Command, lockArgs: Set[LockArg]): Set[LockArg] = command match {

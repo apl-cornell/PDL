@@ -35,18 +35,18 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
     val allAvailable = m.modules.foldLeft[Available](inputs)((av, m) => {
       av + m.name
     })
-    checkCommand(m.body, allAvailable, NoneAvailable)
+    checkCommand(m.extendedBody(), allAvailable, NoneAvailable)
+    m.except_blk match {
+      case ExceptEmpty() => ()
+      case ExceptFull(args, c) => val inputs = args.foldLeft[Available](NoneAvailable)((av, p) => av + p)
+      val allAvailable = m.modules.foldLeft(inputs)((av, m) => av + m.name)
+      checkCommand(c, allAvailable, NoneAvailable)
+    }
     env
   }
 
   /**
-   * TODO comment
-   * @param lhs
-   * @param rhs
-   * @param isRecv
-   * @param vars
-   * @param nextVars
-   * @return
+   * checks a receive or assign command.
    */
   private def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean,
                                 vars: Available, nextVars: Available): (Available, Available) =

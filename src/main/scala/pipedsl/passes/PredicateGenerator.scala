@@ -22,7 +22,8 @@ class PredicateGenerator extends ProgPass[Z3Context] {
 
   private def run(m: ModuleDef): Unit = {
     //no need to reset any state here, at the end of a module predicates will be just true
-    annotateCommand(m.body)
+    annotateCommand(m.extendedBody())
+    m.except_blk.foreach(annotateCommand)
   }
 
   private def annotateCommand(c: Command): Unit =  {

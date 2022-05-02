@@ -14,6 +14,7 @@ import pipedsl.typechecker.TypeChecker.TypeChecks
  * - Checks: That all lock "reserve" statements occur inside the appropriate lock region.
  * - Checks: That all lock regions are well formed according to the above.
  */
+
 object LockRegionChecker extends TypeChecks[Id, LockState] {
 
   override def emptyEnv(): Environment[Id, LockState] = Environments.EmptyLockEnv
@@ -33,37 +34,54 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       case _ => throw UnexpectedCase(m.pos)
     })
 
-    // let read lock release
-    m.commit_blk match {
-      case Some(commit_blk) =>
-        val postBodyStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
-        postBodyStates.getMappedKeys().foreach(m => postBodyStates(m) match {
-          case Locks.Released => throw InvalidLockState(m.pos, m.v, postBodyStates(m), Locks.Released)
-          case _ => ()
-        })
-        val postCommitStates: Environment[Id, LockState] = checkLockRegions(commit_blk, nenv)
-        postCommitStates.getMappedKeys().foreach(m => postCommitStates(m) match {
-          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postCommitStates(m), Locks.Released)
-          case _ => ()
-        })
-      case _ =>
-        val postBodyStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
-        postBodyStates.getMappedKeys().foreach(m => postBodyStates(m) match {
-          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postBodyStates(m), Locks.Released)
-          case _ => ()
-        })
-    }
+    val finalStates: Environment[Id, LockState] = checkLockRegions(m.extendedBody(), nenv)
+    finalStates.getMappedKeys().foreach(m => finalStates(m) match {
+      case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
+      case _ => ()
+    })
 
-    m.except_blk match {
-      case ExceptEmpty() => ()
-      case ExceptFull(args, c) =>
-        nenv.getMappedKeys().foreach(m => nenv.add(m, Free))
-        val postExceptStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
-        postExceptStates.getMappedKeys().foreach(m => postExceptStates(m) match {
-          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postExceptStates(m), Locks.Released)
-          case _ => ()
-        })
-    }
+    m.except_blk.foreach(checkLockRegions(_, nenv).getMappedKeys().foreach(m => finalStates(m) match {
+      case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
+      case _ => ()
+    }))
+
+//
+//    // let read lock release
+//    m.commit_blk match {
+//      case Some(commit_blk) =>
+//        val postBodyStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+//        postBodyStates.getMappedKeys().foreach(m => {
+//          println(m.typ);
+//          postBodyStates(m) match {
+//            case Locks.Released => ()
+//            case _ =>
+//              throw InvalidLockState(m.pos, m.v, postBodyStates(m), Locks.Released)
+//          }
+//        }
+//        )
+//        val postCommitStates: Environment[Id, LockState] = checkLockRegions(commit_blk, nenv)
+//        postCommitStates.getMappedKeys().foreach(m => postCommitStates(m) match {
+//          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postCommitStates(m), Locks.Released)
+//          case _ => ()
+//        })
+//      case _ =>
+//        val postBodyStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+//        postBodyStates.getMappedKeys().foreach(m => postBodyStates(m) match {
+//          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postBodyStates(m), Locks.Released)
+//          case _ => ()
+//        })
+//    }
+//
+//    m.except_blk match {
+//      case ExceptEmpty() => ()
+//      case ExceptFull(args, c) =>
+//        nenv.getMappedKeys().foreach(m => nenv.add(m, Free))
+//        val postExceptStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+//        postExceptStates.getMappedKeys().foreach(m => postExceptStates(m) match {
+//          case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, postExceptStates(m), Locks.Released)
+//          case _ => ()
+//        })
+//    }
     env //no change to lock map after checking module
   }
 
