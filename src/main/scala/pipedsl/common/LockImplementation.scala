@@ -61,6 +61,7 @@ object LockImplementation {
 
   private val checkpointName = "checkpoint"
   private val rollbackName = "rollback"
+  private val abortName = "abort"
 
   private def toPortString(port: Option[Int]): String = port match {
     case Some(value) => value.toString
@@ -145,6 +146,10 @@ object LockImplementation {
 
   def getRollback(l: LockInterface): Option[(TFun, Latency)] = {
     l.getType.methods.get(Id(rollbackName))
+  }
+
+  def getAbort(l: LockInterface): Option[(TFun, Latency)] = {
+    l.getType.methods.get(Id(abortName))
   }
 
   //-------Methods for translation info--------------------------\\
@@ -275,6 +280,16 @@ object LockImplementation {
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + rollbackName
         //TODO do we put the booleans in as named arguments too? kinda unnecessary
         Some(MethodInfo(methodName, doesModify = true, List(cid, EBool(doRollback), EBool(doRelease))))
+      case None => None
+    }
+  }
+
+  def getAbortInfo(mem: Id): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    getAbort(interface) match {
+      case Some(_) =>
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + abortName
+        Some(MethodInfo(methodName, doesModify = true, List()))
       case None => None
     }
   }
