@@ -491,7 +491,8 @@ object LockImplementation {
       TObject(queueLockName, List(),
         parent.methods ++ Map(
           Id(checkpointName) -> (TFun(List(), checkType), Sequential),
-          Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+          Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential),
+          Id(abortName) -> (TFun(List(), TVoid()), Sequential)
         )
       )
     }

@@ -4,6 +4,7 @@ import FIFOF :: *;
 import Ehr :: *;
 import Vector :: *;
 import ConfigReg :: *;
+import GetPut :: *;
 export LockId(..);
 export QueueLock(..);
 export CheckpointQueueLock(..);
@@ -21,19 +22,20 @@ interface QueueLock#(type id);
    method ActionValue#(id) res1();
    method Bool owns1(id i);
    method Action rel1(id i);
-   method Action abort1(id i);
    method Bool isEmpty();
    method Bool canRes1();
 endinterface
 
-interface CheckpointQueueLock#(type id, type cid);
+interface CheckpointQueueLock#(type id, type cid, type winfo);
    method ActionValue#(id) res1();
    method Bool owns1(id i);
    method Action rel1(id i);
    method Bool isEmpty();
    method Bool canRes1();
+   method Action write(winfo wd);
    method ActionValue#(cid) checkpoint();
    method Action rollback(cid id, Bool doRoll, Bool doRel);
+   method Action abort();
 endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
@@ -72,14 +74,6 @@ module mkQueueLock(QueueLock#(LockId#(d)));
       if (owner == tid)
 	 begin
 	    held.deq();
-	 end
-   endmethod
-
-   //Clears everything after `tid` when `tid` comes to the head
-   method Action abort1(LockId#(d) tid);
-      if (owner == tid)
-	 begin
-	    held.clear();
 	 end
    endmethod
 
@@ -134,12 +128,6 @@ module mkCountingLock(QueueLock#(LockId#(d)));
       doRel.wset(owner + 1);
    endmethod
 
-   method Action abort1(LockId#(d) tid);
-      nextId[0] <= 0;
-      owner <= 0;
-      empty <= True;
-   endmethod
-
    //Reserves the lock and returns the associated id
    method ActionValue#(LockId#(d)) res1();
       nextId[0] <= nextId[0] + 1;
@@ -149,12 +137,14 @@ module mkCountingLock(QueueLock#(LockId#(d)));
 
 endmodule
 
-module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
+module mkCheckpointQueueLock(Put#(winfo) mem, CheckpointQueueLock#(LockId#(d), LockId#(d), winfo) _unused_)
+   provisos(Bits#(winfo,wsz));
 
    Ehr#(2, LockId#(d)) nextId <- mkEhr(0);
    Reg#(LockId#(d)) owner <- mkReg(0);
    Reg#(Bool) empty <- mkReg(True);
 
+   Reg#(Maybe#(winfo)) wdata <- mkReg(tagged Invalid);
    RWire#(Bool) doRes <- mkRWire();
    RWire#(LockId#(d)) doRel <- mkRWire();
 
@@ -166,6 +156,13 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
       if (!res &&& doRel.wget() matches tagged Valid.nextOwner) empty <= nextOwner == nextId[1];
    endrule
 
+   method Action abort();
+      nextId[0] <= 0;
+      owner <= 0;   
+      empty <= True;  
+      wdata <= tagged Invalid;
+   endmethod
+   
    method Bool isEmpty();
       return empty;
    endmethod
@@ -179,10 +176,19 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
       return owner == tid;
    endmethod
 
+   //store the write data
+   method Action write(winfo wd);
+      wdata <= tagged Valid wd;
+   endmethod
+   
    //Releases the lock, assume `tid` owns it
    method Action rel1(LockId#(d) tid);
       owner <= owner + 1; //assign next owner
       doRel.wset(owner + 1);
+      if (wdata matches tagged Valid.wd) begin
+	 mem.put(wd);
+	 wdata <= tagged Invalid;
+      end      
    endmethod
 
    //Reserves the lock and returns the associated id
