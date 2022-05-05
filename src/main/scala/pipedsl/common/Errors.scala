@@ -229,4 +229,16 @@ object Errors {
   case class IllegalThrowPlacement(p :Position) extends RuntimeException(
     withPos("Throw not allowed here.", p)
   )
+
+  case class MustEndBeforeCall(p :Position) extends RuntimeException(
+    withPos("Must not have any open lock regions when calling from except block", p)
+  )
+
+  case class NoCommittingWriteInBody(p :Position) extends RuntimeException(
+    withPos("No committing writes in the main body!", p)
+  )
+
+  case class NoWriteReleaseInBody(p :Position) extends RuntimeException(
+    withPos("No release writes in the main body!", p)
+  )
 }

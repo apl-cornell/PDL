@@ -82,7 +82,7 @@ object Main {
       val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(inferredProg))
       val canonProg2 = new CanonicalizePass().run(verifProg)
       val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
-      new PrettyPrinter(None).printProgram(canonProg)
+      // new PrettyPrinter(None).printProgram(canonProg)
 
       val basetypes = BaseTypeChecker.check(canonProg, None)
       FunctionConstraintChecker.check(canonProg)
@@ -101,6 +101,7 @@ object Main {
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
+      FinalblocksConstraintChecker.check(recvProg)
       val linChecker = new LinearExecutionChecker(ctx)
       linChecker.check(recvProg, None)
       val specChecker = new SpeculationChecker(ctx)

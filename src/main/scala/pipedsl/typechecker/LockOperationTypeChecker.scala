@@ -44,7 +44,8 @@ class LockOperationTypeChecker(val memGranularityMap:Map[Id, Map[Id, LockGranula
 
   private def checkModule(moduleDef: ModuleDef): Unit = {
     currentMod = moduleDef.name
-    checkCommand(moduleDef.body)
+    checkCommand(moduleDef.extendedBody())
+    moduleDef.except_blk.foreach(checkCommand)
   }
 
   private def checkCommand(command: Command): Unit = command match {
