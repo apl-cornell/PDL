@@ -61,6 +61,14 @@ function Bool isNewer(UInt#(sz) a, UInt#(sz) b, UInt#(sz) h);
    return !isOlder(a, b, h);
 endfunction
 
+function Put#(Tuple2#(addr, elem)) rfToPut (RegFile#(addr, elem) rf);
+   return (interface Put;
+	      method Action put(Tuple2#(addr, elem) x);
+		 rf.upd(tpl_1(x), tpl_2(x));
+	      endmethod
+	   endinterface);
+endfunction
+
 //Types of memories X Locks:
 //For the built-in types of locks & mems:
 
@@ -111,7 +119,7 @@ endinterface
 interface CheckpointQueueLockCombMem#(type addr, type elem, type id, type cid);
    method elem read(addr a);
    method Action write(addr a, elem b);
-   interface CheckpointQueueLock#(id, cid) lock;
+   interface CheckpointQueueLock#(id, cid, Tuple2#(addr, elem)) lock;
    method Bool canAtom_r1(addr a);
    method Bool canAtom_r2(addr a);
    method elem atom_r(addr a);
@@ -121,7 +129,7 @@ endinterface
 
 interface QueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid);
    interface AsyncMem#(addr, elem, rid, nsz) mem;
-   interface QueueLock#(lid) lock;
+   interface QueueLock#(lid) lock;   
    method Bool canAtom1(addr a);
    method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
 endinterface
@@ -208,6 +216,7 @@ module mkRegFile#(parameter Bool init, parameter String initFile)(RegFile#(addr,
       rf <- mkRegFileWCF(minBound, maxBound);
    return rf;
 endmodule
+
 
 module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, elem, MemId#(inflight), nsz))
    provisos (Bits#(addr,szAddr), Bits#(elem,szElem), Mul#(TDiv#(szElem, nsz), nsz, szElem));
@@ -533,10 +542,13 @@ module mkQueueLockCombMem(RegFile#(addr, elem) rf, QueueLockCombMem#(addr, elem,
 
 endmodule
 
-module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLockCombMem#(addr, elem, LockId#(d), LockId#(d)) _unused_);
+module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLockCombMem#(addr, elem, LockId#(d), LockId#(d)) _unused_)
+provisos(Bits#(Tuple2#(addr, elem), tuplsz));
 
-   CheckpointQueueLock#(LockId#(d), LockId#(d)) l <- mkCheckpointQueueLock();
-
+      
+   Put#(Tuple2#(addr, elem)) doWrite = rfToPut(rf);
+   CheckpointQueueLock#(LockId#(d), LockId#(d), Tuple2#(addr, elem)) l <- mkCheckpointQueueLock(doWrite);
+   
    interface lock = l;
 
    method elem read(addr a);
@@ -544,7 +556,7 @@ module mkCheckpointQueueLockCombMem(RegFile#(addr, elem) rf, CheckpointQueueLock
    endmethod
 
    method Action write(addr a, elem b);
-      rf.upd(a, b);
+      l.write(tuple2(a, b));
    endmethod
 
    method Bool canAtom_r1(addr a);

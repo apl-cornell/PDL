@@ -1,7 +1,5 @@
 package pipedsl.typechecker
 
-import org.apache.commons.io.filefilter.FalseFileFilter
-import org.graalvm.compiler.nodes.virtual.LockState
 import pipedsl.common.Syntax._
 import pipedsl.typechecker.Environments._
 import pipedsl.common.Errors._
