@@ -1,0 +1,32 @@
+exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(Queue), oth :uint<4>[0]<c,s>(Queue), abc :uint<8>[16]<a,a> ] :uint<4> {
+    start(abc);
+    abc[pc] <- 4;
+    end(abc);
+
+    reserve(acc);
+    ---
+    block(acc);
+    acc_val = acc[];
+    acc[] <- acc_val + 1;
+    if(acc_val + 1 == 13)
+    {
+      except(0);
+    } else
+    {
+      call cpu(pc + 1);
+    }
+commit:
+    release(acc);
+    print("no exn here!");
+except(arg :uint<4>):
+    print("exception...");
+    output(1);
+}
+
+
+circuit {
+   accr = register(uint<4>);
+   acc = Queue(accr);
+   c = new cpu[acc, acc];
+   call c(u0<16>);
+}

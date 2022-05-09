@@ -20,8 +20,9 @@ object FinalblocksConstraintChecker {
   {
     m.except_blk match {
       case ExceptEmpty() => checkNormBody(m.body)
-      case ExceptFull(args, c) =>
+      case ExceptFull(_, c) =>
         checkExBody(m.body)
+        checkCommit(m.commit_blk.get)
         checkExceptingBlock(c)
     }
   }
@@ -58,6 +59,7 @@ object FinalblocksConstraintChecker {
 
   private def checkNormBody(c: Command) :Unit = checkNoThrow(c, NonExn)
 
+  private def checkCommit(c :Command) :Unit = checkNoThrow(c, NonExn)
 
   private def checkNoThrow(c :Command, estat :ExnStatus) :ExnStatus = c match {
     case CSeq(c1, c2) => checkNoThrow(c2, checkNoThrow(c1, estat))
