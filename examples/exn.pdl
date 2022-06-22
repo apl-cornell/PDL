@@ -30,9 +30,12 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>, oth :ui
     {
       call cpu(pc + 1);
     }
+    block(acc);
+    acc = acc_val + opcode; //this should do a real thing
     ---
 commit:
     print("commit");
+    release(acc);
 except():
     print("exn");
     ---
