@@ -11,7 +11,10 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>, oth :ui
     done = opcode == 0;
     mult = opcode == 1;
     div = opcode == 2;
+    start(acc);
     acc_val = acc[];
+    reserve(acc);
+    end(acc);
     ---
     if(div){
         if(imm == 0){
@@ -27,7 +30,6 @@ exn-pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>, oth :ui
     {
       call cpu(pc + 1);
     }
-    end(acc);
     ---
 commit:
     print("commit");
