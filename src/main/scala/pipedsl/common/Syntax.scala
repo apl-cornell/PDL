@@ -647,6 +647,8 @@ object Syntax {
 
   sealed trait InternalCommand extends Command
 
+  case class IAbort(mem: Id) extends InternalCommand
+  case class IStageClear() extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand

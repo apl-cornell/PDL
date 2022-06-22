@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import BSVSyntax._
+import BSVSyntax.{BBOp, _}
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
@@ -397,7 +397,8 @@ object BluespecGeneration {
     private val threadIdVar = BVar(threadIdName, getThreadIdType)
     private val outputData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
     private val outputQueue = BVar("outputQueue", bsInts.getOutputQType(threadIdVar.typ, outputData.typ))
-
+    //Registers for exceptions
+    private val globalExnFlag = BVar("globalExnFlag", bsInts.getRegType(BBool))
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
     //First stage should have exactly one input edge by definition
@@ -431,7 +432,7 @@ object BluespecGeneration {
           vars + (m.name -> nvar)
         case _ => vars
       }
-    })
+    }) + (mod.name -> BVar("_lock_" + mod.name, translator.getLockedModType(LockImplementation.getModLockImpl)))
 
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
       locks + (m.name -> BVar(genLockRegionName(m.name),
@@ -631,6 +632,9 @@ object BluespecGeneration {
             BUOp("!", BFromMaybe(BBoolLit(true),
               bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder))))
         //also need these in case we're waiting on responses we need to dequeue
+        case IStageClear() =>
+          l :+ globalExnFlag
+
         case ICondCommand(cond, cs) =>
           val condconds = getKillConds(cs)
           if (condconds.nonEmpty) {
@@ -917,12 +921,17 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, bsInts.getOutputQ(BZero))
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
+
+      //Instantiate Exception Register
+      val globalExnInst = BModInst(globalExnFlag, bsInts.getReg(BBoolLit(false)))
+
       //Instantiate the speculation table if the module is speculative
       val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
       var stmts: List[BStatement] = startFifo +:
         (edgeFifos.values.toList ++ memRegions.values.toList ++ modLockInsts)
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
+      stmts = stmts :+ globalExnInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()
@@ -1257,9 +1266,18 @@ object BluespecGeneration {
         } else {
           None
         }
+      case IAbort(mem) =>
+        val abortInfo = LockImplementation.getAbortInfo(mem)
+        if (abortInfo.isDefined && abortInfo.get.doesModify) {
+          val abortMethod = translateMethod(getLockName(mem), abortInfo.get)
+          Some(BExprStmt(abortMethod))
+        } else {
+          None
+        }
       case IAssignLock(handle, src, _) => Some(
         BAssign(translator.toVar(handle), translator.toExpr(src))
       )
+
       case cl@IReleaseLock(mem, _) =>
         val methodInfo = LockImplementation.getReleaseInfo(cl)
         if (methodInfo.isDefined && methodInfo.get.doesModify) {
@@ -1357,6 +1375,7 @@ object BluespecGeneration {
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
+      case _: IStageClear => None
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)

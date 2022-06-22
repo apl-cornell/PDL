@@ -13,7 +13,6 @@ import pipedsl.passes._
 import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
 import pipedsl.typechecker._
 
-
 object Main {
   val logger: Logger = Logger("main")
 
@@ -108,13 +107,15 @@ object Main {
       specChecker.check(recvProg, None)
       val lock_prog = LockOpTranslationPass.run(recvProg)
       TimingTypeChecker.check(lock_prog, Some(basetypes))
+      val exnprog = ExnTranslationPass.run(lock_prog)
+      new PrettyPrinter(None).printProgram(exnprog)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")
         writer.close()
       }
       ctx.close()
-      (lock_prog, pinfo)
+      (exnprog, pinfo)
     } catch {
       case t: Throwable => {
         //If fails, print the error to the file

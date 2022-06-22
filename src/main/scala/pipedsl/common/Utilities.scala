@@ -197,6 +197,8 @@ object Utilities {
       case None => Set()
     })
     case ILockNoOp(_) => Set()
+    case IStageClear() => Set()
+    case IAbort(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
