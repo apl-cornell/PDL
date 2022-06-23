@@ -72,7 +72,6 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
 
     try {
-      //val prog = ExceptingToNormal.run(ex_prog)
       // new PrettyPrinter(None).printProgram(prog)
       val pinfo = new ProgInfo(prog)
       MarkNonRecursiveModulePass.run(prog)
@@ -81,8 +80,6 @@ object Main {
       val verifProg = AddCheckpointHandlesPass.run(AddVerifyValuesPass.run(inferredProg))
       val canonProg2 = new CanonicalizePass().run(verifProg)
       val canonProg = new TypeInference(autocast).checkProgram(canonProg2)
-      // new PrettyPrinter(None).printProgram(canonProg)
-
       val basetypes = BaseTypeChecker.check(canonProg, None)
       FunctionConstraintChecker.check(canonProg)
       val nprog = new BindModuleTypes(basetypes).run(canonProg)
@@ -106,9 +103,8 @@ object Main {
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
       val lock_prog = LockOpTranslationPass.run(recvProg)
-      TimingTypeChecker.check(lock_prog, Some(basetypes))
+      TimingTypeChecker.check(lock_prog, Some(basetypes))      
       val exnprog = ExnTranslationPass.run(lock_prog)
-      new PrettyPrinter(None).printProgram(exnprog)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")

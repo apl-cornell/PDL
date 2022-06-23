@@ -62,7 +62,9 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         case _ : TModType => modLims.addOne((mod.name, (1, 1)))
         case _ =>
       })
-      val port_map = checkPipe(m.body, emptyEnv())
+      val port_tmp = checkPipe(m.body, emptyEnv())
+      val port_com = if (m.commit_blk.isDefined) { checkPipe(m.commit_blk.get, port_tmp) } else port_tmp;
+      val port_map = checkPipe(m.except_blk.get, port_com);
       if(port_warn)
         port_map.getMappedKeys().foreach(mem =>
           {

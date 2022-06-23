@@ -21,7 +21,6 @@ object ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
 
     val new_m = addExnVars(m)
     new_m.name.typ = m.name.typ
-    print(new_m.body)
     val modified_exnblk = m.except_blk.map(convertExnArgsId)
     createNewStg(new_m.copy(body = new_m.body, commit_blk = new_m.commit_blk, except_blk = modified_exnblk))
   }
