@@ -198,6 +198,7 @@ object Utilities {
     })
     case ILockNoOp(_) => Set()
     case IStageClear() => Set()
+    case ISetGlobalExnFlag(_) => Set()
     case IAbort(_) => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()

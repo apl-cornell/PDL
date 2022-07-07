@@ -100,7 +100,15 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
 //
 //    }
 //    env.add()
-    m.except_blk.foreach(checkCommand(m.name, _, bodyEnv))
+    if(m.except_blk.isInstanceOf[ExceptFull]){
+      val exnenv = m.except_blk.args.foldLeft[Environment[Id, Type]](bodyEnv)((env, arg) => {
+        arg.typ match {
+          case Some(t: Type) => env.add(arg, t)
+          case None => env.add(arg, TVoid())
+        }
+      })
+      m.except_blk.foreach(checkCommand(m.name, _, exnenv))
+    }
     outEnv
   }
 

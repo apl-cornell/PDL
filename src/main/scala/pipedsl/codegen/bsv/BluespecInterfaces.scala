@@ -39,21 +39,21 @@ class BluespecInterfaces() {
     val debugStart = if (debug) { BDisplay(Some("Starting Pipeline %t"), List(BTime)) } else BEmpty
     val initRule = BRuleDef(
       name = "initTB",
-      conds = List(initCond),
+      conds = initCond,
       body = initStmts :+ setStartReg :+ debugStart
     )
     val timerRule = BRuleDef(
       name = "timerCount",
-      conds = List(),
+      conds = BDontCare,
       body = List(BModAssign(timerReg, BBOp("+", timerReg, BOne)))
     )
     val timerDone = BBOp(">=", timerReg, BIntLit(1000000,10,32))
     val doneConds = if (modDone.isEmpty) {
-      List(timerDone)
+      timerDone
     } else {
-      List(BBOp("||", timerDone, modDone.reduce((l, r) => {
+      BBOp("||", timerDone, modDone.reduce((l, r) => {
         BBOp("&&", l, r)}
-      )))
+      ))
     }
     val doneRule = BRuleDef(
       name = "stopTB",

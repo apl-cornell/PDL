@@ -110,8 +110,9 @@ object BSVPrettyPrinter {
     case BTruncate(e) => mkExprString("truncate(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
-    case BBOp(op, lhs, rhs, isInfix) if isInfix => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
-    case BBOp(op, lhs, rhs, isInfix) if !isInfix => mkExprString( op + "(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix, omitBrackets) if isInfix && !omitBrackets => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix, omitBrackets) if isInfix && omitBrackets => mkExprString(toBSVExprStr(lhs), op, toBSVExprStr(rhs))
+    case BBOp(op, lhs, rhs, isInfix, _) if !isInfix => mkExprString( op + "(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
     //TODO incorporate bit types into the typesystem properly
     //and then remove the custom pack/unpack operations
@@ -238,10 +239,10 @@ object BSVPrettyPrinter {
     }
 
     def printBSVRule(rule: BRuleDef): Unit = {
-      val condString = if (rule.conds.nonEmpty) {
-        "(" + rule.conds.map(c => toBSVExprStr(c)).mkString(" && ") + ")"
-      } else {
-        ""
+      val condString = rule.conds match {
+        case BDontCare => ""
+        case _ => toBSVExprStr(rule.conds)
+
       }
       w.write(mkStatementString("rule", rule.name, condString))
       incIndent()

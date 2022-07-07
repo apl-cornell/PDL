@@ -4,8 +4,11 @@ import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
 import pipedsl.typechecker.BaseTypeChecker.replaceNamedType
 
-object ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
-  private var exnArgMap = Map[Id, Id]()
+class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
+  private var exnArgIdMap = Map[Id, Id]()
+  private var exnArgTypeMap = Map[Id, Type]()
+
+  private val localExnFlag = EVar(Id("_localExnFlag"))
 
   override def run(m: ModuleDef): ModuleDef =
   {
@@ -22,29 +25,38 @@ object ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     val new_m = addExnVars(m)
     new_m.name.typ = m.name.typ
     val modified_exnblk = m.except_blk.map(convertExnArgsId)
-    createNewStg(new_m.copy(body = new_m.body, commit_blk = new_m.commit_blk, except_blk = modified_exnblk))
+    createNewStg(new_m.copy(body = new_m.body, commit_blk = new_m.commit_blk, except_blk = modified_exnblk).copyMeta(m))
   }
 
   override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m)))
 
   def addExnVars(m: ModuleDef): ModuleDef =
   {
+    localExnFlag.typ = Some(TBool())
+    localExnFlag.id.typ = localExnFlag.typ
     val fixed_except = m.except_blk match {
       case ExceptFull(args, c) =>
         var arg_count = 0
         args.foreach(arg => {
-          exnArgMap = exnArgMap + (arg -> Id("_exnArg_"+arg_count.toString()))
-          arg_count += 1
+          arg.typ match {
+            case Some(t: Type) =>
+              val newExnArgId = Id("_exnArg_"+arg_count.toString())
+              arg_count += 1
+              exnArgIdMap = exnArgIdMap + (arg -> newExnArgId)
+              exnArgTypeMap = exnArgTypeMap + (newExnArgId -> t)
+            case _ =>
+              arg_count += 1
+          }
         })
       case ExceptEmpty() => CEmpty()
     }
 
-    val newAssignments = exnArgMap.foldLeft(CSeq(CEmpty(), CEmpty()))((c, id_mapping) => {
+    val newAssignments = exnArgIdMap.foldLeft(CSeq(CEmpty(), CEmpty()))((c, id_mapping) => {
       val (lhs, rhs) = id_mapping
       val setCurrArg = CAssign(EVar(lhs), EBool(false))
       CSeq(c, setCurrArg)
   })
-    m.copy(body = CSeq(IStageClear(), convertPrimitives(m.body)), commit_blk = m.commit_blk, except_blk = m.except_blk)
+    m.copy(body = CSeq(IStageClear(), convertPrimitives(m.body)), commit_blk = m.commit_blk, except_blk = m.except_blk).copyMeta(m)
   }
 
   def convertPrimitives(c: Command): Command = {
@@ -53,24 +65,23 @@ object ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
       case CIf(cond, cons, alt) => CIf(cond, convertPrimitives(cons), convertPrimitives(alt)).copyMeta(c)
       case CTBar(c1, c2) => CTBar(convertPrimitives(c1), CSeq(IStageClear(), convertPrimitives(c2))).copyMeta(c)
       case CSplit(cases, default) =>
-        val newCases = List[CaseObj]()
-        val newDefault = convertPrimitives(default)
-        for (index <- cases.indices) {
-          val newBody = convertPrimitives(cases(index).body)
-          newCases :+ cases(index).copy(body = newBody)
-        }
-        CSplit(newCases, newDefault)
+        val newCases = cases.map(c => CaseObj(c.cond, convertPrimitives(c.body)))
+        CSplit(newCases, convertPrimitives(default)).copyMeta(c)
       case CExcept(args) =>
-        val localflag = EVar(Id("_localExnFlag"))
-        localflag.typ = Some(TBool())
-        localflag.id.typ = localflag.typ
-
-        val setLocalErrFlag = CAssign(localflag, EBool(true)).copyMeta(c)
+        val setLocalErrFlag = CAssign(localExnFlag, EBool(true)).copyMeta(c)
         var arg_count = 0
         val setArgs: Command = args.foldLeft[Command](CSeq(setLocalErrFlag, CEmpty()))((c, arg) => {
-          val setCurrArg = CAssign(EVar(Id("_exnArg_"+arg_count.toString())), arg).copyMeta(c)
-          arg_count += 1
-          CSeq(c, setCurrArg).copyMeta(c)
+          arg.typ match {
+            case Some(t: Type) =>
+              val translatedVarId = Id("_exnArg_"+arg_count.toString())
+              translatedVarId.setType(exnArgTypeMap.getOrElse(translatedVarId, TVoid()))
+              val translatedVar = EVar(translatedVarId)
+              translatedVar.typ = translatedVarId.typ
+              val setCurrArg = CAssign(translatedVar, arg).copyMeta(c)
+              arg_count += 1
+              CSeq(c, setCurrArg).copyMeta(c)
+            case _ => c
+          }
       })
         setArgs
       case _ => c
@@ -79,28 +90,27 @@ object ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
 
   def convertExnArgsId(c: Command): Command = {
     c match {
-      case CSeq(c1, c2) => CSeq(convertExnArgsId(c1), convertExnArgsId(c2))
-      case CIf(cond, cons, alt) => CIf(cond, convertExnArgsId(cons), convertExnArgsId(alt))
-      case CTBar(c1, c2) => CSeq(convertExnArgsId(c1), convertExnArgsId(c2));
+      case CSeq(c1, c2) => CSeq(convertExnArgsId(c1), convertExnArgsId(c2)).copyMeta(c)
+      case CIf(cond, cons, alt) => CIf(cond, convertExnArgsId(cons), convertExnArgsId(alt)).copyMeta(c)
+      case CTBar(c1, c2) => CSeq(convertExnArgsId(c1), convertExnArgsId(c2)).copyMeta(c);
       case CSplit(cases, default) =>
-        val newCases = List[CaseObj]()
-        val newDefault = convertExnArgsId(default)
-        for (index <- cases.indices) {
-          val newBody = convertExnArgsId(cases(index).body)
-          newCases :+ cases(index).copy(body = newBody)
-        }
-        CSplit(newCases, newDefault)
+        val newCases = cases.map(c => CaseObj(c.cond, convertExnArgsId(c.body)))
+        CSplit(newCases, convertExnArgsId(default)).copyMeta(c)
       case CAssign(v, exp) =>
-        val newv = EVar(exnArgMap.getOrElse(v.id, v.id)).setPos(v.pos)
-        CAssign(newv, exp)
+        val newv = EVar(exnArgIdMap.getOrElse(v.id, v.id)).setPos(v.pos)
+        newv.typ = Some(exnArgTypeMap.getOrElse(v.id, TVoid()))
+        CAssign(newv, exp).copyMeta(c)
       case CPrint(args) =>
         val newArgs = args.foldLeft(List[Expr]())((l, arg) => {
           arg match {
-            case EVar(id) => l :+ EVar(exnArgMap.getOrElse(id, id)).setPos(arg.pos)
+            case EVar(id) =>
+              val newv = EVar(exnArgIdMap.getOrElse(id, id)).setPos(c.pos)
+              newv.typ = Some(exnArgTypeMap.getOrElse(id, TVoid()))
+              l :+ newv
             case _ => l
           }
         })
-        CPrint(newArgs)
+        CPrint(newArgs).copyMeta(c)
       case _ => c
     }
   }
@@ -112,19 +122,20 @@ object ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
     val except_stmts = m.except_blk match {
       case ExceptFull(_, c) =>
-//        m.modules.filter()
-        CSeq(IAbort(m.name), c)
+        val setGlobalExnFlag = ISetGlobalExnFlag(true)
+        val unsetGlobalExnFlag = ISetGlobalExnFlag(false)
+        val abortStmts = m.modules.foldLeft(CSeq(CEmpty(), CEmpty()))((c, mod) =>
+        mod.typ match {
+          case TLockedMemType(mem, _, _) => CSeq(c, IAbort(mod.name))
+          case _ => c
+        })
+        CSeq(setGlobalExnFlag, CSeq(abortStmts, CTBar(c, unsetGlobalExnFlag)))
       case ExceptEmpty() => CEmpty()
     }
-    val localflag = EVar(Id("_localExnFlag"))
-    localflag.typ = Some(TBool())
-    localflag.id.typ = localflag.typ
-    val checkLocalFlag = CIf(localflag, commit_stmts, except_stmts)
-    val newBody = CTBar(m.body, checkLocalFlag)
+    val checkLocalFlag = CIf(localExnFlag, commit_stmts, except_stmts)
+    val newBody = CSeq(m.body, checkLocalFlag)
 
-    val inputTyps = m.inputs.foldLeft[List[Type]](List())((l, p) => { l :+ p.typ })
     //TODO require memory or module types
-    m.name.typ = Some(TModType(inputTyps, List[Type](), m.ret, Some(m.name)))
-    m.copy(body = newBody, commit_blk = None, except_blk = ExceptEmpty())
+    m.copy(body = newBody, commit_blk = m.commit_blk, except_blk = m.except_blk).copyMeta(m)
   }
 }

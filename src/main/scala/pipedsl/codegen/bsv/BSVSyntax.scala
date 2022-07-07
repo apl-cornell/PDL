@@ -452,7 +452,7 @@ object BSVSyntax {
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
   case class BVar(name: String, typ: BSVType) extends BExpr
-  case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true) extends BExpr
+  case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true, omitBrackets: Boolean = false) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
   case class BBitExtract(expr: BExpr, start: BIndex, end: BIndex) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
@@ -502,7 +502,7 @@ object BSVSyntax {
 
   case class BStructDef(typ: BStruct, derives: List[String])
 
-  case class BRuleDef(name: String, conds: List[BExpr], body: List[BStatement])
+  case class BRuleDef(name: String, conds: BExpr, body: List[BStatement])
 
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
 

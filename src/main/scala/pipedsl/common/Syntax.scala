@@ -39,6 +39,9 @@ object Syntax {
     sealed trait SpeculativeAnnotation {
       var maybeSpec: Boolean = false
     }
+    sealed trait ExceptionAnnotation {
+      var isExcepting: Boolean = false
+    }
     sealed trait LockInfoAnnotation {
       var memOpType: Option[LockType] = None
       var granularity: LockGranularity = General
@@ -649,6 +652,7 @@ object Syntax {
 
   case class IAbort(mem: Id) extends InternalCommand
   case class IStageClear() extends InternalCommand
+  case class ISetGlobalExnFlag(state: Boolean) extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
@@ -695,6 +699,7 @@ object Syntax {
     def map(f : Command => Command) : ExceptBlock
     def foreach(f : Command => Unit) :Unit
     def get :Command
+    def args : List[Id]
     def copyMeta(other :ExceptBlock) = this.setPos(other.pos)
   }
 
@@ -703,12 +708,14 @@ object Syntax {
   {
     override def map(f: Command => Command): ExceptBlock = this
     override def foreach(f: Command => Unit): Unit = ()
+    override def args : List[Id] = throw new NoSuchElementException("EmptyExcept")
     override def get :Command = throw new NoSuchElementException("EmptyExcept")
   }
-  case class ExceptFull(args: List[Id], c: Command) extends ExceptBlock
+  case class ExceptFull(exn_args: List[Id], c: Command) extends ExceptBlock
     {
       override def map(f: Command => Command): ExceptBlock = ExceptFull(args, f(c)).copyMeta(this)
       override def foreach(f: Command => Unit): Unit = f(c)
+      override def args : List[Id] = exn_args
       override def get :Command = c
     }
 
@@ -719,12 +726,13 @@ object Syntax {
                        body: Command,
                        commit_blk: Option[Command],
                        except_blk: ExceptBlock)
-    extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+    extends Definition with RecursiveAnnotation with SpeculativeAnnotation with ExceptionAnnotation with HasCopyMeta
     {
       override val copyMeta: HasCopyMeta => ModuleDef =
         {
           case from :ModuleDef =>
           maybeSpec = from.maybeSpec
+          isExcepting = from.isExcepting
           isRecursive = from.isRecursive
           pos = from.pos
           this

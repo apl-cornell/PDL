@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import BSVSyntax.{BBOp, _}
+import BSVSyntax.{BBOp, BEmpty, _}
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
@@ -398,7 +398,7 @@ object BluespecGeneration {
     private val outputData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
     private val outputQueue = BVar("outputQueue", bsInts.getOutputQType(threadIdVar.typ, outputData.typ))
     //Registers for exceptions
-    private val globalExnFlag = BVar("globalExnFlag", bsInts.getRegType(BBool))
+    private val globalExnFlag = BVar("_globalExnFlag", bsInts.getRegType(BBool))
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
     //First stage should have exactly one input edge by definition
@@ -432,7 +432,7 @@ object BluespecGeneration {
           vars + (m.name -> nvar)
         case _ => vars
       }
-    }) + (mod.name -> BVar("_lock_" + mod.name, translator.getLockedModType(LockImplementation.getModLockImpl)))
+    })
 
     private val lockRegions: LockInfo = mod.modules.foldLeft[LockInfo](Map())((locks, m) => {
       locks + (m.name -> BVar(genLockRegionName(m.name),
@@ -550,6 +550,19 @@ object BluespecGeneration {
     }
 
     private var stgSpecOrder: Int = 0
+
+    private def getMergedCond(lhs: BExpr, rhs: BExpr): BExpr = {
+      if (lhs == BDontCare && rhs == BDontCare){
+        BDontCare
+      } else if (lhs == BDontCare){
+        rhs
+      } else if (rhs == BDontCare){
+        lhs
+      } else {
+        BBOp("&&", lhs, rhs, isInfix = true, omitBrackets = true)
+      }
+    }
+
     /**
      * Given a pipeline stage and the necessary edge info,
      * generate a BSV module definition.
@@ -570,7 +583,7 @@ object BluespecGeneration {
       val execRule = getStageRule(stg)
       //Add a stage kill rule if it needs one
       val killRule = getStageKillRule(stg)
-      val rules = if (mod.maybeSpec && killRule.isDefined) List(execRule, killRule.get) else List(execRule)
+      val rules = if ((mod.maybeSpec && killRule.isDefined) || (is_excepting(mod) && killRule.isDefined)) List(execRule, killRule.get) else List(execRule)
       stgSpecOrder = 0
       translator.setVariablePrefix("")
       (sBody, rules)
@@ -595,7 +608,7 @@ object BluespecGeneration {
         BDisplay(Some(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t"),
           List(translator.toBSVVar(threadIdVar), BTime))
       } else BEmpty
-      BRuleDef( genParamName(stg) + "_execute", blockingConds ++ recvConds,
+      BRuleDef( genParamName(stg) + "_execute", getMergedCond(blockingConds, recvConds),
         writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
     }
 
@@ -608,46 +621,40 @@ object BluespecGeneration {
      */
     private def getStageKillRule(stg: PStage): Option[BRuleDef] = {
       val killConds = getKillConds(stg.getCmds)
-      if (killConds.isEmpty) {
-        None
-      } else {
-        val recvConds = getRecvConds(stg.getCmds)
-        val debugStmt = if (debug) {
-          BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t"),
-            List(getSpecIdVal, BTime))
-        } else { BEmpty }
-        val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
-        val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
-        Some(BRuleDef( genParamName(stg) + "_kill", killConds ++ recvConds, deqStmts :+ freeStmt :+ debugStmt))
-      }
+      val recvConds = getRecvConds(stg.getCmds)
+      val debugStmt = if (debug) {
+        BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t"),
+          List(getSpecIdVal, BTime))
+      } else { BEmpty }
+      val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
+      val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
+      Some(BRuleDef( genParamName(stg) + "_kill", getMergedCond(killConds, recvConds), deqStmts :+ freeStmt :+ debugStmt))
     }
 
-    private def getKillConds(cmds: Iterable[Command]): List[BExpr] = {
-      cmds.foldLeft(List[BExpr]())((l, c) => c match {
-        //check definitely misspeculated
-        // isValid(spec) && !fromMaybe(True, check(spec))
+    private def getKillConds(cmds: Iterable[Command]): BExpr = {
+      var resultingConds: BExpr = BDontCare
+      var readGlobalExnFlag: Boolean = false
+      cmds.foreach(c => c match {
         case CCheckSpec(_) =>
-          l :+ BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
+          resultingConds = getMergedCond(resultingConds, BBOp("&&", BIsValid(translator.toBSVVar(specIdVar)),
             //order is LATE if stage has no update
             BUOp("!", BFromMaybe(BBoolLit(true),
-              bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder))))
+              bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder)))))
         //also need these in case we're waiting on responses we need to dequeue
         case IStageClear() =>
-          l :+ globalExnFlag
-
+          readGlobalExnFlag = true
         case ICondCommand(cond, cs) =>
-          val condconds = getKillConds(cs)
-          if (condconds.nonEmpty) {
-            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
-              BBOp("&&", exp, n)
-            })
-            val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
-            l :+ newCond
-          } else {
-            l
-          }
-        case _ => l
+          val nestedConds = getKillConds(cs)
+          val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
+          resultingConds = getMergedCond(resultingConds, newCond)
+        case _ => BDontCare
       })
+
+      if(readGlobalExnFlag){
+        resultingConds = BBOp("||", globalExnFlag, resultingConds)
+      }
+
+      resultingConds
     }
 
     private def translateMethod(mod: BVar, mi: MethodInfo): BMethodInvoke = {
@@ -670,115 +677,107 @@ object BluespecGeneration {
      * @param cmds The list of commands to translate
      * @return The list of translated blocking commands
      */
-    private def getBlockingConds(cmds: Iterable[Command]): List[BExpr] = {
-      cmds.foldLeft(List[BExpr]())((l, c) => c match {
+    private def getBlockingConds(cmds: Iterable[Command]): BExpr = {
+      var resultingConds: BExpr = BDontCare
+      cmds.foreach(c => c match {
         case CLockStart(mod) =>
-          l :+ bsInts.getCheckStart(lockRegions(mod))
+          resultingConds = getMergedCond(resultingConds, bsInts.getCheckStart(lockRegions(mod)))
         case cl@IReserveLock(_, mem) =>
           val methodInfo = LockImplementation.getCanReserveInfo(cl)
           if (methodInfo.isDefined) {
-            l :+ translateMethod(modParams(mem.id), methodInfo.get)
+            resultingConds = getMergedCond(resultingConds, translateMethod(modParams(mem.id), methodInfo.get))
           } else {
-            l
+            resultingConds
           }
         case cl@ICheckLockOwned(mem, _, _) =>
           val methodInfo = LockImplementation.getBlockInfo(cl)
           if (methodInfo.isDefined) {
-            l :+ translateMethod(getLockName(mem.id), methodInfo.get)
+            resultingConds = getMergedCond(resultingConds, translateMethod(getLockName(mem.id), methodInfo.get))
           } else {
-            l
+            resultingConds
           }
         case im@IMemWrite(mem, addr, data, _, _, isAtomic) if isAtomic =>
           val methodInfo = LockImplementation.getCanAtomicWrite(mem, addr, data, im.portNum)
           if (methodInfo.isDefined) {
-            l :+ translateMethod(getLockName(mem), methodInfo.get)
+            resultingConds = getMergedCond(resultingConds, translateMethod(getLockName(mem), methodInfo.get))
           } else {
-            l
+            resultingConds
           }
         case im@IMemSend(_, _, mem, data, addr, _, _, isAtomic) if isAtomic =>
           val methodInfo = LockImplementation.getCanAtomicAccess(mem, addr, data, im.portNum)
           if (methodInfo.isDefined) {
-            l :+ translateMethod(getLockName(mem), methodInfo.get)
+            resultingConds = getMergedCond(resultingConds, translateMethod(getLockName(mem), methodInfo.get))
           } else {
-            l
+            resultingConds
           }
         //these are just to find EMemAccesses that are also atomic
-        case CAssign(_, rhs) => l ++ getBlockConds(rhs)
-        case CRecv(_, rhs) => l ++ getBlockConds(rhs)
-        case COutput(_) => l :+ bsInts.getOutCanWrite(outputQueue, translator.toBSVVar(threadIdVar))
+        case CAssign(_, rhs) => resultingConds = getMergedCond(resultingConds, getBlockConds(rhs))
+        case CRecv(_, rhs) => resultingConds = getMergedCond(resultingConds, getBlockConds(rhs))
+        case COutput(_) => resultingConds = getMergedCond(resultingConds, bsInts.getOutCanWrite(outputQueue, translator.toBSVVar(threadIdVar)))
           //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
           // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
-        case CCheckSpec(isBlocking) if isBlocking => l ++ List(
+        case CCheckSpec(isBlocking) if isBlocking => resultingConds = getMergedCond(resultingConds,
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
             BFromMaybe(BBoolLit(false), bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder))
           )
         )
         //Execute if check(specid) != Valid(False)
         //fromMaybe(True, check(specId)) <=> check(specid) == (Valid(True) || Invalid)
-        case CCheckSpec(isBlocking) if !isBlocking => l ++ List(
+        case CCheckSpec(isBlocking) if !isBlocking => resultingConds = getMergedCond(resultingConds,
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
             //order is LATE if stage has no update
             BFromMaybe(BBoolLit(true), bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder))
           )
         )
         case ICondCommand(cond, cs) =>
-          val condconds = getBlockingConds(cs)
-          if (condconds.nonEmpty) {
-            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
-              BBOp("&&", exp, n)
-            })
-            val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
-            l :+ newCond
-          } else {
-            l
-          }
-        case _ => l
+          val nestedConds = getMergedCond(getBlockingConds(cs), BDontCare)
+          val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
+          resultingConds = getMergedCond(resultingConds, newCond)
+        case _ => resultingConds
       })
+      resultingConds
     }
 
     //only necessary to find atomic Reads and get their blocking conds
-    private def getBlockConds(e: Expr): List[BExpr] = e match {
+    private def getBlockConds(e: Expr): BExpr = e match {
       case EIsValid(ex) => getBlockConds(ex)
       case EFromMaybe(ex) => getBlockConds(ex)
       case EToMaybe(ex) => getBlockConds(ex)
       case EUop(_, ex) => getBlockConds(ex)
-      case EBinop(_, e1, e2) => getBlockConds(e1) ++ getBlockConds(e2)
+      case EBinop(_, e1, e2) => getMergedCond(getBlockConds(e1), getBlockConds(e2))
       case em@EMemAccess(mem, index, _, _, _, isAtomic) if isAtomic =>
         val methodInfo = LockImplementation.getCanAtomicRead(mem, index, em.portNum)
         if (methodInfo.isDefined) {
-          List(translateMethod(getLockName(mem), methodInfo.get))
-        } else List()
+          translateMethod(getLockName(mem), methodInfo.get)
+        } else BDontCare
       case EBitExtract(num, _, _) => getBlockConds(num)
       //can't appear in cond of ternary
-      case ETernary(_, tval, fval) => getBlockConds(tval) ++ getBlockConds(fval)
-      case EApp(_, args) => args.foldLeft(List[BExpr]())((l, a) => {
-        l ++ getBlockConds(a)
-      })
-      case ECall(_, _, args, isAtomic) => args.foldLeft(List[BExpr]())((l, a) => {
-        l ++ getBlockConds(a)
-      })
+      case ETernary(_, tval, fval) => getMergedCond(getBlockConds(tval), getBlockConds(fval))
+      case EApp(_, args) =>
+        var resultingConds: BExpr = BDontCare
+        args.foreach(a => getMergedCond(resultingConds, getBlockConds(a)))
+        resultingConds
+      case ECall(_, _, args, isAtomic) =>
+        var resultingConds: BExpr = BDontCare
+        args.foreach(a => getMergedCond(resultingConds, getBlockConds(a)))
+        resultingConds
       case ECast(_, exp) => getBlockConds(exp)
-      case _ => List()
+      case _ => BDontCare
     }
-    private def getRecvConds(cmds: Iterable[Command]): List[BExpr] = {
-      cmds.foldLeft(List[BExpr]())((l, c) => c match {
+    private def getRecvConds(cmds: Iterable[Command]): BExpr = {
+      var resultingConds: BExpr = BDontCare
+      cmds.foreach(c => c match {
         case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
-          l :+ bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem))
+          resultingConds = getMergedCond(resultingConds, bsInts.getCheckMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem)))
         case IRecv(handle, sender, _) =>
-          l :+ bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle))
+          resultingConds = getMergedCond(resultingConds, bsInts.getModCheckHandle(modParams(sender), translator.toExpr(handle)))
         case ICondCommand(cond, cs) =>
-          val condconds = getRecvConds(cs)
-          if (condconds.nonEmpty) {
-            val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
-              BBOp("&&", exp, n)
-            })
-            val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
-            l :+ newCond
-          } else {
-            l
-          }
-        case _ => l
+          val nestedConds = getMergedCond(getRecvConds(cs), BDontCare)
+          val newCond = BBOp("||", BUOp("!", translator.toExpr(cond)), nestedConds)
+          resultingConds = getMergedCond(resultingConds, newCond)
+        case _ => resultingConds
       })
+      resultingConds
     }
 
     /**
@@ -1375,6 +1374,7 @@ object BluespecGeneration {
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
+      case ISetGlobalExnFlag(state) => Some(BModAssign(globalExnFlag, BBoolLit(state)))
       case _: IStageClear => None
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
