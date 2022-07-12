@@ -314,6 +314,7 @@ class BluespecInterfaces() {
   private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
   private val specFreeName = "free"
+  private val specClearName = "clear"
   private val specCheckName = "check"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
@@ -335,6 +336,10 @@ class BluespecInterfaces() {
 
   def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))
+  }
+
+  def getSpecClear(st: BVar): BExpr = {
+    BMethodInvoke(st, specClearName);
   }
 
   def getSpecCheck(st: BVar, h: BExpr, order: Int): BExpr = {

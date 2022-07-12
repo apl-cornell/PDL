@@ -12,6 +12,7 @@ interface SpecTable#(type sid, numeric type bypcnt);
     method Action free(sid s);
     method Action validate(sid s, Integer i);
     method Action invalidate(sid s, Integer i);
+    method Action clear();
 endinterface
 
 module mkSpecTable(SpecTable#(SpecId#(entries), bypassCnt));
@@ -53,6 +54,17 @@ module mkSpecTable(SpecTable#(SpecId#(entries), bypassCnt));
       inUse[head] <= True;
       specStatus[head][valueOf(bypassCnt)-1] <= tagged Invalid;
    endrule
+   
+   //reset to the initial state
+   method Action clear();
+      head <= 0;
+      for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
+	 SpecId#(entries) lv = fromInteger(i);
+	 specStatus[lv][0] <= tagged Invalid;
+	 inUse[lv] <= False;
+      end
+   endmethod
+   
     //allocate a new entry in the table to track speculation. do this in a nonblocking way
     //and just assume that only 1 client calls per cycle
    method ActionValue#(SpecId#(entries)) alloc() if (!full);
