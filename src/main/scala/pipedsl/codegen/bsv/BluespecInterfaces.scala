@@ -224,6 +224,7 @@ class BluespecInterfaces() {
   private val memAsyncReqName = "req"
   private val memAsyncRespName = "resp"
   private val memAsyncCheckName = "checkRespId"
+  private val memAsyncClearName = "clear"
 
   //TODO refactor to reuse code better
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
@@ -273,6 +274,14 @@ class BluespecInterfaces() {
   def getMemResp(mem: BVar, handle: BExpr, port: Option[Int], isLocked: Boolean): BMethodInvoke = {
     val portString = if (port.isDefined) port.get.toString else ""
     BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncRespName + portString, List(handle))
+  }
+
+  def getMemClear(mem: BVar, isAsync: Boolean, isLocked: Boolean): Option[BMethodInvoke] = {
+    if (isAsync) {
+      Some(BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncClearName, List()))
+    } else {
+      None
+    }
   }
 
   /**
@@ -339,7 +348,7 @@ class BluespecInterfaces() {
   }
 
   def getSpecClear(st: BVar): BExpr = {
-    BMethodInvoke(st, specClearName);
+    BMethodInvoke(st, specClearName, List());
   }
 
   def getSpecCheck(st: BVar, h: BExpr, order: Int): BExpr = {
