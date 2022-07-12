@@ -62,8 +62,8 @@ object BSVSyntax {
       case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
         val cidtyp = if (LockImplementation.supportsCheckpoint(limpl)) {
-          Some(if (idsz.isDefined) {
-            BSizedInt(unsigned = true, limpl.getChkIdSize(idsz.get))
+          Some(if (idsz.isDefined && limpl.getChkIdSize(idsz.get).isDefined) {
+            BSizedInt(unsigned = true, limpl.getChkIdSize(idsz.get).get)
           } else {
             lockIdToCheckId(modmap(n))
           })
@@ -108,8 +108,8 @@ object BSVSyntax {
           mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
         val cidtyp = if (LockImplementation.supportsCheckpoint(limpl)) {
-          Some(if (idsz.isDefined) {
-            bsints.getChkHandleType(limpl.getChkIdSize(idsz.get))
+          Some(if (idsz.isDefined && limpl.getChkIdSize(idsz.get).isDefined) {
+            bsints.getChkHandleType(limpl.getChkIdSize(idsz.get).get)
           } else bsints.getDefaultChkHandleType)
         } else { None }
         //TODO pass checkpoint ID
@@ -311,8 +311,13 @@ object BSVSyntax {
     //TODO make these parameters passable and no just linked to the static lockimpl definition
     def getLockedModType(limpl: LockInterface): BInterface = {
       val lid = BVar("lidtyp", bsints.getLockHandleType(limpl.getLockIdSize))
-      val chkid = BVar("chkidtyp", bsints.getChkHandleType(limpl.getChkIdSize(limpl.getLockIdSize)))
-      BInterface(limpl.getModuleName(None), List(lid, chkid))
+      val chkid = limpl.getChkIdSize(limpl.getLockIdSize)
+      if (chkid.isDefined) {
+        val chktyp = BVar("chkidtyp", bsints.getChkHandleType(chkid.get))
+        BInterface(limpl.getModuleName(None), List(lid, chktyp))
+      } else {
+        BInterface(limpl.getModuleName(None), List(lid))
+      }
     }
 
 

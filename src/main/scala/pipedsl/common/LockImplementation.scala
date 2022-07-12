@@ -429,7 +429,7 @@ object LockImplementation {
     def useUniqueLockId(): Boolean = true
 
     def getLockIdSize: Int = defaultLockHandleSize
-    def getChkIdSize(lidSize: Int): Int = defaultChkHandleSize
+    def getChkIdSize(lidSize: Int): Option[Int] = None
 
     def getTypeArgs(szParams: List[Int]): List[Int] = List()
 
@@ -458,7 +458,7 @@ object LockImplementation {
    */
   private class LockQueue extends LockInterface {
 
-    private val queueLockName = Id("QueueLock")
+    protected val queueLockName = Id("QueueLock")
     override def getType: TObject = TObject(queueLockName, List(),
       Map(
         Id(resName)    -> (TFun(List(), handleType), Sequential),
@@ -484,7 +484,7 @@ object LockImplementation {
 
   private class CheckpointLockQueue extends LockQueue {
 
-    protected val queueLockName = Id("CheckpointQueueLock")
+    override protected val queueLockName = Id("CheckpointQueueLock")
 
     override def getType: TObject = {
       val parent = super.getType
@@ -506,11 +506,11 @@ object LockImplementation {
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
     //Checkpoint id must equal the lock id size
-    override def getChkIdSize(lidSize: Int): Int = lidSize
+    override def getChkIdSize(lidSize: Int): Option[Int] = Some(lidSize)
   }
 
   //This class should only be used to mediate calls to PDL pipelines
-  private class ModLock extends CheckpointLockQueue {
+  private class ModLock extends LockQueue {
 
     override def getModuleName(m: Option[TMemType]): String = queueLockName.v
     override def getModuleName(m: TMemType): String = queueLockName.v
@@ -578,6 +578,7 @@ object LockImplementation {
     override def shortName: String = "BypassQueue"
 
     override def getModuleName(m: TMemType): String = "BypassLockCombMem"
+
   }
 
   /**
@@ -625,7 +626,7 @@ object LockImplementation {
     override def getModuleName(m: TMemType): String = "CheckpointBypassRF"
 
     //Checkpoint id must equal the lock id size
-    override def getChkIdSize(lidSize: Int): Int = lidSize
+    override def getChkIdSize(lidSize: Int): Option[Int] = Some(lidSize)
   }
 
   /**
@@ -678,6 +679,8 @@ object LockImplementation {
 
     override  def shortName: String = "CheckpointRF"
     override def getModuleName(m: TMemType): String = "CheckpointRF"
+
+    override def getChkIdSize(lidSize: Int): Option[Int] = Some(defaultChkHandleSize)
   }
 
   private class ForwardingRegfile extends RenameRegfile {
