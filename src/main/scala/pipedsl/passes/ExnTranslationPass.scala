@@ -12,20 +12,14 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
 
   override def run(m: ModuleDef): ModuleDef =
   {
-    val fixed_commit = m.commit_blk match {
-      case Some(c) => c
-      case _ => CEmpty()
+    if(is_excepting(m)){
+      val new_m = addExnVars(m)
+      new_m.name.typ = m.name.typ
+      val modified_exnblk = m.except_blk.map(convertExnArgsId)
+      createNewStg(new_m.copy(body = new_m.body, commit_blk = new_m.commit_blk, except_blk = modified_exnblk).copyMeta(m))
+    } else {
+      m
     }
-
-    val fixed_except = m.except_blk match {
-      case ExceptFull(_, c) => c
-      case ExceptEmpty() => CEmpty()
-    }
-
-    val new_m = addExnVars(m)
-    new_m.name.typ = m.name.typ
-    val modified_exnblk = m.except_blk.map(convertExnArgsId)
-    createNewStg(new_m.copy(body = new_m.body, commit_blk = new_m.commit_blk, except_blk = modified_exnblk).copyMeta(m))
   }
 
   override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m)))

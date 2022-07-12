@@ -64,7 +64,7 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       })
       val port_tmp = checkPipe(m.body, emptyEnv())
       val port_com = if (m.commit_blk.isDefined) { checkPipe(m.commit_blk.get, port_tmp) } else port_tmp;
-      val port_map = checkPipe(m.except_blk.get, port_com);
+      val port_map = if (is_excepting(m)) { checkPipe(m.except_blk.get, port_com) } else port_com;
       if(port_warn)
         port_map.getMappedKeys().foreach(mem =>
           {

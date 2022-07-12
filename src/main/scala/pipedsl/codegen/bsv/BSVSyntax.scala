@@ -502,7 +502,7 @@ object BSVSyntax {
 
   case class BStructDef(typ: BStruct, derives: List[String])
 
-  case class BRuleDef(name: String, conds: BExpr, body: List[BStatement])
+  case class BRuleDef(name: String, conds: List[BExpr], body: List[BStatement])
 
   case class BMethodSig(name: String, typ: MethodType, params: List[BVar])
 

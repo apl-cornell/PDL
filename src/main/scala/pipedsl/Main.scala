@@ -106,7 +106,7 @@ object Main {
       TimingTypeChecker.check(lock_prog, Some(basetypes))
       val exnTranslationPass = new ExnTranslationPass()
       val exnprog = exnTranslationPass.run(lock_prog)
-      new PrettyPrinter(None).printProgram(exnprog)
+//      new PrettyPrinter(None).printProgram(exnprog)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")

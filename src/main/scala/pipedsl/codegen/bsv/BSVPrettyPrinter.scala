@@ -239,10 +239,10 @@ object BSVPrettyPrinter {
     }
 
     def printBSVRule(rule: BRuleDef): Unit = {
-      val condString = rule.conds match {
-        case BDontCare => ""
-        case _ => toBSVExprStr(rule.conds)
-
+      val condString = if (rule.conds.nonEmpty) {
+        "(" + rule.conds.map(c => toBSVExprStr(c)).mkString(" && ") + ")"
+      } else {
+        ""
       }
       w.write(mkStatementString("rule", rule.name, condString))
       incIndent()
@@ -250,7 +250,7 @@ object BSVPrettyPrinter {
       decIndent()
       w.write(mkIndentedExpr("endrule\n"))
     }
-
+    
     def printBSVMethodSig(sig: BMethodSig, cond: Option[BExpr]): Unit = {
       val mtypstr = sig.typ match {
         case Action => "Action"
