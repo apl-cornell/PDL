@@ -570,7 +570,7 @@ object BluespecGeneration {
       //Generate the set of execution rules for reading args and writing outputs
       val execRule = getStageRule(stg)
       //Add a stage kill rule if it needs one
-      val killRule = getStageKillRule(stg, mod.maybeSpec, is_excepting(mod))
+      val killRule = getStageKillRules(stg, mod.maybeSpec, is_excepting(mod))
       val rules = if (killRule.isEmpty) List(execRule) else List(execRule) ++ killRule
       stgSpecOrder = 0
       translator.setVariablePrefix("")
@@ -607,7 +607,7 @@ object BluespecGeneration {
      * @param stg - The stage to process
      * @return Some(BSV) rule if the stage can be killed, else None
      */
-    private def getStageKillRule(stg: PStage, is_spec: Boolean, is_excepting: Boolean): List[BRuleDef] = {
+    private def getStageKillRules(stg: PStage, is_spec: Boolean, is_excepting: Boolean): List[BRuleDef] = {
       val misspecKillConds = getMisspecKillConds(stg.getCmds)
       val exnKillConds = getExnKillConds(stg.getCmds)
       val recvConds = getRecvConds(stg.getCmds)
@@ -625,8 +625,8 @@ object BluespecGeneration {
       val exnKillRule = Some(BRuleDef(genParamName(stg) + "_kill_on_exn", exnKillConds, deqStmts :+ freeStmt :+ exnDebugStmt))
 
       var resultingKillRules = List[BRuleDef]()
-      if (misspecKillRule.isDefined && is_spec) resultingKillRules = resultingKillRules :+ misspecKillRule.get
-      if (exnKillRule.isDefined && is_excepting) resultingKillRules = resultingKillRules :+ exnKillRule.get
+      if (misspecKillRule.isDefined && is_spec && !misspecKillConds.isEmpty) resultingKillRules = resultingKillRules :+ misspecKillRule.get
+      if (exnKillRule.isDefined && is_excepting && !exnKillConds.isEmpty) resultingKillRules = resultingKillRules :+ exnKillRule.get
       resultingKillRules
     }
 
