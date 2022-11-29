@@ -128,6 +128,12 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
       case Syntax.CExcept(args) => ins + "except(" + args.map(printExprToString).foldLeft("")((acc, elem) => acc + ", " + elem) + ");"
+      case Syntax.CCheckSpec(isBlk) => ins + (if (isBlk) "spec_barrier();" else "spec_check();")
+      case Syntax.IAbort(mem) => ins + "abort(" + mem +");"
+      case Syntax.IStageClear() => ins + "clearOnExn();"
+      case Syntax.ISetGlobalExnFlag(state) => ins + "setGlobalExnFlag(" + state +");"
+      case Syntax.IReleaseLock(mem, inHandle) => ins + "release(" + mem + ");"
+      case Syntax.IReserveLock(mem, inHandle) => ins + "reserve(" + mem + ");"
       case _ => "TODO PRINTING COMMAND"
     }
   }

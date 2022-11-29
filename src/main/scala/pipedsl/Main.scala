@@ -72,7 +72,6 @@ object Main {
     val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
 
     try {
-      // new PrettyPrinter(None).printProgram(prog)
       val pinfo = new ProgInfo(prog)
       MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
@@ -106,7 +105,7 @@ object Main {
       TimingTypeChecker.check(lock_prog, Some(basetypes))
       val exnTranslationPass = new ExnTranslationPass()
       val exnprog = exnTranslationPass.run(lock_prog)
-//      new PrettyPrinter(None).printProgram(exnprog)
+      new PrettyPrinter(None).printProgram(exnprog)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")

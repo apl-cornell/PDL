@@ -681,6 +681,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         id.typ = Some(t)
         (t, tenv)
       } else {
+        println(id)
         throw UnexpectedType(id.pos, "variable", s"variable type set to new conflicting type : ${tenv(id)}", t)
       }
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)

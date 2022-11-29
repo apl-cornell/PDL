@@ -69,6 +69,7 @@ package object pipedsl {
   def testBlueSpecSim(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String], simFile: Option[String] = None): Unit = {
     val _ = (pathToBluespecScript + " c " + testDir.getAbsolutePath).!!
     Main.gen(testDir, inputFile, printStgInfo = false, debug = false, memInit, portWarn = false, autocast = false, addrLockMod)
+    Console.err.println((pathToBluespecScript + " s " + testDir.getAbsolutePath + " " + FilenameUtils.getBaseName(inputFile.getName) + ".sim"))
     val exit = (pathToBluespecScript + " s " + testDir.getAbsolutePath + " " + FilenameUtils.getBaseName(inputFile.getName) + ".sim").!
     val success = exit == 0 && compareFiles(testDir, inputFile, "sim", simFile)
     deleteGeneratedFiles(testDir)
