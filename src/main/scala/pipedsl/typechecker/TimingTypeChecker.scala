@@ -35,11 +35,11 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
     val allAvailable = m.modules.foldLeft[Available](inputs)((av, m) => {
       av + m.name
     })
-    checkCommand(m.extendedBody(), allAvailable, NoneAvailable)
+       checkCommand(m.extendedBody(), allAvailable, NoneAvailable)
     m.except_blk match {
       case ExceptEmpty() => ()
-      case ExceptFull(args, c) => val inputs = args.foldLeft[Available](NoneAvailable)((av, p) => av + p)
-      val allAvailable = m.modules.foldLeft(inputs)((av, m) => av + m.name)
+      case ExceptFull(args, c) => val exceptInputs = args.foldLeft[Available](inputs)((av, p) => av + p)
+      val allAvailable = m.modules.foldLeft(exceptInputs)((av, m) => av + m.name)
       checkCommand(c, allAvailable, NoneAvailable)
     }
     env

@@ -1,0 +1,62 @@
+//Expect 5 Success, 1 Exception, 1 Success post recovery
+exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
+spec_check();
+    start(acc);
+    reserve(acc);
+    checkpoint(acc);
+    end(acc);
+    print("PC: %d", pc);
+    ---
+    spec_check();
+    s <- speccall cpu(pc + 1);
+    ---
+    spec_barrier();
+    block(acc);
+    acc_val = acc[0];
+    acc[0] <- acc_val + 1;
+    print(acc_val);
+    if(acc_val == 7)
+    {
+      invalidate(s);
+      except(u0<4>);
+    } else {
+        if(acc_val == 2)
+        {
+          invalidate(s);
+          print("3 Should not present!");
+          call cpu(pc + 3);
+        } else {
+            if(acc_val == 9){
+                print("recovered from exception");
+                invalidate(s);
+                output(0);
+            } else {
+                verify(s, pc + 1);
+            }
+        }
+    }
+    ---
+commit:
+    release(acc);
+    print("no exn here!");
+except(arg: uint<4>):
+    print("exception... with arg: %d", arg);
+    start(acc);
+    reserve(acc);
+    end(acc);
+    ---
+    block(acc);
+    acc[0] <- 9;
+    ---
+    release(acc);
+    call cpu(pc + 1);
+}
+
+
+circuit {
+   ti = memory(uint<8>, 16);
+   acc = register(uint<4>, 0);
+   locked = CheckpointQueue(acc);
+   c = new cpu[locked];
+   call c(u1<16>);
+}

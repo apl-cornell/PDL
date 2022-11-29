@@ -1,0 +1,35 @@
+//Expect 5 Success, 1 Exception
+exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
+    start(acc);
+    reserve(acc);
+    end(acc);
+    print("PC: %d", pc);
+    ---
+    block(acc);
+    acc_val = acc[0];
+    acc[0] <- acc_val + 1;
+    print(acc_val);
+    if(acc_val == 6)
+    {
+      except(u0<4>);
+    } else
+    {
+      call cpu(pc + 1);
+    }
+    ---
+commit:
+    release(acc);
+    print("no exn here!");
+except(arg :uint<4>):
+    print("exception... with arg: %d", arg);
+    output(1);
+}
+
+
+circuit {
+   ti = memory(uint<8>, 16);
+   acc = register(uint<4>, 0);
+   locked = CheckpointQueue(acc);
+   c = new cpu[locked];
+   call c(u1<16>);
+}

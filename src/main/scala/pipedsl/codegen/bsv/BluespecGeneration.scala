@@ -622,7 +622,7 @@ object BluespecGeneration {
       val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
       val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
       val misspecKillRule = Some(BRuleDef( genParamName(stg) + "_kill_on_misspec", misspecKillConds ++ recvConds, deqStmts :+ freeStmt :+ misspecDebugStmt))
-      val exnKillRule = Some(BRuleDef(genParamName(stg) + "_kill_on_exn", exnKillConds, deqStmts :+ freeStmt :+ exnDebugStmt))
+      val exnKillRule = Some(BRuleDef(genParamName(stg) + "_kill_on_exn", exnKillConds, deqStmts :+ exnDebugStmt))
 
       var resultingKillRules = List[BRuleDef]()
       if (misspecKillRule.isDefined && is_spec && !misspecKillConds.isEmpty) resultingKillRules = resultingKillRules :+ misspecKillRule.get
