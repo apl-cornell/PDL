@@ -96,15 +96,11 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
     checkCommand(m.name, m.extendedBody(), bodyEnv)
-//    m.except_blk match {
-//
-//    }
-//    env.add()
     if(m.except_blk.isInstanceOf[ExceptFull]){
       val exnenv = m.except_blk.args.foldLeft[Environment[Id, Type]](bodyEnv)((env, arg) => {
         arg.typ match {
           case Some(t: Type) => env.add(arg, t)
-          case None => env.add(arg, TVoid())
+          case None => env
         }
       })
       m.except_blk.foreach(checkCommand(m.name, _, exnenv))
@@ -681,7 +677,6 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
         id.typ = Some(t)
         (t, tenv)
       } else {
-        println(id)
         throw UnexpectedType(id.pos, "variable", s"variable type set to new conflicting type : ${tenv(id)}", t)
       }
       case None if (tenv.get(id).isDefined || defaultType.isEmpty) => id.typ = Some(tenv(id)); (tenv(id), tenv)

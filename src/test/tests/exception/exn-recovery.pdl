@@ -3,19 +3,16 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     start(acc);
     reserve(acc);
     end(acc);
-    print("PC: %d", pc);
     ---
     block(acc);
     acc_val = acc[0];
     acc[0] <- acc_val + 1;
-    print(acc_val);
-    if(acc_val == 5)
+    if(acc_val == 6)
     {
       except(u0<4>);
     } else
     {
-      if(acc_val == 7){
-        print("recovered from exception");
+      if(acc_val == 9){
         output(0);
       } else {
         call cpu(pc + 1);
@@ -24,7 +21,7 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     ---
 commit:
     release(acc);
-    print("no exn here!");
+    print("no exn here! with acc_val of %d", acc_val);
 except(arg: uint<4>):
     print("exception... with arg: %d", arg);
     start(acc);
@@ -32,7 +29,7 @@ except(arg: uint<4>):
     end(acc);
     ---
     block(acc);
-    acc[0] <- 7;
+    acc[0] <- 9;
     ---
     release(acc);
     call cpu(pc + 1);

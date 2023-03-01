@@ -140,6 +140,7 @@ object BSVPrettyPrinter {
     case BAllOnes => "'1"
     case BTime => "$time()"
     case BValueOf(s) => s"valueOf($s)"
+    case BVectorAccess(name, index) => toBSVExprStr(name) + "[" + toBSVIndString(index) + "]"
   }
 
   def getFilePrinter(name: File): BSVPretyPrinterImpl = {
@@ -206,6 +207,8 @@ object BSVPrettyPrinter {
       case BInvokeAssign(lhs, rhs) =>
         w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) =>
+        w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
+      case BVectorAssign(lhs, rhs) =>
         w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) =>
         w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))

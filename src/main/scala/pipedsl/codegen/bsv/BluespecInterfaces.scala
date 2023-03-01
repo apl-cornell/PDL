@@ -91,6 +91,9 @@ class BluespecInterfaces() {
   private val regModuleName = "mkReg"
   private val regType = "Reg"
 
+  private val ehrType = "Ehr"
+  private val ehrModuleName = "mkEhr"
+
   private val fifoModuleName = "mkFIFOF"
   private val fifoNBModuleName = "mkNBFIFOF"
   private val fifoType = "FIFOF"
@@ -377,6 +380,13 @@ class BluespecInterfaces() {
     BModule(regModuleName, List(initVal))
   }
 
+  def getEhrType(port_num: Int, typ: BSVType): BInterface = {
+    BInterface(ehrType, List(BVar("_unused_", BNumericType(port_num)), BVar("elemtyp", typ)))
+  }
+
+  def getEhr(initVal: BExpr): BModule = {
+    BModule(ehrModuleName, List(initVal))
+  }
 
   def defineInterface(intName: String, inputs: List[BVar],
     handleTyp: BSVType, retTyp: Option[BSVType]): BInterfaceDef = {

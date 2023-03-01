@@ -109,7 +109,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
         val newArgs = args.foldLeft(List[Expr]())((l, arg) => {
           arg match {
             case EVar(id) =>
-              val newv = exnArgApplyMap.getOrElse(id, EVar(id)).setPos(e.pos)
+              val newv = exnArgApplyMap.getOrElse(id, arg).setPos(e.pos)
               l :+ newv
             case _ => l :+ arg
           }
@@ -120,7 +120,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
         val newArgs = args.foldLeft(List[Expr]())((l, arg) => {
           arg match {
             case EVar(id) =>
-              val newv = exnArgApplyMap.getOrElse(id, EVar(id)).setPos(e.pos)
+              val newv = exnArgApplyMap.getOrElse(id, arg).setPos(e.pos)
               l :+ newv
             case _ => l :+ arg
           }
@@ -128,7 +128,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
         ECall(mod, name, newArgs, isAtomic)
       }
       case ECast(ctyp, e) => ECast(ctyp, convertExnArgsId(e))
-      case EVar(id) => exnArgApplyMap.getOrElse(id, EVar(id)).setPos(e.pos)
+      case EVar(id) => exnArgApplyMap.getOrElse(id, e).setPos(e.pos)
       case _ => e
     }
   }
@@ -140,18 +140,23 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
     val except_stmts = m.except_blk match {
       case ExceptFull(_, c) =>
-        val setGlobalExnFlag = ISetGlobalExnFlag(true)
         val unsetGlobalExnFlag = ISetGlobalExnFlag(false)
         val abortStmts = m.modules.foldLeft(CSeq(CEmpty(), CEmpty()))((c, mod) =>
         mod.typ match {
-          case TLockedMemType(mem, _, _) => CSeq(IAbort(mod.name), setGlobalExnFlag)
-          case _ => CSeq(CEmpty(), setGlobalExnFlag)
+          case TLockedMemType(mem, _, _) => CSeq(c, IAbort(mod.name))
+          case _ => CSeq(c, CEmpty())
         })
         CTBar(abortStmts, CSeq(c, unsetGlobalExnFlag))
       case ExceptEmpty() => CEmpty()
     }
+    val setGlobalExnFlag = ISetGlobalExnFlag(true)
     val initLocalErrFlag = CAssign(localExnFlag, EBool(false)).copyMeta(m.body)
-    val finalBlocks = CIf(localExnFlag, CTBar(CEmpty(),except_stmts), commit_stmts)
+    val clearSpecTable = if (m.maybeSpec) {
+      ISpecClear()
+    } else {
+      CEmpty()
+    }
+    val finalBlocks = CIf(localExnFlag, CTBar(CSeq(setGlobalExnFlag, clearSpecTable), except_stmts), commit_stmts)
     val newBody = CSeq(initLocalErrFlag, CSeq(m.body,finalBlocks))
 
     //TODO require memory or module types

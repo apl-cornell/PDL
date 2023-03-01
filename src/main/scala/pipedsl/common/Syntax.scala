@@ -652,6 +652,7 @@ object Syntax {
 
   case class IAbort(mem: Id) extends InternalCommand
   case class IStageClear() extends InternalCommand
+  case class ISpecClear() extends InternalCommand
   case class ISetGlobalExnFlag(state: Boolean) extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand

@@ -465,6 +465,7 @@ object BSVSyntax {
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
   case class BValueOf(s :String) extends BExpr
+  case class BVectorAccess(name: BVar, index: BIndex) extends BExpr
 
   sealed trait BIndex
   case class BIndConst(n :Int) extends BIndex
@@ -486,6 +487,8 @@ object BSVSyntax {
   case class BModInst(lhs: BVar, rhs: BModule) extends BStatement
 
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
+
+  case class BVectorAssign(lhs: BVectorAccess, rhs: BExpr) extends BStatement
 
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
 
