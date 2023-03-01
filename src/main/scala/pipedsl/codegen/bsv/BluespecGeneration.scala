@@ -24,9 +24,10 @@ object BluespecGeneration {
   private val combLib = "RegFile"
   private val asyncLib = "BRAMCore"
   private val verilogLib = "VerilogLibs"
+  private val ehrLib = "Ehr"
 
   private def getRequiredTopLibs: List[BImport] = List(clientLib, connLib, lockLib, memLib, verilogLib, combLib, asyncLib).map(l => BImport(l))
-  private def getRequiredModLibs: List[BImport] = List(fifoLib, specFifoLib, queueLib, lockLib, memLib, verilogLib, specLib, combLib).map(l => BImport(l))
+  private def getRequiredModLibs: List[BImport] = List(fifoLib, specFifoLib, queueLib, lockLib, memLib, verilogLib, specLib, combLib, ehrLib).map(l => BImport(l))
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
                                  debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
@@ -398,7 +399,7 @@ object BluespecGeneration {
     private val outputData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
     private val outputQueue = BVar("outputQueue", bsInts.getOutputQType(threadIdVar.typ, outputData.typ))
     //Registers for exceptions
-    private val globalExnFlag = BVar("_globalExnFlag", bsInts.getRegType(BBool))
+    private val globalExnFlag = BVar("_globalExnFlag", bsInts.getEhrType(2, BBool))
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
     //First stage should have exactly one input edge by definition
@@ -632,7 +633,7 @@ object BluespecGeneration {
 
     private def getExnKillConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
-        case IStageClear() => l :+ globalExnFlag
+        case IStageClear() => l :+ BVectorAccess(globalExnFlag, BIndConst(1))
         case _ => l
       })
     }
@@ -659,7 +660,7 @@ object BluespecGeneration {
             l
           }
         case IStageClear() =>
-          val disjointCond = BUOp("!", globalExnFlag)
+          val disjointCond = BUOp("!", BVectorAccess(globalExnFlag, BIndConst(1)))
           l :+ disjointCond
         case _ => l
       })
@@ -938,7 +939,7 @@ object BluespecGeneration {
         bsInts.getReg(BZero))
 
       //Instantiate Exception Register
-      val globalExnInst = BModInst(globalExnFlag, bsInts.getReg(BBoolLit(false)))
+      val globalExnInst = BModInst(globalExnFlag, bsInts.getEhr(BBoolLit(false)))
 
       //Instantiate the speculation table if the module is speculative
       val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
@@ -1289,6 +1290,9 @@ object BluespecGeneration {
         } else {
           None
         }
+      case ISpecClear() =>
+        val clearStmt = BExprStmt(bsInts.getSpecClear(specTable))
+        Some(clearStmt)
       case IAssignLock(handle, src, _) => Some(
         BAssign(translator.toVar(handle), translator.toExpr(src))
       )
@@ -1390,8 +1394,8 @@ object BluespecGeneration {
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
-      case ISetGlobalExnFlag(state) => Some(BModAssign(globalExnFlag, BBoolLit(state)))
-      case _: IStageClear => None
+      case IStageClear() => None
+      case ISetGlobalExnFlag(state) => Some(BVectorAssign(BVectorAccess(globalExnFlag, BIndConst(0)), BBoolLit(state)))
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
