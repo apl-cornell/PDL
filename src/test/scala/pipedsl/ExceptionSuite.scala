@@ -16,15 +16,15 @@ class ExceptionSuite extends AnyFunSuite{
 
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)
-//    val simFile = getSimFile(testFolder, testBaseName)
-//    test(testBaseName + " Typecheck; Compile; Simulate") {
-//      val doesTypecheck = testTypecheck(testFolder, t)
-//      if (doesTypecheck) {
-//        testBlueSpecCompile(testFolder, t, None, inputMap)
-//        if (simFile.exists) {
-//          testBlueSpecSim(testFolder, t, None, inputMap)
-//        }
-//      }
-//    }
+    val simFile = getSimFile(testFolder, testBaseName)
+    test(testBaseName + " Typecheck; Compile; Simulate") {
+      val doesTypecheck = testTypecheck(testFolder, t)
+      if (doesTypecheck) {
+        testBlueSpecCompile(testFolder, t, None, inputMap)
+        if (simFile.exists) {
+          testBlueSpecSim(testFolder, t, None, inputMap)
+        }
+      }
+    }
   })
 }
