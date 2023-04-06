@@ -6,7 +6,7 @@ import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2}
+import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2, visit}
 
 import scala.collection.immutable.ListMap
 
@@ -1394,7 +1394,7 @@ object BluespecGeneration {
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
-      case IStageClear() => None
+      case IStageClear() => Some(BStmtSeq(getFIFOClears().map(mi => BExprStmt(mi))))
       case ISetGlobalExnFlag(state) => Some(BVectorAssign(BVectorAccess(globalExnFlag, BIndConst(0)), BBoolLit(state)))
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
@@ -1440,6 +1440,50 @@ object BluespecGeneration {
       }
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
-  }
 
+    private def findFirstExceptStg(): Option[PStage] = {
+      otherStages.foldLeft(None: Option[PStage])((result, st) => {
+        var stgIsFound = st.getCmds.foldLeft(false)((found, c) => {
+          c match {
+            case IStageClear() => true
+            case _ => found
+          }
+        })
+        if (stgIsFound) {
+          Some(st)
+        } else {
+          result
+        }
+      })
+    }
+
+    private def getFIFOClears(): List[BMethodInvoke] = {
+      findFirstExceptStg() match {
+        case Some(st) => {
+          var resultList = List[BMethodInvoke]()
+          var unvisited = st.preds
+          var visited = Set[PStage]()
+          var currVisit = st
+          while(unvisited.nonEmpty){
+            currVisit = unvisited.head
+            visited += currVisit
+            currVisit.outEdges.foreach(e => {
+              if(e.to != st) {
+                resultList = resultList.appended(bsInts.getFifoClear(edgeParams(e)))
+              }
+            })
+            currVisit.preds.foreach(pred => {
+              if(!visited.contains(pred)){
+                unvisited += pred
+              }
+            })
+            unvisited -= currVisit
+          }
+          resultList
+        }
+        case None => List[BMethodInvoke]()
+      }
+    }
+
+  }
 }
