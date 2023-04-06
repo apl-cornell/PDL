@@ -28,7 +28,7 @@ object DAGSyntax {
    * stages via edgges that are realized as Registers or FIFOs.
    * @param n The identifier for this stage; these should be unique.
    */
-  class PStage(n:Id) extends Process(n) {
+  class PStage(n:Id, tag:String = "") extends Process(n) {
 
     //Any outgoing communication edge, including normal pipeline flow, calls and communication with memories
     private var edges: Set[PipelineEdge] = Set()

@@ -49,14 +49,14 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
       case ExceptEmpty() => CEmpty()
     }
 
-    m.copy(body = CSeq(IStageClear(), convertPrimitives(m.body)), commit_blk = m.commit_blk, except_blk = m.except_blk).copyMeta(m)
+    m.copy(body = convertPrimitives(m.body), commit_blk = m.commit_blk, except_blk = m.except_blk).copyMeta(m)
   }
 
   def convertPrimitives(c: Command): Command = {
     c match {
       case CSeq(c1, c2) => CSeq(convertPrimitives(c1), convertPrimitives(c2)).copyMeta(c)
       case CIf(cond, cons, alt) => CIf(cond, convertPrimitives(cons), convertPrimitives(alt)).copyMeta(c)
-      case CTBar(c1, c2) => CTBar(convertPrimitives(c1), CSeq(IStageClear(), convertPrimitives(c2))).copyMeta(c)
+      case CTBar(c1, c2) => CTBar(convertPrimitives(c1), convertPrimitives(c2)).copyMeta(c)
       case CSplit(cases, default) =>
         val newCases = cases.map(c => CaseObj(c.cond, convertPrimitives(c.body)))
         CSplit(newCases, convertPrimitives(default)).copyMeta(c)
@@ -141,7 +141,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     val except_stmts = m.except_blk match {
       case ExceptFull(_, c) =>
         val unsetGlobalExnFlag = ISetGlobalExnFlag(false)
-        val abortStmts = m.modules.foldLeft(CSeq(CEmpty(), CEmpty()))((c, mod) =>
+        val abortStmts = m.modules.foldLeft(CSeq(IStageClear(), CEmpty()))((c, mod) =>
         mod.typ match {
           case TLockedMemType(mem, _, _) => CSeq(c, IAbort(mod.name))
           case _ => CSeq(c, CEmpty())
@@ -152,7 +152,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     val setGlobalExnFlag = ISetGlobalExnFlag(true)
     val initLocalErrFlag = CAssign(localExnFlag, EBool(false)).copyMeta(m.body)
     val clearSpecTable = if (m.maybeSpec) {
-      ISpecClear()
+       ISpecClear()
     } else {
       CEmpty()
     }

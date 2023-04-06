@@ -51,23 +51,32 @@ module mkOutputFIFOF(ttyp initT, OutputQ#(ttyp, dtyp) res) provisos
    
 endmodule
 
+// Change to a CReg, two element Queue for per cycle.
 module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    
    FIFOF#(dtyp) f <- mkFIFOF();
    //allow multiple writes in the same cycle
    RWire#(dtyp) enq_data <- mkRWireSBR();
-   
+
+   //Make sure no enq could happen during clear (takes 2 cycles)
+   Reg#(Bool) clearCalled <- mkReg(False);
+
+   rule doClear(clearCalled);
+      f.clear();
+      clearCalled <= False;
+   endrule
+
    (*fire_when_enabled*)
    rule doEnq (enq_data.wget() matches tagged Valid.d);
       f.enq(d);
    endrule
 
    //only allow the LAST enq each cycle to work, drop the others
-   method Action enq(dtyp a) if (f.notFull());
+   method Action enq(dtyp a) if (f.notFull() && !clearCalled);
       enq_data.wset(a);
    endmethod
    
-   method Action deq();
+   method Action deq() if (!clearCalled);
       f.deq();
    endmethod
    
@@ -82,11 +91,11 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    method Bool notEmpty();
       return f.notEmpty();
    endmethod
-   
+
    method Action clear();
-      f.clear();
+      clearCalled <= True;
    endmethod
-   
+
 endmodule
 
 

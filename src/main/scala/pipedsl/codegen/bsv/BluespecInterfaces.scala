@@ -319,6 +319,9 @@ class BluespecInterfaces() {
   def getOutCanRead(q: BVar, tag: BExpr): BMethodInvoke = {
     BMethodInvoke(q, "canRead", List(tag));
   }
+  def getFifoClear(f: BVar) : BMethodInvoke = {
+    BMethodInvoke(f, "clear", List())
+  }
 
   private val specHandleName = "SpecId"
   private val defaultSpecHandleSize = 4
