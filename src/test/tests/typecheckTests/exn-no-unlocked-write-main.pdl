@@ -1,3 +1,4 @@
+// exn-no-unlocked-write-main.pdl
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(Queue), oth :uint<4>[0]<c,s>(Queue), abc :uint<8>[16]<a,a> ] :uint<4> {
     start(abc);
     abc[pc] <- 4;

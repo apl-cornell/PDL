@@ -1,3 +1,4 @@
+/* LockRegionInferencePass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Locks.Reserved

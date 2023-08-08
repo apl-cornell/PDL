@@ -1,3 +1,4 @@
+/* CheckExcepting.scala */
 //package pipedsl.passes
 //
 //import pipedsl.common.Errors.{ReleaseInExnBlock, ReleaseWhenMaybeExcepting}

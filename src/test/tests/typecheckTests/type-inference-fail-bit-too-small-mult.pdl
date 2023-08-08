@@ -1,3 +1,4 @@
+// type-inference-fail-bit-too-small-mult.pdl
 
 pipe test6()[] {
   a = 6 * 6;

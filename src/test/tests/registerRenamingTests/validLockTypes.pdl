@@ -1,3 +1,4 @@
+// validLockTypes.pdl
 //Expected Success
 pipe test1(tinput: uint<32>)[rf: int<32>[5]<a2>] {
     uint<5> rs1 = tinput{4:0};

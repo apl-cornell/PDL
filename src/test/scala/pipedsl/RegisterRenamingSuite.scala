@@ -1,3 +1,4 @@
+/* RegisterRenamingSuite.scala */
 package pipedsl
 
 import org.scalatest.funsuite.AnyFunSuite

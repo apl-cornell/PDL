@@ -1,3 +1,4 @@
+// type-inference-fail-funcApp.pdl
 def func(a: bool, b: int<32>): bool {
   return b;
 }

@@ -5,4 +5,8 @@ no exn at PC ==     4! with acc_val of  3
 no exn at PC ==     5! with acc_val of  4
 no exn at PC ==     6! with acc_val of  5
 exception at PC ==     7! with arg:  0
-no exn at PC ==     8! with acc_val of  9
+no exn at PC ==    12! with acc_val of  9
+no exn at PC ==    13! with acc_val of 10
+no exn at PC ==    14! with acc_val of 11
+no exn at PC ==    15! with acc_val of 12
+no exn at PC ==    16! with acc_val of 13

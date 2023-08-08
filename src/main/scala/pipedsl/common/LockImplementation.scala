@@ -1,3 +1,4 @@
+/* LockImplementation.scala */
 package pipedsl.common
 
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
@@ -286,6 +287,7 @@ object LockImplementation {
 
   def getAbortInfo(mem: Id): Option[MethodInfo] = {
     val interface = getLockImplFromMemTyp(mem)
+    println(interface)
     getAbort(interface) match {
       case Some(_) =>
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + abortName
@@ -668,7 +670,8 @@ object LockImplementation {
       val parent = super.getType
       TObject(Id("CheckpointRF"), List(), parent.methods ++ Map(
         Id(checkpointName) -> (TFun(List(), checkType), Sequential),
-        Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+        Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential),
+        Id(abortName) -> (TFun(List(), TVoid()), Sequential)
       ))
     }
     //TODO make more parameterizable

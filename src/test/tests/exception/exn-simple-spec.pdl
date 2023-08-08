@@ -1,3 +1,4 @@
+// exn-simple-spec.pdl
 //Expected Success
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     spec_check();
@@ -15,7 +16,7 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     acc[0] <- acc_val + 1;
     if(acc_val == 6)
     {
-       except(u0<4>);
+       throw(u0<4>);
     }
     ---
     spec_barrier();
@@ -31,7 +32,6 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
             verify(s, pc + 1);
         }
     }
-    ---
 commit:
     release(acc);
     print("no exn at PC == %d! with acc_val of %d", pc, acc_val);

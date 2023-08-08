@@ -1,3 +1,4 @@
+// spec-write-fail2.pdl
 pipe testwrite(pc: int<32>)[rf: int<32>[5]<c4,s1>(CheckpointQueue), imem: int<40>[8]<a1,a1>]: bool {
      spec_check();
      start(imem);

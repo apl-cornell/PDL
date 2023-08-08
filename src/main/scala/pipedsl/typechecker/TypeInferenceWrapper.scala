@@ -1,3 +1,4 @@
+/* TypeInferenceWrapper.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.{Errors, Syntax}
@@ -230,7 +231,7 @@ object TypeInferenceWrapper
      case ces@CirExprStmt(ce) => val (_, nv, nce) = checkCirExpr(ce, tenv)
       (nv, ces.copy(ce = nce).setPos(ces.pos))
     }
-
+   // TODO - EXN: This need rewrite and fix bugs
     def checkModule(m: ModuleDef, env: TypeEnv): (Environment[Id, Type], ModuleDef) =
      {
       val inputTypes = m.inputs.map(p => p.typ)
@@ -250,7 +251,8 @@ object TypeInferenceWrapper
       {
        case ExceptEmpty() => (ExceptEmpty(), subst1)
        //TODO IMPROVE PRECISION OF OUT_ENV, SUBST
-       case ExceptFull(args, c) => checkCommand(c, args.foldLeft(pipeEnv)((env, id) => env.add(id, id.typ.get).asInstanceOf[TypeEnv]), subst) |>
+       case ExceptFull(args, c) =>
+        checkCommand(c, args.foldLeft(out_env)((env, id) => env.add(id, id.typ.get).asInstanceOf[TypeEnv]), subst) |>
          {case (cmd, _, s) => (ExceptFull(args, cmd), s)}
       }
       val hash = mutable.HashMap.from(final_subst)
@@ -357,6 +359,7 @@ object TypeInferenceWrapper
       case b => throw UnexpectedType(mem.id.pos, c.toString, "Memory or Module Type", b)
      }
      case CEmpty() => (c, env, sub)
+     case CCatch(_, oc) => checkCommand(oc, env, sub)
      case CExcept(args) => (c, env, sub) //TODO IMPLEMENT
      case cr@CReturn(exp) =>
       val (s, t, e, fixed) = infer(env, exp)

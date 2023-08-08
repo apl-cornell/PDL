@@ -1,3 +1,4 @@
+// exn-simple.pdl
 //Expect 5 Success, 1 Exception
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     start(acc);
@@ -11,9 +12,8 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     ---
     if(acc_val == 6)
     {
-      except(u0<4>);
+      throw(u0<4>);
     }
-    ---
 commit:
     release(acc);
     print("no exn at PC == %d! with acc_val of %d", pc, acc_val);

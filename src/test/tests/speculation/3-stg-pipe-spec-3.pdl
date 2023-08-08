@@ -1,3 +1,4 @@
+// 3-stg-pipe-spec-3.pdl
 pipe cpu(pc: int<8>)[rf: int<32>[5]<c4,s>(FAQueue), imem: int<32>[8]<a,a>]: bool {
      spec_check(); //nonblocking check
      start(imem);

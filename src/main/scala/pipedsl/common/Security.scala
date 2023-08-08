@@ -1,3 +1,4 @@
+/* Security.scala */
 package pipedsl.common
 
 import scala.util.parsing.input.Positional

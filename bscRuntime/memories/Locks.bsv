@@ -1,3 +1,4 @@
+// Locks.bsv
 package Locks;
 
 import FIFOF :: *;

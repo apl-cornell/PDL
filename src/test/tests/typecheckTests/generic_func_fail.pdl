@@ -1,3 +1,4 @@
+// generic_func_fail.pdl
 def indexing<I, J>(x :int<I>, y :int<J>) :int<6>
 {
    return x{J - 1:0};

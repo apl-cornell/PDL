@@ -1,5 +1,5 @@
 BSC=bsc -no-show-timestamps -no-show-version --aggressive-conditions
-TOBUILD=Ehr.bo Locks.bo Memories.bo Speculation.bo SpecialQueues.bo
+TOBUILD=Ehr.bo Locks.bo Memories.bo Speculation.bo SpecialQueues.bo Interrupt.bo
 
 ## Default simulator is iverilog
 VSIM = -vsim iverilog

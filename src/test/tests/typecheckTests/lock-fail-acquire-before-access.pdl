@@ -1,3 +1,4 @@
+// lock-fail-acquire-before-access.pdl
 
 pipe test6(input: uint<32>)[rf: int<32>[5]] {
     start(rf);

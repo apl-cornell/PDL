@@ -1,3 +1,4 @@
+/* LockWellformedChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Errors.MalformedLockTypes

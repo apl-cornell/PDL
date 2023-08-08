@@ -1,3 +1,4 @@
+/* TimingTypeChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
@@ -331,8 +332,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         //calling another pipe
         case None => Asynchronous
       }
-    case EVar(id) => if(!vars(id) && isRhs && !(id == is_excepting_var)) {
-      throw UnavailableArgUse(e.pos, id.toString) }
+    case EVar(id) => if(!vars(id) && isRhs && !(id == is_excepting_var)) {throw UnavailableArgUse(e.pos, id.toString) }
+      //TODO - exn remove above line and fix this: throw UnavailableArgUse(e.pos, id.toString) }
       //TODO make this error message more clear about what's wrong when these are lock handle vars
       else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)

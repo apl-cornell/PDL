@@ -1,3 +1,4 @@
+/* CheckpointChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}

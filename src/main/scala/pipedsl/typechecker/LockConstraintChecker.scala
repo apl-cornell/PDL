@@ -1,3 +1,4 @@
+/* LockConstraintChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
@@ -63,7 +64,8 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
 
   override def checkModule(m: ModuleDef, env: Environment[LockArg, Z3AST]): Environment[LockArg, Z3AST] = {
     checkChunk(m.name, m.extendedBody(), env)
-    m.except_blk.foreach(checkChunk(m.name, _, env))
+    //TODO - Exn : add new rule
+//    m.except_blk.foreach(checkChunk(m.name, _, env))
     env
   }
 

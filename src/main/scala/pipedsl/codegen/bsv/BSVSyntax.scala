@@ -1,3 +1,4 @@
+/* BSVSyntax.scala */
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator

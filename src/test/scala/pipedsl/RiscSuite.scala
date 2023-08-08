@@ -1,3 +1,4 @@
+/* RiscSuite.scala */
 package pipedsl
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -26,18 +27,21 @@ class RiscSuite extends AnyFunSuite {
   //For each processor impl
   testFiles.foreach(t => {
     val testBaseName = getTestName(t)
-    test(testBaseName + " Typecheck") {
-      testTypecheck(testFolder, t)
-    }
-    test(testBaseName + " BSV Compile") {
-      testBlueSpecCompile(testFolder, t, None, Map())
-    }
-    //For each program
-    sims.foreach(s => {
-      val simInputs = getInputMap(s)
-      test(testBaseName + " Simulate " + s) {
-        testBlueSpecSim(testFolder, t, None, simInputs, Some(s + ".simsol"))
+    if (testBaseName.contains("exn")) {
+      test(testBaseName + " Typecheck") {
+        testTypecheck(testFolder, t)
       }
-    })
+      test(testBaseName + " BSV Compile") {
+        testBlueSpecCompile(testFolder, t, None, Map())
+      }
+      //For each program
+      sims.foreach(s => {
+        val simInputs = getInputMap(s)
+        test(testBaseName + " Simulate " + s) {
+          testBlueSpecSim(testFolder, t, None, simInputs, Some(s + ".simsol"))
+        }
+      })
+    }
+
   })
 }

@@ -1,3 +1,4 @@
+// exn-recovery.pdl
 //Expect 5 Success, 1 Exception, 1 Success post recovery
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     start(acc);
@@ -7,17 +8,23 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     block(acc);
     acc_val = acc[0];
     acc[0] <- acc_val + 1;
-    if(acc_val == 10){
+    bool done = pc == u16<16>;
+    if (!done) {
+       call cpu(pc + 1);
+    }
+    ---
+    if(done){
         output(0);
+        //print("Output called at PC == %d", pc);
     } else {
-        call cpu(pc + 1);
+        if(acc_val == 6)
+        {
+          throw(u0<4>);
+        }
+        else{
+          //do nothing
+        }
     }
-    ---
-    if(acc_val == 6)
-    {
-      except(u0<4>);
-    }
-    ---
 commit:
     release(acc);
     print("no exn at PC == %d! with acc_val of %d", pc, acc_val);
@@ -31,7 +38,7 @@ except(arg: uint<4>):
     acc[0] <- 9;
     ---
     release(acc);
-    call cpu(pc + 1);
+    call cpu(pc + 5);
 }
 
 

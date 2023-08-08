@@ -1,3 +1,4 @@
+/* Syntax.scala */
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
@@ -647,11 +648,13 @@ object Syntax {
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
   case class CExcept(args: List[Expr]) extends Command
+  case class CCatch(mod: Id, onCatch: Command) extends Command
 
   sealed trait InternalCommand extends Command
 
   case class IAbort(mem: Id) extends InternalCommand
-  case class IStageClear() extends InternalCommand
+  case class IFifoClear() extends InternalCommand
+  case class ICheckExn() extends InternalCommand
   case class ISpecClear() extends InternalCommand
   case class ISetGlobalExnFlag(state: Boolean) extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand

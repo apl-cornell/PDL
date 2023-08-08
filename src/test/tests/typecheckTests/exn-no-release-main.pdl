@@ -1,3 +1,4 @@
+// exn-no-release-main.pdl
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(Queue), oth :uint<4>[0]<c,s>(Queue)] :uint<4> {
     reserve(acc);
     ---

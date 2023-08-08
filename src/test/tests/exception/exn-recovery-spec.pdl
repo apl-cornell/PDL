@@ -1,3 +1,4 @@
+// exn-recovery-spec.pdl
 //Expect 5 Success, 1 Exception, 1 Success post recovery
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     spec_check();
@@ -9,14 +10,16 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     spec_check();
     s <- speccall cpu(pc + 1);
     ---
-    spec_barrier();
+    spec_check();
     block(acc);
     acc_val = acc[0];
     acc[0] <- acc_val + 1;
+    ---
+    spec_barrier();
     if(acc_val == 6)
     {
       invalidate(s);
-      except(u0<4>);
+      throw(u0<4>);
     } else {
         if(acc_val == 3)
         {
@@ -31,7 +34,6 @@ exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
             }
         }
     }
-    ---
 commit:
     release(acc);
     print("no exn at PC == %d! with acc_val of %d", pc, acc_val);

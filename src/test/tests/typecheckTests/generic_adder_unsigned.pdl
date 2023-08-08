@@ -1,3 +1,4 @@
+// generic_adder_unsigned.pdl
 def adder<T>(x :uint<T>, y :uint<T>) :int<T>
 {
    return cast(x + y, int<T>);

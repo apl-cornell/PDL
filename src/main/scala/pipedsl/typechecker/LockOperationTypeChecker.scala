@@ -1,3 +1,4 @@
+/* LockOperationTypeChecker.scala */
 package pipedsl.typechecker;
 
 import pipedsl.common.Errors.{IllegalMemoryAccessOperation, MalformedLockTypes, UnexpectedCase}

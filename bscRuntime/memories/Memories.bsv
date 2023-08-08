@@ -1,3 +1,4 @@
+// Memories.bsv
 package Memories;
 
 import GetPut :: *;
@@ -331,6 +332,8 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
    Wire#(elem) fromMem <- mkWire();
 
+   RWire#(Bool) doClear <- mkRWireSBR();
+
    //this must be at least size 2 to work correctly (safe bet)
    Vector#(inflight, Ehr#(2, elem)) outData <- replicateM( mkEhr(unpack(0)) );
    Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
@@ -348,17 +351,24 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
       valid[idx][0] <= True;
    endrule
 
+   (*conflict_free = "freeResp, doClearRule"*)
    (*fire_when_enabled*)
    rule freeResp;
       valid[freeEntry][1] <= False;
    endrule
 
-   method Action clear();
+   (*no_implicit_conditions*)
+   rule doClearRule (doClear.wget() matches tagged Valid.d);
+      //$display("Memory Cleared");
       head <= 0;
       for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
-	 MemId#(inflight) ent = fromInteger(i);
-	 valid[ent][1] <= False;
+	    MemId#(inflight) ent = fromInteger(i);
+	    valid[ent][1] <= False;
       end
+   endrule
+
+   method Action clear();
+      doClear.wset(True);
    endmethod
    
    method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest);

@@ -1,3 +1,4 @@
+// VerilogLibs.bsv
 package VerilogLibs;
 
 import RegFile :: *;
@@ -39,6 +40,7 @@ interface CheckpointRF#(type addr, type elem, type name, type cid);
    method Action write(name a, elem b); //write data given allocated name   
    method ActionValue#(cid) checkpoint();
    method Action rollback(cid c, Bool doRoll, Bool doRel);
+   method Action abort(); //abort
 endinterface
    
 interface BypassRF#(type addr, type elem, type id);
@@ -136,7 +138,7 @@ import "BVI" ForwardRenameRF =
     method D_OUT read[2] (NAME);
     method NAME_OUT res_w1(ADDR_IN) enable(ALLOC_E) ready(ALLOC_READY);
     method rel_w1(NAME_F) enable(FE);
-    method write[2] (NAME_IN, D_IN) enable(WE);    
+    method write[2] (NAME_IN, D_IN) enable(WE);
     
        schedule (res_r1,res_r2) CF (res_r1,res_r2);
        schedule (res_r1,res_r2) CF (owns_r1, owns_r2, read, res_w1, write, rel_w1);
@@ -183,11 +185,14 @@ import "BVI" CheckpointRenameRF =
 
     method CHK_OUT checkpoint() enable(CHK_E) ready(CHK_READY);       
     method rollback (ROLLBK_IN, DO_ROLL, DO_REL) enable(ROLLBK_E);
-    
+
+    method abort() enable(ABORT);
+
        schedule (checkpoint) C (checkpoint);
        schedule (rollback) C (rollback);
+       schedule (abort) C (abort);
        schedule (checkpoint) CF (rollback);
-       schedule (checkpoint, rollback) CF (res_r1, res_r2, owns_r1, owns_r2, read, write, rel_w1);      
+       schedule (checkpoint, rollback) CF (res_r1, res_r2, owns_r1, owns_r2, read, write, rel_w1);
        schedule (res_r1, res_r2) CF (res_r1, res_r2);
        schedule (res_r1, res_r2) CF (owns_r1, owns_r2, read, res_w1, write, rel_w1);
        schedule (owns_r1, owns_r2) CF (owns_r1, owns_r2);
@@ -198,7 +203,8 @@ import "BVI" CheckpointRenameRF =
        schedule (res_w1) CF (write, rel_w1, checkpoint, rollback);
        schedule (write) CF (write, rel_w1);
        schedule (rel_w1) C (rel_w1);
-        
+       schedule (abort) CF (checkpoint, rollback, res_r1, res_r2, res_w1, owns_r1, owns_r2, read, write, rel_w1);
+
  endmodule
 
 

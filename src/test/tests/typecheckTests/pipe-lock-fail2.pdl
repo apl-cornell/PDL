@@ -1,3 +1,4 @@
+// pipe-lock-fail2.pdl
 pipe cache(addr: uint<5>, data: int<32>)[dmem: int<32>[5]<a,a>(Queue)]: bool {
     //spec_check();
     start(dmem);
