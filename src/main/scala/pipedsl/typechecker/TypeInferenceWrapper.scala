@@ -250,9 +250,9 @@ object TypeInferenceWrapper
       val (fixed_except, final_subst) = m.except_blk match
       {
        case ExceptEmpty() => (ExceptEmpty(), subst1)
-       //TODO IMPROVE PRECISION OF OUT_ENV, SUBST
+       //TODO - EXN: IMPROVE PRECISION OF OUT_ENV, SUBST
        case ExceptFull(args, c) =>
-        checkCommand(c, args.foldLeft(out_env)((env, id) => env.add(id, id.typ.get).asInstanceOf[TypeEnv]), subst) |>
+        checkCommand(c, args.foldLeft(pipeEnv)((env, id) => env.add(id, id.typ.get).asInstanceOf[TypeEnv]), subst) |>
          {case (cmd, _, s) => (ExceptFull(args, cmd), s)}
       }
       val hash = mutable.HashMap.from(final_subst)

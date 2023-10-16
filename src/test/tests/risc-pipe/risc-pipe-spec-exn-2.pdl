@@ -4,12 +4,6 @@ extern BHT<T> {
        method upd(pc: int<T>, taken: bool): ();
 }
 
-// hardware interrupt controller
-extern TimingInterruptController<T> {
-       method req(pc: int<T>): bool;
-       method ack(pc: int<T>): ();
-}
-
 def csr_map(csrAddr: uint<12>): uint<5> {
    if (csrAddr == 0x300) { //mstatus: Machine status register
     return u0<5>; } else {
@@ -174,28 +168,22 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
     }
 }
 
-// 0 is U-Mode, 3 is M-mode
-// exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT, irc: TimingInterruptController, acc: uint<4>[0]<c,s>(CheckpointQueue)]: bool {
-exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c,s>, imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT, acc: uint<4>[0]<c,s>(CheckpointQueue)]: bool {
+exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT, csrf: int<32>[5]<c,s>]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
     int<32> insn <- imem[pcaddr];
     end(imem);
-    //print("PC %d -> Stg 0", pc);
     s <- speccall cpu(pc + 1<16>);
     ---
     //This OPCODE is J Self and thus we're using it to signal termination
-    spec_check();
     bool done = insn == 0x0000006f<32>;
-    //print("PC %d -> Stg 1, insn %h,  done? %b", pc, insn, done);
     int<7> opcode = insn{6:0};
     uint<5> rs1 = cast(insn{19:15}, uint<5>);
     uint<5> rs2 = cast(insn{24:20}, uint<5>);
     uint<5> rd = cast(insn{11:7}, uint<5>);
     uint<7> funct7 = cast(insn{31:25}, uint<7>);
     uint<3> funct3 = cast(insn{14:12}, uint<3>);
-    uint<12> csrAddr = cast(insn{31:20}, uint<12>);
     int<1> flipBit = insn{30:30};
     int<32> immI = cast(insn{31:20}, int<32>);
     int<32> immS = cast((insn{31:25} ++ insn{11:7}), int<32>);
@@ -217,26 +205,14 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
     bool isBranch = opcode == 0b1100011<7>;
     bool isStore = opcode == 0b0100011<7>;
     bool isLoad = opcode == 0b0000011<7>;
-    bool isCsr = opcode == 0b1110011<7>;
-    bool isSystem = opcode == 0b1110011<7>;
-    bool isCsrrw = isCsr && (funct3 == u1<3>);
-    bool isCsrrs = isCsr && (funct3 == u2<3>);
-    bool isCsrrc = isCsr && (funct3 == u3<3>);
-    bool isEcall = isSystem && (immI == 0<32>);
-    bool isEbreak = isSystem && (immI == 1<32>);
-    bool isMret = isSystem && (funct7 == u24<7>) && (rs2 == u2<5>);
     bool isMDiv = (funct7 == u1<7>) && isOp;
     bool isDiv = isMDiv && (funct3 >= u4<3>);
     bool isMul = isMDiv && (funct3 < u4<3>);
+    bool isCsr = opcode == 0b1110011<7>;
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore || isJalr;
-    bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui || isCsrrw);
-    // if (isCsr){
-    //  acquire(csrlock);
-    // } else {
-    //  wait(csrlock);
-    // }
-    //print("PC %d -> Stg 2, insn %h,  done? %b", pc, insn, done);
+    bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
+    spec_check();
     bool notBranch = (!isBranch) && (!isJal) && (!isJalr);
     if (!done) {
        if (notBranch) {
@@ -248,11 +224,8 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
 	   s2 <- s;
 	   invalidate(s);
     }}} else { s2 <- s; invalidate(s); }
-    if (isEcall){
-       throw(false, u8<4>);
-    }
-    if (isMret){
-       throw(false, u3<4>);
+    if (isCsr){
+       throw(u15<4>, insn);
     }
     start(rf);
     if (!done && (notBranch || isBranch)) {  checkpoint(rf); }
@@ -266,18 +239,12 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
        reserve(rf[rd], W);
     }
     end(rf);
-//    uint<5> ridx = csr_map(csrAddr);
-//    uint<5> widx = csr_map(csrAddr);
     ---
-    //print("PC %d -> Stg 2", pc);
     spec_check();
-//    if(isCsrrs){
-//        int<32> oldCsrVal = csrf[ridx];
-//    }
     if (needrs1) {
        block(rf[rs1]);
        int<32> rf1 = rf[rs1];
-       release(rf[rs1]); // Read locks doesn't matter
+       release(rf[rs1]);
     } else {
        int<32> rf1 = 0<32>;
     }
@@ -320,7 +287,6 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
        int<32> rddata = 0<32>;
     }
     ---
-    //print("PC %d -> Stg 3", pc);
     spec_barrier(); //delayed just to force writes to happen speculatively
     if (!done) {
        if (!notBranch) {
@@ -353,7 +319,7 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
    uint<2> boff = cast(alu_res{1:0}, uint<2>);
    start(dmem);
    split {
-    case: (isLoad) {
+        case: (isLoad) {
 	   uint<16> raddr = memaddr;
 	   int<32> wdata <- dmem[raddr];
 	}
@@ -371,14 +337,13 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
     }
     end(dmem);
     ---
-    //print("PC %d -> Stg 4", pc);
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
        if (isLoad) {
           block(rf[rd]);
        	  int<32> insnout = maskLoad(wdata, funct3, boff);
-	      rf[rd] <- insnout;
+	  rf[rd] <- insnout;
        } else {
        if (isDiv) {
           block(rf[rd]);
@@ -390,70 +355,53 @@ exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), csrf: int<32>[5]<c
        }}
        print("Writing %d to r%d", insnout, rd);
     }
-//    if (isCsrrw) {
-//       csrf[widx] <- rf1;
-//    }
-
-    // print("reaching pre-commit stage for pc %d", pc);
-    // print(irc.req(pc));
-    // catch(irc){throw(true, u1<4>)};
-    // This gets expanded to:
-
-    // bool is_interrupt = irc.req(pc);
-    // if (is_interrupt) {
-    //  throw(true, exncode);
-    //  irc.ack(pc);
-    // }
-    // Can change return value of req to be exncode
----
+    ---
 commit:
-//  release(acc);
     if (writerd) {
        release(rf[rd]);
-       //print("written to rd %d at pc %d", rd, pc);
     }
-    // print("Committing PC == %d", pc);
-//  if(isCsr){
-//     release(csrlock);
-//  }
     if (done) { output(true); }
-except(interrupt: bool, exncode: uint<4>):
-    // mem.abort
-    // spec.abort
-    // fifos.abort
-    // IF - DC - EX - if(!exceptional) Commit - if(exceptional) Except
+except(exncode: uint<4>, insn: int<32>):
     print("exception at PC == %d! with exncode: %d", pc, exncode);
-    ---
     start(csrf);
-    if (!interrupt && exncode == u8<4>){ // 8 is ecall
-        uint<5> rdidx = u5<5>; // 5 is mtvec
-        print("ECALL");
-    } else {
-    if (!interrupt && exncode == u3<4>){ // 3 is mret
-        uint<5> rdidx = u7<5>; // 7 is mepc
-        print("MRET");
-    } else {
-        if (interrupt) {uint<5> rdidx = u7<5>;}
-        uint<5> rdidx = u0<5>; // undefined
-    }}
-    int<32> csrret = csrf[rdidx];
-    int<16> tmppc = csrret{15:0};
-    if (exncode == u8<4>){
-        int<16> npc = tmppc; // Goto handler address
-    } else {
-    if (exncode == u3<4>){
-        int<16> npc = tmppc + 1<16>; // Goto exceptional instruction address
-    } else {
-        int<16> npc = pc + 1<16>;
+    start(rf);
+    uint<5> rs1_exn = cast(insn{19:15}, uint<5>);
+    uint<5> rd_exn = cast(insn{11:7}, uint<5>);
+    uint<12> csr_addr = cast(insn{31:20}, uint<12>);
+    uint<3> funct3_exn = cast(insn{14:12}, uint<3>);
+    bool isCsrrw = (funct3_exn == u1<3>);
+    bool isCsrrs = (funct3_exn == u2<3>);
+    bool isCsrrc = (funct3_exn == u3<3>);
+    if (exncode == u15<4>){ // Decode CSR instruction
+        reserve(rf[rs1_exn], R);
+        reserve(rf[rd_exn], W);
     }
-    }
+    end(rf);
     ---
-    uint<5> mepcidx = u7<5>; // 7 is mepc
-    csrf[mepcidx] <- cast(pc, int<32>); //write pc to mpec
-    ---
-    uint<5> mcauseidx = u8<5>; // 8 is mcause
-    csrf[mcauseidx] <- cast(exncode, int<32>); //write pc to mpec
+    uint<5> csr_idx = csr_map(csr_addr);
+    int<32> old_csr_val = csrf[csr_idx];
+    if (exncode == u15<4>){ // CSR instruction
+        block(rf[rs1_exn]);
+        int<32> rf1_val = rf[rs1_exn];
+        release(rf[rs1_exn]);
+        if (isCsrrw){
+            csrf[csr_idx] <- rf1_val;
+        } else { if (isCsrrs) {
+            int<32> masked_val = rf1_val | old_csr_val;
+            csrf[csr_idx] <- masked_val;
+        } else { if (isCsrrc) {
+            int<32> masked_val = (~rf1_val) & old_csr_val;
+            csrf[csr_idx] <- masked_val;
+        }}}
+        int<16> npc = pc + 1;
+    } else { int<16> npc = pc + 1; }
     end(csrf);
+    ---
+    if (exncode == u15<4>){ // RF writeback
+        block(rf[rd_exn]);
+        rf[rd_exn] <- old_csr_val;
+        release(rf[rd_exn]);
+    }
     ---
     print("GOTO PC: %d", npc);
     call cpu(npc);
@@ -464,13 +412,8 @@ circuit {
     td = memory(int<32>, 16);
     rf = rflock CheckpointRF(int<32>, 5, 64);
     csrf = regfile(int<32>, 5);
-    acc = register(uint<4>, 0);
-    locked = CheckpointQueue(acc);
     div = new multi_stg_div[];
     b = new BHT<16>[](4);
-    //irc = new TimingInterruptController<16>[]();
-    //c = new cpu[rf, csrf, ti, td, div, b, irc, locked];
-    c = new cpu[rf, csrf, ti, td, div, b, locked];
-
+    c = new cpu[rf, ti, td, div, b, csrf];
     call c(0<16>);
 }
