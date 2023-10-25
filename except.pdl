@@ -1,0 +1,45 @@
+
+
+pipe cpu(pc :uint<16>)[imem :uint<8>[16]<a,a>, acc :uint<4>[0]<c,s>] :uint<4> {
+    start(imem);
+    uint<8> insn <- imem[pc];
+    end(imem);
+    ---
+    print("PC: %h", pc);
+    print("INSN: %h", insn);
+    opcode = insn{7:4};
+    imm = insn{3:0};
+    done = opcode == 0;
+    add = opcode == 1;
+    sub = opcode == 2;
+    ex = !(done || add || sub);
+    start(acc);
+    acc_val = acc[];
+    split
+    {
+      case: (add)
+      {
+	acc[] <- acc_val + imm;
+      }
+      case: (sub)
+      {
+        acc[] <- acc_val - imm;
+      }
+    }
+    if (done)
+    {
+      output acc_val;
+    } else
+    {
+      call cpu(pc + 1);
+    }
+    end(acc);
+}
+
+
+circuit {
+   ti = memory(uint<8>, 16);
+   acc = register(uint<4>, 1);
+   c = new cpu[ti, acc];
+   call c(u0<16>);
+}

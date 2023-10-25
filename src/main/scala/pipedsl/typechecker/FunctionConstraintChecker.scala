@@ -1,3 +1,4 @@
+/* FunctionConstraintChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{Status, Context => Z3Context, Solver => Z3Solver}

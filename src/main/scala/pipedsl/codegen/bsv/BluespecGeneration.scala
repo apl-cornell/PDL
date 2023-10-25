@@ -1,12 +1,13 @@
+/* BluespecGeneration.scala */
 package pipedsl.codegen.bsv
 
-import BSVSyntax._
+import BSVSyntax.{BBOp, BEmpty, _}
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
 import pipedsl.common.Syntax._
-import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2}
+import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2, visit}
 
 import scala.collection.immutable.ListMap
 
@@ -20,13 +21,15 @@ object BluespecGeneration {
   private val specLib = "Speculation"
   private val fifoLib = "FIFOF"
   private val specFifoLib = "SpecialFIFOs"
+  private val stgFifoLib = "StgFIFOs"
   private val queueLib = "SpecialQueues"
   private val combLib = "RegFile"
   private val asyncLib = "BRAMCore"
   private val verilogLib = "VerilogLibs"
+  private val ehrLib = "Ehr"
 
   private def getRequiredTopLibs: List[BImport] = List(clientLib, connLib, lockLib, memLib, verilogLib, combLib, asyncLib).map(l => BImport(l))
-  private def getRequiredModLibs: List[BImport] = List(fifoLib, specFifoLib, queueLib, lockLib, memLib, verilogLib, specLib, combLib).map(l => BImport(l))
+  private def getRequiredModLibs: List[BImport] = List(fifoLib, stgFifoLib, specFifoLib, queueLib, lockLib, memLib, verilogLib, specLib, combLib, ehrLib).map(l => BImport(l))
 
   class BluespecProgramGenerator(prog: Prog, stageInfo: Map[Id, List[PStage]], pinfo: ProgInfo,
                                  debug: Boolean = false, bsInts: BluespecInterfaces, funcmodname: String = "Functions",
@@ -397,7 +400,8 @@ object BluespecGeneration {
     private val threadIdVar = BVar(threadIdName, getThreadIdType)
     private val outputData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
     private val outputQueue = BVar("outputQueue", bsInts.getOutputQType(threadIdVar.typ, outputData.typ))
-
+    //Registers for exceptions
+    private val globalExnFlag = BVar("_globalExnFlag", bsInts.getRegType(BBool))
     //Data types for passing between stages
     private val edgeStructInfo = getEdgeStructInfo(otherStages, addTId = true, addSpecId = mod.maybeSpec)
     //First stage should have exactly one input edge by definition
@@ -414,7 +418,7 @@ object BluespecGeneration {
       es ++ s.inEdges ++ s.outEdges
     })
     val edgeParams: EdgeInfo = allEdges.foldLeft(Map[PipelineEdge, BVar]())((m, e) => {
-      m + (e -> BVar(genParamName(e), bsInts.getFifoType(edgeMap(e))))
+      m + (e -> BVar(genParamName(e), bsInts.getStgFifoType(edgeMap(e))))
     })
     //Generate map from existing module parameter names to BSV variables
     private val modParams: ModInfo = mod.modules.foldLeft[ModInfo](ListMap())((vars, m) => {
@@ -549,6 +553,7 @@ object BluespecGeneration {
     }
 
     private var stgSpecOrder: Int = 0
+
     /**
      * Given a pipeline stage and the necessary edge info,
      * generate a BSV module definition.
@@ -568,8 +573,8 @@ object BluespecGeneration {
       //Generate the set of execution rules for reading args and writing outputs
       val execRule = getStageRule(stg)
       //Add a stage kill rule if it needs one
-      val killRule = getStageKillRule(stg)
-      val rules = if (mod.maybeSpec && killRule.isDefined) List(execRule, killRule.get) else List(execRule)
+      val killRule = getStageKillRules(stg, mod.maybeSpec, is_excepting(mod))
+      val rules = if (killRule.isEmpty) List(execRule) else List(execRule) ++ killRule
       stgSpecOrder = 0
       translator.setVariablePrefix("")
       (sBody, rules)
@@ -590,11 +595,17 @@ object BluespecGeneration {
       val queueStmts = getEdgeQueueStmts(stg, stg.allEdges)
       val blockingConds = getBlockingConds(stg.getCmds)
       val recvConds = getRecvConds(stg.getCmds)
+      val exnDisjointConds = getExnKillConds(stg.getCmds, true)
+      val exnConds = if (exnDisjointConds.isEmpty) {
+        List[BExpr](globalExnFlag)
+      } else {
+        exnDisjointConds
+      }
       val debugStmt = if (debug) {
         BDisplay(Some(mod.name.v + ":Thread %d:Executing Stage " + stg.name + " %t"),
           List(translator.toBSVVar(threadIdVar), BTime))
       } else BEmpty
-      BRuleDef( genParamName(stg) + "_execute", blockingConds ++ recvConds,
+      BRuleDef( genParamName(stg) + "_execute", (if(is_excepting(mod)) exnConds else List[BExpr]()) ++ blockingConds ++ recvConds,
         writeCmdDecls ++ writeCmdStmts ++ queueStmts :+ debugStmt)
     }
 
@@ -605,23 +616,45 @@ object BluespecGeneration {
      * @param stg - The stage to process
      * @return Some(BSV) rule if the stage can be killed, else None
      */
-    private def getStageKillRule(stg: PStage): Option[BRuleDef] = {
-      val killConds = getKillConds(stg.getCmds)
-      if (killConds.isEmpty) {
-        None
-      } else {
-        val recvConds = getRecvConds(stg.getCmds)
-        val debugStmt = if (debug) {
-          BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage " + stg.name + "%t"),
-            List(getSpecIdVal, BTime))
-        } else { BEmpty }
-        val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
-        val freeStmt = BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
-        Some(BRuleDef( genParamName(stg) + "_kill", killConds ++ recvConds, deqStmts :+ freeStmt :+ debugStmt))
-      }
+    private def getStageKillRules(stg: PStage, is_spec: Boolean, is_excepting: Boolean): List[BRuleDef] = {
+      val misspecKillConds = getMisspecKillConds(stg.getCmds)
+      val exnKillConds = getExnKillConds(stg.getCmds, false)
+      val exnDisjointConds = getExnKillConds(stg.getCmds, true)
+      val recvConds = getRecvConds(stg.getCmds)
+      val misspecDebugStmt = if (debug) {
+        BDisplay(Some(mod.name.v + ":SpecId %d: Killing Stage (on Misspec)" + stg.name + "%t"),
+          List(getSpecIdVal, BTime))
+      } else { BEmpty }
+      val exnDebugStmt = if (debug) {
+        BDisplay(Some(mod.name.v + " Killing Stage (on Exception)" + "%t"),
+          List(BTime))
+      } else { BEmpty }
+      val deqStmts = getEdgeQueueStmts(stg, stg.inEdges) ++ getRecvCmds(stg.getCmds)
+      val freeStmt = if (!misspecKillConds.isEmpty) {
+        BExprStmt(bsInts.getSpecFree(specTable, getSpecIdVal))
+      } else { BEmpty }
+      val misspecKillRule = Some(BRuleDef(genParamName(stg) + "_kill_on_misspec", exnDisjointConds ++ misspecKillConds ++ recvConds, deqStmts :+ freeStmt :+ misspecDebugStmt))
+      val exnKillRule = Some(BRuleDef(genParamName(stg) + "_kill_on_exn", exnKillConds, deqStmts :+ freeStmt :+ exnDebugStmt))
+      var resultingKillRules = List[BRuleDef]()
+      if (misspecKillRule.isDefined && is_spec && !misspecKillConds.isEmpty) resultingKillRules = resultingKillRules :+ misspecKillRule.get
+      // if (exnKillRule.isDefined && is_excepting && !exnKillConds.isEmpty) resultingKillRules = resultingKillRules :+ exnKillRule.get
+      resultingKillRules
     }
 
-    private def getKillConds(cmds: Iterable[Command]): List[BExpr] = {
+    private def getExnKillConds(cmds: Iterable[Command], disjoint_cond: Boolean): List[BExpr] = {
+      cmds.foldLeft(List[BExpr]())((l, c) => c match {
+        case ICheckExn() => {
+          if (disjoint_cond) {
+            l :+ BUOp("!", globalExnFlag)
+          } else {
+            l :+ globalExnFlag
+          }
+        }
+        case _ => l
+      })
+    }
+
+    private def getMisspecKillConds(cmds: Iterable[Command]): List[BExpr] = {
       cmds.foldLeft(List[BExpr]())((l, c) => c match {
         //check definitely misspeculated
         // isValid(spec) && !fromMaybe(True, check(spec))
@@ -632,7 +665,7 @@ object BluespecGeneration {
               bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder))))
         //also need these in case we're waiting on responses we need to dequeue
         case ICondCommand(cond, cs) =>
-          val condconds = getKillConds(cs)
+          val condconds = getMisspecKillConds(cs)
           if (condconds.nonEmpty) {
             val nestedConds = condconds.tail.foldLeft(condconds.head)((exp, n) => {
               BBOp("&&", exp, n)
@@ -684,7 +717,7 @@ object BluespecGeneration {
           } else {
             l
           }
-        case im@IMemWrite(mem, addr, data, _, _, isAtomic) if isAtomic =>
+        case im@IMemWrite(mem, addr, data, writeMask, _, _, isAtomic) if isAtomic =>
           val methodInfo = LockImplementation.getCanAtomicWrite(mem, addr, data, im.portNum)
           if (methodInfo.isDefined) {
             l :+ translateMethod(getLockName(mem), methodInfo.get)
@@ -702,8 +735,8 @@ object BluespecGeneration {
         case CAssign(_, rhs) => l ++ getBlockConds(rhs)
         case CRecv(_, rhs) => l ++ getBlockConds(rhs)
         case COutput(_) => l :+ bsInts.getOutCanWrite(outputQueue, translator.toBSVVar(threadIdVar))
-          //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
-          // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
+        //Execute ONLY if check(specid) == Valid(True) && isValid(specid)
+        // fromMaybe(False, check(specId)) <=>  check(specid) == Valid(True)
         case CCheckSpec(isBlocking) if isBlocking => l ++ List(
           BBOp("||", BUOp("!", BIsValid(translator.toBSVVar(specIdVar))),
             BFromMaybe(BBoolLit(false), bsInts.getSpecCheck(specTable, getSpecIdVal, stgSpecOrder))
@@ -814,6 +847,16 @@ object BluespecGeneration {
       })
     }
 
+    private def getInEdgeClearStmts(s: PStage, es: Iterable[PipelineEdge],
+    args: Option[Iterable[BExpr]] = None): List[BStatement] = {
+      es.foldLeft(List[BStatement]())((l, e) => {
+        if (e.to == s) {
+          val stmt = BExprStmt(bsInts.getFifoClear(edgeParams(e)))
+          l :+ stmt
+        } else { l }
+      })
+    }
+
     /**
      *
      * @param stg The stage to compile
@@ -886,7 +929,7 @@ object BluespecGeneration {
         if (mod.isRecursive) { bsInts.getNBFifo } else { bsInts.getBypassFifo })
       val edgeFifos = allEdges.foldLeft(Map[PipelineEdge, BModInst]())((m, e) => {
         if (e != startEdge) {
-          m + (e -> BModInst(edgeParams(e), bsInts.getFifo))
+          m + (e -> BModInst(edgeParams(e), bsInts.getStgFifo))
         } else {
           m
         }
@@ -917,12 +960,16 @@ object BluespecGeneration {
       val outputInst = BModInst(outputQueue, bsInts.getOutputQ(BZero))
       val threadInst = BModInst(BVar(threadIdName, bsInts.getRegType(getThreadIdType)),
         bsInts.getReg(BZero))
+
+      //Instantiate Exception Register
+      val globalExnInst = BModInst(globalExnFlag, bsInts.getReg(BBoolLit(false)))
       //Instantiate the speculation table if the module is speculative
       val specInst = if (mod.maybeSpec) BModInst(specTable, bsInts.getSpecTable) else BEmpty
       var stmts: List[BStatement] = startFifo +:
         (edgeFifos.values.toList ++ memRegions.values.toList ++ modLockInsts)
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
+      stmts = stmts :+ globalExnInst
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()
@@ -1011,7 +1058,7 @@ object BluespecGeneration {
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
       case IMemSend(_, _, _, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
-      case IMemWrite(_, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
+      case IMemWrite(_, _, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
@@ -1057,7 +1104,7 @@ object BluespecGeneration {
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
       case IMemSend(_, _, _, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
         Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
-      case IMemWrite(_, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
+      case IMemWrite(_, _, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
         Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
@@ -1206,7 +1253,7 @@ object BluespecGeneration {
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))))
-      case IMemWrite(mem, addr, data, lHandle, _, isAtomic) =>
+      case IMemWrite(mem, addr, data, writeMask, lHandle, _, isAtomic) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.usesWritePortNum) cmd.portNum else None
           case _ => None //In the future we may allow unlocked mems with port annotations
@@ -1214,7 +1261,7 @@ object BluespecGeneration {
         Some(BExprStmt(
           if (isLockedMemory(mem)) {
             //ask lock for its translation
-            translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, portNum, isAtomic).get)
+            translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, writeMask, portNum, isAtomic).get)
           } else {
             //use unlocked translation
             bsInts.getUnlockedCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)
@@ -1257,6 +1304,22 @@ object BluespecGeneration {
         } else {
           None
         }
+      case IAbort(mem) => mem.typ.get match {
+        case TMemType(_, _, Latency.Asynchronous, writeLatency, readPorts, writePorts) => Some(BExprStmt(
+          bsInts.getMemClear(modParams(mem), true, isLockedMemory(mem)).get))
+        case TMemType(_, _, _ , writeLatency, readPorts, writePorts) => None
+        case _ =>
+          val abortInfo = LockImplementation.getAbortInfo(mem)
+          if (abortInfo.isDefined && abortInfo.get.doesModify) {
+            val abortMethod = translateMethod(getLockName(mem), abortInfo.get)
+            Some(BExprStmt(abortMethod))
+          } else {
+            None
+          }
+      }
+      case ISpecClear() =>
+        val clearStmt = BExprStmt(bsInts.getSpecClear(specTable))
+        Some(clearStmt)
       case IAssignLock(handle, src, _) => Some(
         BAssign(translator.toVar(handle), translator.toExpr(src))
       )
@@ -1357,6 +1420,9 @@ object BluespecGeneration {
       case CAssign(_, _) => None
       case CExpr(_) => None
       case CEmpty() => None
+      case ICheckExn() => None
+      case IFifoClear() => Some(BStmtSeq(getFIFOClears().map(mi => BExprStmt(mi))))
+      case ISetGlobalExnFlag(state) => Some(BModAssign(globalExnFlag, BBoolLit(state)))
       case _: InternalCommand => throw UnexpectedCommand(cmd)
       case CRecv(_, _) => throw UnexpectedCommand(cmd)
       case CSeq(_, _) => throw UnexpectedCommand(cmd)
@@ -1401,6 +1467,49 @@ object BluespecGeneration {
       }
       getEdgeQueueStmts(firstStage.inEdges.head.from, firstStage.inEdges, Some(argmap))
     }
-  }
 
+    private def findFirstExceptStg(): Option[PStage] = {
+      otherStages.foldLeft(None: Option[PStage])((result, st) => {
+        var stgIsFound = st.getCmds.foldLeft(false)((found, c) => {
+          c match {
+            case ICondCommand(_, cs) => found || cs.contains(ICheckExn())
+            case ICheckExn() => true
+            case _ => found
+          }
+        })
+        if (stgIsFound) {
+          Some(st)
+        } else {
+          result
+        }
+      })
+    }
+
+    private def getFIFOClears(): List[BMethodInvoke] = {
+      findFirstExceptStg() match {
+        case Some(st) => {
+          var resultList = List[BMethodInvoke]()
+          var unvisited = Set[PStage](st)
+          var visited = Set[PStage]()
+          var currVisit = st
+          while(unvisited.nonEmpty){
+            currVisit = unvisited.head
+            visited += currVisit
+            currVisit.inEdges.foreach(e => {
+              resultList = resultList.appended(bsInts.getFifoClear(edgeParams(e)))
+            })
+            currVisit.preds.foreach(pred => {
+              if(!visited.contains(pred)){
+                unvisited += pred
+              }
+            })
+            unvisited -= currVisit
+          }
+          resultList
+        }
+        case None => List[BMethodInvoke]()
+      }
+    }
+
+  }
 }

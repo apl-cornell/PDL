@@ -1,0 +1,56 @@
+// exn-simple-spec.pdl
+//Expected Success
+exn-pipe cpu(pc :uint<16>)[acc :uint<8>[0]<a,a>(CheckpointQueue)] :uint<4> {
+    spec_check();
+    start(acc);
+    reserve(acc);
+    checkpoint(acc);
+    end(acc);
+    ---
+    spec_check();
+    s <- speccall cpu(pc + 1);
+    ---
+    spec_check();
+    block(acc);
+    acc_val <- acc[0];
+    ---
+    spec_check();
+    acc[0] <- acc_val + 1;
+    if(acc_val == u6<8>)
+    {
+       throw(u0<4>);
+    }
+    ---
+    spec_barrier();
+    if(acc_val == 2)
+    {
+        invalidate(s);
+        call cpu(pc + 3);
+    } else {
+        if(acc_val == 8){
+            invalidate(s);
+            output(0);
+        } else {
+            verify(s, pc + 1);
+        }
+    }
+commit:
+    release(acc);
+    print("no exn at PC == %d! with acc_val of %d", pc, acc_val);
+except(arg: uint<4>):
+    print("exception at PC == %d! with arg: %d", pc, arg);
+    ---
+    exn_acc_val <- acc[0];
+    ---
+    print(exn_acc_val);
+    output(1);
+}
+
+
+circuit {
+   ti = memory(uint<8>, 16);
+   acc = memory(uint<8>, 0);
+   locked = CheckpointQueue(acc);
+   c = new cpu[locked];
+   call c(u1<16>);
+}

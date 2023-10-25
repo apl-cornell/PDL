@@ -1,0 +1,276 @@
+def alu(arg1: int<32>, arg2: int<32>, op: uint<3>, flip: bool): int<32> {
+    uint<5> shamt = cast(arg2{4:0}, uint<5>);
+    if (op == u0<3>) {  //000 == ADD , flip == sub
+       if (!flip) {
+         return arg1 + arg2;
+       } else {
+         return arg1 - arg2;
+       }
+    } else {
+    if (op == u1<3>) { //001 == SLL
+        return arg1 << shamt;
+    } else {
+    if (op == u2<3>) { //010 == SLT
+        return (arg1 < arg2) ? 1<32> : 0<32>;
+    } else {
+    if (op == u3<3>) { //011 == SLTU
+       uint<32> un1 = cast(arg1, uint<32>);
+       uint<32> un2 = cast(arg2, uint<32>);
+       return (un1 < un2) ? 1<32> : 0<32>;
+    } else {
+    if (op == u4<3>) { //100 == XOR
+        return arg1 ^ arg2;
+    } else {
+    if (op == u5<3>) { //101 == SRL / SRA
+      if (!flip) {
+        return cast((cast(arg1, uint<32>)) >> shamt, int<32>); //SRL
+      } else {
+        return arg1 >> shamt; //SRA
+      }
+    } else {
+    if (op == u6<3>) { //110 == OR
+        return arg1 | arg2;
+    } else { //111 == AND
+        return arg1 & arg2;
+    }}}}}}}
+
+}
+
+//true if taking branch
+def br(op:uint<3>, arg1:int<32>, arg2:int<32>): bool {
+    bool eq = arg1 == arg2;
+    bool lt = arg1 < arg2;
+    uint<32> un1 = cast(arg1, uint<32>);
+    uint<32> un2 = cast(arg2, uint<32>);
+    bool ltu = un1 < un2;
+    if (op == u0<3>) { //BEQ
+        return eq;
+    } else {
+    if (op == u1<3>) { //BNE
+       return !eq;
+    } else {
+    if (op == u4<3>) { //BLT
+       return lt;
+    } else {
+    if (op == u5<3>) { //BGE
+       return !lt;
+    } else {
+    if (op == u6<3>) { //BLTU
+       return ltu;
+    } else {
+    if (op == u7<3>) { //BGEU
+       return !ltu;
+    } else {
+      return false;
+    }}}}}}
+}
+
+
+def storeMask(off: uint<2>, op: uint<3>): uint<4> {
+    if (op == u0<3>) { //SB
+       return (u0b0001<4> << off);
+    } else {
+    if (op == u1<3>) { //SH
+       uint<2> shamt = off{1:1} ++ u0<1>;
+       return (u0b0011<4> << shamt);
+    } else { //SW
+      return u0b1111<4>;
+    }}
+}
+
+def maskLoad(data: int<32>, op: uint<3>, start: uint<2>): int<32> {
+    //start == offset in bytes, need to multiply by 8
+    uint<5> boff = start ++ u0<3>;
+    int<32> tmp = data >> boff;
+    uint<8> bdata = cast(tmp, uint<8>);
+    uint<16> hdata = cast(tmp, uint<16>);
+
+    if (op == u0<3>) { //LB
+       return cast(bdata, int<32>);
+    } else {
+    if (op == u1<3>) { //LH
+       return cast(hdata, int<32>);
+    } else {
+    if (op == u2<3>) { //LW
+       return data;
+    } else {
+    if (op == u4<3>) { //LBU
+       uint<32> zext = cast(bdata, uint<32>);
+       return cast(zext, int<32>);
+    } else {
+    if (op == u5<3>) { //LHU
+       uint<32> zext = cast(hdata, uint<32>);
+       return cast(zext, int<32>);
+    } else {
+      return 0<32>;
+    }}}}}
+}
+
+pipe cpu(pc: int<32>)[rf: int<32>[5]<c2,s>(BypassRF), imem: int<32>[32]<a,a>, dmem: int<32>[32]<a,a>]: bool {
+    spec_check();
+    start(imem);
+    uint<32> pcaddr = cast(pc, uint<32>);
+    int<32> insn <- imem[pcaddr];
+    end(imem);
+    s <- speccall cpu(pc + 1<32>);
+    ---
+    spec_barrier();
+    //This OPCODE is J Self and thus we're using it to signal termination
+    bool done = insn == 0x0000006f<32>;
+    int<7> opcode = insn{6:0};
+    uint<5> rs1 = cast(insn{19:15}, uint<5>);
+    uint<5> rs2 = cast(insn{24:20}, uint<5>);
+    uint<5> rd = cast(insn{11:7}, uint<5>);
+    uint<7> funct7 = cast(insn{31:25}, uint<7>);
+    uint<3> funct3 = cast(insn{14:12}, uint<3>);
+    int<1> flipBit = insn{30:30};
+    int<32> immI = cast(insn{31:20}, int<32>);
+    int<32> immS = cast((insn{31:25} ++ insn{11:7}), int<32>);
+    int<13> immBTmp = insn{31:31} ++ insn{7:7} ++ insn{30:25} ++ insn{11:8} ++ 0<1>;
+    int<32> immB = cast(immBTmp, int<32>);
+    int<21> immJTmp = insn{31:31} ++ insn{19:12} ++ insn{20:20} ++ insn{30:21} ++ 0<1>;
+    int<32> immJ = cast(immJTmp, int<32>);
+    int<12> immJRTmp = insn{31:20};
+    int<32> immJR = cast(immJRTmp, int<32>);
+    int<32> immU = insn{31:12} ++ 0<12>;
+    uint<3> doAdd = u0<3>;
+    bool isOpImm = opcode == 0b0010011<7>;
+    bool flip = (!isOpImm) && (flipBit == 1<1>);
+    bool isLui   = opcode == 0b0110111<7>;
+    bool isAui   = opcode == 0b0010111<7>;
+    bool isOp    = opcode == 0b0110011<7>;
+    bool isJal   = opcode == 0b1101111<7>;
+    bool isJalr  = opcode == 0b1100111<7>;
+    bool isBranch = opcode == 0b1100011<7>;
+    bool isStore = opcode == 0b0100011<7>;
+    bool isLoad = opcode == 0b0000011<7>;
+    bool needrs1 = !isJal;
+    bool needrs2 = isOp || isBranch || isStore || isJalr;
+    bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
+    bool notBranch = (!isBranch) && (!isJal) && (!isJalr);
+    start(rf);
+    if (needrs1) {
+       reserve(rf[rs1], R);
+    }
+    if (needrs2) {
+       reserve(rf[rs2], R);
+    }
+    if (writerd) {
+       reserve(rf[rd], W);
+    }
+    end(rf);
+    bool useRf1 = (!isAui) && (!isLui);
+    int<32> alu_arg1_tmp = (isAui) ? (pc << 2) : 0<32>;
+    bool useRf2 = (!isAui) && (!isLui) && (!isStore) && (!isOpImm) && (!isLoad) && (!isJalr);
+    int<32> alu_arg2_tmp = (isAui || isLui) ? immU : ((isStore) ? immS : ((isOpImm || isLoad) ? immI : ((isJalr) ? immJR : 0<32>)));
+    int<32> pcOff = ((isBranch) ? immB : immJ) >> 2;
+    ---
+    if (needrs1) {
+       block(rf[rs1]);
+       int<32> rf1 = rf[rs1];
+       release(rf[rs1]);
+    } else {
+       int<32> rf1 = 0<32>;
+    }
+    if (needrs2) {
+       block(rf[rs2]);
+       int<32> rf2 = rf[rs2];
+       release(rf[rs2]);
+    } else {
+       int<32> rf2 = 0<32>;
+    }
+
+    int<32> alu_arg1 = (useRf1) ? rf1 : alu_arg1_tmp;
+    int<32> alu_arg2 = (useRf2) ? rf2 : alu_arg2_tmp;
+    bool take = br(funct3, alu_arg1, alu_arg2);
+    int<32> tmppc = pc + 1<32>;
+    if (!done) {
+    if ((isBranch && take) || isJal || isJalr) {
+       invalidate(s);
+    } else {
+       verify(s, tmppc);
+    }} else {
+       invalidate(s);
+    }
+    bool    alu_flip = (isStore || isLoad || isAui || isLui) ? false : flip;
+    uint<3> alu_funct3 = (isStore || isLoad || isAui || isLui) ? doAdd : funct3;
+    int<32> alu_res = alu(alu_arg1, alu_arg2, alu_funct3, alu_flip);
+    int<32> linkpc = tmppc << 2;
+    int<32> rddata = (isJal || isJalr) ? linkpc : alu_res;
+    int<32> takePc = pc + pcOff;
+    split {
+      case: (isBranch) {
+       int<32> npc = (take) ? (takePc) : (tmppc);
+      }
+      case: (isJal) {
+      	  int<32> npc = takePc;
+      }
+      case: (isJalr) {
+          int<32> npc = alu_res >> 2;
+      }
+      default: {
+      	  int<32> npc = tmppc;
+      }
+    }
+    if ((!done)) {
+        if ((isBranch && take) || isJal || isJalr) {
+    	   call cpu(npc);
+	}
+    }
+    int<32> stdata = rf2;
+    ---
+    if (writerd && (!isLoad)) {
+       block(rf[rd]);
+       rf[rd] <- rddata;
+    }
+   uint<32> tmpaddr = cast(rddata, uint<32>);
+   uint<32> memaddr = (tmpaddr >> 2);
+   uint<2> boff = cast(alu_res{1:0}, uint<2>);
+   start(dmem);
+   split {
+        case: (isLoad) {
+	   uint<32> raddr = memaddr;
+	   int<32> wdata <- dmem[raddr];
+	}
+	case: (isStore) {
+	      uint<32> waddr = memaddr;
+	      //use bottom bits of data and place in correct offset
+	      //shift by boff*8
+	      uint<5> nboff = boff ++ u0<3>;
+	      dmem[waddr, storeMask(boff, funct3)] <- (stdata << nboff);
+	      int<32> wdata <- 0<32>;
+	}
+	default: {
+	    int<32> wdata <- 0<32>;
+	}
+    }
+    end(dmem);
+    ---
+    print("PC: %h", pc << 2);
+    print("INSN: %h", insn);
+    if (writerd && isLoad) {
+       block(rf[rd]);
+       int<32> insnout = maskLoad(wdata, funct3, boff);
+       rf[rd] <- insnout;
+    } else {
+      int<32> insnout = rddata;
+    }
+    if (writerd) {
+       print("Writing %d to r%d", insnout, rd);
+    }
+    ---
+    if (writerd) {
+       release(rf[rd]);
+    }
+    if (done) {
+       output(true);
+    }
+}
+
+circuit {
+    ti = memory(int<32>, 32);
+    td = memory(int<32>, 32);
+    rf = rflock BypassRF(int<32>, 5, 8);
+    c = new cpu[rf, ti, td];
+    call c(0<32>);
+}

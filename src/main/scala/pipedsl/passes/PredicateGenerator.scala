@@ -1,3 +1,4 @@
+/* PredicateGenerator.scala */
 package pipedsl.passes
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Expr => Z3Expr}
@@ -22,7 +23,8 @@ class PredicateGenerator extends ProgPass[Z3Context] {
 
   private def run(m: ModuleDef): Unit = {
     //no need to reset any state here, at the end of a module predicates will be just true
-    annotateCommand(m.body)
+    annotateCommand(m.extendedBody())
+    m.except_blk.foreach(annotateCommand)
   }
 
   private def annotateCommand(c: Command): Unit =  {

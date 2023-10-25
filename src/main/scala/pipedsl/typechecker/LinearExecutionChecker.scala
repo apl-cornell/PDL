@@ -1,3 +1,4 @@
+/* LinearExecutionChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{
@@ -22,6 +23,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
   private val solver: Z3Solver = ctx.mkSolver()
 
   private val predicates: mutable.Stack[Z3AST] = mutable.Stack(ctx.mkFalse())
+  private val except_pred :mutable.Stack[Z3AST] = mutable.Stack(ctx.mkFalse())
   private var currentPipe: Id = null
 
   override def emptyEnv(): Environments.Environment[Id, Z3AST] = null
@@ -40,20 +42,49 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
     {
       predicates.clear()
       predicates.push(ctx.mkFalse())
+      except_pred.clear()
+      except_pred.push(ctx.mkFalse())
       currentPipe = m.name
-      checkCommand(m.body)
-      checkAllRecurse() match
-      {
-        case Z3Status.SATISFIABLE | Z3Status.UNKNOWN =>
-          throw LonelyPaths(m.name)
-        case _ =>
+      m.except_blk match {
+        case ExceptEmpty() =>
+          checkCommand(m.body)
+          checkAllRecurse() match
+          {
+            case Z3Status.SATISFIABLE | Z3Status.UNKNOWN =>
+              throw LonelyPaths(m.name)
+            case _ =>
+          }
+          env
+        case ExceptFull(args, c) =>
+          checkCommand(c)
+          checkAllRecurse() match {
+            case Z3Status.SATISFIABLE | Z3Status.UNKNOWN =>
+              throw LonelyPaths(m.name)
+            case _ => ()
+          }
+          predicates.clear()
+          predicates.push(ctx.mkFalse())
+          checkCommand(m.extendedBody())
+          checkAllRecurse() match {
+            case Z3Status.SATISFIABLE | Z3Status.UNKNOWN =>
+              throw LonelyPaths(m.name)
+            case _ => ()
+            env
+          }
+
       }
-      env
+
     }
 
   override def checkCircuit(c: Circuit, env: Environments.Environment[Id,
     Z3AST]): Environments.Environment[Id, Z3AST] = env
 
+
+  /*
+  Output  xor call.
+
+
+   */
   def checkCommand(c: Command): Unit =
     {
       c match
@@ -65,6 +96,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
           for (caseObj <- cases) checkCommand(caseObj.body)
           checkCommand(default)
         case COutput(_) => verifyRecursive(c.predicateCtx.get, c.pos)
+        case CExcept(_) => except_pred.push(c.predicateCtx.get)
         case CVerify(_, args, _, _, _) =>
           val pred = c.predicateCtx.get
           args.foreach(a => checkExpr(a, pred))
@@ -124,7 +156,8 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
    * Checks to see if all the predicates together form a tautology */
   def checkAllRecurse(): Z3Status =
     {
-      solver.add(ctx.mkNot(mkOr(ctx, predicates.toSeq: _*)))
+      val all_conds :Seq[Z3AST] = predicates.toSeq.appendedAll(except_pred)
+      solver.add(ctx.mkNot(mkOr(ctx, all_conds :_*)))
       val check = solver.check()
       solver.reset()
       check

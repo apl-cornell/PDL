@@ -1,3 +1,4 @@
+/* LockRegionInferencePass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Locks.Reserved
@@ -38,7 +39,7 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
     checkpointConds = Map()
     m.modules.foreach(p => {
       p.typ match {
-        case TMemType(_, _, _, _, _, _) =>
+        case _ :TMemType =>
           unlockedMems = unlockedMems + p.name
         case _ => ()
       }
@@ -51,7 +52,16 @@ class LockRegionInferencePass() extends ModulePass[ModuleDef] with ProgPass[Prog
     checkpointConds = checkpointConds.removedAll(haveCheckpoint(m.body))
     val (memsThatNeedChks, _) = needsCheckpoint(m.body, m.maybeSpec)
     val checks = insertChecks(ends, modIds.intersect(checkpointConds.keySet).intersect(memsThatNeedChks))
-    m.copy(body = checks._1).copyMeta(m)
+    val new_exn = if(is_excepting(m))
+      {
+        val started_exn = m.except_blk.map(insertStarts(_, modIds, Set())._1)
+        val ended_exn   = started_exn.map(insertEnds(_, modIds, Set())._1)
+        findInvalidateConds(ended_exn.get, None, (Set(), Set()))
+        checkpointConds = checkpointConds.removedAll(haveCheckpoint(m.except_blk.get))
+        val (exn_needs_checked, _) = needsCheckpoint(m.except_blk.get, m.maybeSpec)
+        ended_exn.map(insertChecks(_, modIds.intersect(checkpointConds.keySet).intersect(exn_needs_checked))._1)
+      } else ExceptEmpty()
+    m.copy(body = checks._1, except_blk = new_exn).copyMeta(m)
   }
 
   /**

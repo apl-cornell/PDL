@@ -1,3 +1,4 @@
+// lock-acquire-in-split-case.pdl
 pipe test22(input: uint<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]<c,s>(Queue)] {
     start(rf);
     split {

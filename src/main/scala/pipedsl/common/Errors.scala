@@ -1,3 +1,4 @@
+/* Errors.scala */
 package pipedsl.common
 
 import scala.util.parsing.input.{NoPosition, Position, Positional}
@@ -212,5 +213,37 @@ object Errors {
   )
   case class BadConstraintsAtCall(app :EApp) extends RuntimeException(
     withPos(s"Constraints for $app not satisfied", app.pos)
+  )
+
+  case class ReleaseInExnBlock(p :Position) extends RuntimeException(
+    withPos(s"You may not release locks in the except block!", p)
+  )
+
+  case class ReleaseWhenMaybeExcepting(p :Position) extends RuntimeException(
+    withPos(s"No no no! No releasing when you might be excepting!!", p)
+  )
+
+  case class MalformedExceptBlock(p :Position) extends RuntimeException(
+    withPos("Mistake in except block.", p)
+  )
+
+  case class IllegalThrowPlacement(p :Position) extends RuntimeException(
+    withPos("Throw not allowed here.", p)
+  )
+
+  case class MustEndBeforeCall(p :Position) extends RuntimeException(
+    withPos("Must not have any open lock regions when calling from except block", p)
+  )
+
+  case class NoCommittingWriteInBody(p :Position) extends RuntimeException(
+    withPos("No committing writes in the main body!", p)
+  )
+
+  case class NoWriteReleaseInBody(p :Position) extends RuntimeException(
+    withPos("No release writes in the main body!", p)
+  )
+
+  case class MustThrowWithExnPipe(p :Position) extends RuntimeException(
+    withPos("Must have at least one throw for a module with defined exception handler", p)
   )
 }

@@ -1,3 +1,4 @@
+/* CanonicalizePass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Syntax._
@@ -41,7 +42,9 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
         removeCEmpty(nc)
       }
 
-    override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body)).copyMeta(m)
+    override def run(m: ModuleDef): ModuleDef = m.copy(body = run(m.body),
+      commit_blk = m.commit_blk.map(run),
+      except_blk = m.except_blk.map(run)).copyMeta(m)
 
     override def run(f: FuncDef): FuncDef = f.copy(body = run(f.body)).setPos(f.pos)
 
@@ -112,6 +115,9 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case CLockEnd(_) => c
       case CLockOp(_, _, _, _, _) => c
       case CEmpty() => c
+      case CExcept(args) => val (nargs, nc) = extractCastVars(args)
+        CSeq(nc, CExcept(nargs).setPos(c.pos))
+      case CCatch(m, oc) => c
       case _: InternalCommand => c
     }
 

@@ -1,3 +1,4 @@
+/* PrettyPrinter.scala */
 package pipedsl.common
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
@@ -38,10 +39,29 @@ class PrettyPrinter(output: Option[File]) {
       printCmdToString(f.body, 2) + "\n}")
   }
 
-  def printModule(m: ModuleDef): Unit = {
+  def printModule(m :ModuleDef) : Unit =
+    if (is_excepting(m)) printExceptingModule(m)
+    else _printModule(m)
+
+  def _printModule(m: ModuleDef): Unit = {
     pline("pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
       ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
     printCmdToString(m.body, 2) + "\n}")
+  }
+
+  def printExceptingModule(m :ModuleDef) :Unit = {
+    pline("exn-pipe " + m.name.v + "(" + m.inputs.map(printParamToString).mkString(",") +
+      ")[" + m.modules.map(printParamToString).mkString(",") + "] {\n" +
+      printCmdToString(m.body, 2) + "\ncommit:\n" +
+      printCmdToString(m.commit_blk.get, 2) + "\n" +
+      printExnBlock(m.except_blk, 2) + "\n}"
+    )
+  }
+
+  def printExnBlock(block: Syntax.ExceptBlock, ident: Int): String = block match
+  {
+    case ExceptEmpty() => ""
+    case ExceptFull(args, c) => "except(" + args.map((id) => id.v).foldLeft("")((acc, elem) => acc + "," + elem) + "):\n" + printCmdToString(c, ident)
   }
 
   def printCircuit(c: Circuit): Unit = pline("circuit {\n" + printCircuitToString(c, 2) + "\n}")
@@ -108,6 +128,18 @@ class PrettyPrinter(output: Option[File]) {
         printExprToString(originalSpec) + " = update(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.ICheck(specId, value) => ins + "check(" + specId + ", " + printExprToString(value) + ");"
       case Syntax.CCheckpoint(h, m) => ins + printExprToString(h) + " <- checkpoint(" + m.v + ");"
+      case Syntax.CExcept(args) => ins + "except(" + args.map(printExprToString).foldLeft("")((acc, elem) => acc + ", " + elem) + ");"
+      case Syntax.CCheckSpec(isBlk) => ins + (if (isBlk) "spec_barrier();" else "spec_check();")
+      case Syntax.IAbort(mem) => ins + "abort(" + mem +");"
+      case Syntax.ICheckExn() => ins + "clearStgOnExn();"
+      case Syntax.ISpecClear() => ins + "spectable.clear();"
+      case Syntax.ISetGlobalExnFlag(state) => ins + "setGlobalExnFlag(" + state +");"
+      case Syntax.IReleaseLock(mem, inHandle) => ins + "release(" + mem + ");"
+      case Syntax.IReserveLock(mem, inHandle) => ins + "reserve(" + mem + ");"
+      case Syntax.ICheckLockOwned(mem, inHandle, outHandle) => ins + "block(" + mem + ");"
+      case Syntax.CInvalidate(handle, checkHandles) => ins + "invalidate(" + handle.id + ");"
+      case Syntax.CSpecCall(handle, pipe, args) => handle.id + " <- speccall " + pipe + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
+      case Syntax.CVerify(handle, args, preds, update, checkHandles) => "verify(" + handle.id + ");" //TODO: print out more info
       case _ => "TODO PRINTING COMMAND"
     }
   }
@@ -134,6 +166,7 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EApp(func, args) => func.v + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.ECall(id, name, args, isAtomic) => "call" + (if(isAtomic) "<atomic> " else " ") + id + "(" + args.map(a => printExprToString(a)).mkString(",") + ")"
     case Syntax.EVar(id) => id.v
+    case Syntax.EString(v) => s""""${v}""""
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
       case CirMem(elemTyp, addrSize, numPorts) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + "," + numPorts.toString + ")"

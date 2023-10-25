@@ -1,3 +1,4 @@
+/* BaseTypeChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Errors._
@@ -95,7 +96,16 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
-    checkCommand(m.name, m.body, bodyEnv)
+    checkCommand(m.name, m.extendedBody(), bodyEnv)
+    if(m.except_blk.isInstanceOf[ExceptFull]){
+      val exnenv = m.except_blk.args.foldLeft[Environment[Id, Type]](bodyEnv)((env, arg) => {
+        arg.typ match {
+          case Some(t: Type) => env.add(arg, t)
+          case None => env
+        }
+      })
+      m.except_blk.foreach(checkCommand(m.name, _, exnenv))
+    }
     outEnv
   }
 
@@ -391,6 +401,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           mtyp match {
             case TModType(inputs, _, _, _) =>
               if (inputs.length != args.length) {
+                print(args)
                 throw ArgLengthMismatch(c.pos, inputs.length, args.length)
               }
               if (inputs.length != preds.length) {
@@ -460,6 +471,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       })
       tenv
     case CEmpty() => tenv
+    case CExcept(arg) => arg.foreach(checkExpression(_, tenv, None)); tenv
     case _ => throw UnexpectedCommand(c)
   }
 

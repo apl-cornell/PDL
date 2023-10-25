@@ -1,0 +1,32 @@
+// exn-simple.pdl
+//Expect 5 Success, 1 Exception
+exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
+    start(acc);
+    reserve(acc);
+    end(acc);
+    ---
+    block(acc);
+    acc_val = acc[0];
+    acc[0] <- acc_val + 1;
+    call cpu(pc + 1);
+    ---
+    if(acc_val == 6)
+    {
+      throw(u0<4>);
+    }
+commit:
+    release(acc);
+    print("no exn at PC == %d! with acc_val of %d", pc, acc_val);
+except(arg :uint<4>):
+    print("exception at PC == %d! with arg: %d", pc, arg);
+    output(1);
+}
+
+
+circuit {
+   ti = memory(uint<8>, 16);
+   acc = register(uint<4>, 0);
+   locked = CheckpointQueue(acc);
+   c = new cpu[locked];
+   call c(u1<16>);
+}

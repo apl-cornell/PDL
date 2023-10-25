@@ -1,3 +1,4 @@
+/* BSVSyntax.scala */
 package pipedsl.codegen.bsv
 
 import pipedsl.codegen.Translations.Translator
@@ -62,8 +63,8 @@ object BSVSyntax {
       case TLockedMemType(mem, idsz, limpl) =>
         val lidtyp = if (idsz.isDefined) BSizedInt(unsigned = true, idsz.get) else modmap(n)
         val cidtyp = if (LockImplementation.supportsCheckpoint(limpl)) {
-          Some(if (idsz.isDefined) {
-            BSizedInt(unsigned = true, limpl.getChkIdSize(idsz.get))
+          Some(if (idsz.isDefined && limpl.getChkIdSize(idsz.get).isDefined) {
+            BSizedInt(unsigned = true, limpl.getChkIdSize(idsz.get).get)
           } else {
             lockIdToCheckId(modmap(n))
           })
@@ -108,8 +109,8 @@ object BSVSyntax {
           mtyp.tparams.find(bv => bv.name == bsints.reqIdName).get.typ
         }
         val cidtyp = if (LockImplementation.supportsCheckpoint(limpl)) {
-          Some(if (idsz.isDefined) {
-            bsints.getChkHandleType(limpl.getChkIdSize(idsz.get))
+          Some(if (idsz.isDefined && limpl.getChkIdSize(idsz.get).isDefined) {
+            bsints.getChkHandleType(limpl.getChkIdSize(idsz.get).get)
           } else bsints.getDefaultChkHandleType)
         } else { None }
         //TODO pass checkpoint ID
@@ -182,7 +183,11 @@ object BSVSyntax {
     }
 
     def toExpr(e: Expr): BExpr = e match {
-      case EInt(v, base, bits) => BIntLit(v, base, bits)
+      case EInt(v, base, bits) => bits match {
+        case -1 if v == 0 => BZero
+        case -1 if v == 1 => BAllOnes
+        case _ => BIntLit(v, base, bits)
+      } // TODO - EXN: Very ad-hoc stuff.. need Fix
       case EBool(v) => BBoolLit(v)
       case EString(v) => BStringLit(v)
       case eu@EUop(_, _) => translateUOp(eu)
@@ -311,8 +316,13 @@ object BSVSyntax {
     //TODO make these parameters passable and no just linked to the static lockimpl definition
     def getLockedModType(limpl: LockInterface): BInterface = {
       val lid = BVar("lidtyp", bsints.getLockHandleType(limpl.getLockIdSize))
-      val chkid = BVar("chkidtyp", bsints.getChkHandleType(limpl.getChkIdSize(limpl.getLockIdSize)))
-      BInterface(limpl.getModuleName(None), List(lid, chkid))
+      val chkid = limpl.getChkIdSize(limpl.getLockIdSize)
+      if (chkid.isDefined) {
+        val chktyp = BVar("chkidtyp", bsints.getChkHandleType(chkid.get))
+        BInterface(limpl.getModuleName(None), List(lid, chktyp))
+      } else {
+        BInterface(limpl.getModuleName(None), List(lid))
+      }
     }
 
 
@@ -452,7 +462,7 @@ object BSVSyntax {
   case class BStructLit(typ: BStruct, fields: Map[BVar, BExpr]) extends BExpr
   case class BStructAccess(rec: BExpr, field: BExpr) extends BExpr
   case class BVar(name: String, typ: BSVType) extends BExpr
-  case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true) extends BExpr
+  case class BBOp(op: String, lhs: BExpr, rhs: BExpr, isInfix: Boolean = true, omitBrackets: Boolean = false) extends BExpr
   case class BUOp(op: String, expr: BExpr) extends BExpr
   case class BBitExtract(expr: BExpr, start: BIndex, end: BIndex) extends BExpr
   case class BConcat(first: BExpr, rest: List[BExpr]) extends BExpr
@@ -460,6 +470,7 @@ object BSVSyntax {
   case class BMethodInvoke(mod: BExpr, method: String, args: List[BExpr]) extends BExpr
   case class BFuncCall(func: String, args: List[BExpr]) extends BExpr
   case class BValueOf(s :String) extends BExpr
+  case class BVectorAccess(name: BVar, index: BIndex) extends BExpr
 
   sealed trait BIndex
   case class BIndConst(n :Int) extends BIndex
@@ -481,6 +492,8 @@ object BSVSyntax {
   case class BModInst(lhs: BVar, rhs: BModule) extends BStatement
 
   case class BModAssign(lhs: BVar, rhs: BExpr) extends BStatement
+
+  case class BVectorAssign(lhs: BVectorAccess, rhs: BExpr) extends BStatement
 
   case class BAssign(lhs: BVar, rhs: BExpr) extends BStatement
 

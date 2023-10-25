@@ -1,3 +1,4 @@
+// generic-bht-fail.pdl
 extern BHT<T> {
        method req(pc: int<T>, skip: int<T>, take: int<T>): int<T>;
        method upd(pc: int<T>, taken: bool): ();

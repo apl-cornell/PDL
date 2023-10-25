@@ -1,3 +1,4 @@
+/* TimingTypeChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
@@ -35,18 +36,18 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
     val allAvailable = m.modules.foldLeft[Available](inputs)((av, m) => {
       av + m.name
     })
-    checkCommand(m.body, allAvailable, NoneAvailable)
+       checkCommand(m.extendedBody(), allAvailable, NoneAvailable)
+    m.except_blk match {
+      case ExceptEmpty() => ()
+      case ExceptFull(args, c) => val exceptInputs = args.foldLeft[Available](inputs)((av, p) => av + p)
+      val allAvailable = m.modules.foldLeft(exceptInputs)((av, m) => av + m.name)
+      checkCommand(c, allAvailable, NoneAvailable)
+    }
     env
   }
 
   /**
-   * TODO comment
-   * @param lhs
-   * @param rhs
-   * @param isRecv
-   * @param vars
-   * @param nextVars
-   * @return
+   * checks a receive or assign command.
    */
   private def check_recv_or_asn(lhs :Expr, rhs :Expr, isRecv :Boolean,
                                 vars: Available, nextVars: Available): (Available, Available) =
@@ -230,6 +231,9 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkExpr(exp, vars)
         (vars, nextVars)
       case Syntax.CEmpty() => (vars, nextVars)
+      case CExcept(arg) =>
+        arg.foreach(checkExpr(_, vars))
+        (vars, nextVars)
       case CPrint(args) =>
         args.foreach(a => {
           checkExpr(a, vars)
@@ -328,8 +332,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         //calling another pipe
         case None => Asynchronous
       }
-    case EVar(id) => if(!vars(id) && isRhs) {
-      throw UnavailableArgUse(e.pos, id.toString) }
+    case EVar(id) => if(!vars(id) && isRhs && !(id == is_excepting_var)) {throw UnavailableArgUse(e.pos, id.toString) }
+      //TODO - exn remove above line and fix this: throw UnavailableArgUse(e.pos, id.toString) }
       //TODO make this error message more clear about what's wrong when these are lock handle vars
       else { Combinational }
     case ECast(_, exp) => checkExpr(exp, vars, isRhs)

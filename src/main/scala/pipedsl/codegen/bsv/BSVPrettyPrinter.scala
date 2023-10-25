@@ -1,6 +1,8 @@
+/* BSVPrettyPrinter.scala */
 package pipedsl.codegen.bsv
 
 import java.io.{File, FileOutputStream, OutputStreamWriter, Writer}
+import java.math.BigInteger
 
 import pipedsl.codegen.bsv.BSVSyntax._
 import pipedsl.common.Errors.BaseError
@@ -68,7 +70,7 @@ object BSVPrettyPrinter {
     case BInteger() => "Integer"
   }
 
-  private def toIntString(base: Int, value: Int): String = base match {
+  private def toIntString(base: Int, value: Int, bits: Int): String = base match {
     case 16 => "h" + value.toHexString
     case 10 => "d" + value.toString
     case 8 => "o" + value.toOctalString
@@ -96,7 +98,7 @@ object BSVPrettyPrinter {
       "False"
     }
     case BUnsizedInt(v) => v.toString
-    case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
+    case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v, bits)
     case BStringLit(v) => "\"" + v + "\""
     case BStructLit(typ, fields) =>
       val fieldStr = fields.keys.map(k => {
@@ -110,8 +112,9 @@ object BSVPrettyPrinter {
     case BTruncate(e) => mkExprString("truncate(", toBSVExprStr(e), ")")
     case BStructAccess(rec, field) => toBSVExprStr(rec) + "." + toBSVExprStr(field)
     case BVar(name, _) => name
-    case BBOp(op, lhs, rhs, isInfix) if isInfix => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
-    case BBOp(op, lhs, rhs, isInfix) if !isInfix => mkExprString( op + "(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix, omitBrackets) if isInfix && !omitBrackets => mkExprString("(", toBSVExprStr(lhs), op, toBSVExprStr(rhs), ")")
+    case BBOp(op, lhs, rhs, isInfix, omitBrackets) if isInfix && omitBrackets => mkExprString(toBSVExprStr(lhs), op, toBSVExprStr(rhs))
+    case BBOp(op, lhs, rhs, isInfix, _) if !isInfix => mkExprString( op + "(", toBSVExprStr(lhs), ",", toBSVExprStr(rhs), ")")
     case BUOp(op, expr) => mkExprString("(", op, toBSVExprStr(expr), ")")
     //TODO incorporate bit types into the typesystem properly
     //and then remove the custom pack/unpack operations
@@ -127,6 +130,7 @@ object BSVPrettyPrinter {
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
     case BMethodInvoke(mod, method, args) =>
+      println(mod, method, args)
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       val argStringFull = if (argstring.isEmpty) "" else "(" + argstring + ")"
       toBSVExprStr(mod) + "." + method + argStringFull
@@ -139,6 +143,7 @@ object BSVPrettyPrinter {
     case BAllOnes => "'1"
     case BTime => "$time()"
     case BValueOf(s) => s"valueOf($s)"
+    case BVectorAccess(name, index) => toBSVExprStr(name) + "[" + toBSVIndString(index) + "]"
   }
 
   def getFilePrinter(name: File): BSVPretyPrinterImpl = {
@@ -206,6 +211,8 @@ object BSVPrettyPrinter {
         w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "<-", toBSVExprStr(rhs)))
       case BModAssign(lhs, rhs) =>
         w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
+      case BVectorAssign(lhs, rhs) =>
+        w.write(mkStatementString(toBSVExprStr(lhs), "<=", toBSVExprStr(rhs)))
       case BAssign(lhs, rhs) =>
         w.write(mkStatementString(getLetString(stmt) + toBSVExprStr(lhs), "=", toBSVExprStr(rhs)))
       case BIntAssign(lhs, rhs) =>
@@ -249,7 +256,7 @@ object BSVPrettyPrinter {
       decIndent()
       w.write(mkIndentedExpr("endrule\n"))
     }
-
+    
     def printBSVMethodSig(sig: BMethodSig, cond: Option[BExpr]): Unit = {
       val mtypstr = sig.typ match {
         case Action => "Action"

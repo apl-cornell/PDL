@@ -1,3 +1,4 @@
+// histogram_bram2.pdl
 /*
 n = 128
 void histogram ( int feature [] , float weight [] , float hist [] , int n ) {

@@ -1,3 +1,4 @@
+/* SpeculationChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
@@ -126,9 +127,10 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         //TODO error that actually says something about checkpoints
         throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
       }
-      if (op == Released && (t.isEmpty || t.get == LockWrite) && s != NonSpeculative) {
-        throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-      }
+// TODO - Exn: Fix this check
+//      if (op == Released && (t.isEmpty || t.get == LockWrite) && s != NonSpeculative) {
+//        throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
+//      }
       //shouldn't do any potentially speculative lock ops w/o checking first
       if (s == Unknown) {
         throw IllegalSpeculativeOperation(c.pos, Speculative.toString)

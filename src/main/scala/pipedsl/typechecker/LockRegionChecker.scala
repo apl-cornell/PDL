@@ -1,3 +1,4 @@
+/* LockRegionChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Errors.{IllegalLockAcquisition, InvalidLockState, UnexpectedCase}
@@ -14,6 +15,7 @@ import pipedsl.typechecker.TypeChecker.TypeChecks
  * - Checks: That all lock "reserve" statements occur inside the appropriate lock region.
  * - Checks: That all lock regions are well formed according to the above.
  */
+
 object LockRegionChecker extends TypeChecks[Id, LockState] {
 
   override def emptyEnv(): Environment[Id, LockState] = Environments.EmptyLockEnv
@@ -33,11 +35,17 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       case _ => throw UnexpectedCase(m.pos)
     })
 
-    val finalStates: Environment[Id, LockState] = checkLockRegions(m.body, nenv)
+    val finalStates: Environment[Id, LockState] = checkLockRegions(m.extendedBody(), nenv)
     finalStates.getMappedKeys().foreach(m => finalStates(m) match {
       case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
       case _ => ()
     })
+
+    m.except_blk.foreach(checkLockRegions(_, nenv).getMappedKeys().foreach(m => finalStates(m) match {
+      case Locks.Reserved | Locks.Acquired => throw InvalidLockState(m.pos, m.v, finalStates(m), Locks.Released)
+      case _ => ()
+    }))
+
     env //no change to lock map after checking module
   }
 
@@ -91,7 +99,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
         throw InvalidLockState(c.pos, lock.v, env(lock), Acquired)
       }
       env
-    //can only reserve locks insisde of the relevant lock region
+    //can only reserve locks inside of the relevant lock region
     //other lock ops can be outside of this pass
     case CLockOp(mem, op, _, _, _) if op == Reserved =>
       if (env(mem.id) != Acquired) {
@@ -101,6 +109,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case CAssign(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case CRecv(lhs, rhs) => checkMemAccess(lhs, env); checkMemAccess(rhs, env); env
     case Syntax.CEmpty() => env
+    case CExcept(args) => args.foreach(a => checkMemAccess(a, env)); env
     case _ => env
   }
 
@@ -137,7 +146,6 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
     case ECast(_, exp) => checkMemAccess(exp, env)
     case _ => ()
   }
-
 
   override def checkCircuit(c: Circuit, env: Environment[Id, LockState]): Environment[Id, LockState] = env
 }

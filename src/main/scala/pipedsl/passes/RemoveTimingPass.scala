@@ -1,3 +1,4 @@
+/* RemoveTimingPass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Syntax._
@@ -13,7 +14,7 @@ object RemoveTimingPass extends CommandPass[Command] with ModulePass[ModuleDef] 
   }
 
   override def run(m: ModuleDef): ModuleDef = {
-    m.copy(body = run(m.body)).setPos(m.pos)
+    m.copy(body = run(m.body), commit_blk = None, except_blk = ExceptEmpty()).setPos(m.pos)
   }
 
   override def run(c: Command): Command = {

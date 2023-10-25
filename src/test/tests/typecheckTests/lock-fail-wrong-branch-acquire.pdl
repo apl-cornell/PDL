@@ -1,3 +1,4 @@
+// lock-fail-wrong-branch-acquire.pdl
 pipe test18(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
     bool a = true;
     bool b = false;

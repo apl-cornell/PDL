@@ -1,3 +1,4 @@
+/* MarkNonRecursiveModulePass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Syntax._
@@ -25,7 +26,9 @@ object MarkNonRecursiveModulePass extends ModulePass[ModuleDef] with ProgPass[Pr
 
   override def run(m: ModuleDef): ModuleDef = {
     val (isRec, isSpec) = hasRecursiveCall(m.body, m.name)
-    m.isRecursive = isRec
+    m.isRecursive = isRec || (if(is_excepting(m))
+      hasRecursiveCall(m.commit_blk.get, m.name)._1 ||  hasRecursiveCall(m.except_blk.get, m.name)._1
+      else false)
     m.maybeSpec = isSpec
     m
   }

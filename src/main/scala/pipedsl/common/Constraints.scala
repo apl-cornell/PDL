@@ -1,3 +1,4 @@
+/* Constraints.scala */
 package pipedsl.common
 
 import pipedsl.common.Syntax.{EIndAdd, EIndConst, EIndSub, EIndex, Id, TBitWidth, TNamedType}

@@ -1,3 +1,4 @@
+// PrioFifo.bsv
 package PrioFifo;
 
 import FIFOF :: *;
@@ -11,7 +12,7 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    FIFOF#(dtyp) f <- mkFIFOF();
    //allow multiple writes in the same cycle
    RWire#(dtyp) enq_data <- mkRWireSBR();
-   
+
    (*fire_when_enabled*)
    rule doEnq (enq_data.wget() matches tagged Valid.d);
       f.enq(d);
@@ -36,7 +37,7 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    method Bool notEmpty();
       return f.notEmpty();
    endmethod
-   
+
    method Action clear();
       f.clear();
    endmethod

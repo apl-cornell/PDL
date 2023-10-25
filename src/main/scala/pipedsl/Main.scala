@@ -1,9 +1,9 @@
+/* Main.scala */
 package pipedsl
 
 import java.io.{File, PrintWriter}
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import com.typesafe.scalalogging.Logger
-
 import org.apache.commons.io.FilenameUtils
 import pipedsl.codegen.bsv.{BSVPrettyPrinter, BluespecInterfaces}
 import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
@@ -13,7 +13,6 @@ import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, Prog
 import pipedsl.passes._
 import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
 import pipedsl.typechecker._
-
 
 object Main {
   val logger: Logger = Logger("main")
@@ -72,8 +71,10 @@ object Main {
     val outputFile = new File(Paths.get(outDir.getPath, outputName).toString)
 
     val prog = parse(debug = false, printOutput = false, inputFile, outDir, rfLockImpl = rfLockImpl)
-    val pinfo = new ProgInfo(prog)
+
     try {
+      val pinfo = new ProgInfo(prog)
+
       MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
       val inferredProg = new LockRegionInferencePass().run(prog)
@@ -90,28 +91,29 @@ object Main {
       pinfo.addLockInfo(lockWellformedChecker.getModLockGranularityMap)
       val lockOperationTypeChecker = new LockOperationTypeChecker(lockWellformedChecker.getModLockGranularityMap)
       lockOperationTypeChecker.check(recvProg)
-
       val portChecker = new PortChecker(port_warn)
       portChecker.check(recvProg, None)
-
       val predicateGenerator = new PredicateGenerator()
       val ctx = predicateGenerator.run(recvProg)
       val lockChecker = new LockConstraintChecker(locks, lockWellformedChecker.getModLockGranularityMap, ctx)
       lockChecker.check(recvProg, None)
       LockReleaseChecker.check(recvProg)
+      FinalblocksConstraintChecker.check(recvProg)
       val linChecker = new LinearExecutionChecker(ctx)
       linChecker.check(recvProg, None)
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
       val lock_prog = LockOpTranslationPass.run(recvProg)
       TimingTypeChecker.check(lock_prog, Some(basetypes))
+      val exnTranslationPass = new ExnTranslationPass()
+      val exnprog = exnTranslationPass.run(lock_prog)
       if (printOutput) {
         val writer = new PrintWriter(outputFile)
         writer.write("Passed")
         writer.close()
       }
       ctx.close()
-      (lock_prog, pinfo)
+      (exnprog, pinfo)
     } catch {
       case t: Throwable => {
         //If fails, print the error to the file

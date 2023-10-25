@@ -1,3 +1,4 @@
+/* Utilities.scala */
 package pipedsl.common
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
@@ -83,6 +84,8 @@ object Utilities {
     case ICondCommand(cond, cs) => getUsedVars(cond) ++ cs.foldLeft(Set[Id]())((s, c) => getAllVarNames(c) ++ s)
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty() => Set()
+    case CExcept(args) => args.foldLeft(Set[Id]())((set, arg) => set.union(getUsedVars(arg)))
+    case CCatch(m, c) => Set()
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -177,8 +180,13 @@ object Utilities {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data, inHandle, _, _) =>
-      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
+    case IMemWrite(_, addr, data, writeMask, inHandle, _, _) =>
+      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set())) ++ (
+        if (writeMask.isDefined) {
+        getUsedVars(writeMask.get)
+      } else {
+        Set()
+      })
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {
@@ -196,6 +204,11 @@ object Utilities {
       case None => Set()
     })
     case ILockNoOp(_) => Set()
+    case ICheckExn() => Set()
+    case ISpecClear() => Set()
+    case ISetGlobalExnFlag(_) => Set()
+    case IAbort(_) => Set()
+    case IFifoClear() => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
@@ -209,6 +222,7 @@ object Utilities {
     case CInvalidate(handle, cHandles) => Set(handle.id) ++ cHandles.map(v => v.id)
     case CCheckSpec(_) => Set()
     case CEmpty() => Set()
+    case CCatch(m, c) => Set()
   }
 
   /**
@@ -680,10 +694,11 @@ object Utilities {
   def typeMapFunc(fun :FuncDef, f_opt :Option[Type] => FOption[Type]) :FuncDef =
     fun.copy(body = typeMapCmd(fun.body, f_opt))
   def typeMapModule(mod :ModuleDef, f_opt :Option[Type] => FOption[Type]) :ModuleDef =
-    mod.copy(body = typeMapCmd(mod.body, f_opt),
-      modules = mod.modules.map(p =>
-        p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
-      )).copyMeta(mod)
+    mod.copy(modules = mod.modules.map(p =>
+                p.copy(typ = f_opt(Some(p.typ)).getOrElse(p.typ))
+              ), body = typeMapCmd(mod.body, f_opt),
+      commit_blk = mod.commit_blk.map(typeMapCmd(_,  f_opt)),
+      except_blk = mod.except_blk.map(typeMapCmd(_, f_opt))).copyMeta(mod)
 
   def typeMap(p: Prog, f: Type => Option[Type]) :Unit=
     {

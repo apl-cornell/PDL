@@ -1,9 +1,12 @@
+/* LockImplementation.scala */
 package pipedsl.common
 
+import pipedsl.codegen.bsv.BSVSyntax.BPack
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Latency.{Combinational, Latency, Sequential}
 import pipedsl.common.Syntax._
+import pipedsl.codegen.bsv.BluespecInterfaces
 
 
 object LockImplementation {
@@ -30,6 +33,7 @@ object LockImplementation {
   private val dataType = TNamedType(Id("data"))
   private val handleType = TNamedType(Id("handle"))
   private val checkType = TNamedType(Id("checkHandle"))
+  private val maskType = TNamedType(Id("wmask"))
   //Lock Object Method Names
   private val canResName = "canRes"
   private val canResReadName = canResName + "_r"
@@ -61,6 +65,7 @@ object LockImplementation {
 
   private val checkpointName = "checkpoint"
   private val rollbackName = "rollback"
+  private val abortName = "abort"
 
   private def toPortString(port: Option[Int]): String = port match {
     case Some(value) => value.toString
@@ -147,6 +152,10 @@ object LockImplementation {
     l.getType.methods.get(Id(rollbackName))
   }
 
+  def getAbort(l: LockInterface): Option[(TFun, Latency)] = {
+    l.getType.methods.get(Id(abortName))
+  }
+
   //-------Methods for translation info--------------------------\\
   private val lockIntStr = "lock."
   def getCanReserveInfo(l: IReserveLock): Option[MethodInfo] = {
@@ -229,10 +238,10 @@ object LockImplementation {
     }
   }
 
-  def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
+  def getWriteInfo(mem: Id, addr: Expr, inHandle: Option[Expr], data: Expr, writeMask: Option[Expr], portNum: Option[Int], isAtomic: Boolean): Option[MethodInfo] = {
     val interface = getLockImplFromMemTyp(mem)
     val (funTyp, latency) = getAccess(interface, Some(LockWrite), isAtomic).get
-    val args = getArgs(funTyp, Some(addr), inHandle, Some(data))
+    val args = getArgs(funTyp, Some(addr), inHandle, Some(data), writeMask)
     val methodName = getAccessName(Some(LockWrite), isAtomic).v + toPortString(portNum)
     Some(MethodInfo(methodName, latency != Combinational, args))
   }
@@ -279,6 +288,17 @@ object LockImplementation {
     }
   }
 
+  def getAbortInfo(mem: Id): Option[MethodInfo] = {
+    val interface = getLockImplFromMemTyp(mem)
+    println(interface)
+    getAbort(interface) match {
+      case Some(_) =>
+        val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + abortName
+        Some(MethodInfo(methodName, doesModify = true, List()))
+      case None => None
+    }
+  }
+
   private def extractHandle(h: Expr): Expr = {
     val e = EFromMaybe(h).setPos(h.pos)
     e.typ = h.typ.get.matchOrError(h.pos, "Lock Handle", "Maybe type") {
@@ -287,13 +307,14 @@ object LockImplementation {
     e
   }
   private def getArgs(fun: TFun, addr: Option[Expr] = None,
-                      handle: Option[Expr] = None, data: Option[Expr] = None): List[Expr] = {
+                      handle: Option[Expr] = None, data: Option[Expr] = None, writeMask: Option[Expr] = None): List[Expr] = {
     fun.args.foldLeft(List[Expr]())((l, argTyp) => {
       argTyp match {
         //TODO throw better exception if missing arg
         case t: TNamedType if t == dataType => l :+ data.get
         case t: TNamedType if t == addrType => l :+ addr.get
         case t: TNamedType if t == handleType => l :+ extractHandle(handle.get)
+        case t: TNamedType if t == maskType && writeMask.isDefined => l :+ writeMask.get
         case _ => l //should be unreachable TODO throw badly formatted type
       }
     })
@@ -413,8 +434,10 @@ object LockImplementation {
     //LSQ doesn't need a separate lock id so use this to differentiate
     def useUniqueLockId(): Boolean = true
 
+    def canSilentWrite(): Boolean = false
+
     def getLockIdSize: Int = defaultLockHandleSize
-    def getChkIdSize(lidSize: Int): Int = defaultChkHandleSize
+    def getChkIdSize(lidSize: Int): Option[Int] = None
 
     def getTypeArgs(szParams: List[Int]): List[Int] = List()
 
@@ -443,7 +466,7 @@ object LockImplementation {
    */
   private class LockQueue extends LockInterface {
 
-    private val queueLockName = Id("QueueLock")
+    protected val queueLockName = Id("QueueLock")
     override def getType: TObject = TObject(queueLockName, List(),
       Map(
         Id(resName)    -> (TFun(List(), handleType), Sequential),
@@ -469,14 +492,17 @@ object LockImplementation {
 
   private class CheckpointLockQueue extends LockQueue {
 
-    protected val queueLockName = Id("CheckpointQueueLock")
+    override protected val queueLockName = Id("CheckpointQueueLock")
 
     override def getType: TObject = {
       val parent = super.getType
       TObject(queueLockName, List(),
         parent.methods ++ Map(
+          Id(writeName) -> (TFun(List(addrType, dataType, maskType), TVoid()), Combinational),
+          Id(atomicAccessName) -> (TFun(List(addrType), TVoid()), Combinational),
           Id(checkpointName) -> (TFun(List(), checkType), Sequential),
-          Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+          Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential),
+          Id(abortName) -> (TFun(List(), TVoid()), Sequential)
         )
       )
     }
@@ -489,12 +515,13 @@ object LockImplementation {
 
     override def getModInstArgs(m: TMemType, szParams: List[Int]): List[Int] = List()
 
+    override def canSilentWrite(): Boolean = true
     //Checkpoint id must equal the lock id size
-    override def getChkIdSize(lidSize: Int): Int = lidSize
+    override def getChkIdSize(lidSize: Int): Option[Int] = Some(lidSize)
   }
 
   //This class should only be used to mediate calls to PDL pipelines
-  private class ModLock extends CheckpointLockQueue {
+  private class ModLock extends LockQueue {
 
     override def getModuleName(m: Option[TMemType]): String = queueLockName.v
     override def getModuleName(m: TMemType): String = queueLockName.v
@@ -562,6 +589,7 @@ object LockImplementation {
     override def shortName: String = "BypassQueue"
 
     override def getModuleName(m: TMemType): String = "BypassLockCombMem"
+
   }
 
   /**
@@ -609,7 +637,7 @@ object LockImplementation {
     override def getModuleName(m: TMemType): String = "CheckpointBypassRF"
 
     //Checkpoint id must equal the lock id size
-    override def getChkIdSize(lidSize: Int): Int = lidSize
+    override def getChkIdSize(lidSize: Int): Option[Int] = Some(lidSize)
   }
 
   /**
@@ -651,7 +679,8 @@ object LockImplementation {
       val parent = super.getType
       TObject(Id("CheckpointRF"), List(), parent.methods ++ Map(
         Id(checkpointName) -> (TFun(List(), checkType), Sequential),
-        Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential)
+        Id(rollbackName) -> (TFun(List(checkType), TVoid()), Sequential),
+        Id(abortName) -> (TFun(List(), TVoid()), Sequential)
       ))
     }
     //TODO make more parameterizable
@@ -662,6 +691,8 @@ object LockImplementation {
 
     override  def shortName: String = "CheckpointRF"
     override def getModuleName(m: TMemType): String = "CheckpointRF"
+
+    override def getChkIdSize(lidSize: Int): Option[Int] = Some(defaultChkHandleSize)
   }
 
   private class ForwardingRegfile extends RenameRegfile {

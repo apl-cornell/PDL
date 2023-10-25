@@ -1,3 +1,4 @@
+// risc-pipe.pdl
 def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
     uint<32> mag1 = cast(mag(arg1), uint<32>);
     uint<32> mag2 = cast(mag(arg2), uint<32>);

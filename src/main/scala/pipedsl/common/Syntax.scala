@@ -1,3 +1,4 @@
+/* Syntax.scala */
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
@@ -38,6 +39,9 @@ object Syntax {
     }
     sealed trait SpeculativeAnnotation {
       var maybeSpec: Boolean = false
+    }
+    sealed trait ExceptionAnnotation {
+      var isExcepting: Boolean = false
     }
     sealed trait LockInfoAnnotation {
       var memOpType: Option[LockType] = None
@@ -643,10 +647,16 @@ object Syntax {
   }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
-
+  case class CExcept(args: List[Expr]) extends Command
+  case class CCatch(mod: Id, onCatch: Command) extends Command
 
   sealed trait InternalCommand extends Command
 
+  case class IAbort(mem: Id) extends InternalCommand
+  case class IFifoClear() extends InternalCommand
+  case class ICheckExn() extends InternalCommand
+  case class ISpecClear() extends InternalCommand
+  case class ISetGlobalExnFlag(state: Boolean) extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
@@ -660,7 +670,7 @@ object Syntax {
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately but don't send a response
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar,
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar, writeMask: Option[Expr],
                        inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
@@ -688,27 +698,72 @@ object Syntax {
                       lat :Latency
                       ) extends Definition
 
-  case class ModuleDef(
-    name: Id,
-    inputs: List[Param],
-    modules: List[Param],
-    ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+  sealed trait ExceptBlock extends Positional with HasCopyMeta
+  {
+    def map(f : Command => Command) : ExceptBlock
+    def foreach(f : Command => Unit) :Unit
+    def get :Command
+    def args : List[Id]
+    def copyMeta(other :ExceptBlock) = this.setPos(other.pos)
+  }
+
+
+  case class ExceptEmpty() extends ExceptBlock
+  {
+    override def map(f: Command => Command): ExceptBlock = this
+    override def foreach(f: Command => Unit): Unit = ()
+    override def args : List[Id] = throw new NoSuchElementException("EmptyExcept")
+    override def get :Command = throw new NoSuchElementException("EmptyExcept")
+  }
+  case class ExceptFull(exn_args: List[Id], c: Command) extends ExceptBlock
+    {
+      override def map(f: Command => Command): ExceptBlock = ExceptFull(args, f(c)).copyMeta(this)
+      override def foreach(f: Command => Unit): Unit = f(c)
+      override def args : List[Id] = exn_args
+      override def get :Command = c
+    }
+
+
+  case class ModuleDef(name: Id, inputs: List[Param],
+                       modules: List[Param],
+                       ret: Option[Type],
+                       body: Command,
+                       commit_blk: Option[Command],
+                       except_blk: ExceptBlock)
+    extends Definition with RecursiveAnnotation with SpeculativeAnnotation with ExceptionAnnotation with HasCopyMeta
     {
       override val copyMeta: HasCopyMeta => ModuleDef =
         {
           case from :ModuleDef =>
           maybeSpec = from.maybeSpec
+          isExcepting = from.isExcepting
           isRecursive = from.isRecursive
           pos = from.pos
           this
           case _ => this
         }
+
+      def command_map(f : Command => Command) :ModuleDef = copy(body = f(body),
+        commit_blk = commit_blk.map(f), except_blk = except_blk.map(f))
+
+      def extendedBody(): Command = commit_blk match {
+        case None => body
+        case Some(c) => CSeq(body, c)
+      }
     }
+
+  def is_excepting(m :ModuleDef) :Boolean = m.except_blk match
+  {
+    case ExceptEmpty() => false
+    case _ :ExceptFull => true
+  }
 
   case class Param(name: Id, typ: Type) extends Positional
 
   case class ExternDef(name: Id, typParams: List[Type], methods: List[MethodDef]) extends Definition with TypeAnnotation
+
+  val is_excepting_var: Id =
+    Id("__excepting").setType(TBool())
 
   case class Prog(exts: List[ExternDef],
     fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional

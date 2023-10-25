@@ -1,0 +1,24 @@
+// exn-no-throw-normal.pdl
+pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(Queue), oth :uint<4>[0]<c,s>(Queue)] :uint<4> {
+    reserve(acc);
+    ---
+    block(acc);
+    acc_val = acc[];
+    acc[] <- acc_val + 1;
+    if(acc_val + 1 == 13)
+    {
+      except(0);
+      output(1);
+    } else
+    {
+      call cpu(pc + 1);
+    }
+}
+
+
+circuit {
+   accr = register(uint<4>);
+   acc = Queue(accr);
+   c = new cpu[acc, acc];
+   call c(u0<16>);
+}

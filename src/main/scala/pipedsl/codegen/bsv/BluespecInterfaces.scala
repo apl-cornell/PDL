@@ -1,3 +1,4 @@
+/* BluespecInterfaces.scala */
 package pipedsl.codegen.bsv
 
 import BSVSyntax._
@@ -91,12 +92,17 @@ class BluespecInterfaces() {
   private val regModuleName = "mkReg"
   private val regType = "Reg"
 
+  private val ehrType = "Ehr"
+  private val ehrModuleName = "mkEhr"
+
   private val fifoModuleName = "mkFIFOF"
   private val fifoNBModuleName = "mkNBFIFOF"
   private val fifoType = "FIFOF"
   private val fifoDequeuMethodName = "deq"
   private val fifoEnqueueMethodName = "enq"
   private val fifoFirstMethodName = "first"
+
+  private val fifoStgModuleName = "mkFIFOF"
 
   private val lockHandleName = "LockId"
   private val chkpointHandleName = "LockId"
@@ -224,6 +230,7 @@ class BluespecInterfaces() {
   private val memAsyncReqName = "req"
   private val memAsyncRespName = "resp"
   private val memAsyncCheckName = "checkRespId"
+  private val memAsyncClearName = "clear"
 
   //TODO refactor to reuse code better
   def toMask(isWrite: Boolean, m: Option[BExpr]): BExpr = {
@@ -275,6 +282,14 @@ class BluespecInterfaces() {
     BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncRespName + portString, List(handle))
   }
 
+  def getMemClear(mem: BVar, isAsync: Boolean, isLocked: Boolean): Option[BMethodInvoke] = {
+    if (isAsync) {
+      Some(BMethodInvoke(mem, (if (isLocked) memAsync else "") + memAsyncClearName, List()))
+    } else {
+      None
+    }
+  }
+
   /**
    * Uses the configured fifo interface type and the provided
    * BSV type to make a paramterized fifo type.
@@ -285,11 +300,15 @@ class BluespecInterfaces() {
   def getFifoType(typ: BSVType): BInterface = {
     BInterface(fifoType, List(BVar("elemtyp", typ)))
   }
+  def getStgFifoType(typ: BSVType): BInterface = {
+    BInterface(fifoType, List(BVar("elemtyp", typ)))
+  }
   def getOutputQType(ttyp: BSVType, dtyp: BSVType): BInterface = {
     BInterface("OutputQ", List(BVar("tagtyp", ttyp), BVar("datatyp", dtyp)));
   }
   def getFifo: BModule = BModule(fifoModuleName, List())
   def getNBFifo: BModule = BModule(fifoNBModuleName, List())
+  def getStgFifo: BModule = BModule(fifoStgModuleName, List())
   def getBypassFifo: BModule = BModule("mkBypassFIFOF", List())
   def getOutputQ(init: BExpr): BModule = BModule("mkOutputFIFOF", List(init))
   def getFifoDeq(f: BVar): BMethodInvoke = {
@@ -307,6 +326,9 @@ class BluespecInterfaces() {
   def getOutCanRead(q: BVar, tag: BExpr): BMethodInvoke = {
     BMethodInvoke(q, "canRead", List(tag));
   }
+  def getFifoClear(f: BVar) : BMethodInvoke = {
+    BMethodInvoke(f, "clear", List())
+  }
 
   private val specHandleName = "SpecId"
   private val defaultSpecHandleSize = 4
@@ -314,6 +336,7 @@ class BluespecInterfaces() {
   private val specModuleType = "SpecTable"
   private val specAllocName = "alloc"
   private val specFreeName = "free"
+  private val specClearName = "clear"
   private val specCheckName = "check"
   private val specValidateName = "validate"
   private val specInvalidateName = "invalidate"
@@ -335,6 +358,10 @@ class BluespecInterfaces() {
 
   def getSpecFree(st: BVar, h: BExpr): BExpr = {
     BMethodInvoke(st, specFreeName, List(h))
+  }
+
+  def getSpecClear(st: BVar): BExpr = {
+    BMethodInvoke(st, specClearName, List());
   }
 
   def getSpecCheck(st: BVar, h: BExpr, order: Int): BExpr = {
@@ -363,6 +390,13 @@ class BluespecInterfaces() {
     BModule(regModuleName, List(initVal))
   }
 
+  def getEhrType(port_num: Int, typ: BSVType): BInterface = {
+    BInterface(ehrType, List(BVar("_unused_", BNumericType(port_num)), BVar("elemtyp", typ)))
+  }
+
+  def getEhr(initVal: BExpr): BModule = {
+    BModule(ehrModuleName, List(initVal))
+  }
 
   def defineInterface(intName: String, inputs: List[BVar],
     handleTyp: BSVType, retTyp: Option[BSVType]): BInterfaceDef = {
