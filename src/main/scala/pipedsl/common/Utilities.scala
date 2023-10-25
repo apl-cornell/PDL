@@ -180,8 +180,13 @@ object Utilities {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data, inHandle, _, _) =>
-      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
+    case IMemWrite(_, addr, data, writeMask, inHandle, _, _) =>
+      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set())) ++ (
+        if (writeMask.isDefined) {
+        getUsedVars(writeMask.get)
+      } else {
+        Set()
+      })
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {

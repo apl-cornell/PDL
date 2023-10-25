@@ -717,7 +717,7 @@ object BluespecGeneration {
           } else {
             l
           }
-        case im@IMemWrite(mem, addr, data, _, _, isAtomic) if isAtomic =>
+        case im@IMemWrite(mem, addr, data, writeMask, _, _, isAtomic) if isAtomic =>
           val methodInfo = LockImplementation.getCanAtomicWrite(mem, addr, data, im.portNum)
           if (methodInfo.isDefined) {
             l :+ translateMethod(getLockName(mem), methodInfo.get)
@@ -1058,7 +1058,7 @@ object BluespecGeneration {
     private def getCombinationalDeclaration(cmd: Command): Option[BDecl] = cmd match {
       case CAssign(lhs, _) => Some(BDecl(translator.toVar(lhs), None))
       case IMemSend(_, _, _, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
-      case IMemWrite(_, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
+      case IMemWrite(_, _, _, _, _, outH, _) if outH.isDefined => Some(BDecl(translator.toVar(outH.get), None))
       case IMemRecv(_, _, data) => data match {
         case Some(v) => Some(BDecl(translator.toVar(v), None))
         case None => None
@@ -1104,7 +1104,7 @@ object BluespecGeneration {
       case CExpr(exp) => Some(BExprStmt(translator.toExpr(exp)))
       case IMemSend(_, _, _, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
         Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
-      case IMemWrite(_, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
+      case IMemWrite(_, _, _, _, inH, outH, _) if inH.isDefined && outH.isDefined =>
         Some(BAssign(translator.toVar(outH.get), translator.toExpr(inH.get)))
       case IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) => data match {
         case Some(v) => Some(BAssign(translator.toVar(v),
@@ -1253,7 +1253,7 @@ object BluespecGeneration {
       //This is an effectful op b/c is modifies the mem queue its reading from
       case IMemRecv(mem: Id, handle: EVar, _: Option[EVar]) =>
         Some(BExprStmt(bsInts.getMemResp(modParams(mem), translator.toVar(handle), cmd.portNum, isLockedMemory(mem))))
-      case IMemWrite(mem, addr, data, lHandle, _, isAtomic) =>
+      case IMemWrite(mem, addr, data, writeMask, lHandle, _, isAtomic) =>
         val portNum = mem.typ.get match {
           case memType: TLockedMemType => if (memType.limpl.usesWritePortNum) cmd.portNum else None
           case _ => None //In the future we may allow unlocked mems with port annotations
@@ -1261,7 +1261,7 @@ object BluespecGeneration {
         Some(BExprStmt(
           if (isLockedMemory(mem)) {
             //ask lock for its translation
-            translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, portNum, isAtomic).get)
+            translateMethod(modParams(mem), LockImplementation.getWriteInfo(mem, addr, lHandle, data, writeMask, portNum, isAtomic).get)
           } else {
             //use unlocked translation
             bsInts.getUnlockedCombWrite(modParams(mem), translator.toExpr(addr), translator.toExpr(data), portNum)

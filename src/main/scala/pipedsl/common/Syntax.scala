@@ -670,7 +670,7 @@ object Syntax {
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately but don't send a response
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar,
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar, writeMask: Option[Expr],
                        inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation

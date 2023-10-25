@@ -183,7 +183,11 @@ object BSVSyntax {
     }
 
     def toExpr(e: Expr): BExpr = e match {
-      case EInt(v, base, bits) => BIntLit(v, base, bits)
+      case EInt(v, base, bits) => bits match {
+        case -1 if v == 0 => BZero
+        case -1 if v == 1 => BAllOnes
+        case _ => BIntLit(v, base, bits)
+      } // TODO - EXN: Very ad-hoc stuff.. need Fix
       case EBool(v) => BBoolLit(v)
       case EString(v) => BStringLit(v)
       case eu@EUop(_, _) => translateUOp(eu)

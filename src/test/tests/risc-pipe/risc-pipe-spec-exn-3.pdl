@@ -32,7 +32,7 @@ def alu(arg1: int<32>, arg2: int<32>, op: uint<3>, flip: bool): int<32> {
     if (op == u1<3>) { //001 == SLL
         return arg1 << shamt;
     } else {
-    if (op == u2<3>) { //010 == SLT 
+    if (op == u2<3>) { //010 == SLT
         return (arg1 < arg2) ? 1<32> : 0<32>;
     } else {
     if (op == u3<3>) { //011 == SLTU
@@ -55,7 +55,7 @@ def alu(arg1: int<32>, arg2: int<32>, op: uint<3>, flip: bool): int<32> {
     } else { //111 == AND
         return arg1 & arg2;
     }}}}}}}
-    
+
 }
 
 //true if taking branch
@@ -141,7 +141,7 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>(CheckpointQueue), div: multi_stg_div, bht: BHT]: bool {
+exn-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT, csrf: int<32>[3]<c,s>]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
@@ -181,6 +181,9 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
     bool isMDiv = (funct7 == u1<7>) && isOp;
     bool isDiv = isMDiv && (funct3 >= u4<3>);
     bool isMul = isMDiv && (funct3 < u4<3>);
+    bool isSystem = opcode == 0b1110011<7>;
+    bool isEcall = isSystem && (immI == 0<32>);
+    bool isMret = isSystem && (funct7 == u24<7>) && (rs2 == u2<5>);
     bool needrs1 = !isJal;
     bool needrs2 = isOp || isBranch || isStore || isJalr;
     bool writerd = (rd != u0<5>) && (isOp || isOpImm || isLoad || isJal || isJalr || isLui || isAui);
@@ -196,6 +199,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
 	   s2 <- s;
 	   invalidate(s);
     }}} else { s2 <- s; invalidate(s); }
+    if (isEcall){
+       throw(0, u8<4>);
+    }
+    if (isMret){
+       throw(0, u3<4>);
+    }
     start(rf);
     if (!done && (notBranch || isBranch)) {  checkpoint(rf); }
     if (needrs1) {
@@ -224,13 +233,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
     } else {
        int<32> rf2 = 0<32>;
     }
-    bool take = br(funct3, rf1, rf2);    
+    bool take = br(funct3, rf1, rf2);
     if (isBranch) {
        //divide by 4 b/c we count instructions not bytes
        int<16> offpc = pc + (immB >> 2);
-       int<16> npc = (take) ? (offpc) : (pc + 1<16>);       
+       int<16> npc = (take) ? (offpc) : (pc + 1<16>);
     } else {
-    if (isJal) {       
+    if (isJal) {
        //divide by 4 since it counts bytes instead of insns
        int<32> npc32 = cast(pc, int<32>) + (immJ >> 2);
        int<16> npc = npc32{15:0};
@@ -255,13 +264,6 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
     } else {
        int<32> rddata = 0<32>;
     }
-    uint<32> tmpaddr = cast(alu_res, uint<32>);
-    uint<16> memaddr = (tmpaddr >> 2){15:0};
-    start(dmem);
-    if (isLoad || isStore){
-        reserve(dmem);
-    }
-    end(dmem);
     ---
     spec_barrier(); //delayed just to force writes to happen speculatively
     if (!done) {
@@ -275,7 +277,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
        	  verify(s, pc + 1<16>);
        }
     }
-    
+
     if (isDiv) {
        int<32> sdividend = sign(rf1);
        //For REM, ignore sign of divisor
@@ -284,22 +286,22 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
        uint<32> dividend = (isSignedDiv) ? cast(mag(rf1), uint<32>) : cast(rf1, uint<32>);
        uint<32> divisor =  (isSignedDiv) ? cast(mag(rf2), uint<32>) : cast(rf2, uint<32>);
        bool retQuot = funct3 <= u5<3>;
-       bool invertRes <- isSignedDiv && (sdividend != sdivisor);       
+       bool invertRes <- isSignedDiv && (sdividend != sdivisor);
        uint<32> udivout <- call div(dividend, divisor, u0<32>, u0<32>, u0<5>, retQuot);
    } else {
        bool invertRes <- false;
        uint<32> udivout <- u0<32>;
    }
-
-   uint<2> boff = cast(alu_res{1:0}, uint<2>);   
+   uint<32> tmpaddr = cast(alu_res, uint<32>);
+   uint<16> memaddr = (tmpaddr >> 2){15:0};
+   uint<2> boff = cast(alu_res{1:0}, uint<2>);
+   start(dmem);
    split {
-    case: (isLoad) {
-        block(dmem);
-	    uint<16> raddr = memaddr;
-	    int<32> wdata <- dmem[raddr];
+        case: (isLoad) {
+	   uint<16> raddr = memaddr;
+	   int<32> wdata <- dmem[raddr];
 	}
 	case: (isStore) {
-	    block(dmem);
 	      uint<16> waddr = memaddr;
 	      //use bottom bits of data and place in correct offset
 	      //shift by boff*8
@@ -311,6 +313,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
 	    int<32> wdata <- 0<32>;
 	}
     }
+    end(dmem);
     ---
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
@@ -322,31 +325,68 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
        } else {
        if (isDiv) {
           block(rf[rd]);
-	  int<32> divout = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);  
+	  int<32> divout = (invertRes) ? -(cast(udivout, int<32>)) :  cast(udivout, int<32>);
 	  int<32> insnout = divout;
-	  rf[rd] <- insnout;	  
+	  rf[rd] <- insnout;
        } else {
        	 int<32> insnout = rddata;
        }}
        print("Writing %d to r%d", insnout, rd);
     }
+    int<32> enable = csrf[4];
     ---
+    int<32> pending = csrf[3];
+    int<32> masked_pending = pending | enable;
+    bool isExtInt = (masked_pending{11:11} == 1<1>);
+    if (isExtInt) {
+       throw(1, u11<4>);
+    }
+commit:
     if (writerd) {
        release(rf[rd]);
     }
-    if (isStore || isLoad) {
-       release(dmem);
-    }
     if (done) { output(true); }
+except(is_interrupt: uint<1>, exncode: uint<4>): // mepc = csrf[0], mtvec = csrf[1], mcause = csrf[2]
+    print("exception at PC == %d! with exncode: %d", pc, exncode);
+    start(csrf); // mip = csrf[3], mie = csrf[4], mstatus = csrf[5]
+    bool isStartContext = (is_interrupt == u1<1>) || exncode == u8<4>;
+    bool isRestoreContext = (exncode == u3<4>);
+    if (isStartContext) {
+        csrf[0] <- cast(pc, int<32>); // write to mepc
+        int<32> csrret = csrf[1]; // read from mtvec
+        int<16> npc = csrret{15:0};
+    } else { if (isRestoreContext) {
+        int<32> csrret = csrf[0]; // read from mepc
+        int<16> npc = csrret{15:0} + 1;
+    } else { int<16> npc = pc + 1; }}
+    ---
+    int<32> oldmcause = csrf[2];
+    bool wasHandlingInterrupt = oldmcause{31:31} == 1;
+    int<32> newmcause = cast(is_interrupt, int<1>) ++ cast(exncode, int<31>);
+    if (isStartContext) {
+        csrf[2] <- cast(newmcause, int<32>); // write to mcause
+    } else { if (isRestoreContext) { csrf[4] <- 1<32>; }} // enable mie
+    ---
+    if (isStartContext && (is_interrupt == u1<1>)) {
+        csrf[4] <- 0<32>; // disable mie
+    } else { if (isRestoreContext && wasHandlingInterrupt) {
+        int<32> oldmip = csrf[3];
+        int<32> newmip = oldmip{31:12} ++ 0<1> ++ oldmip{10:0};
+        csrf[3] <- newmip; // unset mip
+    }}
+    end(csrf);
+    ---
+    print("GOTO PC: %d", npc);
+    call cpu(npc);
 }
 
 circuit {
     ti = memory(int<32>, 16);
     td = memory(int<32>, 16);
     rf = rflock CheckpointRF(int<32>, 5, 64);
+    csrf = regfile(int<32>, 3);
     div = new multi_stg_div[];
     b = new BHT<16>[](4);
-    lockedtd = CheckpointQueue(td);
-    c = new cpu[rf, ti, lockedtd, div, b];
+    c = new cpu[rf, ti, td, div, b, csrf];
     call c(0<16>);
 }

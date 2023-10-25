@@ -159,8 +159,8 @@ module mkCheckpointQueueLock(Put#(winfo) mem, CheckpointQueueLock#(LockId#(d), L
 
    method Action abort();
       nextId[0] <= 0;
-      owner <= 0;   
-      empty <= True;  
+      owner <= 0;
+      empty <= True;
       wdata <= tagged Invalid;
    endmethod
    

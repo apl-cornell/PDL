@@ -4,6 +4,7 @@ package pipedsl.passes
 import pipedsl.common.Syntax._
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{UnexpectedExpr, UnexpectedType}
+import pipedsl.common.LockImplementation
 import pipedsl.common.Utilities.flattenStageList
 import pipedsl.passes.Passes.StagePass
 
@@ -77,12 +78,12 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           recv.portNum = c.portNum
           (send, recv)
         case _ :TMemType =>
-          val write = IMemWrite(mem, index, data, inHandle, outHandle, isAtomic).setPos(e.pos)
+          val write = IMemWrite(mem, index, data, wm, inHandle, outHandle, isAtomic).setPos(e.pos)
           write.memOpType = e.memOpType
           write.granularity = e.granularity
           write.portNum = c.portNum
           (write, CEmpty())
-        case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous, _, _),_, _) =>
+        case TLockedMemType(TMemType(_, _, _, Latency.Asynchronous, _, _),_, lock) if !lock.canSilentWrite() =>
           val handle = freshMessage(mem)
           val send = IMemSend(handle, writeMask = wm, mem, Some(data), index, inHandle, outHandle, isAtomic)
           val recv = IMemRecv(mem, handle, None)
@@ -95,8 +96,13 @@ class ConvertAsyncPass(modName: Id) extends StagePass[List[PStage]] {
           (send, recv)
           //if the memory is sequential we don't use handle since it
           //is assumed to complete at the end of the cycle
-        case TLockedMemType(_,_,_) =>
-          val write = IMemWrite(mem, index, data, inHandle, outHandle, isAtomic).setPos(e.pos)
+        case TLockedMemType(TMemType(_, _, _, lat, _, _),_, lock) =>
+          val newwm = wm match {
+            case _: Expr => wm
+            case _ if lat == Latency.Asynchronous => Some(EInt(1, 2, -1))
+            case _ => None
+          }
+          val write = IMemWrite(mem, index, data, newwm, inHandle, outHandle, isAtomic).setPos(e.pos)
           write.memOpType = e.memOpType
           write.granularity = e.granularity
           write.portNum = c.portNum
