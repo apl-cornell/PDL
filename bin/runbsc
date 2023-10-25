@@ -91,13 +91,13 @@ case "$CMD" in
 	#Run simulation in Bluesim
 	"$BSC" $ARGS -sim $BPATH "$TOP".bsv
 	"$BSC" $ARGS $BPATH -sim -o "$TB".bexe -e "$TB" "$TB".ba
-	timeout "$TOUT"s ./"$TB".bexe | grep -v "WARNING" > "$SIMOUT"	
+	timeout "$TOUT"s ./"$TB".bexe | grep -v "WARNING" | grep -v "\$finish" > "$SIMOUT"
 	;;
     "s")
 	#Run simulation in Verilog
 	"$BSC" $ARGS $BPATH $VPATH $VSIM -vdir $VDIR -simdir $SDIR -u "$TOP".bsv
 	"$BSC" $ARGS $VPATH $VSIM -verilog -vdir $VDIR -simdir $SDIR -o "$TB".bexe -e "$TB" "$VDIR"/"$TB".v
-	timeout "$TOUT"s ./"$TB".bexe | grep -v "WARNING" > "$SIMOUT"
+	timeout "$TOUT"s ./"$TB".bexe | grep -v "WARNING" | grep -v "\$finish" > "$SIMOUT"
 	;;
     "c")
 	rm -f *.bi *.bo *.ba

@@ -1,3 +1,4 @@
+/* PortChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.{Locks, Syntax, Errors}

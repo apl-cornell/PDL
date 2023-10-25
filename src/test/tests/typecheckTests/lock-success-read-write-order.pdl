@@ -1,3 +1,4 @@
+// lock-success-read-write-order.pdl
 //Expected Success
 pipe test3(input: uint<32>)[rf: int<32>[5]<c2,s>(RenameRF), m:int<32>[5]<c2,s>(RenameRF)] {
     uint<5> rs1 = input{4:0};

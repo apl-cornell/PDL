@@ -1,3 +1,4 @@
+// Speculation.bsv
 package Speculation;
 
 import Vector :: *;
@@ -41,30 +42,43 @@ module mkSpecTable(SpecTable#(SpecId#(entries), bypassCnt));
       $display("Head: %d", head);
       for (Integer i = 0; i < valueOf(entries); i = i + 1)
 	 begin
-	    $display("Idx %d, InUse: %b", i, inUse[fromInteger(i)]);   
-	    $display("Idx %d, Status: %b", i, specStatus[fromInteger(i)]);
+	    $display("Idx %d, InUse: %b", i, inUse[fromInteger(i)]);
+	    $display("Idx %d, Status: %b", i, specStatus[fromInteger(i)][0]);
 	 end
    endrule
-    */
-   
+   */
+   //Make sure no enq could happen during clear (takes 2 cycles)
+
    RWire#(Bool) doAlloc <- mkRWireSBR();
+   RWire#(Bool) doClear <- mkRWireSBR();
+
+   /*
+   Reg#(Bool) enabled <- mkReg(True);
+   */
+   (*conflict_free = "doAllocRule, doClearRule"*)
    (*fire_when_enabled*)
    rule doAllocRule (doAlloc.wget() matches tagged Valid.d);
-      head <= head + 1;
-      inUse[head] <= True;
-      specStatus[head][valueOf(bypassCnt)-1] <= tagged Invalid;
+        head <= head + 1;
+        inUse[head] <= True;
+        specStatus[head][valueOf(bypassCnt)-1] <= tagged Invalid;
    endrule
-   
+
    //reset to the initial state
+   (*no_implicit_conditions*)
+   rule doClearRule (doClear.wget() matches tagged Valid.d);
+        //$display("SpecTable Cleared");
+        head <= 0;
+        for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
+           SpecId#(entries) lv = fromInteger(i);
+           specStatus[lv][0] <= tagged Invalid;
+           inUse[lv] <= False;
+        end
+   endrule
+
    method Action clear();
-      head <= 0;
-      for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
-	 SpecId#(entries) lv = fromInteger(i);
-	 specStatus[lv][0] <= tagged Invalid;
-	 inUse[lv] <= False;
-      end
+        doClear.wset(True);
    endmethod
-   
+
     //allocate a new entry in the table to track speculation. do this in a nonblocking way
     //and just assume that only 1 client calls per cycle
    method ActionValue#(SpecId#(entries)) alloc() if (!full);

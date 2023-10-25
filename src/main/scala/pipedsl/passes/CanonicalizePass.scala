@@ -1,3 +1,4 @@
+/* CanonicalizePass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Syntax._
@@ -116,6 +117,7 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
       case CEmpty() => c
       case CExcept(args) => val (nargs, nc) = extractCastVars(args)
         CSeq(nc, CExcept(nargs).setPos(c.pos))
+      case CCatch(m, oc) => c
       case _: InternalCommand => c
     }
 

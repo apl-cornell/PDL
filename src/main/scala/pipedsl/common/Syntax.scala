@@ -1,3 +1,4 @@
+/* Syntax.scala */
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
@@ -647,11 +648,13 @@ object Syntax {
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
   case class CExcept(args: List[Expr]) extends Command
+  case class CCatch(mod: Id, onCatch: Command) extends Command
 
   sealed trait InternalCommand extends Command
 
   case class IAbort(mem: Id) extends InternalCommand
-  case class IStageClear() extends InternalCommand
+  case class IFifoClear() extends InternalCommand
+  case class ICheckExn() extends InternalCommand
   case class ISpecClear() extends InternalCommand
   case class ISetGlobalExnFlag(state: Boolean) extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
@@ -667,7 +670,7 @@ object Syntax {
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately but don't send a response
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar,
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar, writeMask: Option[Expr],
                        inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation

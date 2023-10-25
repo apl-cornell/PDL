@@ -1,3 +1,4 @@
+// unlocked-mem-fail-1.pdl
 //Expected Success
 pipe unlock(input: int<32>)[rf: int<32>[5]<c,s>] {
     start(rf);

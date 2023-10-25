@@ -1,3 +1,4 @@
+/* FinalblocksConstraintChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Syntax._
@@ -19,7 +20,7 @@ object FinalblocksConstraintChecker {
     m.except_blk match {
       case ExceptEmpty() => checkNormBody(m.body)
       case ExceptFull(_, c) =>
-        checkExBody(m.body)
+        if(!checkExBody(m.body)) throw MustThrowWithExnPipe(c.pos)
         checkCommit(m.commit_blk.get)
         checkExceptingBlock(c)
     }
@@ -43,14 +44,16 @@ object FinalblocksConstraintChecker {
   }
 
 
-  private def checkExBody(c :Command) :Unit = c match {
-    case CSeq(c1, c2) => checkExBody(c1); checkExBody(c2)
-    case CTBar(c1, c2) => checkExBody(c1); checkExBody(c2)
-    case CIf(_, cons, alt) => checkExBody(cons); checkExBody(alt)
-    case CRecv(EMemAccess(mem, _, _, _, _, isAtomic), _) if isAtomic || !isLockedMemory(mem)=> throw NoCommittingWriteInBody(c.pos)
+  private def checkExBody(c :Command) : Boolean = c match {
+    case CSeq(c1, c2) => checkExBody(c1) || checkExBody(c2)
+    case CTBar(c1, c2) => checkExBody(c1) || checkExBody(c2)
+    case CIf(_, cons, alt) => checkExBody(cons) || checkExBody(alt)
+    // TODO: (PDL Exception) Add Async Locked Memory for CheckpointQueue
+    case CRecv(EMemAccess(mem, _, _, _, _, isAtomic), _) if isAtomic && !isLockedMemory(mem)=> throw NoCommittingWriteInBody(c.pos)
     case c@CLockOp(mem, Released, _, _, _) if c.memOpType.contains(LockWrite) || c.granularity == General => throw NoWriteReleaseInBody(c.pos)
-    case CSplit(cases, default) => checkExBody(default); cases.foreach(co => checkExBody(co.body))
-    case _ => ()
+    case CSplit(cases, default) => checkExBody(default) || cases.foldLeft(false) { (acc, co) => acc || checkExBody(co.body) }
+    case CExcept(_) => true
+    case _ => false
   }
 
   private def checkExceptingBlock(c :Command) :Unit = checkNoThrow(c, PreCall)

@@ -1,3 +1,4 @@
+/* BluespecInterfaces.scala */
 package pipedsl.codegen.bsv
 
 import BSVSyntax._
@@ -100,6 +101,8 @@ class BluespecInterfaces() {
   private val fifoDequeuMethodName = "deq"
   private val fifoEnqueueMethodName = "enq"
   private val fifoFirstMethodName = "first"
+
+  private val fifoStgModuleName = "mkFIFOF"
 
   private val lockHandleName = "LockId"
   private val chkpointHandleName = "LockId"
@@ -297,11 +300,15 @@ class BluespecInterfaces() {
   def getFifoType(typ: BSVType): BInterface = {
     BInterface(fifoType, List(BVar("elemtyp", typ)))
   }
+  def getStgFifoType(typ: BSVType): BInterface = {
+    BInterface(fifoType, List(BVar("elemtyp", typ)))
+  }
   def getOutputQType(ttyp: BSVType, dtyp: BSVType): BInterface = {
     BInterface("OutputQ", List(BVar("tagtyp", ttyp), BVar("datatyp", dtyp)));
   }
   def getFifo: BModule = BModule(fifoModuleName, List())
   def getNBFifo: BModule = BModule(fifoNBModuleName, List())
+  def getStgFifo: BModule = BModule(fifoStgModuleName, List())
   def getBypassFifo: BModule = BModule("mkBypassFIFOF", List())
   def getOutputQ(init: BExpr): BModule = BModule("mkOutputFIFOF", List(init))
   def getFifoDeq(f: BVar): BMethodInvoke = {

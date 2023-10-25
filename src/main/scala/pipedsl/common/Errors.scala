@@ -1,3 +1,4 @@
+/* Errors.scala */
 package pipedsl.common
 
 import scala.util.parsing.input.{NoPosition, Position, Positional}
@@ -240,5 +241,9 @@ object Errors {
 
   case class NoWriteReleaseInBody(p :Position) extends RuntimeException(
     withPos("No release writes in the main body!", p)
+  )
+
+  case class MustThrowWithExnPipe(p :Position) extends RuntimeException(
+    withPos("Must have at least one throw for a module with defined exception handler", p)
   )
 }

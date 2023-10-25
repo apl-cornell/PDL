@@ -1,3 +1,4 @@
+/* Main.scala */
 package pipedsl
 
 import java.io.{File, PrintWriter}
@@ -73,6 +74,7 @@ object Main {
 
     try {
       val pinfo = new ProgInfo(prog)
+
       MarkNonRecursiveModulePass.run(prog)
       //First: add lock regions + checkpoints, then do other things
       val inferredProg = new LockRegionInferencePass().run(prog)

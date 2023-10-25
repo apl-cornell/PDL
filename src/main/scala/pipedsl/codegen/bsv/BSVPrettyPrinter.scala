@@ -1,6 +1,8 @@
+/* BSVPrettyPrinter.scala */
 package pipedsl.codegen.bsv
 
 import java.io.{File, FileOutputStream, OutputStreamWriter, Writer}
+import java.math.BigInteger
 
 import pipedsl.codegen.bsv.BSVSyntax._
 import pipedsl.common.Errors.BaseError
@@ -68,7 +70,7 @@ object BSVPrettyPrinter {
     case BInteger() => "Integer"
   }
 
-  private def toIntString(base: Int, value: Int): String = base match {
+  private def toIntString(base: Int, value: Int, bits: Int): String = base match {
     case 16 => "h" + value.toHexString
     case 10 => "d" + value.toString
     case 8 => "o" + value.toOctalString
@@ -96,7 +98,7 @@ object BSVPrettyPrinter {
       "False"
     }
     case BUnsizedInt(v) => v.toString
-    case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v)
+    case BIntLit(v, base, bits) => bits.toString + "'" + toIntString(base, v, bits)
     case BStringLit(v) => "\"" + v + "\""
     case BStructLit(typ, fields) =>
       val fieldStr = fields.keys.map(k => {
@@ -128,6 +130,7 @@ object BSVPrettyPrinter {
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
     case BMethodInvoke(mod, method, args) =>
+      println(mod, method, args)
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       val argStringFull = if (argstring.isEmpty) "" else "(" + argstring + ")"
       toBSVExprStr(mod) + "." + method + argStringFull

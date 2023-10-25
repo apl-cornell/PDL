@@ -1,3 +1,4 @@
+// PrioFifo.bsv
 package PrioFifo;
 
 import FIFOF :: *;

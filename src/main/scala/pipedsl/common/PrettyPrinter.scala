@@ -1,3 +1,4 @@
+/* PrettyPrinter.scala */
 package pipedsl.common
 
 import java.io.{File, FileOutputStream, OutputStreamWriter}
@@ -130,7 +131,7 @@ class PrettyPrinter(output: Option[File]) {
       case Syntax.CExcept(args) => ins + "except(" + args.map(printExprToString).foldLeft("")((acc, elem) => acc + ", " + elem) + ");"
       case Syntax.CCheckSpec(isBlk) => ins + (if (isBlk) "spec_barrier();" else "spec_check();")
       case Syntax.IAbort(mem) => ins + "abort(" + mem +");"
-      case Syntax.IStageClear() => ins + "clearOnExn();"
+      case Syntax.ICheckExn() => ins + "clearStgOnExn();"
       case Syntax.ISpecClear() => ins + "spectable.clear();"
       case Syntax.ISetGlobalExnFlag(state) => ins + "setGlobalExnFlag(" + state +");"
       case Syntax.IReleaseLock(mem, inHandle) => ins + "release(" + mem + ");"

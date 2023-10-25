@@ -1,3 +1,4 @@
+// SpecialQueues.bsv
 package SpecialQueues;
 
 import Ehr :: *;
@@ -57,26 +58,26 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    FIFOF#(dtyp) f <- mkFIFOF();
    //allow multiple writes in the same cycle
    RWire#(dtyp) enq_data <- mkRWireSBR();
+   RWire#(Bool) doClear <- mkRWireSBR();
 
-   //Make sure no enq could happen during clear (takes 2 cycles)
-   Reg#(Bool) clearCalled <- mkReg(False);
-
-   rule doClear(clearCalled);
-      f.clear();
-      clearCalled <= False;
-   endrule
-
+   (*conflict_free = "doEnqRule, doClearRule"*)
    (*fire_when_enabled*)
-   rule doEnq (enq_data.wget() matches tagged Valid.d);
+   rule doEnqRule (enq_data.wget() matches tagged Valid.d);
       f.enq(d);
    endrule
 
+   //reset to the initial state
+   (*no_implicit_conditions*)
+   rule doClearRule (doClear.wget() matches tagged Valid.d);
+      f.clear();
+   endrule
+
    //only allow the LAST enq each cycle to work, drop the others
-   method Action enq(dtyp a) if (f.notFull() && !clearCalled);
+   method Action enq(dtyp a) if (f.notFull());
       enq_data.wset(a);
    endmethod
    
-   method Action deq() if (!clearCalled);
+   method Action deq();
       f.deq();
    endmethod
    
@@ -93,7 +94,7 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    endmethod
 
    method Action clear();
-      clearCalled <= True;
+      doClear.wset(True);
    endmethod
 
 endmodule

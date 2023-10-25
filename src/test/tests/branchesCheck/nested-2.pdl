@@ -1,3 +1,4 @@
+// nested-2.pdl
 pipe test(inarg: uint<32>)[] {
     if (cast (inarg{0:0}, bool)) {
         if (inarg{1:1} == u0) {

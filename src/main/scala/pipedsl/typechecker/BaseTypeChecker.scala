@@ -1,3 +1,4 @@
+/* BaseTypeChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Errors._
@@ -400,6 +401,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           mtyp match {
             case TModType(inputs, _, _, _) =>
               if (inputs.length != args.length) {
+                print(args)
                 throw ArgLengthMismatch(c.pos, inputs.length, args.length)
               }
               if (inputs.length != preds.length) {

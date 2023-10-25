@@ -1,3 +1,4 @@
+/* LinearExecutionChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{

@@ -1,3 +1,4 @@
+/* LockRegionChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Errors.{IllegalLockAcquisition, InvalidLockState, UnexpectedCase}

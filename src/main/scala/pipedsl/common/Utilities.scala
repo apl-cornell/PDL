@@ -1,3 +1,4 @@
+/* Utilities.scala */
 package pipedsl.common
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
@@ -84,6 +85,7 @@ object Utilities {
     case IUpdate(specId, value, originalSpec) => getUsedVars(value) ++ getUsedVars(originalSpec) + specId
     case Syntax.CEmpty() => Set()
     case CExcept(args) => args.foldLeft(Set[Id]())((set, arg) => set.union(getUsedVars(arg)))
+    case CCatch(m, c) => Set()
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -178,8 +180,13 @@ object Utilities {
         Set()
       })
     case IMemRecv(_, handle, _) => Set(handle.id)
-    case IMemWrite(_, addr, data, inHandle, _, _) =>
-      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set()))
+    case IMemWrite(_, addr, data, writeMask, inHandle, _, _) =>
+      Set(addr.id, data.id).union(inHandle.map(h => Set(h.id)).getOrElse(Set())) ++ (
+        if (writeMask.isDefined) {
+        getUsedVars(writeMask.get)
+      } else {
+        Set()
+      })
     case IRecv(handle, _, _) => Set(handle.id)
     case ISend(_, _, args) => args.map(a => a.id).toSet
     case IReserveLock(_, larg) => larg.evar match {
@@ -197,10 +204,11 @@ object Utilities {
       case None => Set()
     })
     case ILockNoOp(_) => Set()
-    case IStageClear() => Set()
+    case ICheckExn() => Set()
     case ISpecClear() => Set()
     case ISetGlobalExnFlag(_) => Set()
     case IAbort(_) => Set()
+    case IFifoClear() => Set()
     case CLockStart(_) => Set()
     case CLockEnd(_) => Set()
     case CSpecCall(handle, _, args) => args.foldLeft(Set(handle.id))((s, a) => s ++ getUsedVars(a))
@@ -214,6 +222,7 @@ object Utilities {
     case CInvalidate(handle, cHandles) => Set(handle.id) ++ cHandles.map(v => v.id)
     case CCheckSpec(_) => Set()
     case CEmpty() => Set()
+    case CCatch(m, c) => Set()
   }
 
   /**

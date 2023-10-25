@@ -1,3 +1,4 @@
+// Memories.bsv
 package Memories;
 
 import GetPut :: *;
@@ -21,6 +22,7 @@ export AsyncMem(..);
 export AsyncMem2(..);
 export QueueLockCombMem(..);
 export CheckpointQueueLockCombMem(..);
+export CheckpointQueueLockAsyncMem(..);
 export QueueLockAsyncMem(..);
 export QueueLockAsyncMem2(..);
 export BypassLockCombMem(..);
@@ -37,6 +39,7 @@ export mkAsyncMem;
 export mkAsyncMem2;
 export mkQueueLockCombMem;
 export mkCheckpointQueueLockCombMem;
+export mkCheckpointQueueLockAsyncMem;
 export mkQueueLockAsyncMem;
 export mkQueueLockAsyncMem2;
 export mkFAAddrLockCombMem;
@@ -61,6 +64,14 @@ function Bool isNewer(UInt#(sz) a, UInt#(sz) b, UInt#(sz) h);
    return !isOlder(a, b, h);
 endfunction
 
+function Put#(Tuple3#(Bit#(nsz), addr, elem)) asyncMemToPut (AsyncMem#(addr, elem, MemId#(inflight), nsz) amem);
+   return (interface Put;
+	      method Action put(Tuple3#(Bit#(nsz), addr, elem) x);
+	        amem.silentReq1(tpl_2(x), tpl_3(x), tpl_1(x));
+	      endmethod
+	   endinterface);
+endfunction
+
 function Put#(Tuple2#(addr, elem)) rfToPut (RegFile#(addr, elem) rf);
    return (interface Put;
 	      method Action put(Tuple2#(addr, elem) x);
@@ -83,6 +94,7 @@ endinterface
 
 interface AsyncMem#(type addr, type elem, type mid, numeric type nsz);
    method ActionValue#(mid) req1(addr a, elem b, Bit#(nsz) wmask);
+   method Action silentReq1(addr a, elem b, Bit#(nsz) wmask);
    method elem peekResp1(mid a);
    method Bool checkRespId1(mid a);
    method Action resp1(mid a);
@@ -127,6 +139,14 @@ interface CheckpointQueueLockCombMem#(type addr, type elem, type id, type cid);
    method elem atom_r(addr a);
    method Bool canAtom_w1(addr a);
    method Action atom_w(addr a, elem b);
+endinterface
+
+interface CheckpointQueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type id, type cid);
+   interface AsyncMem#(addr, elem, rid, nsz) mem;
+   interface CheckpointQueueLock#(id, cid, Tuple3#(Bit#(nsz), addr, elem)) lock;
+   method Action write(addr a, elem b, Bit#(nsz) wmask);
+   method Bool canAtom1(addr a);
+   method ActionValue#(rid) atom_req1(addr a, elem b, Bit#(nsz) wmask);
 endinterface
 
 interface QueueLockAsyncMem#(type addr, type elem, type rid, numeric type nsz, type lid);
@@ -242,7 +262,7 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
    interface Server bram_server;
       interface Put request;
 	 method Action put (Tuple3#(Bit#(nsz), addr, elem) req);
-	    // $display("Sending request %t", $time());
+	    //$display("Sending request %t %d %d ", $time(), tpl_1(req), tpl_3(req));
 	    p.put(tpl_1(req), tpl_2(req), tpl_3(req));
 	    doRead <= True;
 	 endmethod
@@ -250,6 +270,7 @@ module mkBramPort#(parameter Bool init, parameter String file)(BramPort#(addr, e
 
       interface Get response;
 	 method ActionValue#(elem) get();
+	    //$display("Returning data %t %d", nextData);
 	    return nextData;
 	 endmethod
       endinterface
@@ -331,6 +352,8 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
    Wire#(elem) fromMem <- mkWire();
 
+   RWire#(Bool) doClear <- mkRWireSBR();
+
    //this must be at least size 2 to work correctly (safe bet)
    Vector#(inflight, Ehr#(2, elem)) outData <- replicateM( mkEhr(unpack(0)) );
    Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
@@ -348,17 +371,24 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
       valid[idx][0] <= True;
    endrule
 
+   (*conflict_free = "freeResp, doClearRule"*)
    (*fire_when_enabled*)
    rule freeResp;
       valid[freeEntry][1] <= False;
    endrule
 
-   method Action clear();
+   (*no_implicit_conditions*)
+   rule doClearRule (doClear.wget() matches tagged Valid.d);
+      //$display("Memory Cleared");
       head <= 0;
       for (Integer i = 0; i < valueOf(inflight); i = i + 1) begin
-	 MemId#(inflight) ent = fromInteger(i);
-	 valid[ent][1] <= False;
+	    MemId#(inflight) ent = fromInteger(i);
+	    valid[ent][1] <= False;
       end
+   endrule
+
+   method Action clear();
+      doClear.wset(True);
    endmethod
    
    method ActionValue#(MemId#(inflight)) req1(addr a, elem b, Bit#(n) wmask) if (okToRequest);
@@ -366,6 +396,11 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
       head <= head + 1;
       nextData <= tagged Valid head;
       return head;
+   endmethod
+
+   method Action silentReq1(addr a, elem b, Bit#(n) wmask) if (okToRequest);
+      toMem <= tuple3(wmask, a, b);
+      head <= head + 1;
    endmethod
 
    method elem peekResp1(MemId#(inflight) a);
@@ -669,6 +704,30 @@ module mkDMAddrLockCombMem(RegFile#(addr, elem) rf, AddrLockCombMem#(addr, elem,
    endmethod
 
    interface lock = l;
+endmodule
+
+module mkCheckpointQueueLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), nsz) amem, CheckpointQueueLockAsyncMem#(addr, elem, MemId#(inflight), nsz, LockId#(d), LockId#(d)) _unused_)
+provisos(Bits#(Tuple3#(Bit#(nsz), addr, elem), tuplsz));
+
+   Put#(Tuple3#(Bit#(nsz), addr, elem)) doWrite = asyncMemToPut(amem);
+   CheckpointQueueLock#(LockId#(d), LockId#(d), Tuple3#(Bit#(nsz), addr, elem)) l <- mkCheckpointQueueLock(doWrite);
+
+   interface lock = l;
+   interface mem = amem;
+
+   method Action write(addr a, elem b, Bit#(nsz) wmask);
+      l.write(tuple3(wmask, a, b));
+   endmethod
+
+   method Bool canAtom1(addr a);
+      return l.isEmpty;
+   endmethod
+
+   method ActionValue#(MemId#(inflight)) atom_req1(addr a, elem b, Bit#(nsz) wmask);
+      let r <- amem.req1(a, b, wmask);
+      return r;
+   endmethod
+
 endmodule
 
 module mkQueueLockAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) amem, QueueLockAsyncMem#(addr, elem, MemId#(inflight), n, LockId#(d)) _unused_)

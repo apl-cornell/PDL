@@ -1,3 +1,4 @@
+// autocast-basic-pass.pdl
 def helper1(a: int<32>, b:bool, c: String): int<32> {
   d = a + 1<16>;
   e = b && false;

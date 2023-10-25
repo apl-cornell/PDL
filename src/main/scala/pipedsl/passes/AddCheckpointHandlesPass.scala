@@ -1,3 +1,4 @@
+/* AddCheckpointHandlesPass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Syntax._
