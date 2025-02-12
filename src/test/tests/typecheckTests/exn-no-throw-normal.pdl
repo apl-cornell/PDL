@@ -7,7 +7,7 @@ pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(Queue), oth :uint<4>[0]<c,s>(Queue)]
     acc[] <- acc_val + 1;
     if(acc_val + 1 == 13)
     {
-      except(0);
+      throw(0);
       output(1);
     } else
     {

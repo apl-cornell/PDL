@@ -39,6 +39,7 @@ object Subtypes {
         TMemType(e2, as2, r2, w2, rp2, wp2)) =>
             areEqual(e1, e2) && as1 == as2 && r1 == r2 && w1 == w2 &&
               (rp1 >= rp2 || rp1 == 0) && (wp1 >= wp2 || wp1 == 0)
+        case (TVolatileMemType(m1), TVolatileMemType(m2)) => isSubtype(m1, m2)
         case _ => areEqual(t1, t2)
     }
 
@@ -52,6 +53,7 @@ object Subtypes {
             w1 == w2 && rp1 == rp2 && wp1 == wp2
         case (TLockedMemType(m1, id1, l1), TLockedMemType(m2, id2, l2)) =>
             areEqual(m1, m2) && id1 == id2 && l1 == l2
+        case (TVolatileMemType(m1), TVolatileMemType(m2)) => areEqual(m1, m2)
         case _ => t1 == t2
     }
 

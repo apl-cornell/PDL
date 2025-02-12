@@ -130,7 +130,6 @@ object BSVPrettyPrinter {
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       mkExprString(name, "(", argstring, ")")
     case BMethodInvoke(mod, method, args) =>
-      println(mod, method, args)
       val argstring = args.map(a => toBSVExprStr(a)).mkString(", ")
       val argStringFull = if (argstring.isEmpty) "" else "(" + argstring + ")"
       toBSVExprStr(mod) + "." + method + argStringFull

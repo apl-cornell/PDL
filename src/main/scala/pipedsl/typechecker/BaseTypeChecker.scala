@@ -573,6 +573,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
             }
           }
           (e, env1)
+        case (TVolatileMemType(TMemType(e, s, _, _, _, _)), TSizedInt(l, TUnsigned())) if l.getLen == s =>
+          if (wm.isDefined) {
+            val (wmt, _) = checkExpression(wm.get, tenv, None)
+            wmt match {
+              //TODO check that the mask size is correct (i.e., length of elemtype / 8)
+              case TSizedInt(lm, TUnsigned()/*true*/) => ()
+              case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
+                " to the number of bytes in the element type", wmt)
+            }
+          }
+          (e, env1)
         case _ => throw UnexpectedType(e.pos, "memory access", "mismatched types", memt)
       }
     case EBitExtract(num, start, end) => {

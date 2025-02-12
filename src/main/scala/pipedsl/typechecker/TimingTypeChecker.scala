@@ -296,6 +296,8 @@ object TimingTypeChecker extends TypeChecks[Id, Type] {
         checkMemRead(rLat, wLat)
       case TLockedMemType(TMemType(_, _, rLat, wLat, _, _),_,_) =>
         checkMemRead(rLat, wLat)
+      case TVolatileMemType(TMemType(_, _, rLat, wLat, _, _)) =>
+        checkMemRead(rLat, wLat)
       case _ => throw UnexpectedType(m.pos, m.v, "Mem Type", m.typ.get)
     }
     case EBitExtract(num, _, _) => checkExpr(num, vars, isRhs) match {

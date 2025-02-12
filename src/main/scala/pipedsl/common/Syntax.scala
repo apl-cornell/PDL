@@ -135,6 +135,7 @@ object Syntax {
         s"${elem.toString}[${size}]<$rLat$rPorts, $wLat$wPorts>"
       case TLockedMemType(m, sz, impl) => s"${m.toString}(${impl.toString})".concat(
         if (sz.isDefined) s"<${sz.get.toString}>" else "")
+      case TVolatileMemType(m) => s"${m.toString}(volatile)"
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
       case TReqHandle(tp, _) => s"${tp}_Request"
@@ -206,6 +207,8 @@ object Syntax {
       case _ :TModType =>
         if(this == that) this else throw TypeMeetError(this, that)
       case _ :TLockedMemType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TVolatileMemType =>
         if(this == that) this else throw TypeMeetError(this, that)
       case _ :TRequestHandle =>
         if(this == that) this else throw TypeMeetError(this, that)
@@ -319,6 +322,7 @@ object Syntax {
                       writePorts: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
+  case class TVolatileMemType(mem: TMemType) extends Type
   case class TReqHandle(tp :Type, rtyp :RequestType) extends Type
   //TODO merge these two together
   case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
@@ -446,6 +450,9 @@ object Syntax {
       val latency: Latency = if (isWrite) writeLatency else readLatency
       latency == Latency.Asynchronous
     case TLockedMemType(TMemType(_, _, readLatency, writeLatency, _, _), _, _) =>
+      val latency: Latency = if (isWrite) writeLatency else readLatency
+      latency == Latency.Asynchronous
+    case TVolatileMemType(TMemType(_, _, readLatency, writeLatency, _, _)) =>
       val latency: Latency = if (isWrite) writeLatency else readLatency
       latency == Latency.Asynchronous
     case _ => false

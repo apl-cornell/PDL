@@ -129,7 +129,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
   /**
    * Checks to see if [[predicate]] can be true at the same time that ANY of
    * the globl [[predicates]] are in [[env]] */
-  def checkRecursive(predicate: Z3BoolExpr): Z3Status =
+  private def checkRecursive(predicate: Z3BoolExpr): Z3Status =
     {
       /* we want to know if it is possible to satisfy the current predicate */
       /* we are testing AND ANY of the other known predicates */
@@ -144,7 +144,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
   /**
    * call checkRecursive and throws the appropriate errors on output
    */
-  def verifyRecursive(predicate: Z3BoolExpr, pos :Position) :Unit =
+  private def verifyRecursive(predicate: Z3BoolExpr, pos :Position) :Unit =
     checkRecursive(predicate) match
     {
       case Z3Status.SATISFIABLE => throw MultipleCall(pos, true)

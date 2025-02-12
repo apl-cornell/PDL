@@ -31,6 +31,7 @@ object LockRegionChecker extends TypeChecks[Id, LockState] {
       case TLockedMemType(_, _, _) => e.add(m.name, Free)
       case TMemType(_, _, _,_ ,_ ,_) => e.add(m.name, Free)
       case TModType(_, _, _, _) => e.add(m.name, Free)
+      case TVolatileMemType(_) => e //no lock and checked by another pass
       case TObject(_, _, _) => e //no locks here
       case _ => throw UnexpectedCase(m.pos)
     })

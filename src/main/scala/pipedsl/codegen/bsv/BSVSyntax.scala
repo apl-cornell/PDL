@@ -98,6 +98,7 @@ object BSVSyntax {
         val elemTyp = toType(elem)
         bsints.getBaseMemType(isAsync = rlat != Combinational,
           getTypeSize(elemTyp), BSizedInt(unsigned = true, addrSize), elemTyp, readPorts)
+      case TVolatileMemType(mem) => toType(mem)
       case TLockedMemType(mem, idsz, limpl) =>
         val mtyp = toType(mem).matchOrError() { case c: BInterface => c }
         val lidtyp = if (limpl.useUniqueLockId()) {

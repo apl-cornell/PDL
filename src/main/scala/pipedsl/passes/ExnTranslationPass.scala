@@ -1,9 +1,12 @@
 /* ExnTranslationPass.scala */
 package pipedsl.passes
 
+import pipedsl.common.Locks.Released
 import pipedsl.common.Syntax._
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
 import pipedsl.typechecker.BaseTypeChecker.replaceNamedType
+
+import scala.math._
 
 class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
   private var exnArgCallMap = Map[Int, EVar]()
@@ -25,7 +28,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
 
   override def run(p: Prog): Prog = p.copy(moddefs = p.moddefs.map(m => run(m).copyMeta(m)))
 
-  def addExnVars(m: ModuleDef): ModuleDef =
+  private def addExnVars(m: ModuleDef): ModuleDef =
   {
     localExnFlag.typ = Some(TBool())
     localExnFlag.id.typ = localExnFlag.typ
@@ -52,7 +55,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     m.copy(body = CSeq(ICheckExn(), convertBody(m.body)), commit_blk = m.commit_blk, except_blk = m.except_blk).copyMeta(m)
   }
 
-  def convertBody(c: Command): Command = {
+  private def convertBody(c: Command): Command = {
     c match {
       case CSeq(c1, c2) => CSeq(convertBody(c1), convertBody(c2)).copyMeta(c)
       case CIf(cond, cons, alt) => CIf(cond, convertBody(cons), convertBody(alt)).copyMeta(c)
@@ -78,7 +81,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
   }
 
-  def convertExnArgsId(c: Command): Command = {
+  private def convertExnArgsId(c: Command): Command = {
     c match {
       case CSeq(c1, c2) => CSeq(convertExnArgsId(c1), convertExnArgsId(c2)).copyMeta(c)
       case CIf(cond, cons, alt) => CIf(convertExnArgsId(cond), convertExnArgsId(cons), convertExnArgsId(alt)).copyMeta(c)
@@ -98,7 +101,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
   }
 
-  def convertExnArgsId(e: Expr): Expr = {
+  private def convertExnArgsId(e: Expr): Expr = {
     e match {
       case EIsValid(ex) => EIsValid(convertExnArgsId(ex)).setPos(e.pos)
       case EFromMaybe(ex) => EFromMaybe(convertExnArgsId(ex)).setPos(e.pos)
@@ -133,7 +136,17 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
   }
 
-  def createNewStg(m: ModuleDef): ModuleDef = {
+  private def countRelStgs(c: Command, stgCnt: Integer): Integer = {
+    c match {
+      case CTBar(c1, c2) => max(countRelStgs(c1, stgCnt), countRelStgs(c2, stgCnt + 1))
+      case CSeq(c1, c2) => max(countRelStgs(c1, stgCnt), countRelStgs(c2, stgCnt))
+      case CIf(_, cons, alt) => max(countRelStgs(cons, stgCnt), countRelStgs(alt, stgCnt))
+      case IReleaseLock(_, _) => stgCnt
+      case _ => 0
+    }
+  }
+
+  private def createNewStg(m: ModuleDef): ModuleDef = {
     val commit_stmts = m.commit_blk match {
       case Some(c) => c
       case _ => CEmpty()
@@ -150,7 +163,6 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
         case _ => CSeq(c, CEmpty())
       })
 
-    println(abortStmts)
     val initLocalErrFlag = CAssign(localExnFlag, EBool(false)).copyMeta(m.body)
     val setGlobalExnFlag = ISetGlobalExnFlag(true)
     val unsetGlobalExnFlag = ISetGlobalExnFlag(false)
@@ -158,8 +170,16 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     val clearSpecTable = if (m.maybeSpec) ISpecClear() else CEmpty()
     val clearFifos = IFifoClear()
 
-    val exnRollbackStmts = CTBar(setGlobalExnFlag, CSeq(CSeq(abortStmts, clearSpecTable), clearFifos))
-    val translatedExnBlock = CTBar(exnRollbackStmts, CSeq(except_stmts, unsetGlobalExnFlag))
+    val relStgCnt = countRelStgs(commit_stmts, 0)
+    val exnRollbackStmts = CSeq(CSeq(abortStmts, clearSpecTable), clearFifos)
+
+    val fullRollbackStg = (1 to relStgCnt).foldLeft(exnRollbackStmts: Command) { (expr, _) =>
+      CTBar(CEmpty(), expr)
+    } match {
+      case expr => CTBar(setGlobalExnFlag, expr)
+    }
+
+    val translatedExnBlock = CTBar(fullRollbackStg, CSeq(except_stmts, unsetGlobalExnFlag))
     val finalBlocks = CIf(localExnFlag, translatedExnBlock, commit_stmts)
     val newBody = CSeq(initLocalErrFlag, CSeq(m.body, finalBlocks))
 

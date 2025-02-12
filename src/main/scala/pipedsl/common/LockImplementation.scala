@@ -290,7 +290,6 @@ object LockImplementation {
 
   def getAbortInfo(mem: Id): Option[MethodInfo] = {
     val interface = getLockImplFromMemTyp(mem)
-    println(interface)
     getAbort(interface) match {
       case Some(_) =>
         val methodName = (if(interface.hasLockSubInterface) lockIntStr else "") + abortName

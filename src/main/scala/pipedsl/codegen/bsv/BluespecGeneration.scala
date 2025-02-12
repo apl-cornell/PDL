@@ -249,6 +249,7 @@ object BluespecGeneration {
     private def isDualPorted(t: Type): Boolean = t match {
       case TMemType(_, _, _, _, rp, wp) => Math.max(rp, wp) > 1
       case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) => Math.max(rp, wp) > 1
+      case TVolatileMemType(TMemType(_, _, _, _, rp, wp)) => Math.max(rp, wp) > 1
       case _ => false
     }
 
@@ -686,6 +687,7 @@ object BluespecGeneration {
     private def getLockName(m: Id): BVar = {
       m.typ.get match {
         case TLockedMemType(_, _, _) => modParams(m)
+        case TVolatileMemType(_) => modParams(m)
         case TMemType(_, _, _, _, _, _) => modParams(m)
         case TModType(_, _, _, _) => modLocks(m)
         case _ => //TODO better error
