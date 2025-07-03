@@ -246,4 +246,12 @@ object Errors {
   case class MustThrowWithExnPipe(p :Position) extends RuntimeException(
     withPos("Must have at least one throw for a module with defined exception handler", p)
   )
+
+  case class IllegalVolatileWrite(p :Position) extends RuntimeException(
+    withPos("Volatile memory cannot be written in body with possible exceptional pipe!", p)
+  )
+
+  case class NoMultipleVolatileAccess(p :Position) extends RuntimeException(
+    withPos("Volatile memory cannot be accessed simutaneously", p)
+  )
 }

@@ -169,11 +169,11 @@ class PrettyPrinter(output: Option[File]) {
     case Syntax.EString(v) => s""""${v}""""
     case Syntax.ECast(ctyp, exp) => "cast(" + printExprToString(exp) + "," + printTypeToString(ctyp) + ")"
     case expr: Syntax.CirExpr => expr match {
-      case CirMem(elemTyp, addrSize, numPorts) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + "," + numPorts.toString + ")"
+      case CirMem(elemTyp, addrSize, numPorts, isVolatile) => "memory(" + printTypeToString(elemTyp) + "," + addrSize.toString + "," + numPorts.toString + ")"
       case CirLockMem(elemTyp, addrSize, _, sz, numPorts) => "memlock(" +
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + "," + numPorts.toString + ")"
-      case CirRegister(elemTyp, initVal) => "register(" + printTypeToString(elemTyp) + "," + initVal.toString + ")"
-      case CirRegFile(elemTyp, addrSize) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
+      case CirRegister(elemTyp, initVal, isVolatile) => "register(" + printTypeToString(elemTyp) + "," + initVal.toString + ")"
+      case CirRegFile(elemTyp, addrSize, isVolatile) => "regfile(" + printTypeToString(elemTyp) + "," + addrSize.toString + ")"
       case CirLockRegFile(elemTyp, addrSize, _, sz) => "rflock(" +
         printTypeToString(elemTyp) + "," + addrSize.toString + "," + sz.map(a => a.toString).mkString(",") + ")"
       case CirLock(mem, impl, sz) => impl.toString + "(" + mem.v + ")" +

@@ -546,22 +546,38 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
     }
   }
 
-  lazy val creg: P[CirExpr] = positioned {
-    "register" ~> parens(sizedInt ~ ("," ~> posint).?)^^ { case elem ~ init =>
-      val initval = if (init.isDefined) { init.get } else { 0 }
-      CirRegister(elem, initval)
-    }
+lazy val creg: P[CirExpr] = positioned {
+  ("volatile" ~ "register" ~> parens(sizedInt ~ ("," ~> posint).?)) ^^ {
+    case elem ~ init =>
+      CirRegister(elem, init.getOrElse(0), isVolatile = true)
+  } |
+  ("register" ~> parens(sizedInt ~ ("," ~> posint).?)) ^^ {
+    case elem ~ init =>
+      CirRegister(elem, init.getOrElse(0), isVolatile = false)
   }
+}
 
-  lazy val cmem: P[CirExpr] = positioned {
-    "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^
-      { case elem ~ _ ~
-      addr ~ ports => CirMem(elem, addr, ports.getOrElse(1)); }
+lazy val cmem: P[CirExpr] = positioned {
+  ("volatile" ~ "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint))) ^^ {
+    case elem ~ _ ~ addr ~ ports =>
+      CirMem(elem, addr, ports.getOrElse(1), isVolatile = true)
+  } |
+  ("memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint))) ^^ {
+    case elem ~ _ ~ addr ~ ports =>
+      CirMem(elem, addr, ports.getOrElse(1), isVolatile = false)
   }
+}
 
-  lazy val crf: P[CirExpr] = positioned {
-    "regfile" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirRegFile(elem, addr) }
+lazy val crf: P[CirExpr] = positioned {
+  ("volatile" ~ "regfile" ~> parens(sizedInt ~ "," ~ posint)) ^^ {
+    case elem ~ _ ~ addr =>
+      CirRegFile(elem, addr, isVolatile = true)
+  } |
+  ("regfile" ~> parens(sizedInt ~ "," ~ posint)) ^^ {
+    case elem ~ _ ~ addr =>
+      CirRegFile(elem, addr, isVolatile = false)
   }
+}
 
   lazy val clockrf: P[CirExpr] = positioned {
     ("rflock" ~> iden.?) ~ parens(sizedInt ~ "," ~ posint ~ ("," ~> repsep(posint,",")).?) ^^ {

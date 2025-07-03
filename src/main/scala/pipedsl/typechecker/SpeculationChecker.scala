@@ -100,8 +100,20 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         if (s != NonSpeculative && !isLockedMemory(m)) {
           throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
         }
+        if (s != NonSpeculative && isVolatileMemory(m)) { //no volatile access till resolved 
+          throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
+        }
         if (s == Unknown && isLockedMemory(m)) {
           throw IllegalSpeculativeOperation(lhs.pos, Speculative.toString)
+        }
+        ()
+      case _ => ()
+    }; s
+    case CRecv(_, rhs) => rhs match {
+        //just match on volatile mem read, no volatile access till resolved 
+      case EMemAccess(m, _, _ ,_ ,_, _) =>
+        if (s != NonSpeculative && isVolatileMemory(m)) { //no volatile access till resolved 
+          throw IllegalSpeculativeOperation(rhs.pos, NonSpeculative.toString)
         }
         ()
       case _ => ()

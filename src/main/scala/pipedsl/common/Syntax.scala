@@ -439,6 +439,7 @@ object Syntax {
 
   //returns false only if it represents an unlocked memory type
   def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+  def isVolatileMemory(mem: Id): Boolean = mem.typ.get match { case _:TVolatileMemType => true; case _ => false }
   //returns false only if it represents an external (Verilog) module or a pipeline with no internal mems/submodules
   def isLockedModule(mod: Id): Boolean = mod.typ.get match {
     case TModType(_, refs, _, _) => refs.nonEmpty
@@ -781,9 +782,9 @@ object Syntax {
   case class CirExprStmt(ce: CirExpr) extends Circuit
 
   sealed trait CirExpr extends Expr
-  case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int) extends CirExpr
-  case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
-  case class CirRegister(elemTyp: Type, initVal: Int) extends CirExpr
+  case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int, isVolatile: Boolean) extends CirExpr
+  case class CirRegFile(elemTyp: Type, addrSize: Int, isVolatile: Boolean) extends CirExpr
+  case class CirRegister(elemTyp: Type, initVal: Int, isVolatile: Boolean) extends CirExpr
   //TODO do these ever need other kinds of parameters besides ints?
   //this allows us to build a "locked" version of a memory
   case class CirLock(mem: Id, impl: LockInterface, szParams: List[Int]) extends CirExpr

@@ -98,7 +98,7 @@ object BluespecGeneration {
         (stmts1 ++ stmts2, env2)
       case CirConnect(name, cm) =>
         val (elemTyp, addrSize, numPorts) = cm match {
-          case CirMem(elemTyp, addrSize, numPorts) => (elemTyp, addrSize, numPorts)
+          case CirMem(elemTyp, addrSize, numPorts, _) => (elemTyp, addrSize, numPorts)
           case CirLockMem(elemTyp, addrSize, _, _, numPorts) => (elemTyp, addrSize, numPorts)
           case _ => return (List(), env)
         }
@@ -130,7 +130,7 @@ object BluespecGeneration {
           else {
             Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(mtyp)))
           }
-        case CirMem(_, _, _)  if memMap.contains(name) =>
+        case CirMem(_, _, _, _)  if memMap.contains(name) =>
           if(isDualPorted(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(name.typ.get)),
@@ -158,7 +158,7 @@ object BluespecGeneration {
     }
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
-      case CirMem(elemTyp, addrSize, numPorts) =>
+      case CirMem(elemTyp, addrSize, numPorts, _) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = true,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp, numPorts)
@@ -170,12 +170,12 @@ object BluespecGeneration {
         val modInstName = impl.getModuleInstName(mtyp)
         val largs = getLockModArgs(mtyp, impl, szParams)
         (lockMemTyp, BModule(modInstName, largs))
-      case CirRegister(elemTyp, initVal) =>
+      case CirRegister(elemTyp, initVal, _) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, 0), bElemTyp, 0)
         (memtyp, bsInts.getRegister(initVal))
-      case CirRegFile(elemTyp, addrSize) =>
+      case CirRegFile(elemTyp, addrSize, _) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp, 0)
@@ -258,7 +258,7 @@ object BluespecGeneration {
         case CirSeq(c1, c2) =>
           makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
         case CirConnect(mem, rhs) if memMap.contains(mem) => rhs match {
-          case CirMem(_, _, _) | CirLockMem(_, _, _, _, _) =>
+          case CirMem(_, _, _, _) | CirLockMem(_, _, _, _, _) =>
             val leftArg = intMap.get(mem)
             val rightArg = memMap(mem)
             leftArg match {
