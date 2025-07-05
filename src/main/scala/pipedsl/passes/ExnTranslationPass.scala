@@ -146,6 +146,14 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
   }
 
+  private def translateCmtBlk(c: Command, stgCnt: Integer): Command = {
+    c match {
+      case CTBar(c1, c2) if stgCnt > 0 => CTBar(c1, CSeq(ICheckExn(), translateCmtBlk(c2, stgCnt - 1)))
+      case CSeq(c1, c2) => CSeq(c1, translateCmtBlk(c2, stgCnt))
+      case _ => c
+    }
+  }
+
   private def createNewStg(m: ModuleDef): ModuleDef = {
     val commit_stmts = m.commit_blk match {
       case Some(c) => c
@@ -173,6 +181,8 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     val relStgCnt = countRelStgs(commit_stmts, 0)
     val exnRollbackStmts = CSeq(CSeq(abortStmts, clearSpecTable), clearFifos)
 
+    val transformedCmtStmts = translateCmtBlk(commit_stmts, relStgCnt + 1)
+
     val fullRollbackStg = (1 to relStgCnt).foldLeft(exnRollbackStmts: Command) { (expr, _) =>
       CTBar(CEmpty(), expr)
     } match {
@@ -180,7 +190,7 @@ class ExnTranslationPass extends ModulePass[ModuleDef] with ProgPass[Prog]{
     }
 
     val translatedExnBlock = CTBar(fullRollbackStg, CSeq(except_stmts, unsetGlobalExnFlag))
-    val finalBlocks = CIf(localExnFlag, translatedExnBlock, commit_stmts)
+    val finalBlocks = CIf(localExnFlag, translatedExnBlock, transformedCmtStmts)
     val newBody = CSeq(initLocalErrFlag, CSeq(m.body, finalBlocks))
 
     //TODO require memory or module types
