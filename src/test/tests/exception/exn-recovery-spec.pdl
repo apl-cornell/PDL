@@ -1,5 +1,5 @@
 // exn-recovery-spec.pdl
-//Expect 5 Success, 1 Exception, 1 Success post recovery
+//Expect 6 Success, 1 Exception, 1 Success post recovery
 exn-pipe cpu(pc :uint<16>)[acc :uint<8>[0]<a,a>(CheckpointQueue)] :uint<4> {
     spec_check();
     start(acc);

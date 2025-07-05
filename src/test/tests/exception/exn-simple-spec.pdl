@@ -1,5 +1,5 @@
 // exn-simple-spec.pdl
-//Expected Success
+//Expect 6 Success, 1 Exception
 exn-pipe cpu(pc :uint<16>)[acc :uint<8>[0]<a,a>(CheckpointQueue)] :uint<4> {
     spec_check();
     start(acc);

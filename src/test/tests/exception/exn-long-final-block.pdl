@@ -1,5 +1,5 @@
 // exn-simple.pdl
-//Expect 5 Success, 1 Exception
+//Expect 6 Success, 1 Exception
 exn-pipe cpu(pc :uint<16>)[acc :uint<4>[0]<c,s>(CheckpointQueue)] :uint<4> {
     start(acc);
     reserve(acc);
