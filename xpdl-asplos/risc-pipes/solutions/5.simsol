@@ -1,0 +1,237 @@
+PC: 0000
+INSN: 010000ef
+Writing           4 to r 1
+PC: 0010
+INSN: ff010113
+Writing        1008 to r 2
+PC: 0014
+INSN: 000107a3
+PC: 0018
+INSN: 00011623
+PC: 001c
+INSN: 0400006f
+PC: 005c
+INSN: 00c11703
+Writing           0 to r14
+PC: 0060
+INSN: 00300793
+Writing           3 to r15
+PC: 0064
+INSN: fae7dee3
+PC: 0020
+INSN: 00c11783
+Writing           0 to r15
+PC: 0024
+INSN: 00000717
+Writing          36 to r14
+PC: 0028
+INSN: 05c70713
+Writing         128 to r14
+PC: 002c
+INSN: 00f707b3
+Writing         128 to r15
+PC: 0030
+INSN: 0007c703
+Writing         255 to r14
+PC: 0034
+INSN: 00f14783
+Writing           0 to r15
+PC: 0038
+INSN: 00f707b3
+Writing         255 to r15
+PC: 003c
+INSN: 00f107a3
+PC: 0040
+INSN: 00c11783
+Writing           0 to r15
+PC: 0044
+INSN: 01079793
+Writing           0 to r15
+PC: 0048
+INSN: 0107d793
+Writing           0 to r15
+PC: 004c
+INSN: 00178793
+Writing           1 to r15
+PC: 0050
+INSN: 01079793
+Writing       65536 to r15
+PC: 0054
+INSN: 0107d793
+Writing           1 to r15
+PC: 0058
+INSN: 00f11623
+PC: 005c
+INSN: 00c11703
+Writing           1 to r14
+PC: 0060
+INSN: 00300793
+Writing           3 to r15
+PC: 0064
+INSN: fae7dee3
+PC: 0020
+INSN: 00c11783
+Writing           1 to r15
+PC: 0024
+INSN: 00000717
+Writing          36 to r14
+PC: 0028
+INSN: 05c70713
+Writing         128 to r14
+PC: 002c
+INSN: 00f707b3
+Writing         129 to r15
+PC: 0030
+INSN: 0007c703
+Writing           2 to r14
+PC: 0034
+INSN: 00f14783
+Writing         255 to r15
+PC: 0038
+INSN: 00f707b3
+Writing         257 to r15
+PC: 003c
+INSN: 00f107a3
+PC: 0040
+INSN: 00c11783
+Writing           1 to r15
+PC: 0044
+INSN: 01079793
+Writing       65536 to r15
+PC: 0048
+INSN: 0107d793
+Writing           1 to r15
+PC: 004c
+INSN: 00178793
+Writing           2 to r15
+PC: 0050
+INSN: 01079793
+Writing      131072 to r15
+PC: 0054
+INSN: 0107d793
+Writing           2 to r15
+PC: 0058
+INSN: 00f11623
+PC: 005c
+INSN: 00c11703
+Writing           2 to r14
+PC: 0060
+INSN: 00300793
+Writing           3 to r15
+PC: 0064
+INSN: fae7dee3
+PC: 0020
+INSN: 00c11783
+Writing           2 to r15
+PC: 0024
+INSN: 00000717
+Writing          36 to r14
+PC: 0028
+INSN: 05c70713
+Writing         128 to r14
+PC: 002c
+INSN: 00f707b3
+Writing         130 to r15
+PC: 0030
+INSN: 0007c703
+Writing           3 to r14
+PC: 0034
+INSN: 00f14783
+Writing           1 to r15
+PC: 0038
+INSN: 00f707b3
+Writing           4 to r15
+PC: 003c
+INSN: 00f107a3
+PC: 0040
+INSN: 00c11783
+Writing           2 to r15
+PC: 0044
+INSN: 01079793
+Writing      131072 to r15
+PC: 0048
+INSN: 0107d793
+Writing           2 to r15
+PC: 004c
+INSN: 00178793
+Writing           3 to r15
+PC: 0050
+INSN: 01079793
+Writing      196608 to r15
+PC: 0054
+INSN: 0107d793
+Writing           3 to r15
+PC: 0058
+INSN: 00f11623
+PC: 005c
+INSN: 00c11703
+Writing           3 to r14
+PC: 0060
+INSN: 00300793
+Writing           3 to r15
+PC: 0064
+INSN: fae7dee3
+PC: 0020
+INSN: 00c11783
+Writing           3 to r15
+PC: 0024
+INSN: 00000717
+Writing          36 to r14
+PC: 0028
+INSN: 05c70713
+Writing         128 to r14
+PC: 002c
+INSN: 00f707b3
+Writing         131 to r15
+PC: 0030
+INSN: 0007c703
+Writing           4 to r14
+PC: 0034
+INSN: 00f14783
+Writing           4 to r15
+PC: 0038
+INSN: 00f707b3
+Writing           8 to r15
+PC: 003c
+INSN: 00f107a3
+PC: 0040
+INSN: 00c11783
+Writing           3 to r15
+PC: 0044
+INSN: 01079793
+Writing      196608 to r15
+PC: 0048
+INSN: 0107d793
+Writing           3 to r15
+PC: 004c
+INSN: 00178793
+Writing           4 to r15
+PC: 0050
+INSN: 01079793
+Writing      262144 to r15
+PC: 0054
+INSN: 0107d793
+Writing           4 to r15
+PC: 0058
+INSN: 00f11623
+PC: 005c
+INSN: 00c11703
+Writing           4 to r14
+PC: 0060
+INSN: 00300793
+Writing           3 to r15
+PC: 0064
+INSN: fae7dee3
+PC: 0068
+INSN: 00f14783
+Writing           8 to r15
+PC: 006c
+INSN: 00078513
+Writing           8 to r10
+PC: 0070
+INSN: 01010113
+Writing        1024 to r 2
+PC: 0074
+INSN: 00008067
+PC: 0004
+INSN: 0000006f
