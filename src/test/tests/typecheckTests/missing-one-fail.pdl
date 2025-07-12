@@ -1,3 +1,4 @@
+// missing-one-fail.pdl
 pipe quad_call(input: int<32>)[rf: int<32>[5]<c, s>]
   {
     bool a = input{0:0};

@@ -1,3 +1,4 @@
+// extern-synch-fail.pdl
 extern myExt {
        method mySyncMethod<s>(a :int<32>) :int<32>;
        method myCombMethod<c>(a :int<32>) :int<32>;

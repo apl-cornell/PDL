@@ -1,3 +1,4 @@
+// risc-pipe-spec.pdl
 def mul(arg1: int<32>, arg2: int<32>, op: uint<3>): int<32> {
     uint<32> mag1 = cast(mag(arg1), uint<32>);
     uint<32> mag2 = cast(mag(arg2), uint<32>);
@@ -233,7 +234,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queu
     }
     ---
     split {
-    	  case: (isLui) {
+    	case: (isLui) {
 	  	int<32> alu_res = immU;
 	  }
 	  case: (isAui) {
@@ -252,7 +253,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queu
 	  }
     }
     split {
-    	  case: (isStore) {
+      case: (isStore) {
 	  	//addresses also are word-sized
 		int<32> tmp = immS + rf1;
 		uint<32> ctmp = cast(tmp, uint<32>);
@@ -269,7 +270,7 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(FAQueue), imem: int<32>[16]<a,a>(Queu
 	  default: {
   	  	uint<16> memaddr = u0<16>;
 		uint<2> boff = u0<2>;
-	  }	  
+	  }
     }
     ---
     start(dmem);

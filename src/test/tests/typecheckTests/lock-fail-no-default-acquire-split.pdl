@@ -1,3 +1,4 @@
+// lock-fail-no-default-acquire-split.pdl
 pipe test21(input: int<32>, randomBool: bool, randomBool2: bool)[rf: int<32>[5]] {
     start(rf);
     split {

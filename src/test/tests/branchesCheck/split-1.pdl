@@ -1,3 +1,4 @@
+// split-1.pdl
 pipe test(inarg: int<32>)[] {
     split {
         case: (inarg{1:0} == 0<2>) {

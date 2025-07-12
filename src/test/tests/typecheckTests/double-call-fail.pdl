@@ -1,3 +1,4 @@
+// double-call-fail.pdl
 //cannot call twice in same pipe
 pipe call2(input: int<32>)[rf: int<32>[5]<c,s>] {
     start(rf);

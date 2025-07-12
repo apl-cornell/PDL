@@ -1,3 +1,4 @@
+/* PortChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.{Locks, Syntax, Errors}
@@ -57,12 +58,16 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
       reserveMap.clear()
       m.modules.foreach(mod => mod.typ match {
         case TMemType(_, _, _, _, r, w) => modLims.addOne((mod.name, (r, w)))
+        case TVolatileMemType(TMemType(_, _, _, _, r, w)) =>
+          modLims.addOne((mod.name, (r, w)))
         case TLockedMemType(TMemType(_, _, _, _, r, w), _, _) =>
           modLims.addOne((mod.name, (r, w)))
         case _ : TModType => modLims.addOne((mod.name, (1, 1)))
         case _ =>
       })
-      val port_map = checkPipe(m.body, emptyEnv())
+      val port_tmp = checkPipe(m.body, emptyEnv())
+      val port_com = if (m.commit_blk.isDefined) { checkPipe(m.commit_blk.get, port_tmp) } else port_tmp;
+      val port_map = if (is_excepting(m)) { checkPipe(m.except_blk.get, port_com) } else port_com;
       if(port_warn)
         port_map.getMappedKeys().foreach(mem =>
           {
@@ -91,6 +96,8 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
             case TMemType(_, _, _, _, rp, wp) =>
               ass_ports(rp, wp)
             case TLockedMemType(TMemType(_, _, _, _, rp, wp), _, _) =>
+              ass_ports(rp, wp)
+            case TVolatileMemType(TMemType(_, _, _, _, rp, wp)) =>
               ass_ports(rp, wp)
             case _ =>
           }
@@ -148,6 +155,8 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         case TMemType(_, _, rlat, _, _, _) =>
           rlat
         case TLockedMemType(TMemType(_, _, rlat, _, _, _), _, _) =>
+          rlat
+        case TVolatileMemType(TMemType(_, _, rlat, _, _, _)) =>
           rlat
         case _ => throw new RuntimeException("no")
       }} match {

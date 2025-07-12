@@ -1,3 +1,4 @@
+// lock-fail-no-acquire-before-release.pdl
 
 pipe test7(input: int<32>)[rf: int<32>[5]] {
     start(rf);

@@ -1,3 +1,4 @@
+// risc-pipe-spec-write.pdl
 extern BHT<T> {
        method req(pc: int<T>, skip: int<T>, take: int<T>): int<T>;
        method upd(pc: int<T>, taken: bool): ();
@@ -140,7 +141,7 @@ pipe multi_stg_div(num: uint<32>, denom: uint<32>, quot: uint<32>, acc: uint<32>
 }
 
 
-pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>, div: multi_stg_div, bht: BHT]: bool {
+pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>, dmem: int<32>[16]<a,a>(CheckpointQueue), div: multi_stg_div, bht: BHT]: bool {
     spec_check();
     start(imem);
     uint<16> pcaddr = cast(pc, uint<16>);
@@ -254,6 +255,13 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
     } else {
        int<32> rddata = 0<32>;
     }
+    uint<32> tmpaddr = cast(alu_res, uint<32>);
+    uint<16> memaddr = (tmpaddr >> 2){15:0};
+    start(dmem);
+    if (isLoad || isStore){
+        reserve(dmem);
+    }
+    end(dmem);
     ---
     spec_barrier(); //delayed just to force writes to happen speculatively
     if (!done) {
@@ -282,16 +290,16 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
        bool invertRes <- false;
        uint<32> udivout <- u0<32>;
    }
-   uint<32> tmpaddr = cast(alu_res, uint<32>);
-   uint<16> memaddr = (tmpaddr >> 2){15:0};
+
    uint<2> boff = cast(alu_res{1:0}, uint<2>);   
-   start(dmem);
    split {
-        case: (isLoad) {
-	   uint<16> raddr = memaddr;
-	   int<32> wdata <- dmem[raddr];
+    case: (isLoad) {
+        block(dmem);
+	    uint<16> raddr = memaddr;
+	    int<32> wdata <- dmem[raddr];
 	}
 	case: (isStore) {
+	    block(dmem);
 	      uint<16> waddr = memaddr;
 	      //use bottom bits of data and place in correct offset
 	      //shift by boff*8
@@ -303,13 +311,12 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
 	    int<32> wdata <- 0<32>;
 	}
     }
-    end(dmem);
     ---
     print("PC: %h", pc << 2);
     print("INSN: %h", insn);
     if (writerd) {
        if (isLoad) {
-          block(rf[rd]);       
+          block(rf[rd]);
        	  int<32> insnout = maskLoad(wdata, funct3, boff);
 	  rf[rd] <- insnout;
        } else {
@@ -326,7 +333,10 @@ pipe cpu(pc: int<16>)[rf: int<32>[5]<c2,s>(CheckpointRF), imem: int<32>[16]<a,a>
     ---
     if (writerd) {
        release(rf[rd]);
-    }  
+    }
+    if (isStore || isLoad) {
+       release(dmem);
+    }
     if (done) { output(true); }
 }
 
@@ -336,6 +346,7 @@ circuit {
     rf = rflock CheckpointRF(int<32>, 5, 64);
     div = new multi_stg_div[];
     b = new BHT<16>[](4);
-    c = new cpu[rf, ti, td, div, b];
+    lockedtd = CheckpointQueue(td);
+    c = new cpu[rf, ti, lockedtd, div, b];
     call c(0<16>);
 }

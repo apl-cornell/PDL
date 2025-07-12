@@ -1,3 +1,4 @@
+// type-inference-fail-call-args.pdl
 pipe test10(a: bool, b: int<32>)[rf: int<32>[32]]: int<32> {
   output(5<32>);
 }

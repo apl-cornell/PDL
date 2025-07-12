@@ -1,3 +1,4 @@
+// CheckpointRenameRF.v
 `ifdef BSV_ASSIGNMENT_DELAY
 `else
 `define BSV_ASSIGNMENT_DELAY
@@ -21,6 +22,7 @@ module CheckpointRenameRF(CLK,
 		VALID_NAME_2, VALID_OUT_2,               //check valid data 2
 		NAME_F, FE,                              //free name
 		CHK_OUT, CHK_E, CHK_READY,               //checkpoint req
+		ABORT,                                     //abort req
 		ROLLBK_IN, DO_ROLL, DO_REL, ROLLBK_E        //rollback req
 		);
 
@@ -83,7 +85,9 @@ module CheckpointRenameRF(CLK,
    //rollback
    input [replica_width - 1 : 0]  ROLLBK_IN;
    input 			  ROLLBK_E, DO_ROLL, DO_REL;
-   
+
+   //abort
+   input    ABORT;
 
    parameter copy_width = name_width * (hi_arch-lo_arch+1);      
    //arch reg file (name file)
@@ -155,24 +159,31 @@ module CheckpointRenameRF(CLK,
 
    always@(*)
      begin
-	if (ROLLBK_E)
-	  begin
-	     case ({DO_REL, DO_ROLL})
-	       2'b00 : nextFreeReplicas = freeReplicas;	       
-	       2'b01 : nextFreeReplicas =  ~(1 << ROLLBK_IN); // free everything but ROLLBK_IN
-	       2'b10 : nextFreeReplicas =  freeReplicas | (1 << ROLLBK_IN);  //only free ROLLBK_IN
-	       2'b11 : nextFreeReplicas =  ~0; // free everything
-	     endcase // case ({DO_REL, DO_ROLL})	     
-	  end
-	else
-	  begin
-	     nextFreeReplicas = freeReplicas;	     
-	  end // else: !if(ROLLBK_E)
+     if (ABORT)
+        begin
+            nextFreeReplicas = ~0;
+        end // if abort
+     else
+        begin
+            if (ROLLBK_E)
+        	    begin
+        	        case ({DO_REL, DO_ROLL})
+        	            2'b00 : nextFreeReplicas = freeReplicas;
+        	            2'b01 : nextFreeReplicas =  ~(1 << ROLLBK_IN); // free everything but ROLLBK_IN
+        	            2'b10 : nextFreeReplicas =  freeReplicas | (1 << ROLLBK_IN);  //only free ROLLBK_IN
+        	            2'b11 : nextFreeReplicas =  ~0; // free everything
+        	        endcase // case ({DO_REL, DO_ROLL})
+        	    end
+        	else
+        	    begin
+        	        nextFreeReplicas = freeReplicas;
+        	    end // else: !if(ROLLBK_E)
+        end // if not abort
 	if (CHK_E & nextReplicaValid)
-	  begin
-	     nextFreeReplicas[nextReplica] = 0;	     
-	  end	
-     end // always@ begin
+	    begin
+	        nextFreeReplicas[nextReplica] = 0;
+	    end
+    end // always@ begin
    
    assign CHK_READY = nextReplicaValid;
    assign CHK_OUT = nextReplica;
@@ -265,6 +276,14 @@ module CheckpointRenameRF(CLK,
        end
      else
        begin
+	  if (ABORT)
+	  	begin
+	  	   names <= `BSV_ASSIGNMENT_DELAY name_copies[0] | name_copies[1];
+      	   free <= `BSV_ASSIGNMENT_DELAY free_copies[0] | free_copies[1] | (FE << oldName) | free;
+      	   freeReplicas <= `BSV_ASSIGNMENT_DELAY nextFreeReplicas;
+      	end // if(abort)
+      else
+        begin
 	  //ROLLBK_E & DO_ROLL => !CHK_E & !ALLOC_E
 	  if (ROLLBK_E | (CHK_E & nextReplicaValid))
 	    begin
@@ -302,6 +321,7 @@ module CheckpointRenameRF(CLK,
 	    begin
 	       free[oldName] <= `BSV_ASSIGNMENT_DELAY 1;	       
 	    end
+       end // else: !if(ABORT)
        end // else: !if(RST)
      end // always@ (posedge CLK)
 

@@ -1,3 +1,4 @@
+// SpecialQueues.bsv
 package SpecialQueues;
 
 import Ehr :: *;
@@ -51,15 +52,24 @@ module mkOutputFIFOF(ttyp initT, OutputQ#(ttyp, dtyp) res) provisos
    
 endmodule
 
+// Change to a CReg, two element Queue for per cycle.
 module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    
    FIFOF#(dtyp) f <- mkFIFOF();
    //allow multiple writes in the same cycle
    RWire#(dtyp) enq_data <- mkRWireSBR();
-   
+   RWire#(Bool) doClear <- mkRWireSBR();
+
+   (*conflict_free = "doEnqRule, doClearRule"*)
    (*fire_when_enabled*)
-   rule doEnq (enq_data.wget() matches tagged Valid.d);
+   rule doEnqRule (enq_data.wget() matches tagged Valid.d);
       f.enq(d);
+   endrule
+
+   //reset to the initial state
+   (*no_implicit_conditions*)
+   rule doClearRule (doClear.wget() matches tagged Valid.d);
+      f.clear();
    endrule
 
    //only allow the LAST enq each cycle to work, drop the others
@@ -82,11 +92,11 @@ module mkNBFIFOF(FIFOF#(dtyp)) provisos (Bits#(dtyp, szdtyp));
    method Bool notEmpty();
       return f.notEmpty();
    endmethod
-   
+
    method Action clear();
-      f.clear();
+      doClear.wset(True);
    endmethod
-   
+
 endmodule
 
 

@@ -1,3 +1,4 @@
+// lock-wellformedness-fail.pdl
 pipe test1(input: uint<32>)[rf: int<32>[5]] {
     uint<5> rs2 = input{13:9};
     if (input{0:0} == u1) {

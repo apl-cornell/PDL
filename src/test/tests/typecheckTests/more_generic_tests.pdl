@@ -1,3 +1,4 @@
+// more_generic_tests.pdl
 // def error(inpt :int<10>) :bool
 // {
 //    shamt = cast(inpt{4:0}, uint<5>);

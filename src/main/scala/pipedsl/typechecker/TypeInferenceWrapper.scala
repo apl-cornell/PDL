@@ -1,3 +1,4 @@
+/* TypeInferenceWrapper.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.{Errors, Syntax}
@@ -7,7 +8,7 @@ import pipedsl.common.Syntax._
 import pipedsl.common.Constraints._
 import pipedsl.common.Constraints.ImplicitConstraints._
 import pipedsl.common.Utilities.{defaultReadPorts, defaultWritePorts, degenerify, fopt_func, is_generic, is_my_generic, specialize, typeMap, typeMapFunc, typeMapModule, without_prefix}
-import pipedsl.typechecker.Environments.{EmptyTypeEnv, Environment, TypeEnv}
+import pipedsl.typechecker.Environments.{EmptyIntEnv, EmptyTypeEnv, Environment, TypeEnv}
 import pipedsl.typechecker.Subtypes.{canCast, isSubtype}
 import com.microsoft.z3.{Status, AST => Z3AST, ArithExpr => Z3ArithExpr, BoolExpr => Z3BoolExpr, Context => Z3Context, IntExpr => Z3IntExpr, Solver => Z3Solver}
 import TBitWidthImplicits._
@@ -42,6 +43,7 @@ object TypeInferenceWrapper
   {
    case t: TMemType => t.copy(elem = subst_into_type(typevar, toType, t.elem)).setPos(t.pos)
    case t1@TLockedMemType(t2: TMemType, _, _) => t1.copy(t2.copy(elem = subst_into_type(typevar, toType, t2.elem))).setPos(t1.pos)
+   case t1@TVolatileMemType(t2: TMemType) => t1.copy(t2.copy(elem = subst_into_type(typevar, toType, t2.elem))).setPos(t1.pos)
    case TSizedInt(len, signedness) =>
     val width = subst_into_type(typevar, toType, len) |> to_width
     val sign = subst_into_type(typevar, toType, signedness) |> to_sign
@@ -132,6 +134,7 @@ object TypeInferenceWrapper
        case f@TFun(args, ret) => f.copy(args = args.map(type_subst_map(_, tp_mp, templated)), ret = type_subst_map(ret, tp_mp, templated)).copyMeta(f)
        case r@TRecType(_, fields) => r.copy(fields = fields.map(idtp => (idtp._1, type_subst_map(idtp._2, tp_mp, templated)))).copyMeta(r)
        case m: TMemType => m.copy(elem = type_subst_map(m.elem, tp_mp, templated)).copyMeta(m)
+       case vm@TVolatileMemType(mem) => vm.copy(mem = type_subst_map(mem, tp_mp, templated).asInstanceOf[TMemType]).copyMeta(vm)
        case m@TModType(inputs, refs, _, _) => m.copy(inputs = inputs.map(type_subst_map(_, tp_mp, templated)), refs = refs.map(type_subst_map(_, tp_mp, templated))).copyMeta(m)
        case l@TLockedMemType(mem, _, _) => l.copy(mem = type_subst_map(mem, tp_mp, templated).asInstanceOf[TMemType]).copyMeta(l)
        case TNamedType(name) if /*templated.contains(name)*/ is_my_generic(name) => t
@@ -187,7 +190,6 @@ object TypeInferenceWrapper
      }
 
 
-
     def checkProgram(p: Prog): Prog =
      {
       val extEnv = p.exts.foldLeft[Environment[Id, Type]](TypeEnv())((env, ext) => {
@@ -208,7 +210,8 @@ object TypeInferenceWrapper
         val (nenv, nfunc) = checkFunc(f, env.asInstanceOf[TypeEnv])
         (nenv, lst.prepended(nfunc))
        })
-      val (modEnvs, newMods) = p.moddefs.foldLeft[(Environment[Id, Type], List[ModuleDef])]((funcEnvs, List.empty[ModuleDef]))((envNlst, m) =>
+      val (modEnvs, newMods) = p.moddefs.foldLeft[(Environment[Id, Type],
+        List[ModuleDef])]((funcEnvs.add(is_excepting_var, TBool()), List.empty[ModuleDef]))((envNlst, m) =>
        {
         val env = envNlst._1
         val lst = envNlst._2
@@ -230,7 +233,7 @@ object TypeInferenceWrapper
      case ces@CirExprStmt(ce) => val (_, nv, nce) = checkCirExpr(ce, tenv)
       (nv, ces.copy(ce = nce).setPos(ces.pos))
     }
-
+   // TODO - EXN: This need rewrite and fix bugs
     def checkModule(m: ModuleDef, env: TypeEnv): (Environment[Id, Type], ModuleDef) =
      {
       val inputTypes = m.inputs.map(p => p.typ)
@@ -239,10 +242,23 @@ object TypeInferenceWrapper
       compose_subst(subst, unify(types._1.typ, types._2)._1))
       val modEnv = env.add(m.name, TModType(inputTypes, modTypes, m.ret, Some(m.name)))
       val inEnv = m.inputs.foldLeft[Environment[Id, Type]](modEnv)((env, p) => env.add(p.name, p.typ))
-      val pipeEnv = m.modules.zip(modTypes).foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m._1.name, m._2))
-      val (fixed_cmd, _, subst) = checkCommand(m.body, pipeEnv.asInstanceOf[TypeEnv], mod_subs)
-      val hash = mutable.HashMap.from(subst)
-      val newMod = typeMapModule(m.copy(body = fixed_cmd).copyMeta(m), fopt_func(type_subst_map_fopt(_, hash)))
+      val pipeEnv = m.modules.zip(modTypes).foldLeft[Environment[Id, Type]](inEnv)((env, m) => env.add(m._1.name, m._2)).asInstanceOf[TypeEnv]
+      val (fixed_cmd, out_env, subst) = checkCommand(m.body, pipeEnv, mod_subs)
+      val (fixed_commit, _, subst1) = m.commit_blk match
+      {
+       case None => (None, out_env, subst)
+       case Some(c) => checkCommand(c, out_env, subst) |> {case (x, y, z) => (Some(x), y, z)}
+      }
+      val (fixed_except, final_subst) = m.except_blk match
+      {
+       case ExceptEmpty() => (ExceptEmpty(), subst1)
+       //TODO - EXN: IMPROVE PRECISION OF OUT_ENV, SUBST
+       case ExceptFull(args, c) =>
+        checkCommand(c, args.foldLeft(pipeEnv)((env, id) => env.add(id, id.typ.get).asInstanceOf[TypeEnv]), subst) |>
+         {case (cmd, _, s) => (ExceptFull(args, cmd), s)}
+      }
+      val hash = mutable.HashMap.from(final_subst)
+      val newMod = typeMapModule(m.copy(body = fixed_cmd, commit_blk = fixed_commit, except_blk = fixed_except).copyMeta(m), fopt_func(type_subst_map_fopt(_, hash)))
 
       val new_input = newMod.inputs.map(p => p.typ)
       val new_mod_tps = newMod.modules.map(m => replaceNamedType(m.typ, env))
@@ -340,11 +356,22 @@ object TypeInferenceWrapper
         (c, e.apply_subst_typeenv(newSub), newSub)
        case None => (c, env, sub)
       }
+      case TVolatileMemType(tm: TMemType) => mem.evar match
+      {
+       case Some(value) => val (s, t, e, _) = infer(env, value)
+        val tempSub = compose_subst(sub, s)
+        val tNew = apply_subst_typ(tempSub, t)
+        val newSub = compose_subst(tempSub, unify(tNew, TSizedInt(TBitWidthLen(tm.addrSize), TUnsigned()))._1)
+        (c, e.apply_subst_typeenv(newSub), newSub)
+       case None => (c, env, sub)
+      }
       case _: TModType => if (mem.evar.isDefined) throw MalformedLockTypes("Pipeline modules can not have specific locks")
        (c, env, sub)
       case b => throw UnexpectedType(mem.id.pos, c.toString, "Memory or Module Type", b)
      }
      case CEmpty() => (c, env, sub)
+     case CCatch(_, oc) => checkCommand(oc, env, sub)
+     case CExcept(args) => (c, env, sub) //TODO IMPLEMENT
      case cr@CReturn(exp) =>
       val (s, t, e, fixed) = infer(env, exp)
       val tempSub = compose_subst(sub, s)
@@ -367,7 +394,7 @@ object TypeInferenceWrapper
         (cr.copy(exp = more_fixed).copyMeta(cr), e.apply_subst_typeenv(retSub), retSub)
        case b => throw UnexpectedType(c.pos, c.toString, funT.toString, b)
       }
-     case CLockStart(mod) => if (!(env(mod).isInstanceOf[TMemType] || env(mod).isInstanceOf[TModType] || env(mod).isInstanceOf[TLockedMemType]))
+     case CLockStart(mod) => if (!(env(mod).isInstanceOf[TMemType] || env(mod).isInstanceOf[TModType] || env(mod).isInstanceOf[TLockedMemType] || env(mod).isInstanceOf[TVolatileMemType]))
       {
        throw UnexpectedType(mod.pos, c.toString, "Memory or Module Type", env(mod))
       }
@@ -381,7 +408,7 @@ object TypeInferenceWrapper
       val newEnv2 = newEnv.apply_subst_typeenv(consSub)
       val (fixed_alt, altEnv, altSub) = checkCommand(alt, newEnv2, consSub)
       (i.copy(cond = fixed_cond, cons = fixed_cons, alt = fixed_alt).copyMeta(i), consEnv.apply_subst_typeenv(altSub).intersect(altEnv).asInstanceOf[TypeEnv], altSub)
-     case CLockEnd(mod) => if (!(env(mod).isInstanceOf[TMemType] || env(mod).isInstanceOf[TModType] || env(mod).isInstanceOf[TLockedMemType]))
+     case CLockEnd(mod) => if (!(env(mod).isInstanceOf[TMemType] || env(mod).isInstanceOf[TModType] || env(mod).isInstanceOf[TLockedMemType] || env(mod).isInstanceOf[TVolatileMemType]))
       {
        throw UnexpectedType(mod.pos, c.toString, "Memory or Module Type", env(mod))
       }
@@ -401,7 +428,8 @@ object TypeInferenceWrapper
         runningEnv = runningEnv.apply_subst_typeenv(runningSub).intersect(caseEnv).asInstanceOf[TypeEnv]
        }
       (cs.copy(cases = fixed_cases, default = fixed_def).copyMeta(cs), runningEnv, runningSub)
-     case ce@CExpr(exp) => val (s, _, e, fixed) = infer(env, exp)
+     case ce@CExpr(exp) =>
+      val (s, _, e, fixed) = infer(env, exp)
       val retS = compose_subst(sub, s)
       (ce.copy(exp = fixed).copyMeta(ce), e.apply_subst_typeenv(retS), retS)
      case CCheckSpec(_) => (c, env, sub)
@@ -409,7 +437,6 @@ object TypeInferenceWrapper
       update.map(c =>
       {
        infer(env, c)
-
       })
       val (s, a) = args.foldLeft(sub, List[Expr]())((sublst, exp) => {
        val (s, t, e, fixed) = infer(env, exp)
@@ -604,7 +631,11 @@ object TypeInferenceWrapper
 
     private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type], CirExpr) = c match
     {
-     case CirMem(elemTyp, addrSize, numPorts) => if (numPorts > 2) throw TooManyPorts(c.pos, 2)
+     case CirMem(elemTyp, addrSize, numPorts, true) => if (numPorts > 2) throw TooManyPorts(c.pos, 2)
+      val mtyp = TVolatileMemType(TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts))
+      c.typ = Some(mtyp)
+      (mtyp, tenv, c)
+     case CirMem(elemTyp, addrSize, numPorts, false) => if (numPorts > 2) throw TooManyPorts(c.pos, 2)
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       c.typ = Some(mtyp)
       (mtyp, tenv, c)
@@ -618,10 +649,16 @@ object TypeInferenceWrapper
       val ltyp = TLockedMemType(mtyp, None, impl)
       c.typ = Some(ltyp)
       (ltyp, tenv, c)
-     case CirRegister(elemTyp, _) => val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
+     case CirRegister(elemTyp, _, true) => val mtyp = TVolatileMemType(TMemType(elemTyp, 0, Combinational, Sequential, 0, 0))
       c.typ = Some(mtyp)
       (mtyp, tenv, c)
-     case CirRegFile(elemTyp, addrSize) => val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
+     case CirRegister(elemTyp, _, false) => val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
+      c.typ = Some(mtyp)
+      (mtyp, tenv, c)
+     case CirRegFile(elemTyp, addrSize, true) => val mtyp = TVolatileMemType(TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts))
+      c.typ = Some(mtyp)
+      (mtyp, tenv, c)
+     case CirRegFile(elemTyp, addrSize, false) => val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)
       (mtyp, tenv, c)
      case CirLockRegFile(elemTyp, addrSize, impl, szParams) => val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
@@ -684,6 +721,7 @@ object TypeInferenceWrapper
      case _: TObject => false //TODO need?
      case _: TRequestHandle => false //TODO need?
      case TLockedMemType(_, _, _) => false
+     case TVolatileMemType(_) => false
     }
 
     private def apply_subst_substs(subst: Subst, inSubst: Subst): Subst = inSubst.foldLeft[Subst](List())((s, c) => s :+ ((c._1, apply_subst_typ(subst, c._2))))
@@ -807,7 +845,8 @@ object TypeInferenceWrapper
         val bFixed = b.copy(e1 = moreFixed1, e2 = moreFixed2).copyMeta(b)
         bFixed.typ = Some(finalRetTyp)
         (finalRetSubst, finalRetTyp, env2.apply_subst_typeenv(finalRetSubst), bFixed)
-       case m@EMemAccess(mem, index, _, _, _, _) => if (!(env(mem).isInstanceOf[TMemType] || env(mem).isInstanceOf[TLockedMemType])) throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env(mem))
+       case m@EMemAccess(mem, index, _, _, _, _) => 
+        if (!(env(mem).isInstanceOf[TMemType] || env(mem).isInstanceOf[TLockedMemType] || env(mem).isInstanceOf[TVolatileMemType])) throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env(mem))
         val retType = generateTypeVar()
         val (s, t, env1, fixed_idx) = infer(env, index)
         val tTemp = apply_subst_typ(s, t)
@@ -815,6 +854,7 @@ object TypeInferenceWrapper
         {
          case t@TMemType(_, _, _, _, _, _) => t
          case TLockedMemType(t, _, _) => t
+         case TVolatileMemType(t) => t
          case _ => throw UnexpectedType(e.pos, "Memory Access", "TMemtype", env1(mem))
         }
         val (subst, _) = unify(TFun(List(tTemp), retType), getMemAccessType(memt))

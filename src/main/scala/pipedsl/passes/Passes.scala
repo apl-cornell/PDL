@@ -1,3 +1,4 @@
+/* Passes.scala */
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.PStage

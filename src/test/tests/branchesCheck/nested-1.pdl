@@ -1,3 +1,4 @@
+// nested-1.pdl
 pipe test(inarg: int<32>)[] {
     if (inarg{0:0} == 1) {
         if (inarg{1:1} == 0) {

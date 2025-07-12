@@ -1,3 +1,4 @@
+// superscalar-fail.pdl
 pipe pp(val: int<8>)[]:int<8>
   {
     int<8> a = val + 1<8>;

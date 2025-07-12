@@ -1,3 +1,4 @@
+// double-call-guarded.pdl
 pipe call_guard(input: int<32>)[rf: int<32>[5]<c, s>(Queue)] {
     start(rf);
     reserve(rf);

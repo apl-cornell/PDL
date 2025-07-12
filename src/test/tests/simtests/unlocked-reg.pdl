@@ -1,3 +1,4 @@
+// unlocked-reg.pdl
 //Expected Success
 pipe unlock(tinput: int<32>)[rf: int<32>[0]<c,s>]: bool {
     spec_check();

@@ -1,3 +1,4 @@
+/* LockEliminationPass.scala */
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.{IfStage, PStage}

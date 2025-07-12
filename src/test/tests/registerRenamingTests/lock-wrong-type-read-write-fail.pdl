@@ -1,3 +1,4 @@
+// lock-wrong-type-read-write-fail.pdl
 pipe test3(input: uint<32>)[rf: int<32>[5]] {
     uint<5> rs1 = input{0:4};
     uint<5> rs2 = input{5:9};

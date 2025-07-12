@@ -1,3 +1,4 @@
+/* BaseTypeChecker.scala */
 package pipedsl.typechecker
 
 import pipedsl.common.Errors._
@@ -95,7 +96,16 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
     val bodyEnv = pipeEnv.add(m.name, modTyp)
     val outEnv = tenv.add(m.name, modTyp)
     checkModuleBodyWellFormed(m.body, Set())
-    checkCommand(m.name, m.body, bodyEnv)
+    checkCommand(m.name, m.extendedBody(), bodyEnv)
+    if(m.except_blk.isInstanceOf[ExceptFull]){
+      val exnenv = m.except_blk.args.foldLeft[Environment[Id, Type]](bodyEnv)((env, arg) => {
+        arg.typ match {
+          case Some(t: Type) => env.add(arg, t)
+          case None => env
+        }
+      })
+      m.except_blk.foreach(checkCommand(m.name, _, exnenv))
+    }
     outEnv
   }
 
@@ -155,7 +165,13 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
-    case CirMem(elemTyp, addrSize, numPorts) => {
+    case CirMem(elemTyp, addrSize, numPorts, true) => {
+      if(numPorts > 2) throw TooManyPorts(c.pos, 2)
+      val mtyp = TVolatileMemType(TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts))
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
+    case CirMem(elemTyp, addrSize, numPorts, false) => {
       if(numPorts > 2) throw TooManyPorts(c.pos, 2)
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       c.typ = Some(mtyp)
@@ -175,12 +191,22 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(newtyp)
       (newtyp, tenv)
     }
-    case CirRegister(elemTyp, _) => {
+    case CirRegister(elemTyp, _, true) => {
+      val mtyp = TVolatileMemType(TMemType(elemTyp, 0, Combinational, Sequential, 0, 0))
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
+    case CirRegister(elemTyp, _, false) => {
       val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
-    case CirRegFile(elemTyp, addrSize) => {
+    case CirRegFile(elemTyp, addrSize, true) => {
+      val mtyp = TVolatileMemType(TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts))
+      c.typ = Some(mtyp)
+      (mtyp, tenv)
+    }
+    case CirRegFile(elemTyp, addrSize, false) => {
       val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)
       (mtyp, tenv)
@@ -391,6 +417,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           mtyp match {
             case TModType(inputs, _, _, _) =>
               if (inputs.length != args.length) {
+                print(args)
                 throw ArgLengthMismatch(c.pos, inputs.length, args.length)
               }
               if (inputs.length != preds.length) {
@@ -460,6 +487,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       })
       tenv
     case CEmpty() => tenv
+    case CExcept(arg) => arg.foreach(checkExpression(_, tenv, None)); tenv
     case _ => throw UnexpectedCommand(c)
   }
 
@@ -551,6 +579,17 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
           }
           (e, env1)
         case (TLockedMemType(TMemType(e, s, _, _, _, _),_,_), TSizedInt(l, TUnsigned())) if l.getLen == s =>
+          if (wm.isDefined) {
+            val (wmt, _) = checkExpression(wm.get, tenv, None)
+            wmt match {
+              //TODO check that the mask size is correct (i.e., length of elemtype / 8)
+              case TSizedInt(lm, TUnsigned()/*true*/) => ()
+              case _ => throw UnexpectedType(wm.get.pos, "Write Mask", "Mask must be unsigned and has length equal" +
+                " to the number of bytes in the element type", wmt)
+            }
+          }
+          (e, env1)
+        case (TVolatileMemType(TMemType(e, s, _, _, _, _)), TSizedInt(l, TUnsigned())) if l.getLen == s =>
           if (wm.isDefined) {
             val (wmt, _) = checkExpression(wm.get, tenv, None)
             wmt match {

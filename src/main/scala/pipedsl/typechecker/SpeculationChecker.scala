@@ -1,3 +1,4 @@
+/* SpeculationChecker.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
@@ -99,8 +100,20 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         if (s != NonSpeculative && !isLockedMemory(m)) {
           throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
         }
+        if (s != NonSpeculative && isVolatileMemory(m)) { //no volatile access till resolved 
+          throw IllegalSpeculativeOperation(lhs.pos, NonSpeculative.toString)
+        }
         if (s == Unknown && isLockedMemory(m)) {
           throw IllegalSpeculativeOperation(lhs.pos, Speculative.toString)
+        }
+        ()
+      case _ => ()
+    }; s
+    case CRecv(_, rhs) => rhs match {
+        //just match on volatile mem read, no volatile access till resolved 
+      case EMemAccess(m, _, _ ,_ ,_, _) =>
+        if (s != NonSpeculative && isVolatileMemory(m)) { //no volatile access till resolved 
+          throw IllegalSpeculativeOperation(rhs.pos, NonSpeculative.toString)
         }
         ()
       case _ => ()
@@ -126,9 +139,10 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
         //TODO error that actually says something about checkpoints
         throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
       }
-      if (op == Released && (t.isEmpty || t.get == LockWrite) && s != NonSpeculative) {
-        throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
-      }
+// TODO - Exn: Fix this check
+//      if (op == Released && (t.isEmpty || t.get == LockWrite) && s != NonSpeculative) {
+//        throw IllegalSpeculativeOperation(c.pos, NonSpeculative.toString)
+//      }
       //shouldn't do any potentially speculative lock ops w/o checking first
       if (s == Unknown) {
         throw IllegalSpeculativeOperation(c.pos, Speculative.toString)

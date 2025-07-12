@@ -1,3 +1,4 @@
+// 3-stg-pipe.pdl
 pipe test(pc: uint<32>)[rf: int<32>[5]<c,s>(RenameRF)]: bool {
     uint<5> rs1 = pc{4:0};
     uint<5> rd = rs1 - u1<5>;

@@ -1,3 +1,4 @@
+// lock-fail-branch-release.pdl
 pipe test3(input: int<32>)[rf: int<32>[5]] {
     start(rf);
     acquire(rf);

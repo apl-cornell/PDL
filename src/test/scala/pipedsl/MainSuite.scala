@@ -1,3 +1,4 @@
+/* MainSuite.scala */
 package pipedsl
 
 import java.io.File

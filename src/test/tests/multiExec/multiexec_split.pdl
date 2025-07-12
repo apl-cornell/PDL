@@ -1,3 +1,4 @@
+// multiexec_split.pdl
 pipe multi_stg_mul(a1: int<32>, a2: int<32>)[]: int<32> {
      int<32> rr = a1{15:0} * a2{15:0};
      int<32> rl = a1{15:0} * a2{31:16};

@@ -1,3 +1,4 @@
+// lock-fail-branch-acquire.pdl
 pipe test1(input: int<32>)[rf: int<32>[5]] {
     start(rf);
     if (input{0:0} == 1) {

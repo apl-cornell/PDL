@@ -1,3 +1,4 @@
+// tb.bsv
 import Locks :: *;
 import Memories::*;
 import FIFO::*;

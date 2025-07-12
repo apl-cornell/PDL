@@ -1,3 +1,4 @@
+// input-smt-fail.pdl
 pipe should_fail(input : int<32>)[]
 {
   if(input{1:1} == 1)

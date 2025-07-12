@@ -1,3 +1,4 @@
+// unlocked-mem-fail.pdl
 //Expected Fail
 pipe unlock(input: int<32>)[rf: int<32>[5]<c,s>] {
     spec_check();

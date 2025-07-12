@@ -1,3 +1,4 @@
+/* LockOpTranslationPass.scala */
 package pipedsl.passes
 
 import pipedsl.common.Locks._
@@ -62,13 +63,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
     p.copy(moddefs = p.moddefs.map(run))
   }
 
-  override def run(m: ModuleDef): ModuleDef =
-    {
-      val nm = m.copy(body = run(m.body))
-      nm.isRecursive = m.isRecursive
-      nm.maybeSpec = m.maybeSpec
-      nm
-    }
+  override def run(m: ModuleDef): ModuleDef = m.command_map(run).copyMeta(m)
 
   override def run(c: Command): Command = c match
   {

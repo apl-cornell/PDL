@@ -1,3 +1,4 @@
+// lock-merge-1.pdl
 pipe ex1(in: bool)[r1: int<32>[5]<a,a>(Queue), r2: int<32>[5]<a,a>(Queue)] :bool {
     start(r1);
     start(r2);

@@ -1,9 +1,11 @@
+// Locks.bsv
 package Locks;
 
 import FIFOF :: *;
 import Ehr :: *;
 import Vector :: *;
 import ConfigReg :: *;
+import GetPut :: *;
 export LockId(..);
 export QueueLock(..);
 export CheckpointQueueLock(..);
@@ -25,14 +27,16 @@ interface QueueLock#(type id);
    method Bool canRes1();
 endinterface
 
-interface CheckpointQueueLock#(type id, type cid);
+interface CheckpointQueueLock#(type id, type cid, type winfo);
    method ActionValue#(id) res1();
    method Bool owns1(id i);
    method Action rel1(id i);
    method Bool isEmpty();
    method Bool canRes1();
+   method Action write(winfo wd);
    method ActionValue#(cid) checkpoint();
    method Action rollback(cid id, Bool doRoll, Bool doRel);
+   method Action abort();
 endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
@@ -47,25 +51,25 @@ module mkQueueLock(QueueLock#(LockId#(d)));
 
    Reg#(LockId#(d)) nextId <- mkReg(0);
    FIFOF#(LockId#(d)) held <- mkSizedFIFOF(valueOf(d));
-   
+
    Reg#(LockId#(d)) cnt <- mkReg(0);
-   
+
    Bool lockFree = !held.notEmpty;
    LockId#(d) owner = held.first;
 
    method Bool isEmpty();
       return lockFree;
    endmethod
-   
+
    method Bool canRes1();
       return held.notFull;
    endmethod
-   
+
    //Returns True if thread `tid` already owns the lock
    method Bool owns1(LockId#(d) tid);
       return owner == tid;
    endmethod
-	       
+
    //Releases the lock iff thread `tid` owns it already
    method Action rel1(LockId#(d) tid);
       if (owner == tid)
@@ -73,7 +77,7 @@ module mkQueueLock(QueueLock#(LockId#(d)));
 	    held.deq();
 	 end
    endmethod
-   
+
    //Reserves the lock and returns the associated id
    method ActionValue#(LockId#(d)) res1();
       held.enq(nextId);
@@ -81,12 +85,12 @@ module mkQueueLock(QueueLock#(LockId#(d)));
       cnt <= cnt + 1;
       return nextId;
    endmethod
-      
+
 endmodule
 
 module mkCountingLock(QueueLock#(LockId#(d)));
 
-   Ehr#(2, LockId#(d)) nextId <- mkEhr(0);   
+   Ehr#(2, LockId#(d)) nextId <- mkEhr(0);
    Reg#(LockId#(d)) owner <- mkReg(0);
    Reg#(Bool) empty <- mkReg(True);
 
@@ -94,7 +98,8 @@ module mkCountingLock(QueueLock#(LockId#(d)));
 
    RWire#(Bool) doRes <- mkRWire();
    RWire#(LockId#(d)) doRel <- mkRWire();
-   
+   //i think i need to add a doAbrt wire here
+
    (*fire_when_enabled*)
    rule updateEmpty;
       let res = fromMaybe(False, doRes.wget());
@@ -108,40 +113,42 @@ module mkCountingLock(QueueLock#(LockId#(d)));
    method Bool isEmpty();
       return empty;
    endmethod
-   
+
    method Bool canRes1();
       return !full;
    endmethod
-   
+
    //Returns True if thread `tid` already owns the lock
    method Bool owns1(LockId#(d) tid);
       return owner == tid;
    endmethod
-	       
+
    //Releases the lock
    method Action rel1(LockId#(d) tid);
       owner <= owner + 1;
       doRel.wset(owner + 1);
    endmethod
-   
+
    //Reserves the lock and returns the associated id
    method ActionValue#(LockId#(d)) res1();
       nextId[0] <= nextId[0] + 1;
       doRes.wset(True);
       return nextId[0];
    endmethod
-      
+
 endmodule
 
-module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
+module mkCheckpointQueueLock(Put#(winfo) mem, CheckpointQueueLock#(LockId#(d), LockId#(d), winfo) _unused_)
+   provisos(Bits#(winfo,wsz));
 
    Ehr#(2, LockId#(d)) nextId <- mkEhr(0);
    Reg#(LockId#(d)) owner <- mkReg(0);
    Reg#(Bool) empty <- mkReg(True);
-   
+
+   Reg#(Maybe#(winfo)) wdata <- mkReg(tagged Invalid);
    RWire#(Bool) doRes <- mkRWire();
    RWire#(LockId#(d)) doRel <- mkRWire();
-   
+
    //for when you're doing not rollback
    (*fire_when_enabled*)
    rule updateEmpty;
@@ -149,38 +156,54 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
       if (res &&& doRel.wget() matches tagged Invalid) empty <= False;
       if (!res &&& doRel.wget() matches tagged Valid.nextOwner) empty <= nextOwner == nextId[1];
    endrule
+
+   method Action abort();
+      nextId[0] <= 0;
+      owner <= 0;
+      empty <= True;
+      wdata <= tagged Invalid;
+   endmethod
    
    method Bool isEmpty();
       return empty;
    endmethod
-   
+
    method Bool canRes1();
       return empty || nextId[0] != owner;
    endmethod
-   
+
    //Returns True if thread `tid` already owns the lock
    method Bool owns1(LockId#(d) tid);
       return owner == tid;
    endmethod
-	       
+
+   //store the write data
+   method Action write(winfo wd);
+      wdata <= tagged Valid wd;
+   endmethod
+   
    //Releases the lock, assume `tid` owns it
    method Action rel1(LockId#(d) tid);
       owner <= owner + 1; //assign next owner
       doRel.wset(owner + 1);
+      if (wdata matches tagged Valid.wd) begin
+	 mem.put(wd);
+	 wdata <= tagged Invalid;
+      end      
    endmethod
-   
+
    //Reserves the lock and returns the associated id
    method ActionValue#(LockId#(d)) res1();
       nextId[0] <= nextId[0] + 1;
       doRes.wset(True);
       return nextId[0];
    endmethod
-   
+
    method ActionValue#(LockId#(d)) checkpoint();
       //return point after this cycle's reservations
       return nextId[1];
    endmethod
-   
+
    method Action rollback(LockId#(d) i, Bool doRoll, Bool doRollRel);
       //rollback release is noop
       //conflicts with other update rules - cannot res/rel and rollback
@@ -189,15 +212,15 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
 	    nextId[0] <= i;
 	    empty <= i == owner; //if i is Owner, then this is actually empty after rollback
 	 end
-   endmethod   
-   
+   endmethod
+
 endmodule
 
 typedef UInt#(TLog#(n)) LockIdx#(numeric type n);
 
 module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, szAddr), Eq#(addr));
 
-   
+
    Vector#(numlocks, QueueLock#(LockId#(d))) lockVec <- replicateM( mkCountingLock() );
    Vector#(numlocks, Reg#(Maybe#(addr))) entryVec <- replicateM( mkConfigReg(tagged Invalid) );
    //Signal that a reservation used an already-allocated lock this cycle
@@ -206,18 +229,18 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 
    //Allow each lock entry to be freed once it's no longer used,
    //but tagged as valid, *AND* was there isn't a reservation this cycle to it.
-   for (Integer i = 0; i < valueOf(numlocks); i = i + 1) begin      
+   for (Integer i = 0; i < valueOf(numlocks); i = i + 1) begin
       rule freelock(lockVec[i].isEmpty && isValid(entryVec[i]) && !isValid(resVec[i].wget()));
 	 entryVec[i] <= tagged Invalid;
       endrule
    end
-  
+
    //returns the index of the lock associated with loc
    //returns invalid if no lock is associated with loc
    function Maybe#(LockIdx#(numlocks)) getLockIndex(addr loc);
       Maybe#(LockIdx#(numlocks)) result = tagged Invalid;
       for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
-	    if (result matches tagged Invalid &&& 
+	    if (result matches tagged Invalid &&&
 	       entryVec[idx] matches tagged Valid.t &&& t == loc)
 	       result = tagged Valid fromInteger(idx);
       return result;
@@ -229,7 +252,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
     else
        return tagged Invalid;
    endfunction
-   
+
    //gets the first index where an address is not assigned to the lock OR the lock is empty
    //returns invalid if all locks are in use
    function Maybe#(LockIdx#(numlocks)) getFreeLock();
@@ -237,14 +260,14 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       for (Integer idx = 0; idx < valueOf(numlocks); idx = idx + 1)
 	    if (result matches tagged Invalid &&&
 		entryVec[idx] matches tagged Invalid)
-		  result = tagged Valid fromInteger(idx);		  
+		  result = tagged Valid fromInteger(idx);
       return result;
    endfunction
 
    //returns true iff there is a lock location free
    function Bool isFreeLock();
       return isValid(getFreeLock());
-   endfunction   
+   endfunction
 
    //true if lock is associated w/ addr or there is a location free
    method Bool canRes1(addr loc);
@@ -252,7 +275,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
       if (lockAddr matches tagged Valid.l) return True;
       else return isFreeLock();
    endmethod
-   
+
    //true if lock associated w/ address is empty or there is a lock lockation free
    method Bool isEmpty(addr loc);
         Maybe#(QueueLock#(LockId#(d))) addrLock = getLock(loc);
@@ -275,7 +298,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	    //free then this location is acquirable
 	    return hasFree;
    endmethod
-      
+
    method Action rel1(LockId#(d) tid, addr loc);
       Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
@@ -286,7 +309,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 	 end
       //else no lock is associated with loc, do nothing
    endmethod
-   
+
    method ActionValue#(LockId#(d)) res1(addr loc);
       Maybe#(LockIdx#(numlocks)) lockIdx = getLockIndex(loc);
       if (lockIdx matches tagged Valid.idx)
@@ -312,7 +335,7 @@ module mkFAAddrLock(AddrLock#(LockId#(d), addr, numlocks)) provisos(Bits#(addr, 
 endmodule: mkFAAddrLock
 
 module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(addr, szAddr));
-   
+
    Vector#(TExp#(szAddr), QueueLock#(LockId#(d))) lockVec <- replicateM( mkCountingLock() );
 
    method Bool isEmpty(addr loc);
@@ -322,20 +345,20 @@ module mkDMAddrLock(AddrLock#(LockId#(d), addr, unused)) provisos(PrimIndex#(add
    method Bool owns1(LockId#(d) tid, addr loc);
       return lockVec[loc].owns1(tid);
    endmethod
-   
+
    method Bool canRes1(addr loc);
       return True;
    endmethod
-   
+
    method Action rel1(LockId#(d) tid, addr loc);
       lockVec[loc].rel1(tid);
    endmethod
-   
+
    method ActionValue#(LockId#(d)) res1(addr loc);
       let id <- lockVec[loc].res1();
       return id;
    endmethod
-   
+
 endmodule: mkDMAddrLock
 
 endpackage

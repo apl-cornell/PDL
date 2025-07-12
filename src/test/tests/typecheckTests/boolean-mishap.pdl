@@ -1,3 +1,4 @@
+// boolean-mishap.pdl
 pipe mistake(input: int<32>)[rf: int<32>[5]<c, s>] {
    bool a = input{0:0};
    bool b = input{1:1};

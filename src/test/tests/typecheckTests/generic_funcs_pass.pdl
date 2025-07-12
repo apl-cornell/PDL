@@ -1,3 +1,4 @@
+// generic_funcs_pass.pdl
 def fixed_1(inpt :int<10>) :bool
 {
    shamt = cast(inpt{4:0}, uint<5>);

@@ -1,3 +1,4 @@
+/* Environments.scala */
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
@@ -69,7 +70,8 @@ object Environments {
         
         override def add(name: Id, typ: Type): Environment[Id, Type] = typeMap.get(name) match {
             case Some(t) => throw AlreadyBoundType(name.pos, name.v, t, typ)
-            case None => this.copy(typeMap = typeMap + (name -> typ))
+            case None =>
+                this.copy(typeMap = typeMap + (name -> typ))
         }
         override def remove(name: Id): Environment[Id, Type] = {
             TypeEnv(this.typeMap - name)

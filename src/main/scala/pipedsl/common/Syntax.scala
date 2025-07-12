@@ -1,3 +1,4 @@
+/* Syntax.scala */
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
 import Errors._
@@ -38,6 +39,9 @@ object Syntax {
     }
     sealed trait SpeculativeAnnotation {
       var maybeSpec: Boolean = false
+    }
+    sealed trait ExceptionAnnotation {
+      var isExcepting: Boolean = false
     }
     sealed trait LockInfoAnnotation {
       var memOpType: Option[LockType] = None
@@ -131,6 +135,7 @@ object Syntax {
         s"${elem.toString}[${size}]<$rLat$rPorts, $wLat$wPorts>"
       case TLockedMemType(m, sz, impl) => s"${m.toString}(${impl.toString})".concat(
         if (sz.isDefined) s"<${sz.get.toString}>" else "")
+      case TVolatileMemType(m) => s"${m.toString}(volatile)"
       case TModType(ins, refs, _, _) => s"${ins.mkString("->")} ++ ${refs.mkString("=>")})"
       case TRequestHandle(m, _) => s"${m}_Request"
       case TReqHandle(tp, _) => s"${tp}_Request"
@@ -202,6 +207,8 @@ object Syntax {
       case _ :TModType =>
         if(this == that) this else throw TypeMeetError(this, that)
       case _ :TLockedMemType =>
+        if(this == that) this else throw TypeMeetError(this, that)
+      case _ :TVolatileMemType =>
         if(this == that) this else throw TypeMeetError(this, that)
       case _ :TRequestHandle =>
         if(this == that) this else throw TypeMeetError(this, that)
@@ -315,6 +322,7 @@ object Syntax {
                       writePorts: Int) extends Type
   case class TModType(inputs: List[Type], refs: List[Type], retType: Option[Type], name: Option[Id] = None) extends Type
   case class TLockedMemType(mem: TMemType, idSz: Option[Int], limpl: LockInterface) extends Type
+  case class TVolatileMemType(mem: TMemType) extends Type
   case class TReqHandle(tp :Type, rtyp :RequestType) extends Type
   //TODO merge these two together
   case class TRequestHandle(mod: Id, rtyp: RequestType) extends Type
@@ -431,6 +439,7 @@ object Syntax {
 
   //returns false only if it represents an unlocked memory type
   def isLockedMemory(mem: Id): Boolean = mem.typ.get match { case _:TMemType => false; case _ => true }
+  def isVolatileMemory(mem: Id): Boolean = mem.typ.get match { case _:TVolatileMemType => true; case _ => false }
   //returns false only if it represents an external (Verilog) module or a pipeline with no internal mems/submodules
   def isLockedModule(mod: Id): Boolean = mod.typ.get match {
     case TModType(_, refs, _, _) => refs.nonEmpty
@@ -442,6 +451,9 @@ object Syntax {
       val latency: Latency = if (isWrite) writeLatency else readLatency
       latency == Latency.Asynchronous
     case TLockedMemType(TMemType(_, _, readLatency, writeLatency, _, _), _, _) =>
+      val latency: Latency = if (isWrite) writeLatency else readLatency
+      latency == Latency.Asynchronous
+    case TVolatileMemType(TMemType(_, _, readLatency, writeLatency, _, _)) =>
       val latency: Latency = if (isWrite) writeLatency else readLatency
       latency == Latency.Asynchronous
     case _ => false
@@ -643,10 +655,16 @@ object Syntax {
   }
   case class CSplit(cases: List[CaseObj], default: Command) extends Command
   case class CEmpty() extends Command
-
+  case class CExcept(args: List[Expr]) extends Command
+  case class CCatch(mod: Id, onCatch: Command) extends Command
 
   sealed trait InternalCommand extends Command
 
+  case class IAbort(mem: Id) extends InternalCommand
+  case class IFifoClear() extends InternalCommand
+  case class ICheckExn() extends InternalCommand
+  case class ISpecClear() extends InternalCommand
+  case class ISetGlobalExnFlag(state: Boolean) extends InternalCommand
   case class ICondCommand(cond: Expr, cs: List[Command]) extends InternalCommand
   case class IUpdate(specId: Id, value: EVar, originalSpec: EVar) extends InternalCommand
   case class ICheck(specId: Id, value: EVar) extends InternalCommand
@@ -660,7 +678,7 @@ object Syntax {
   }
   case class IMemRecv(mem: Id, handle: EVar, data: Option[EVar]) extends InternalCommand with LockInfoAnnotation
   //used for sequential memories that don't commit writes immediately but don't send a response
-  case class IMemWrite(mem: Id, addr: EVar, data: EVar,
+  case class IMemWrite(mem: Id, addr: EVar, data: EVar, writeMask: Option[Expr],
                        inHandle: Option[EVar], outHandle: Option[EVar], isAtomic: Boolean) extends InternalCommand with LockInfoAnnotation
   case class ICheckLockOwned(mem: LockArg, inHandle: EVar, outHandle :EVar) extends InternalCommand with LockInfoAnnotation
   case class IReserveLock(outHandle: EVar, mem: LockArg) extends InternalCommand with LockInfoAnnotation
@@ -688,27 +706,72 @@ object Syntax {
                       lat :Latency
                       ) extends Definition
 
-  case class ModuleDef(
-    name: Id,
-    inputs: List[Param],
-    modules: List[Param],
-    ret: Option[Type],
-    body: Command) extends Definition with RecursiveAnnotation with SpeculativeAnnotation with HasCopyMeta
+  sealed trait ExceptBlock extends Positional with HasCopyMeta
+  {
+    def map(f : Command => Command) : ExceptBlock
+    def foreach(f : Command => Unit) :Unit
+    def get :Command
+    def args : List[Id]
+    def copyMeta(other :ExceptBlock) = this.setPos(other.pos)
+  }
+
+
+  case class ExceptEmpty() extends ExceptBlock
+  {
+    override def map(f: Command => Command): ExceptBlock = this
+    override def foreach(f: Command => Unit): Unit = ()
+    override def args : List[Id] = throw new NoSuchElementException("EmptyExcept")
+    override def get :Command = throw new NoSuchElementException("EmptyExcept")
+  }
+  case class ExceptFull(exn_args: List[Id], c: Command) extends ExceptBlock
+    {
+      override def map(f: Command => Command): ExceptBlock = ExceptFull(args, f(c)).copyMeta(this)
+      override def foreach(f: Command => Unit): Unit = f(c)
+      override def args : List[Id] = exn_args
+      override def get :Command = c
+    }
+
+
+  case class ModuleDef(name: Id, inputs: List[Param],
+                       modules: List[Param],
+                       ret: Option[Type],
+                       body: Command,
+                       commit_blk: Option[Command],
+                       except_blk: ExceptBlock)
+    extends Definition with RecursiveAnnotation with SpeculativeAnnotation with ExceptionAnnotation with HasCopyMeta
     {
       override val copyMeta: HasCopyMeta => ModuleDef =
         {
           case from :ModuleDef =>
           maybeSpec = from.maybeSpec
+          isExcepting = from.isExcepting
           isRecursive = from.isRecursive
           pos = from.pos
           this
           case _ => this
         }
+
+      def command_map(f : Command => Command) :ModuleDef = copy(body = f(body),
+        commit_blk = commit_blk.map(f), except_blk = except_blk.map(f))
+
+      def extendedBody(): Command = commit_blk match {
+        case None => body
+        case Some(c) => CSeq(body, c)
+      }
     }
+
+  def is_excepting(m :ModuleDef) :Boolean = m.except_blk match
+  {
+    case ExceptEmpty() => false
+    case _ :ExceptFull => true
+  }
 
   case class Param(name: Id, typ: Type) extends Positional
 
   case class ExternDef(name: Id, typParams: List[Type], methods: List[MethodDef]) extends Definition with TypeAnnotation
+
+  val is_excepting_var: Id =
+    Id("__excepting").setType(TBool())
 
   case class Prog(exts: List[ExternDef],
     fdefs: List[FuncDef], moddefs: List[ModuleDef], circ: Circuit) extends Positional
@@ -719,9 +782,9 @@ object Syntax {
   case class CirExprStmt(ce: CirExpr) extends Circuit
 
   sealed trait CirExpr extends Expr
-  case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int) extends CirExpr
-  case class CirRegFile(elemTyp: Type, addrSize: Int) extends CirExpr
-  case class CirRegister(elemTyp: Type, initVal: Int) extends CirExpr
+  case class CirMem(elemTyp: Type, addrSize: Int, numPorts: Int, isVolatile: Boolean) extends CirExpr
+  case class CirRegFile(elemTyp: Type, addrSize: Int, isVolatile: Boolean) extends CirExpr
+  case class CirRegister(elemTyp: Type, initVal: Int, isVolatile: Boolean) extends CirExpr
   //TODO do these ever need other kinds of parameters besides ints?
   //this allows us to build a "locked" version of a memory
   case class CirLock(mem: Id, impl: LockInterface, szParams: List[Int]) extends CirExpr

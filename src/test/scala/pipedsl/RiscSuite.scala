@@ -1,3 +1,4 @@
+/* RiscSuite.scala */
 package pipedsl
 
 import org.scalatest.funsuite.AnyFunSuite
@@ -39,5 +40,6 @@ class RiscSuite extends AnyFunSuite {
         testBlueSpecSim(testFolder, t, None, simInputs, Some(s + ".simsol"))
       }
     })
+
   })
 }
