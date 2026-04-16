@@ -1,0 +1,1126 @@
+[info] welcome to sbt 1.10.11 (Homebrew Java 25.0.2)
+[info] loading settings for project pdl-new-build from assembly.sbt...
+[info] loading project definition from /Users/r2/Research/Coding/pdl-new/project
+[info] loading settings for project pdl-new from build.sbt...
+[info] set current project to PipelineDescriptionLanguage (in build file:/Users/r2/Research/Coding/pdl-new/)
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Dmcache.bsv
+compiling ./Mul_pipe.bsv
+code generation for mkMul_pipe starts
+Schedule dump file created: mkMul_pipe.sched
+Verilog file created: Circuit_verilog/mkMul_pipe.v
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Dmcache.bsv
+compiling ./Mul_pipe.bsv
+code generation for mkMul_pipe starts
+Verilog file created: Circuit_verilog/mkMul_pipe.v
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Dmcache.bsv
+compiling ./Mul_pipe.bsv
+code generation for mkMul_pipe starts
+Verilog file created: Circuit_verilog/mkMul_pipe.v
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Dmcache.bsv
+compiling ./Mul_pipe.bsv
+code generation for mkMul_pipe starts
+Verilog file created: Circuit_verilog/mkMul_pipe.v
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Dmcache.bsv
+compiling ./Mul_pipe.bsv
+code generation for mkMul_pipe starts
+Verilog file created: Circuit_verilog/mkMul_pipe.v
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Dmcache.bsv
+compiling ./Mul_pipe.bsv
+code generation for mkMul_pipe starts
+Verilog file created: Circuit_verilog/mkMul_pipe.v
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Schedule dump file created: mkMulti_stg_div.sched
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Schedule dump file created: mkCircuit.sched
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Schedule dump file created: mkTB.sched
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+~/Research/Coding/pdl-new/src/test/tests/risc-pipe ~/Research/Coding/pdl-new
+checking package dependencies
+compiling ./Functions.bsv
+compiling ./Multi_stg_div.bsv
+code generation for mkMulti_stg_div starts
+Verilog file created: Circuit_verilog/mkMulti_stg_div.v
+compiling ./Cpu.bsv
+compiling Circuit.bsv
+code generation for mkCircuit starts
+Verilog file created: Circuit_verilog/mkCircuit.v
+code generation for mkTB starts
+Verilog file created: Circuit_verilog/mkTB.v
+All packages are up to date.
+Verilog binary file created: mkTB.bexe
+~/Research/Coding/pdl-new
+[info] RiscSuite:
+[info] - risc-pipe-spec-write Typecheck
+[info] - risc-pipe-spec-write BSV Compile
+[info] - risc-pipe-spec-write Simulate 4
+[info] - risc-pipe-spec-write Simulate 2
+[info] - risc-pipe-spec-write Simulate 5
+[info] - risc-pipe-spec-write Simulate 3
+[info] - risc-pipe-spec-write Simulate 1
+[info] - risc-pipe Typecheck
+[info] - risc-pipe BSV Compile
+[info] - risc-pipe Simulate 4
+[info] - risc-pipe Simulate 2
+[info] - risc-pipe Simulate 5
+[info] - risc-pipe Simulate 3
+[info] - risc-pipe Simulate 1
+[info] - risc-pipe-spec-bypass-bht Typecheck
+[info] - risc-pipe-spec-bypass-bht BSV Compile
+[info] - risc-pipe-spec-bypass-bht Simulate 4
+[info] - risc-pipe-spec-bypass-bht Simulate 2
+[info] - risc-pipe-spec-bypass-bht Simulate 5
+[info] - risc-pipe-spec-bypass-bht Simulate 3
+[info] - risc-pipe-spec-bypass-bht Simulate 1
+[info] - risc-pipe-cache Typecheck
+[info] - risc-pipe-cache BSV Compile
+[info] - risc-pipe-cache Simulate 4
+[info] - risc-pipe-cache Simulate 2
+[info] - risc-pipe-cache Simulate 5
+[info] - risc-pipe-cache Simulate 3
+[info] - risc-pipe-cache Simulate 1
+[info] - risc-pipe-spec-rename-ooo-infer Typecheck
+[info] - risc-pipe-spec-rename-ooo-infer BSV Compile
+[info] - risc-pipe-spec-rename-ooo-infer Simulate 4
+[info] - risc-pipe-spec-rename-ooo-infer Simulate 2
+[info] - risc-pipe-spec-rename-ooo-infer Simulate 5
+[info] - risc-pipe-spec-rename-ooo-infer Simulate 3
+[info] - risc-pipe-spec-rename-ooo-infer Simulate 1
+[info] - risc-pipe-3stg Typecheck
+[info] - risc-pipe-3stg BSV Compile
+[info] - risc-pipe-3stg Simulate 4
+[info] - risc-pipe-3stg Simulate 2
+[info] - risc-pipe-3stg Simulate 5
+[info] - risc-pipe-3stg Simulate 3
+[info] - risc-pipe-3stg Simulate 1
+[info] - risc-pipe-spec-write-infer Typecheck
+[info] - risc-pipe-spec-write-infer BSV Compile
+[info] - risc-pipe-spec-write-infer Simulate 4
+[info] - risc-pipe-spec-write-infer Simulate 2
+[info] - risc-pipe-spec-write-infer Simulate 5
+[info] - risc-pipe-spec-write-infer Simulate 3
+[info] - risc-pipe-spec-write-infer Simulate 1
+[info] - risc-pipe-spec-rename-ooo Typecheck
+[info] - risc-pipe-spec-rename-ooo BSV Compile
+[info] - risc-pipe-spec-rename-ooo Simulate 4
+[info] - risc-pipe-spec-rename-ooo Simulate 2
+[info] - risc-pipe-spec-rename-ooo Simulate 5
+[info] - risc-pipe-spec-rename-ooo Simulate 3
+[info] - risc-pipe-spec-rename-ooo Simulate 1
+[info] - risc-pipe-spec-rename-bht Typecheck
+[info] - risc-pipe-spec-rename-bht BSV Compile
+[info] - risc-pipe-spec-rename-bht Simulate 4
+[info] - risc-pipe-spec-rename-bht Simulate 2
+[info] - risc-pipe-spec-rename-bht Simulate 5
+[info] - risc-pipe-spec-rename-bht Simulate 3
+[info] - risc-pipe-spec-rename-bht Simulate 1
+[info] - risc-pipe-spec Typecheck
+[info] - risc-pipe-spec BSV Compile
+[info] - risc-pipe-spec Simulate 4
+[info] - risc-pipe-spec Simulate 2
+[info] - risc-pipe-spec Simulate 5
+[info] - risc-pipe-spec Simulate 3
+[info] - risc-pipe-spec Simulate 1
+[info] - risc-pipe-spec-write-2 Typecheck
+[info] - risc-pipe-spec-write-2 BSV Compile
+[info] - risc-pipe-spec-write-2 Simulate 4
+[info] - risc-pipe-spec-write-2 Simulate 2
+[info] - risc-pipe-spec-write-2 Simulate 5
+[info] - risc-pipe-spec-write-2 Simulate 3
+[info] - risc-pipe-spec-write-2 Simulate 1
+[info] Run completed in 7 minutes, 13 seconds.
+[info] Total number of tests run: 77
+[info] Suites: completed 1, aborted 0
+[info] Tests: succeeded 77, failed 0, canceled 0, ignored 0, pending 0
+[info] All tests passed.
+[success] Total time: 434 s (0:07:14.0), completed Apr 16, 2026, 4:37:23 PM
