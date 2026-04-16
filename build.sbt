@@ -1,6 +1,6 @@
 name := "PipelineDescriptionLanguage"
 version := "0.0.1"
-scalaVersion := "2.13.2"
+scalaVersion := "2.13.16"
 
 libraryDependencies ++= Seq(
   "commons-io" % "commons-io" % "2.8.0",
@@ -10,7 +10,7 @@ libraryDependencies ++= Seq(
   "com.lihaoyi" %% "pprint" % "0.5.6",
 
   // SMT Solving
-  "io.github.tudo-aqua" % "z3-turnkey" % "4.8.7.1",
+  "tools.aqua" % "z3-turnkey" % "4.13.0",
 
   // Command Line Parsing
   "com.github.scopt" % "scopt_2.13" % "4.0.0-RC2",
@@ -26,7 +26,9 @@ libraryDependencies ++= Seq(
 
 scalacOptions += "-language:implicitConversions"
 
+Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
+
 //Deployment Options
-assemblyJarName in assembly := "pdl.jar"
-test in assembly := {}
-mainClass in assembly := Some("pipedsl.Main")
+assembly / assemblyJarName := "pdl.jar"
+assembly / test := {}
+assembly / mainClass := Some("pipedsl.Main")

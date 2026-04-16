@@ -58,6 +58,16 @@ else
     SIMOUT="$3"
 fi
 
+# Detect timeout command (GNU coreutils on macOS uses gtimeout)
+if command -v timeout &>/dev/null; then
+    TIMEOUT_CMD=timeout
+elif command -v gtimeout &>/dev/null; then
+    TIMEOUT_CMD=gtimeout
+else
+    echo "Error: neither 'timeout' nor 'gtimeout' found. Install coreutils."
+    exit 1
+fi
+
 SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 if [ -d "$WDIR" ]
 then
@@ -91,13 +101,13 @@ case "$CMD" in
 	#Run simulation in Bluesim
 	"$BSC" $ARGS -sim $BPATH "$TOP".bsv
 	"$BSC" $ARGS $BPATH -sim -o "$TB".bexe -e "$TB" "$TB".ba
-	timeout "$TOUT"s ./"$TB".bexe | grep -v "WARNING" > "$SIMOUT"	
+	"$TIMEOUT_CMD" "$TOUT"s ./"$TB".bexe | grep -v "WARNING" > "$SIMOUT"
 	;;
     "s")
 	#Run simulation in Verilog
 	"$BSC" $ARGS $BPATH $VPATH $VSIM -vdir $VDIR -simdir $SDIR -u "$TOP".bsv
 	"$BSC" $ARGS $VPATH $VSIM -verilog -vdir $VDIR -simdir $SDIR -o "$TB".bexe -e "$TB" "$VDIR"/"$TB".v
-	timeout "$TOUT"s ./"$TB".bexe | grep -v "WARNING" > "$SIMOUT"
+	"$TIMEOUT_CMD" "$TOUT"s vvp ./"$TB".bexe | grep -v "WARNING" | grep -v '\$finish' > "$SIMOUT"
 	;;
     "c")
 	rm -f *.bi *.bo *.ba

@@ -738,7 +738,7 @@ object TypeInferenceWrapper
      }
 
 
-    private def z3_of_index(index: EIndex) :Z3ArithExpr = index match
+    private def z3_of_index(index: EIndex) :Z3ArithExpr[_] = index match
     {
      case EIndConst(v) => context.mkInt(v)
      case EIndAdd(l, r) => context.mkAdd(z3_of_index(l), z3_of_index(r))
@@ -746,7 +746,7 @@ object TypeInferenceWrapper
      case EIndVar(id) => context.mkIntConst(id.v)
     }
 
-    private def z3_of_width(width: TBitWidth) :Z3ArithExpr = width match
+    private def z3_of_width(width: TBitWidth) :Z3ArithExpr[_] = width match
     {
      case TBitWidthVar(name) => context.mkIntConst(name.v)
      case TBitWidthLen(len) => context.mkInt(len)
