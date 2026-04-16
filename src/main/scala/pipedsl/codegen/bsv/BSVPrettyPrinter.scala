@@ -2,7 +2,7 @@ package pipedsl.codegen.bsv
 
 import java.io.{File, FileOutputStream, OutputStreamWriter, Writer}
 
-import pipedsl.codegen.bsv.BSVSyntax._
+import pipedsl.codegen.bsv.BSVSyntax.*
 import pipedsl.common.Errors.BaseError
 
 object BSVPrettyPrinter {
@@ -293,8 +293,8 @@ object BSVPrettyPrinter {
 
     def printBSVFuncModule(funcs: Iterable[BFuncDef]): Unit = {
       funcs.foreach(f => {
-        val export = BExport(f.name, expFields = false)
-        printExport(export)
+        val exportDecl = BExport(f.name, expFields = false)
+        printExport(exportDecl)
         printBSVFunc(f)
       })
     }

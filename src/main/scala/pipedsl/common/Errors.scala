@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import scala.util.parsing.input.{NoPosition, Position, Positional}
-import Syntax._
+import Syntax.*
 import pipedsl.common.Locks.LockState
 
 object Errors {

@@ -32,21 +32,57 @@ make            # Full build: compiler JAR + BSV runtime libraries
 sbt test        # Run all 247 tests (parse, typecheck, compile, simulate)
 ```
 
-## Dependency Updates for ARM64 Compatibility
+## Dependency Updates
 
-The original project was developed on x86_64 Linux (Ubuntu 18.04, per CI). The following changes were needed to build and test on ARM64 macOS:
+The original project was developed on x86_64 Linux (Ubuntu 18.04, per CI). All dependencies have been updated to latest stable versions.
 
-### project/build.properties
-- SBT **1.4.4 → 1.10.11**: The old SBT bundled x86_64-only JNA natives, causing `UnsatisfiedLinkError` on ARM64.
+| Dependency | Original | Current | Notes |
+|---|---|---|---|
+| **Scala** | **2.13.2** | **3.3.6 LTS** | **Major version migration** |
+| SBT | 1.4.4 | 1.11.0 | ARM64 JNA natives |
+| sbt-assembly | 0.14.10 | 2.3.1 | SBT 1.x compat |
+| commons-io | 2.8.0 | 2.18.0 | |
+| scala-parser-combinators | 1.1.2 | 2.4.0 | |
+| pprint | 0.5.6 | 0.9.0 | |
+| z3-turnkey | 4.8.7.1 (`io.github.tudo-aqua`) | 4.13.0 (`tools.aqua`) | ARM64 natives, generified API |
+| scopt | 4.0.0-RC2 | 4.1.0 | Was pre-release, now stable |
+| scala-logging | 3.9.2 | 3.9.5 | |
+| logback-classic | 1.2.3 | 1.5.18 | Now uses SLF4J 2.x |
+| scalatest | 3.2.2 | 3.2.19 | |
+| scalactic | 3.2.2 | 3.2.19 | |
 
-### project/assembly.sbt
-- sbt-assembly **0.14.10 → 2.3.1**: Required for SBT 1.10 compatibility.
+### build.sbt additional changes
+- `in` syntax → slash syntax: `assemblyJarName in assembly` → `assembly / assemblyJarName` (deprecated in SBT 1.x)
+- Added `Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat` to fix Z3 JNI class loading in tests
+- Added `assembly / assemblyMergeStrategy` to discard `module-info.class` conflicts from newer Java dependencies
 
-### build.sbt
-- Scala **2.13.2 → 2.13.16**: SBT 1.10 requires Scala >= 2.13.3 (SIP-51 binary compatibility enforcement).
-- z3-turnkey **4.8.7.1** (`io.github.tudo-aqua`) → **4.13.0** (`tools.aqua`): The old JAR only bundled x86_64 Z3 natives. The maintainer moved to a new Maven group (`tools.aqua`) and added ARM64 support starting with 4.8.15.
-- `in` syntax → slash syntax: `assemblyJarName in assembly` → `assembly / assemblyJarName` (deprecated in SBT 1.x).
-- Added `Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat` to fix Z3 JNI class loading in tests.
+### Scala 3 migration changes
+Migrated from Scala 2.13 to Scala 3.3.6 LTS. Key source changes:
+
+**Syntax (all files):**
+- `import foo._` → `import foo.*` (84 occurrences across 47 files)
+- Varargs `: _*` → `*` (12 occurrences)
+- Lambda params `{ x: Type => }` → `{ (x: Type) => }` (2 files)
+- `.close` → `.close()` for side-effecting no-arg methods (Main.scala)
+- `return` statements removed (test package.scala)
+
+**Reserved keywords:**
+- `export` variable renamed to `exportDecl` (BSVPrettyPrinter.scala) — `export` is a keyword in Scala 3
+
+**Indentation-sensitive parsing (most common issue):**
+- Multi-statement `case` bodies wrapped in explicit braces (CanonicalizePass.scala, TypeInferenceWrapper.scala, others)
+- `matchOrError(...)` followed by `{ case ... }` on next line — moved `{` to same line (Syntax.scala, Utilities.scala, LockImplementation.scala, BaseTypeChecker.scala, FunctionConstraintChecker.scala)
+- `if/else` reformatted for unambiguous indentation (PortChecker.scala)
+
+**Stricter type inference:**
+- Implicit conversions that auto-applied in Scala 2 need explicit calls in Scala 3 (TypeInferenceWrapper.scala: `1` → `TBitWidthLen(1)`)
+- Ambiguous overload resolution needs type ascription (Utilities.scala, LockOpTranslationPass.scala: `.copyMeta(e: Expr)`)
+
+**Removed APIs:**
+- `scala.reflect.io.Directory` → `FileUtils.deleteDirectory` from commons-io (test package.scala)
+
+**Test formatting:**
+- Lambda body after `=>` with `{` on next line not parsed as lambda body in Scala 3 (TypeAutoCastSuite.scala)
 
 ### Z3 API changes (4.8.7 → 4.13.0)
 Z3 4.8.13+ generified `Expr`, `ArithExpr`, and `IntExpr`:

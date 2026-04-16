@@ -3,7 +3,7 @@ package pipedsl.common
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{LackOfConstraints, UnexpectedCommand}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -528,15 +528,16 @@ object Utilities {
         {
           // If we can't decide the type of an int literal, choose the smallest
           // sized integer with the appropriate sign (default: unsigned)
-          case EInt(v, _, _) => val sign: TSignedNess =
-            e1.typ match {
-              case Some(TSizedInt(_, sign)) => sign match
-              {
-                case TSignVar(_) => TUnsigned()
-                case defined => defined
+          case EInt(v, _, _) =>
+            val sign: TSignedNess =
+              e1.typ match {
+                case Some(TSizedInt(_, sign)) => sign match
+                {
+                  case TSignVar(_) => TUnsigned()
+                  case defined => defined
+                }
+                case Some(_) => TUnsigned()
               }
-              case Some(_) => TUnsigned()
-            }
             e1.typ = Some(TSizedInt(TBitWidthLen(log2(v)), sign))
           case t =>
             throw LackOfConstraints(e1)
@@ -551,10 +552,8 @@ object Utilities {
               assert(false)
               e.typ = Some(TSizedInt(TBitWidthLen(log2(v)), TSigned()))
             }
-          e.typ.get.matchOrError(e.pos, "Int", "TSizedInt")
-          {
-            case t: TSizedInt => t.len.matchOrError(e.pos, "TSizedInt", "len or var")
-            {
+          e.typ.get.matchOrError(e.pos, "Int", "TSizedInt") {
+            case t: TSizedInt => t.len.matchOrError(e.pos, "TSizedInt", "len or var") {
               case TBitWidthLen(l) => e.copy(bits = l).copyMeta(e)
               case TBitWidthVar(v) if is_generic(v) => e
             }
@@ -573,7 +572,7 @@ object Utilities {
         case e@EMemAccess(mem, index, wmask, inHandle, outHandle, isAtomic) =>
           e.copy(mem = typeMapId(mem, f_opt), index = typeMapExpr(index, f_opt),
             wmask = opt_func(typeMapExpr(_, f_opt))(wmask), inHandle = inHandle.map(typeMapEVar(_, f_opt)),
-            outHandle = outHandle.map(typeMapEVar(_, f_opt)), isAtomic).copyMeta(e)
+            outHandle = outHandle.map(typeMapEVar(_, f_opt)), isAtomic).copyMeta(e: HasCopyMeta)
         case e@EBitExtract(num, _, _) => e.copy(num = typeMapExpr(num, f_opt)).copyMeta(e)
         case e@ETernary(cond, tval, fval) =>
           e.copy(cond = typeMapExpr(cond, f_opt),
@@ -696,12 +695,12 @@ object Utilities {
 
   /** Like [[Z3Context.mkAnd]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkAnd(ctx: Z3Context, expressions: Z3AST *): Z3BoolExpr =
-    ctx.mkAnd(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
+    ctx.mkAnd(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr])*)
 
   /** Like [[Z3Context.mkOr]], but automatically casts inputs to
    * [[Z3BoolExpr]]s. */
   def mkOr(ctx : Z3Context, expressions: Z3AST *): Z3BoolExpr =
-    ctx.mkOr(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr]):_*)
+    ctx.mkOr(expressions.map(ast => ast.asInstanceOf[Z3BoolExpr])*)
 
   /** Like [[Z3Context.mkImplies]], but automatically casts inputs to [[Z3BoolExpr]]s. */
   def mkImplies(ctx: Z3Context, t1: Z3AST, t2: Z3AST): Z3BoolExpr =
@@ -727,7 +726,7 @@ object Utilities {
 
   val lock_handle_prefix = "_lock_id_"
   val is_handle_var :Id => Boolean =
-    { id: Id => id.v.startsWith(lock_handle_prefix) }
+    { (id: Id) => id.v.startsWith(lock_handle_prefix) }
 
   val generic_type_prefix = "__GEN_"
 
@@ -836,10 +835,11 @@ object Utilities {
           case _ => ""
         }).zip(new_types) //TODO more descriptive error when length mismatch
         val map = assoc_list.toMap
-        val new_args = old_fun.args.map
-        { case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
-          TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
-        case other => other }
+        val new_args = old_fun.args.map {
+          case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
+            TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)
+          case other => other
+        }
         val new_ret = old_fun.ret match {
           case ts@TSizedInt(len@TBitWidthVar(name), sign) =>
             TSizedInt(map.getOrElse(name.v, len).copyMeta(len).asInstanceOf[TBitWidth], sign).copyMeta(ts)

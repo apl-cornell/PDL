@@ -1,11 +1,11 @@
 package pipedsl.codegen.bsv
 
-import BSVSyntax._
+import BSVSyntax.*
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2}
 
 import scala.collection.immutable.ListMap

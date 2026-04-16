@@ -1,9 +1,9 @@
 package pipedsl.common
 
-import DAGSyntax._
+import DAGSyntax.*
 import Syntax.{Id, LockArg}
-import Utilities._
-import pipedsl.common.Locks._
+import Utilities.*
+import pipedsl.common.Locks.*
 
 object Dataflow {
 

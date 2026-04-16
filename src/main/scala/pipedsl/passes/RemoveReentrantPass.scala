@@ -3,7 +3,7 @@ package pipedsl.passes
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Dataflow.{DFMap, MaybeReservedHandles, worklist}
 import pipedsl.common.Locks.LockHandleInfo
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities
 import pipedsl.common.Utilities.{flattenStageList, updateSetMap}
 import pipedsl.passes.Passes.StagePass

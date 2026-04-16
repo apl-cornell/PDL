@@ -1,7 +1,7 @@
 package pipedsl
-import scala.util.parsing.combinator._
-import common.Syntax._
-import common.Locks._
+import scala.util.parsing.combinator.*
+import common.Syntax.*
+import common.Locks.*
 import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.Latency
 import pipedsl.common.Utilities.{generic_type_prefix, opt_func}
@@ -101,7 +101,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }}
 
   lazy val num: P[EInt] = binary | hex | octal | dec ^^
-    { x: EInt => x.typ.get.setPos(x.pos); x }
+    { (x: EInt) => x.typ.get.setPos(x.pos); x }
 
   lazy val boolean: P[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
@@ -371,7 +371,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
     posint ^^ {i => TBitWidthLen(i)}
 
-  lazy val bitWidth :P[TBitWidth] =
+  lazy val bitWidth :P[TBitWidth] = (
       repsep(bitWidthAtom, "+") ^^
         { lst =>
           {
@@ -382,8 +382,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
               }
             tmp
           }
-        } |
-    bitWidthAtom
+        }
+    | bitWidthAtom
+    )
 
   lazy val sizedInt: P[Type] = "int" ~> angular(bitWidth) ^^ { bits => TSizedInt(bits, TSigned() ) } |
   "uint" ~> angular(bitWidth) ^^ { bits =>  TSizedInt(bits, TUnsigned() ) }

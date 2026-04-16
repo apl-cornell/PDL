@@ -4,8 +4,8 @@ import com.microsoft.z3.{
   AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver =>
   Z3Solver, Status => Z3Status
 }
-import pipedsl.common.Syntax._
-import pipedsl.common.Errors._
+import pipedsl.common.Syntax.*
+import pipedsl.common.Errors.*
 import pipedsl.common.Utilities.{mkAnd, mkOr}
 import pipedsl.typechecker.TypeChecker.TypeChecks
 
@@ -102,7 +102,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
       /* we want to know if it is possible to satisfy the current predicate */
       /* we are testing AND ANY of the other known predicates */
       val or_stmt
-      = mkOr(ctx, predicates.toSeq.map(ast => mkAnd(ctx, ast, predicate)): _*)
+      = mkOr(ctx, predicates.toSeq.map(ast => mkAnd(ctx, ast, predicate))*)
       solver.add(or_stmt)
       val check = solver.check()
       solver.reset()
@@ -124,7 +124,7 @@ class LinearExecutionChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST]
    * Checks to see if all the predicates together form a tautology */
   def checkAllRecurse(): Z3Status =
     {
-      solver.add(ctx.mkNot(mkOr(ctx, predicates.toSeq: _*)))
+      solver.add(ctx.mkNot(mkOr(ctx, predicates.toSeq*)))
       val check = solver.check()
       solver.reset()
       check

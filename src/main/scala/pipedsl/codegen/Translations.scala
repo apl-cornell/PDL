@@ -1,6 +1,6 @@
 package pipedsl.codegen
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 object Translations {
 

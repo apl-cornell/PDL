@@ -1,10 +1,10 @@
 package pipedsl.typechecker
 
 import pipedsl.common.{Locks, Syntax, Errors}
-import pipedsl.common.Syntax._
-import pipedsl.common.Errors._
+import pipedsl.common.Syntax.*
+import pipedsl.common.Errors.*
 import pipedsl.typechecker.TypeChecker.TypeChecks
-import pipedsl.typechecker.Environments._
+import pipedsl.typechecker.Environments.*
 
 import scala.collection.mutable
 
@@ -225,10 +225,8 @@ class PortChecker(port_warn :Boolean) extends TypeChecks[Id, (Int, Int)]
         case Locks.Reserved =>
           val ret = env.add(mangled, (1, 0))
           val limit =
-            if (lockType.contains(Syntax.LockWrite))
-            modLims(mem.id)._2
-          else
-            modLims(mem.id)._1
+            if (lockType.contains(Syntax.LockWrite)) modLims(mem.id)._2
+            else modLims(mem.id)._1
           
           var port = (ret(mangled)._1 + start_env(mangled)._1) % limit
           if (port == 0) port = limit

@@ -1,9 +1,9 @@
 /*
 package pipedsl.typechecker
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.typechecker.TypeChecker.TypeChecks
-import Environments._
+import Environments.*
 import pipedsl.common.Syntax
 import pipedsl.common.Syntax.Latency.{Combinational, Latency}
 

@@ -4,7 +4,7 @@ import java.io.{File, FileOutputStream, OutputStreamWriter}
 
 import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge}
 import pipedsl.common.Errors.UnexpectedType
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 class PrettyPrinter(output: Option[File]) {
 

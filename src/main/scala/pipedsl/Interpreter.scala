@@ -4,7 +4,7 @@ import java.io.{File, PrintWriter}
 
 import pipedsl.common.Errors
 import pipedsl.common.Errors.UnexpectedExpr
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 import scala.collection.immutable
 

@@ -1,7 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.Locks.Reserved
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.{andExpr, orExpr}
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
 

@@ -27,10 +27,10 @@ class PredicateGenerator extends ProgPass[Z3Context] {
 
   private def annotateCommand(c: Command): Unit =  {
     c match {
-      case CSeq(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
-      case Syntax.CTBar(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
+      case CSeq(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*)); annotateCommand(c1); annotateCommand(c2)
+      case Syntax.CTBar(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*)); annotateCommand(c1); annotateCommand(c2)
       case Syntax.CIf(cond, cons, alt) =>
-        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*))
         abstractInterpExpr(cond) match {
           case Some(value) => predicates.push(value.asInstanceOf[Z3AST]);
           case None => predicates.push(ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue()))
@@ -42,7 +42,7 @@ class PredicateGenerator extends ProgPass[Z3Context] {
         annotateCommand(alt)
         predicates.pop()
       case Syntax.CSplit(cases, default) =>
-        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*))
         var runningPredicates: Z3AST = null
         for (caseObj <- cases) {
           //get abstract interp of condition
@@ -71,7 +71,7 @@ class PredicateGenerator extends ProgPass[Z3Context] {
         predicates.push(runningPredicates)
         annotateCommand(default)
         predicates.pop()
-      case _ => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+      case _ => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*))
     }
   }
 

@@ -10,9 +10,9 @@ import pipedsl.codegen.bsv.BluespecGeneration.BluespecProgramGenerator
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Syntax.{Id, Prog}
 import pipedsl.common.{CommandLineParser, MemoryInputParser, PrettyPrinter, ProgInfo}
-import pipedsl.passes._
+import pipedsl.passes.*
 import pipedsl.typechecker.TypeInferenceWrapper.TypeInference
-import pipedsl.typechecker._
+import pipedsl.typechecker.*
 
 
 object Main {
@@ -169,12 +169,12 @@ object Main {
       debug, bsints, memInit = memInitFileNames, printTimer = printTimer)
     val funcWriter = BSVPrettyPrinter.getFilePrinter(new File(outDir.toString + "/" + bsvgen.funcModule + ".bsv"))
     funcWriter.printBSVFuncModule(bsvgen.getBSVFunctions)
-    funcWriter.close
+    funcWriter.close()
     bsvgen.getBSVPrograms.foreach(p => {
       val outFile = new File(outDir.toString + "/" + p.name + ".bsv")
       val bsvWriter = BSVPrettyPrinter.getFilePrinter(name = outFile)
       bsvWriter.printBSVProg(p)
-      bsvWriter.close
+      bsvWriter.close()
     })
   }
 }

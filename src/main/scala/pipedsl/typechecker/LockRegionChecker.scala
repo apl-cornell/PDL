@@ -1,10 +1,10 @@
 package pipedsl.typechecker
 
 import pipedsl.common.Errors.{IllegalLockAcquisition, InvalidLockState, UnexpectedCase}
-import pipedsl.common.Locks._
+import pipedsl.common.Locks.*
 import pipedsl.common.{Locks, Syntax}
-import pipedsl.common.Syntax._
-import pipedsl.typechecker.Environments._
+import pipedsl.common.Syntax.*
+import pipedsl.typechecker.Environments.*
 import pipedsl.typechecker.TypeChecker.TypeChecks
 
 /**

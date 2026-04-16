@@ -1,7 +1,7 @@
 package pipedsl.common
 import scala.util.parsing.input.{Position, Positional}
-import Errors._
-import Security._
+import Errors.*
+import Security.*
 import pipedsl.common.LockImplementation.LockInterface
 import pipedsl.common.Locks.{General, LockGranularity, LockState}
 import com.microsoft.z3.BoolExpr
@@ -82,14 +82,14 @@ object Syntax {
     }
   }
 
-  import Latency._
+  import Latency.*
 
   object RequestType extends Enumeration {
     type RequestType = Value
     val Lock, Module, Speculation, Checkpoint = Value
   }
 
-  import RequestType._
+  import RequestType.*
 
   object OpConstructor {
     val add: (Int, Int) => Int = (_ + _)
@@ -107,7 +107,7 @@ object Syntax {
     val concat: (Int, Int) => Int = (a, b) => (a << (32-Integer.numberOfLeadingZeros(b)) | b)
   }
 
-  import Annotations._
+  import Annotations.*
 
   case class Id(v: String) extends Positional with TypeAnnotation {
     override def toString = s"$v"
@@ -323,8 +323,9 @@ object Syntax {
   case class TMaybe(btyp: Type) extends Type
   sealed trait TBitWidth extends Type
   {
-    def getLen :Int = this.matchOrError(this.pos, "bit width", "bit width len")
-    { case l : TBitWidthLen => l.len}
+    def getLen :Int = this.matchOrError(this.pos, "bit width", "bit width len") {
+      case l : TBitWidthLen => l.len
+    }
 
     def stringRep() :String
   }

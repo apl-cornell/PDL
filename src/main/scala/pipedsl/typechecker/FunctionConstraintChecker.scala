@@ -1,10 +1,10 @@
 package pipedsl.typechecker
 
 import com.microsoft.z3.{Status, Context => Z3Context, Solver => Z3Solver}
-import pipedsl.common.Constraints.ImplicitConstraints._
-import pipedsl.common.Constraints._
+import pipedsl.common.Constraints.ImplicitConstraints.*
+import pipedsl.common.Constraints.*
 import pipedsl.common.Errors.{BadConstraintsAtCall, MissingType}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.degenerify
 import scala.collection.mutable
 import scala.language.implicitConversions
@@ -64,9 +64,8 @@ object FunctionConstraintChecker
     }
    }
 
-  def extract_width(t: Type): Option[IntExpr] = t match
-  {
-   case TSizedInt(len, _) => Some(len)
+  def extract_width(t: Type): Option[IntExpr] = t match {
+   case TSizedInt(len, _) => Some(toConstraint(len))
    case _ => None
   }
 
@@ -95,26 +94,25 @@ object FunctionConstraintChecker
      case ETernary(cond, tval, fval) => _checkExpr(cond); _checkExpr(tval); _checkExpr(fval)
      case ea@EApp(func, args) =>
 
-      type_of_fdef(cons_map(func)).matchOrError(e.pos, "func type", "func type")
-      { case TFun(targs, ret) => solv.push()
+      type_of_fdef(cons_map(func)).matchOrError(e.pos, "func type", "func type") {
+       case TFun(targs, ret) =>
+       solv.push()
        val contraints_here = targs.zip(args.map(e => e.typ.getOrElse(throw MissingType(e.pos, "arg type")))).map(pair =>
         {
-         (pair._1 |> extract_width, pair._2 |> degenerify |> extract_width) match
-         {
+         (pair._1 |> extract_width, pair._2 |> degenerify |> extract_width) match {
           case (Some(a), Some(b)) => Some(ReEq(a, b))
           case _ => None
          }
-        }).collect
-       { case Some(cons) => cons
-       }.prependedAll((ret |> extract_width, e.typ.getOrElse(throw MissingType(e.pos, "ret type")) |> degenerify |> extract_width) match
-       { case (Some(a), Some(b)) => List(ReEq(a, b))
+        }).collect {
+        case Some(cons) => cons
+       }.prependedAll(((ret |> extract_width, e.typ.getOrElse(throw MissingType(e.pos, "ret type")) |> degenerify |> extract_width) match {
+        case (Some(a), Some(b)) => List(ReEq(a, b))
         case _ => List()
-       }).map(degenerify_constr)
+       })).map(degenerify_constr)
        val called_cons = cons_map(func).constraints.map(degenerify_constr)
        val constraints = called_cons prependedAll contraints_here
        constraints.foreach(c => solv.add(to_z3(ctxt, c)))
-       solv.check() match
-       {
+       solv.check() match {
         case Status.UNSATISFIABLE | Status.UNKNOWN => throw BadConstraintsAtCall(ea)
         case Status.SATISFIABLE => ()
        }

@@ -1,10 +1,10 @@
 package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
-import TypeChecker._
-import Environments._
+import TypeChecker.*
+import Environments.*
 import pipedsl.common.Errors.{AlreadyResolvedSpeculation, IllegalSpeculativeOperation, MismatchedSpeculationState, UnresolvedSpeculation}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Locks.Released
 import pipedsl.common.Utilities.{mkAnd, mkImplies}
 
@@ -15,7 +15,7 @@ class SpeculationChecker(val ctx: Z3Context) extends TypeChecks[Id, Z3AST] {
     val Unknown, Speculative, NonSpeculative = Value
   }
 
-  import SpecState._
+  import SpecState.*
 
   private val solver: Z3Solver = ctx.mkSolver()
 
