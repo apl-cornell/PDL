@@ -1,8 +1,8 @@
 package pipedsl.passes
 
-import pipedsl.common.DAGSyntax._
+import pipedsl.common.DAGSyntax.*
 import pipedsl.common.Locks.eliminateLockRegions
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.{andExpr, getReachableStages, getUsedVars, isReceivingCmd, updateListMap}
 import pipedsl.passes.Passes.StagePass
 

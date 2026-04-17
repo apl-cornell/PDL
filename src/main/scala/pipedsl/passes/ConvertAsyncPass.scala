@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.DAGSyntax.PStage
 import pipedsl.common.Errors.{UnexpectedExpr, UnexpectedType}
 import pipedsl.common.Utilities.flattenStageList

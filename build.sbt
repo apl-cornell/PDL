@@ -1,32 +1,39 @@
 name := "PipelineDescriptionLanguage"
 version := "0.0.1"
-scalaVersion := "2.13.2"
+scalaVersion := "3.3.6"
 
 libraryDependencies ++= Seq(
-  "commons-io" % "commons-io" % "2.8.0",
+  "commons-io" % "commons-io" % "2.18.0",
 
   // Parsing & Pretty Printing
-  "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2",
-  "com.lihaoyi" %% "pprint" % "0.5.6",
+  "org.scala-lang.modules" %% "scala-parser-combinators" % "2.4.0",
+  "com.lihaoyi" %% "pprint" % "0.9.0",
 
   // SMT Solving
-  "io.github.tudo-aqua" % "z3-turnkey" % "4.8.7.1",
+  "tools.aqua" % "z3-turnkey" % "4.13.0",
 
   // Command Line Parsing
-  "com.github.scopt" % "scopt_2.13" % "4.0.0-RC2",
+  "com.github.scopt" %% "scopt" % "4.1.0",
 
   // Logging
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
-  "ch.qos.logback" % "logback-classic" % "1.2.3",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
+  "ch.qos.logback" % "logback-classic" % "1.5.18",
 
   // Testing
-  "org.scalatest" %% "scalatest" % "3.2.2" % "test",
-  "org.scalactic" %% "scalactic" % "3.2.2",
+  "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+  "org.scalactic" %% "scalactic" % "3.2.19",
 )
 
-scalacOptions += "-language:implicitConversions"
+scalacOptions ++= Seq("-language:implicitConversions", "-source:3.3-migration")
+
+Test / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat
 
 //Deployment Options
-assemblyJarName in assembly := "pdl.jar"
-test in assembly := {}
-mainClass in assembly := Some("pipedsl.Main")
+assembly / assemblyJarName := "pdl.jar"
+assembly / test := {}
+assembly / mainClass := Some("pipedsl.Main")
+assembly / assemblyMergeStrategy := {
+  case "module-info.class" => MergeStrategy.discard
+  case PathList("META-INF", "versions", _, "module-info.class") => MergeStrategy.discard
+  case x => (assembly / assemblyMergeStrategy).value(x)
+}

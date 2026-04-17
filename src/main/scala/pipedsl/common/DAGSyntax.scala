@@ -1,7 +1,7 @@
 package pipedsl.common
 
 import pipedsl.common.Errors.UnexpectedCommand
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.{log2, updateListMap}
 
 /**

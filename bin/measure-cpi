@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -e
+
+# measure-cpi: Measure CPI for all RISC-V pipeline variants x test programs
+#
+# Usage: ./bin/measure-cpi
+#
+# Runs each pipeline variant against each test program and reports CPI.
+# Results saved to .claude-logs/cpi-baseline-<date>.txt
+
+SCRIPTPATH=$(cd "$(dirname "$0")" && pwd -P)
+PROJDIR=$(cd "$SCRIPTPATH/.." && pwd -P)
+
+if [ -f "$PROJDIR/config.env" ]; then
+    source "$PROJDIR/config.env"
+fi
+
+TIMEOUT_CMD="${TIMEOUT_CMD:-$(command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null)}"
+SIM_RUNNER="${SIM_RUNNER:-vvp}"
+WORKDIR=$(mktemp -d)
+PIPEDIR="$PROJDIR/src/test/tests/risc-pipe"
+MEMDIR="$PIPEDIR/memInputs"
+LOGDIR="$PROJDIR/.claude-logs"
+mkdir -p "$LOGDIR"
+LOGFILE="$LOGDIR/cpi-$(date +%Y%m%d-%H%M%S).txt"
+
+cleanup() { rm -rf "$WORKDIR"; }
+trap cleanup EXIT
+
+# Pipeline variants to test
+PIPELINES=(
+    "risc-pipe-spec"
+    "risc-pipe-spec-write-2"
+    "risc-pipe-spec-rename-ooo"
+    "risc-pipe-spec-rename-bht"
+)
+
+# Test programs (numbered 1-5)
+TESTS=(1 2 3 4 5)
+
+# BSV $time uses 10 time units per clock cycle
+TIME_DIVISOR=10
+
+echo "PDL CPI Measurement"
+echo "==================="
+echo ""
+printf "%-35s " "Pipeline"
+for t in "${TESTS[@]}"; do printf "%8s " "prog$t"; done
+printf "%8s\n" "GeoMean"
+printf "%-35s " "--------"
+for t in "${TESTS[@]}"; do printf "%8s " "------"; done
+printf "%8s\n" "-------"
+
+{
+    echo "# PDL CPI Measurement -- $(date)"
+    echo "# TIME_DIVISOR=$TIME_DIVISOR (iverilog $time units per BSV clock cycle)"
+    echo ""
+    printf "%-35s " "Pipeline"
+    for t in "${TESTS[@]}"; do printf "%8s " "prog$t"; done
+    printf "%8s\n" "GeoMean"
+} > "$LOGFILE"
+
+for pipe in "${PIPELINES[@]}"; do
+    PDL_FILE="$PIPEDIR/$pipe.pdl"
+    if [ ! -f "$PDL_FILE" ]; then
+        printf "%-35s %s\n" "$pipe" "SKIP (not found)"
+        continue
+    fi
+
+    printf "%-35s " "$pipe"
+    CPIS=()
+
+    for t in "${TESTS[@]}"; do
+        rm -rf "$WORKDIR"/*
+
+        # Generate BSV with timer and memory inputs
+        MEM_ARGS="rf=$MEMDIR/rf,ti=$MEMDIR/ti$t,td=$MEMDIR/td$t,cmem=$MEMDIR/cmem,mm=$MEMDIR/mm$t"
+        sbt -error "runMain pipedsl.Main gen --printTimer --memInit $MEM_ARGS -o $WORKDIR $PDL_FILE" 2>/dev/null
+
+        # Compile
+        "$SCRIPTPATH/runbsc" c "$WORKDIR" >/dev/null 2>&1
+
+        # Simulate (30s timeout)
+        SIMOUT="$WORKDIR/out.sim"
+        "$SCRIPTPATH/runbsc" -t 30 s "$WORKDIR" "out.sim" >/dev/null 2>&1 || true
+
+        if [ -f "$SIMOUT" ]; then
+            INSNS=$(grep -c "^PC:" "$SIMOUT" 2>/dev/null || echo 0)
+            TIME_VAL=$(grep "^TIME" "$SIMOUT" | head -1 | awk '{print $2}' || echo 0)
+            if [ "$INSNS" -gt 0 ] && [ -n "$TIME_VAL" ] && [ "$TIME_VAL" -gt 0 ] 2>/dev/null; then
+                CYCLES=$((TIME_VAL / TIME_DIVISOR))
+                CPI=$(echo "scale=3; $CYCLES / $INSNS" | bc)
+                printf "%8s " "$CPI"
+                CPIS+=("$CPI")
+            else
+                printf "%8s " "err"
+            fi
+        else
+            printf "%8s " "fail"
+        fi
+    done
+
+    # Geometric mean
+    if [ ${#CPIS[@]} -gt 0 ]; then
+        PRODUCT=1
+        for c in "${CPIS[@]}"; do
+            PRODUCT=$(echo "$PRODUCT * $c" | bc -l)
+        done
+        GEOMEAN=$(echo "e(l($PRODUCT)/${#CPIS[@]})" | bc -l)
+        printf "%8.3f" "$GEOMEAN"
+    fi
+    echo ""
+
+    # Log to file
+    printf "%-35s " "$pipe" >> "$LOGFILE"
+    for c in "${CPIS[@]}"; do printf "%8s " "$c" >> "$LOGFILE"; done
+    echo "" >> "$LOGFILE"
+done
+
+echo ""
+echo "Results saved to $LOGFILE"

@@ -1,6 +1,6 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 object Subtypes {
 

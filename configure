@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+set -e
+
+# PDL Project Configuration
+# Detects local toolchain paths and writes config.env
+# Works on: macOS (ARM64/x86_64), Linux (x86_64/ARM64)
+# Run once after cloning. Re-run if you update tools.
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+ok()   { echo -e "  ${GREEN}+${NC} $1"; }
+warn() { echo -e "  ${YELLOW}!${NC} $1"; }
+fail() { echo -e "  ${RED}x${NC} $1"; ERRORS=$((ERRORS+1)); }
+
+ERRORS=0
+CONFIG="config.env"
+OS=$(uname -s)
+ARCH=$(uname -m)
+
+echo "Configuring PDL build environment..."
+echo "  Platform: $OS $ARCH"
+echo ""
+
+# --- Homebrew prefix (macOS only) ---
+BREW_PREFIX=""
+if [ "$OS" = "Darwin" ]; then
+    if [ "$ARCH" = "arm64" ]; then
+        BREW_PREFIX="/opt/homebrew"
+    else
+        BREW_PREFIX="/usr/local"
+    fi
+fi
+
+# --- Java ---
+# On macOS, /usr/bin/java is a stub that fails without Xcode command line tools
+# or an actual JDK. Prefer Homebrew openjdk, then JAVA_HOME, then PATH.
+JAVA_BIN=""
+
+# 1. Check Homebrew openjdk (macOS)
+if [ -n "$BREW_PREFIX" ]; then
+    for p in "$BREW_PREFIX/opt/openjdk/bin/java" "$BREW_PREFIX/opt/openjdk@21/bin/java" "$BREW_PREFIX/opt/openjdk@17/bin/java"; do
+        if [ -x "$p" ] && "$p" -version &>/dev/null; then
+            JAVA_BIN="$p"
+            break
+        fi
+    done
+fi
+
+# 2. Check JAVA_HOME
+if [ -z "$JAVA_BIN" ] && [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    JAVA_BIN="$JAVA_HOME/bin/java"
+fi
+
+# 3. Check PATH (verify it actually works, not just exists)
+if [ -z "$JAVA_BIN" ] && command -v java &>/dev/null && java -version &>/dev/null; then
+    JAVA_BIN=$(command -v java)
+fi
+
+if [ -n "$JAVA_BIN" ]; then
+    JAVA_VERSION=$("$JAVA_BIN" -version 2>&1 | head -1)
+    ok "java: $JAVA_BIN ($JAVA_VERSION)"
+else
+    fail "java not found."
+    if [ "$OS" = "Darwin" ]; then
+        echo "       Install: brew install openjdk"
+    else
+        echo "       Install: apt install default-jdk  (Debian/Ubuntu)"
+        echo "                dnf install java-latest-openjdk  (Fedora)"
+    fi
+fi
+
+# Compute extra PATH entry if java is not on the default PATH
+EXTRA_PATH=""
+if [ -n "$JAVA_BIN" ]; then
+    JAVA_DIR=$(dirname "$JAVA_BIN")
+    if ! command -v java &>/dev/null || [ "$(command -v java)" != "$JAVA_BIN" ]; then
+        EXTRA_PATH="$JAVA_DIR"
+    fi
+fi
+
+# --- SBT ---
+if command -v sbt &>/dev/null; then
+    ok "sbt: $(command -v sbt)"
+else
+    fail "sbt not found."
+    if [ "$OS" = "Darwin" ]; then
+        echo "       Install: brew install sbt"
+    else
+        echo "       Install: see https://www.scala-sbt.org/download"
+    fi
+fi
+
+# --- BSC (Bluespec Compiler) ---
+BSC_BIN=""
+BLUESPECDIR=""
+if command -v bsc &>/dev/null; then
+    BSC_BIN=$(command -v bsc)
+    ok "bsc: $BSC_BIN"
+
+    # Find BLUESPECDIR by probing relative to bsc binary
+    # Works for: Homebrew, manual install, GitHub release tarball
+    if [ -n "${BLUESPECDIR:-}" ] && [ -d "$BLUESPECDIR/lib/Libraries" ]; then
+        : # already set and valid
+    else
+        BLUESPECDIR=""
+        BSC_REAL=$(readlink -f "$BSC_BIN" 2>/dev/null || realpath "$BSC_BIN" 2>/dev/null || echo "$BSC_BIN")
+        BSC_DIR=$(dirname "$BSC_REAL")
+        for candidate in \
+            "$BSC_DIR/../libexec" \
+            "$BSC_DIR/../lib" \
+            "$BSC_DIR/.." \
+            ; do
+            if [ -d "$candidate/lib/Libraries" ]; then
+                BLUESPECDIR=$(cd "$candidate" && pwd)
+                break
+            fi
+        done
+        # Homebrew symlink paths
+        if [ -z "$BLUESPECDIR" ] && [ -n "$BREW_PREFIX" ]; then
+            for candidate in "$BREW_PREFIX/opt/bsc/libexec" "$BREW_PREFIX/opt/bsc/lib"; do
+                if [ -d "$candidate/lib/Libraries" ]; then
+                    BLUESPECDIR=$(cd "$candidate" && pwd)
+                    break
+                fi
+            done
+        fi
+        # Linux common paths
+        if [ -z "$BLUESPECDIR" ]; then
+            for candidate in /usr/share/bsc /usr/local/share/bsc; do
+                if [ -d "$candidate/lib/Libraries" ]; then
+                    BLUESPECDIR=$(cd "$candidate" && pwd)
+                    break
+                fi
+            done
+        fi
+    fi
+
+    if [ -n "$BLUESPECDIR" ]; then
+        ok "BLUESPECDIR: $BLUESPECDIR"
+    else
+        fail "BLUESPECDIR not found. Set manually: export BLUESPECDIR=/path/to/bsc/lib"
+    fi
+else
+    fail "bsc not found."
+    if [ "$OS" = "Darwin" ]; then
+        echo "       Install: brew install bsc"
+    else
+        echo "       Install: https://github.com/B-Lang-org/bsc/releases"
+    fi
+fi
+
+# --- IVerilog ---
+if command -v iverilog &>/dev/null; then
+    IV_VERSION=$(iverilog -V 2>&1 | head -1 | sed 's/Icarus Verilog version //')
+    ok "iverilog: $(command -v iverilog) ($IV_VERSION)"
+else
+    fail "iverilog not found."
+    if [ "$OS" = "Darwin" ]; then
+        echo "       Install: brew install icarus-verilog"
+    else
+        echo "       Install: apt install iverilog  (Debian/Ubuntu)"
+    fi
+fi
+
+# --- VVP ---
+VVP_BIN=""
+if command -v vvp &>/dev/null; then
+    VVP_BIN=$(command -v vvp)
+    ok "vvp: $VVP_BIN"
+else
+    warn "vvp not found (usually installed with iverilog)"
+fi
+
+# --- timeout / gtimeout ---
+TIMEOUT_CMD=""
+if command -v timeout &>/dev/null; then
+    TIMEOUT_CMD="timeout"
+    ok "timeout: $(command -v timeout)"
+elif command -v gtimeout &>/dev/null; then
+    TIMEOUT_CMD="gtimeout"
+    ok "timeout: $(command -v gtimeout) (gtimeout)"
+else
+    fail "timeout/gtimeout not found."
+    if [ "$OS" = "Darwin" ]; then
+        echo "       Install: brew install coreutils"
+    else
+        echo "       timeout should be in coreutils (apt install coreutils)"
+    fi
+fi
+
+echo ""
+
+# --- Detect simulation runner ---
+# On some systems (macOS with oss-cad-suite iverilog), running .bexe files
+# directly via shebang + gtimeout fails. We always use 'vvp' explicitly.
+SIM_RUNNER="vvp"
+
+# --- Write config.env ---
+if [ $ERRORS -gt 0 ]; then
+    echo -e "${RED}$ERRORS error(s) found. Fix them and re-run ./configure${NC}"
+    exit 1
+fi
+
+# Write two config files:
+#   config.env  -- for shell (source config.env)
+#   config.mk   -- for Make (include config.mk)
+{
+    echo "# Generated by ./configure -- do not edit, do not commit"
+    echo "# Platform: $OS $ARCH"
+    echo "# Re-run ./configure to regenerate"
+    echo ""
+    echo "export BLUESPECDIR=$BLUESPECDIR"
+    echo "export TIMEOUT_CMD=$TIMEOUT_CMD"
+    echo "export SIM_RUNNER=$SIM_RUNNER"
+    if [ -n "$EXTRA_PATH" ]; then
+        echo "export PATH=$EXTRA_PATH:\$PATH"
+    fi
+} > "$CONFIG"
+
+{
+    echo "# Generated by ./configure -- do not edit, do not commit"
+    echo "export BLUESPECDIR = $BLUESPECDIR"
+    echo "export TIMEOUT_CMD = $TIMEOUT_CMD"
+    echo "export SIM_RUNNER = $SIM_RUNNER"
+    if [ -n "$EXTRA_PATH" ]; then
+        echo "export PATH := $EXTRA_PATH:\$(PATH)"
+    fi
+} > config.mk
+
+echo -e "${GREEN}Configuration written to $CONFIG${NC}"
+echo ""
+echo "Next steps:"
+echo "  make          # build compiler + BSV runtime"
+echo "  sbt test      # run 247 compiler tests"
+echo "  cd bscTests  && make test   # run 40 BSV module tests"
+echo "  cd verilogTests && make test # run 25 Verilog RF tests"

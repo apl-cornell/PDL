@@ -1,8 +1,8 @@
 package pipedsl.passes
 
-import pipedsl.common.Locks._
+import pipedsl.common.Locks.*
 import pipedsl.common.Locks
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.lock_handle_prefix
 import pipedsl.passes.Passes.{CommandPass, ModulePass, ProgPass}
 
@@ -43,11 +43,12 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
   {
     type LockedMemState = Value
     val Free, Reserved, Acquired, Operated, Released = Value
-    def -- :LockedMemState = this match {
+    def --(v: LockedMemState) :LockedMemState = v match {
       case Reserved => Free
       case Acquired => Reserved
       case Operated => Acquired
       case Released => Operated
+      case Free => Free
     }
   }
   private def lk_st_2_mem_st(st :LockState) = st match
@@ -100,7 +101,7 @@ object LockOpTranslationPass extends ProgPass[Prog] with CommandPass[Command] wi
       val inHandle = if (addHandles) Some(lockVar(l_arg, LockedMemState.Acquired)) else None
       val outHandle = if (addHandles) Some(lockVar(l_arg, LockedMemState.Operated)) else None
       val res = EMemAccess(mem, newArg, wm, inHandle, outHandle, isAtomic).setPos(em.pos)
-      res.copyMeta(em)
+      res.copyMeta(em: Expr)
     case et@ETernary(cond, tval, fval) =>
       val ncond = modifyMemArg(cond, isLhs)
       val ntval = modifyMemArg(tval, isLhs)

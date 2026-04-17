@@ -1,3 +1,6 @@
+# Source generated config if available (created by ./configure)
+-include config.mk
+
 export SCALA_V := 2.13
 export COMPILER_JAR := target/scala-$(SCALA_V)/pdl.jar
 

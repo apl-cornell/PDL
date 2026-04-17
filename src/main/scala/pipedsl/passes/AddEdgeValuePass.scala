@@ -1,9 +1,9 @@
 package pipedsl.passes
 
-import pipedsl.common.Dataflow._
+import pipedsl.common.Dataflow.*
 import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge, addValues}
-import pipedsl.common.Syntax._
-import pipedsl.common.Utilities._
+import pipedsl.common.Syntax.*
+import pipedsl.common.Utilities.*
 import pipedsl.passes.Passes.StagePass
 
 /**

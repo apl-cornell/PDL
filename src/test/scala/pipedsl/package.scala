@@ -2,9 +2,7 @@ import java.io.File
 import java.nio.file.Paths
 
 import org.apache.commons.io.{FileUtils, FilenameUtils}
-
-import scala.reflect.io.Directory
-import scala.sys.process._
+import scala.sys.process.*
 
 package object pipedsl {
   val pathToBluespecScript = "bin/runbsc"
@@ -54,7 +52,7 @@ package object pipedsl {
     val success = compareFiles(testDir, inputFile, "typecheck")
     deleteGeneratedFiles(testDir)
     assert(success)
-    return doesTypecheck
+    doesTypecheck
   }
 
   def testBlueSpecCompile(testDir: File, inputFile: File, addrLockMod: Option[String] = None, memInit: Map[String, String]): Unit = {
@@ -84,7 +82,7 @@ package object pipedsl {
     } else {
       new File(Paths.get(testDir.getAbsolutePath, "solutions", outputName + "sol").toString)
     }
-    return FileUtils.contentEqualsIgnoreEOL(outputFile, expected, null);
+    FileUtils.contentEqualsIgnoreEOL(outputFile, expected, null)
   }
 
   def deleteGeneratedFiles(testDir: File): Unit = {
@@ -105,9 +103,7 @@ package object pipedsl {
   def deleteBSVFiles(testDir: File, memMap: Map[String, String]): Unit = {
     memMap.values.foreach(memPath =>
       new File(Paths.get(testDir.getAbsolutePath, FilenameUtils.getName(memPath)).toString).delete())
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).deleteRecursively()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString)).delete()
-    new Directory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString)).delete()
+    FileUtils.deleteDirectory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_sim").toString))
+    FileUtils.deleteDirectory(new File(Paths.get(testDir.getAbsolutePath, "Circuit_verilog").toString))
   }
 }

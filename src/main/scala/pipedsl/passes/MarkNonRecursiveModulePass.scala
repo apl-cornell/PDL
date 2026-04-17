@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.passes.Passes.{ModulePass, ProgPass}
 
 import scala.annotation.tailrec

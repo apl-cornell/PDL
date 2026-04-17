@@ -6,7 +6,7 @@ import pipedsl.common.Errors.{MissingType, UnexpectedBSVType, UnexpectedCommand,
 import pipedsl.common.LockImplementation
 import pipedsl.common.LockImplementation.{LockInterface, getDefaultLockImpl, supportsCheckpoint}
 import pipedsl.common.Syntax.Latency.{Asynchronous, Combinational}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.generic_type_prefix
 
 object BSVSyntax {

@@ -2,8 +2,8 @@ package pipedsl.passes
 
 import Passes.{CommandPass, ModulePass, ProgPass}
 import pipedsl.common.Errors.UnexpectedCase
-import pipedsl.common.Syntax._
-import pipedsl.common.Utilities._
+import pipedsl.common.Syntax.*
+import pipedsl.common.Utilities.*
 
 import scala.util.parsing.input.Position
 

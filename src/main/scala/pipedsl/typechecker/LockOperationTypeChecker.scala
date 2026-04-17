@@ -2,7 +2,7 @@ package pipedsl.typechecker;
 
 import pipedsl.common.Errors.{IllegalMemoryAccessOperation, MalformedLockTypes, UnexpectedCase}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 /**
  * A class to check whether a program's lock types are correct, and to check the memory accesses are correct

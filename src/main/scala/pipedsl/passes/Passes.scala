@@ -1,7 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.PStage
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 object Passes {
 

@@ -27,12 +27,12 @@ class PredicateGenerator extends ProgPass[Z3Context] {
 
   private def annotateCommand(c: Command): Unit =  {
     c match {
-      case CSeq(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
-      case Syntax.CTBar(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*)); annotateCommand(c1); annotateCommand(c2)
+      case CSeq(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*)); annotateCommand(c1); annotateCommand(c2)
+      case Syntax.CTBar(c1, c2) => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*)); annotateCommand(c1); annotateCommand(c2)
       case Syntax.CIf(cond, cons, alt) =>
-        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*))
         abstractInterpExpr(cond) match {
-          case Some(value) => predicates.push(value);
+          case Some(value) => predicates.push(value.asInstanceOf[Z3AST]);
           case None => predicates.push(ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue()))
         }
         incrementer += 1
@@ -42,13 +42,13 @@ class PredicateGenerator extends ProgPass[Z3Context] {
         annotateCommand(alt)
         predicates.pop()
       case Syntax.CSplit(cases, default) =>
-        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+        c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*))
         var runningPredicates: Z3AST = null
         for (caseObj <- cases) {
           //get abstract interp of condition
           var currentCond: Z3AST = null
           abstractInterpExpr(caseObj.cond) match {
-            case Some(value) => currentCond = value
+            case Some(value) => currentCond = value.asInstanceOf[Z3AST]
             case None => currentCond = ctx.mkEq(ctx.mkBoolConst("__TOPCONSTANT__" + incrementer), ctx.mkTrue())
           }
           //Get the not of the current condition
@@ -71,11 +71,11 @@ class PredicateGenerator extends ProgPass[Z3Context] {
         predicates.push(runningPredicates)
         annotateCommand(default)
         predicates.pop()
-      case _ => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq: _*))
+      case _ => c.predicateCtx = Some(mkAnd(ctx, predicates.toSeq*))
     }
   }
 
-  private def abstractInterpExpr(e: Expr): Option[Z3Expr] = e match {
+  private def abstractInterpExpr(e: Expr): Option[Z3Expr[_]] = e match {
     case evar: EVar => Some(declareConstant(evar))
     case Syntax.EInt(v, base, bits) => Some(ctx.mkInt(v))
     case Syntax.EBool(v) => if (v) Some(ctx.mkTrue()) else Some(ctx.mkFalse())
@@ -89,8 +89,8 @@ class PredicateGenerator extends ProgPass[Z3Context] {
       val abse1 = abstractInterpExpr(e1)
       val abse2 = abstractInterpExpr(e2)
       (op, abse1, abse2) match {
-        case (EqOp(o), Some(v1), Some(v2)) if o == "==" => Some(ctx.mkEq(v1, v2))
-        case (EqOp(o), Some(v1), Some(v2)) if o == "!=" => Some(ctx.mkNot(ctx.mkEq(v1, v2)))
+        case (EqOp(o), Some(v1), Some(v2)) if o == "==" => Some(ctx.mkEq(v1.asInstanceOf[Z3Expr[_]], v2.asInstanceOf[Z3Expr[_]]))
+        case (EqOp(o), Some(v1), Some(v2)) if o == "!=" => Some(ctx.mkNot(ctx.mkEq(v1.asInstanceOf[Z3Expr[_]], v2.asInstanceOf[Z3Expr[_]])))
         case (BoolOp(o, _), Some(v1), Some(v2)) if o == "&&" =>
           Some(ctx.mkAnd(v1.asInstanceOf[Z3BoolExpr], v2.asInstanceOf[Z3BoolExpr]))
         case (BoolOp(o, _), Some(v1), Some(v2)) if o == "||" =>
@@ -103,14 +103,14 @@ class PredicateGenerator extends ProgPass[Z3Context] {
       val absfval = abstractInterpExpr(fval)
       (abscond, abstval, absfval) match {
         case (Some(vcond), Some(vtval), Some(vfval)) =>
-          Some(ctx.mkITE(vcond.asInstanceOf[Z3BoolExpr], vtval, vfval))
+          Some(ctx.mkITE(vcond.asInstanceOf[Z3BoolExpr], vtval.asInstanceOf[Z3Expr[_]], vfval.asInstanceOf[Z3Expr[_]]))
         case _ =>
           None
       }
     case _ => None
   }
 
-  private def declareConstant(evar: EVar): Z3Expr =
+  private def declareConstant(evar: EVar): Z3Expr[_] =
     evar.typ match {
       case Some(value) => value match {
         case _: Syntax.TSizedInt => ctx.mkIntConst(evar.id.v);

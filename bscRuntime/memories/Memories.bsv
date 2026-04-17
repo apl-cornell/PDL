@@ -78,6 +78,7 @@ interface AsyncMem#(type addr, type elem, type mid, numeric type nsz);
    method elem peekResp1(mid a);
    method Bool checkRespId1(mid a);
    method Action resp1(mid a);
+   method Action clear();  // Drop all in-flight requests (for exception abort)
    interface Client#(Tuple3#(Bit#(nsz), addr, elem), elem) bram_client;
 endinterface
 
@@ -320,23 +321,23 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    Wire#(Tuple3#(Bit#(n), addr, elem)) toMem <- mkWire();
    Wire#(elem) fromMem <- mkWire();
    
-   //this must be at least size 2 to work correctly (safe bet)
-   Vector#(inflight, Ehr#(2, elem)) outData <- replicateM( mkEhr(unpack(0)) );
-   Vector#(inflight, Ehr#(2, Bool)) valid <- replicateM( mkEhr(False) );
-   
+   //3-port EHR: port 0 = moveToOutFifo, port 1 = freeResp, port 2 = clear
+   Vector#(inflight, Ehr#(3, elem)) outData <- replicateM( mkEhr(unpack(0)) );
+   Vector#(inflight, Ehr#(3, Bool)) valid <- replicateM( mkEhr(False) );
+
    Reg#(MemId#(inflight)) head <- mkReg(0);
    Wire#(MemId#(inflight)) freeEntry <- mkWire();
-      
+
    Bool okToRequest = valid[head][1] == False;
-   
+
    Reg#(Maybe#(MemId#(inflight))) nextData <- mkDReg(tagged Invalid);
-  
+
    (* fire_when_enabled *)
    rule moveToOutFifo (nextData matches tagged Valid.idx);
       outData[idx][0] <= fromMem;
       valid[idx][0] <= True;
    endrule
-   
+
    (*fire_when_enabled*)
    rule freeResp;
       valid[freeEntry][1] <= False;
@@ -352,7 +353,7 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
    method elem peekResp1(MemId#(inflight) a);
       return outData[a][1];
    endmethod
-      
+
    method Bool checkRespId1(MemId#(inflight) a);
       return valid[a][1] == True;
    endmethod
@@ -362,19 +363,27 @@ module mkAsyncMem(AsyncMem#(addr, elem, MemId#(inflight), n) _unused_)
       freeEntry <= a;
    endmethod
    
+   // Drop all in-flight requests. Does not undo completed memory writes.
+   // Uses EHR port 2 (after moveToOutFifo[0] and freeResp[1]).
+   method Action clear();
+      head <= 0;
+      for (Integer i = 0; i < valueOf(inflight); i = i + 1)
+         valid[i][2] <= False;
+   endmethod
+
    interface Client bram_client;
       interface Get request;
 	 method ActionValue#(Tuple3#(Bit#(n), addr, elem)) get();
 	    return toMem;
 	 endmethod
       endinterface
-   
+
       interface Put response;
 	 method Action put(elem);
 	    fromMem <= elem;
 	 endmethod
       endinterface
-   
+
    endinterface
 
    

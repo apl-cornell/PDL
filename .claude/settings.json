@@ -1,0 +1,6 @@
+{
+  "env": {
+    "BLUESPECDIR": "/opt/homebrew/Cellar/bsc/2025.07/libexec",
+    "PATH": "/opt/homebrew/opt/openjdk/bin:/opt/homebrew/bin:$PATH"
+  }
+}

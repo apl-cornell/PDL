@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import BSVSyntax._
+import BSVSyntax.*
 import pipedsl.common.Errors.UnexpectedBSVType
 import pipedsl.common.LockImplementation
 

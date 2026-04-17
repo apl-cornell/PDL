@@ -296,7 +296,7 @@ module CheckpointRenameRF(CLK,
 	  if (ROLLBK_E && DO_ROLL)
 	    begin
 	       names <= `BSV_ASSIGNMENT_DELAY name_copies[ROLLBK_IN];	       
-	       free <= `BSV_ASSIGNMENT_DELAY free_copies[ROLLBK_IN] | (FE << oldName) | free;	       	      
+	       free <= `BSV_ASSIGNMENT_DELAY free_copies[ROLLBK_IN] | (FE << oldName);
 	    end
 	  else if (FE)
 	    begin

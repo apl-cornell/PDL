@@ -1,6 +1,6 @@
 package pipedsl.codegen.bsv
 
-import pipedsl.common.Constraints._
+import pipedsl.common.Constraints.*
 import pipedsl.codegen.bsv.BSVSyntax.{PAdd, PEq, PMax, Proviso}
 import pipedsl.common.Syntax.Id
 

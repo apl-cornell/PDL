@@ -1,7 +1,7 @@
 package pipedsl.passes
 
 import pipedsl.common.DAGSyntax.{IfStage, PStage, PipelineEdge}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import Passes.{CommandPass, ModulePass, ProgPass}
 
 /**

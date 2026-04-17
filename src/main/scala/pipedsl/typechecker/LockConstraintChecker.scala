@@ -3,10 +3,10 @@ package pipedsl.typechecker
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context, Solver => Z3Solver, Status => Z3Status}
 import pipedsl.common.Errors.{UnexpectedCase, UnprovenLockState}
 import pipedsl.common.Locks
-import pipedsl.common.Locks._
-import pipedsl.common.Syntax._
+import pipedsl.common.Locks.*
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.{mkAnd, mkImplies, updateSetMap}
-import pipedsl.typechecker.Environments._
+import pipedsl.typechecker.Environments.*
 import pipedsl.typechecker.TypeChecker.TypeChecks
 /*want to also check that writes are done precisely once*/
 /*maybe keep a map from mems to Z3AST that keeps track of on what conditions there is a write?*/
@@ -240,7 +240,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           SMTReserveModeListMap = updateSetMap(
             SMTReserveModeListMap,
             c.mem.id,
-            mkImplies(ctx, mkAnd(ctx, predicates.toSeq: _*), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
+            mkImplies(ctx, mkAnd(ctx, predicates.toSeq*), ctx.mkEq(lockReserveMode, ctx.mkInt(WRITE))))
         }
 
       case (Released, Some(LockWrite)) =>
@@ -250,7 +250,7 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
           SMTReleaseModeListMap = updateSetMap(
             SMTReleaseModeListMap,
             c.mem.id,
-            mkImplies(ctx, mkAnd(ctx, predicates.toSeq: _*), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
+            mkImplies(ctx, mkAnd(ctx, predicates.toSeq*), ctx.mkEq(lockReleaseMode, ctx.mkInt(WRITE))))
         }
       case (r@(Reserved | Released), Some(LockRead)) => checkLockWrite(r, c.mem.id) match {
         case Z3Status.UNSATISFIABLE =>
@@ -262,15 +262,15 @@ class LockConstraintChecker(lockMap: Map[Id, Set[LockArg]], lockGranularityMap: 
   }
 
   private def checkLockWrite(ls: LockState, mem: Id): Z3Status = {
-    solver.add(ctx.mkEq(mkAnd(ctx, predicates.toSeq: _*), ctx.mkTrue()))
+    solver.add(ctx.mkEq(mkAnd(ctx, predicates.toSeq*), ctx.mkTrue()))
     val expectedName = ls match {
       case Released => lockReleaseMode
       case Reserved => lockReserveMode
       case _ => assert(false); lockReleaseMode //TODO throw good exception
     }
     val assertion = ls match {
-      case Released => ctx.mkAnd((SMTReleaseModeListMap(mem) + topLevelReleaseModeMap(mem)).toSeq: _*)
-      case Reserved => ctx.mkAnd((SMTReserveModeListMap(mem) + topLevelReserveModeMap(mem)).toSeq: _*)
+      case Released => ctx.mkAnd((SMTReleaseModeListMap(mem) + topLevelReleaseModeMap(mem)).toSeq*)
+      case Reserved => ctx.mkAnd((SMTReserveModeListMap(mem) + topLevelReserveModeMap(mem)).toSeq*)
       case _ => assert(false); lockReleaseMode //TODO throw good exception
     }
     solver.add(mkAnd(ctx, assertion, ctx.mkEq(expectedName, ctx.mkInt(WRITE))))

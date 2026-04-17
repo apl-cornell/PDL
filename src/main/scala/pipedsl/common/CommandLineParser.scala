@@ -25,7 +25,7 @@ object CommandLineParser {
   private def buildParser(): OParser[Unit, Config] = {
     val builder = OParser.builder[Config]
     val parser1 = {
-      import builder._
+      import builder.*
       OParser.sequence(
         programName("pipedsl"),
         head("pipedsl", "0.0.1"),

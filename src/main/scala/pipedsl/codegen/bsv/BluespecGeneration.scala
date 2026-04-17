@@ -1,11 +1,11 @@
 package pipedsl.codegen.bsv
 
-import BSVSyntax._
+import BSVSyntax.*
 import pipedsl.common.DAGSyntax.{PStage, PipelineEdge}
 import pipedsl.common.Errors.{UnexpectedCommand, UnexpectedExpr}
 import pipedsl.common.LockImplementation.{LockInterface, MethodInfo}
 import pipedsl.common.{LockImplementation, ProgInfo}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.{annotateSpecTimings, flattenStageList, log2}
 
 import scala.collection.immutable.ListMap
@@ -95,7 +95,7 @@ object BluespecGeneration {
         (stmts1 ++ stmts2, env2)
       case CirConnect(name, cm) =>
         val (elemTyp, addrSize, numPorts) = cm match {
-          case CirMem(elemTyp, addrSize, numPorts) => (elemTyp, addrSize, numPorts)
+          case CirMem(elemTyp, addrSize, numPorts, _) => (elemTyp, addrSize, numPorts)
           case CirLockMem(elemTyp, addrSize, _, _, numPorts) => (elemTyp, addrSize, numPorts)
           case _ => return (List(), env)
         }
@@ -127,7 +127,7 @@ object BluespecGeneration {
           else {
             Map(name -> BVar(name.v + "." + bsInts.getBramClientName, translator.toClientType(mtyp)))
           }
-        case CirMem(_, _, _)  if memMap.contains(name) =>
+        case CirMem(_, _, _, _)  if memMap.contains(name) =>
           if(isDualPorted(name.typ.get)) {
             Map(
               name.copy(name.v + "1") -> BVar(name.v + "." + bsInts.getBramClientName + "1", translator.toClientType(name.typ.get)),
@@ -155,7 +155,7 @@ object BluespecGeneration {
     }
 
     private def cirExprToModule(c: CirExpr, env: Map[Id, BVar], initFile: Option[String]): (BSVType, BModule) = c match {
-      case CirMem(elemTyp, addrSize, numPorts) =>
+      case CirMem(elemTyp, addrSize, numPorts, _) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = true,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp, numPorts)
@@ -167,12 +167,12 @@ object BluespecGeneration {
         val modInstName = impl.getModuleInstName(mtyp)
         val largs = getLockModArgs(mtyp, impl, szParams)
         (lockMemTyp, BModule(modInstName, largs))
-      case CirRegister(elemTyp, initVal) =>
+      case CirRegister(elemTyp, initVal, _) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, 0), bElemTyp, 0)
         (memtyp, bsInts.getRegister(initVal))
-      case CirRegFile(elemTyp, addrSize) =>
+      case CirRegFile(elemTyp, addrSize, _) =>
         val bElemTyp = translator.toType(elemTyp)
         val memtyp = bsInts.getBaseMemType(isAsync = false,
           translator.getTypeSize(bElemTyp), BSizedInt(unsigned = true, addrSize), bElemTyp, 0)
@@ -254,7 +254,7 @@ object BluespecGeneration {
         case CirSeq(c1, c2) =>
           makeConnections(c1, memMap, intMap) ++ makeConnections(c2, memMap, intMap)
         case CirConnect(mem, rhs) if memMap.contains(mem) => rhs match {
-          case CirMem(_, _, _) | CirLockMem(_, _, _, _, _) =>
+          case CirMem(_, _, _, _) | CirLockMem(_, _, _, _, _) =>
             val leftArg = intMap.get(mem)
             val rightArg = memMap(mem)
             leftArg match {
@@ -394,6 +394,8 @@ object BluespecGeneration {
     private def getSpecIdVal = BFromMaybe(BDontCare, translator.toBSVVar(specIdVar))
     //Registers for external communication
     private val busyReg = BVar("busyReg", bsInts.getRegType(BBool))
+    //Exception handling: global exception flag register
+    private val globalExnFlag = BVar("globalExnFlag", bsInts.getRegType(BBool))
     private val threadIdVar = BVar(threadIdName, getThreadIdType)
     private val outputData =  BVar("data", translator.toType(mod.ret.getOrElse(TVoid())))
     private val outputQueue = BVar("outputQueue", bsInts.getOutputQType(threadIdVar.typ, outputData.typ))
@@ -728,6 +730,9 @@ object BluespecGeneration {
           } else {
             l
           }
+        // Exception: ICheckExn guards the stage -- only fire if NOT in exception mode
+        case _: ICheckExn =>
+          l :+ BUOp("!", BMethodInvoke(globalExnFlag, "_read", List()))
         case _ => l
       })
     }
@@ -923,6 +928,8 @@ object BluespecGeneration {
         (edgeFifos.values.toList ++ memRegions.values.toList ++ modLockInsts)
       if (mod.isRecursive) stmts = stmts :+ busyInst
       if (mod.maybeSpec) stmts = stmts :+ specInst
+      //Instantiate global exception flag for exception pipelines
+      if (mod.hasExceptions) stmts = stmts :+ BModInst(globalExnFlag, bsInts.getReg(BBoolLit(false)))
       stmts = (stmts :+ outputInst :+ threadInst) ++ stgStmts
       //expose a start method as part of the top level interface
       var methods = List[BMethodDef]()
@@ -1391,6 +1398,30 @@ object BluespecGeneration {
           bsInts.getMemResp(modParams(mem), translator.toVar(handle), c.portNum, isLockedMemory(mem))))
       case IRecv(_, sender, _) =>
         Some(BExprStmt(bsInts.getModResponse(modParams(sender))))
+      // Exception handling internal commands
+      case IAbort(mem) =>
+        // Call abort() on the lock/memory module
+        if (isLockedMemory(mem))
+          Some(BExprStmt(BMethodInvoke(modParams(mem), "lock.abort", List())))
+        else
+          Some(BExprStmt(BMethodInvoke(modParams(mem), "clear", List())))
+      case ISetGlobalExnFlag(state) =>
+        Some(BExprStmt(BMethodInvoke(globalExnFlag, "_write", List(BBoolLit(state)))))
+      case _: IFifoClear =>
+        // Generate .clear() for all pipeline edge FIFOs
+        val clearStmts = edgeParams.values.map(fifoVar =>
+          BExprStmt(BMethodInvoke(fifoVar, "clear", List()))
+        ).toList
+        if (clearStmts.nonEmpty) Some(BStmtSeq(clearStmts)) else Some(BEmpty)
+      case _: ISpecClear =>
+        // Clear the speculation table (reset all entries)
+        if (mod.maybeSpec)
+          Some(BExprStmt(BMethodInvoke(specTable, "clear", List())))
+        else
+          Some(BEmpty)
+      case _: ICheckExn =>
+        // This is handled as a guard condition, not a statement
+        None
       case _ => None
     }
     private def sendToModuleInput(args: List[Expr], specHandle: Option[EVar] = None) = {

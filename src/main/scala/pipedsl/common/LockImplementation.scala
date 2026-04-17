@@ -3,7 +3,7 @@ package pipedsl.common
 import pipedsl.common.Errors.{MissingType, UnexpectedLockImpl}
 import pipedsl.common.Locks.{General, LockGranularity, Specific}
 import pipedsl.common.Syntax.Latency.{Combinational, Latency, Sequential}
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 
 
 object LockImplementation {
@@ -357,8 +357,7 @@ object LockImplementation {
   private def getLockImplFromMemTyp(mem: Id): LockInterface = {
     mem.typ match
     {
-      case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory")
-      {
+      case Some(mtyp) => mtyp.matchOrError(mem.pos, "Memory Access", "Memory") {
         case TLockedMemType(_, _, limpl) => limpl
         case _ :TModType => modLock
       }

@@ -2,10 +2,10 @@ package pipedsl.typechecker
 
 import com.microsoft.z3.{AST => Z3AST, BoolExpr => Z3BoolExpr, Context => Z3Context}
 import pipedsl.typechecker.TypeInferenceWrapper.apply_subst_typ
-import pipedsl.common.Errors._
-import pipedsl.common.Locks._
-import pipedsl.common.Syntax._
-import pipedsl.common.Utilities._
+import pipedsl.common.Errors.*
+import pipedsl.common.Locks.*
+import pipedsl.common.Syntax.*
+import pipedsl.common.Utilities.*
 
 object Environments {
 

@@ -1,7 +1,7 @@
 package pipedsl
-import scala.util.parsing.combinator._
-import common.Syntax._
-import common.Locks._
+import scala.util.parsing.combinator.*
+import common.Syntax.*
+import common.Locks.*
 import pipedsl.common.LockImplementation
 import pipedsl.common.Syntax.Latency.Latency
 import pipedsl.common.Utilities.{generic_type_prefix, opt_func}
@@ -101,7 +101,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   }}
 
   lazy val num: P[EInt] = binary | hex | octal | dec ^^
-    { x: EInt => x.typ.get.setPos(x.pos); x }
+    { (x: EInt) => x.typ.get.setPos(x.pos); x }
 
   lazy val boolean: P[Boolean] = "true" ^^ { _ => true } | "false" ^^ { _ => false }
 
@@ -271,6 +271,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
       "print" ~> parens(repsep(expr, ",")) ^^ (e => { CPrint(e)}) |
       "return" ~> expr ^^ (e => CReturn(e)) |
       "output" ~> expr ^^ (e => { COutput(e)}) |
+      throwExn |
       expr ^^ (e => { CExpr(e)})
   }
   
@@ -371,7 +372,7 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
   lazy val bitWidthAtom :P[TBitWidth] = iden ^^ {id => TBitWidthVar(Id(generic_type_prefix + id.v))} |
     posint ^^ {i => TBitWidthLen(i)}
 
-  lazy val bitWidth :P[TBitWidth] =
+  lazy val bitWidth :P[TBitWidth] = (
       repsep(bitWidthAtom, "+") ^^
         { lst =>
           {
@@ -382,8 +383,9 @@ class Parser(rflockImpl: String) extends RegexParsers with PackratParsers {
               }
             tmp
           }
-        } |
-    bitWidthAtom
+        }
+    | bitWidthAtom
+    )
 
   lazy val sizedInt: P[Type] = "int" ~> angular(bitWidth) ^^ { bits => TSizedInt(bits, TSigned() ) } |
   "uint" ~> angular(bitWidth) ^^ { bits =>  TSizedInt(bits, TUnsigned() ) }
@@ -487,10 +489,30 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
   }
 
   lazy val moddef: P[ModuleDef] = dlog(positioned {
-    "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ (":" ~> typ).? ~ braces(cmd) ^^ {
-      case i ~ ps ~ mods ~ rt ~ c => ModuleDef(i, ps, mods, rt, c)
+    "pipe" ~> iden ~ parens(repsep(param, ",")) ~ brackets(repsep(param, ",")) ~ (":" ~> typ).? ~ braces(pipeBody) ^^ {
+      case i ~ ps ~ mods ~ rt ~ ((body, commitOpt, exceptBlk)) =>
+        ModuleDef(i, ps, mods, rt, body, commitOpt, exceptBlk)
     }
   })("module")
+
+  // Pipeline body with optional commit and except blocks
+  lazy val pipeBody: P[(Command, Option[Command], ExceptBlock)] =
+    cmd ~ ("commit" ~ ":" ~> cmd).? ~ exceptBlock.? ^^ {
+      case body ~ commitOpt ~ exceptOpt =>
+        (body, commitOpt, exceptOpt.getOrElse(ExceptEmpty()))
+    }
+
+  lazy val exceptBlock: P[ExceptBlock] = positioned {
+    "except" ~> parens(repsep(param, ",")) ~ (":" ~> cmd) ^^ {
+      case params ~ handler =>
+        ExceptFull(params.map(p => { p.name.typ = Some(p.typ); p.name }), handler)
+    }
+  }
+
+  // throw(args...) -- raises exception
+  lazy val throwExn: P[CExcept] = positioned {
+    "throw" ~> parens(repsep(expr, ",")) ^^ { case args => CExcept(args) }
+  }
 
   lazy val ccall: P[CirCall] = positioned {
     "call" ~ iden ~ parens(repsep(expr, ",")) ^^ {
@@ -518,20 +540,22 @@ lazy val genericName :P[Id] = iden ^^ {i => Id(generic_type_prefix + i.v)}
   }
 
   lazy val creg: P[CirExpr] = positioned {
-    "register" ~> parens(sizedInt ~ ("," ~> posint).?)^^ { case elem ~ init =>
+    ("volatile".? <~ "register") ~ parens(sizedInt ~ ("," ~> posint).?) ^^ { case vol ~ (elem ~ init) =>
       val initval = if (init.isDefined) { init.get } else { 0 }
-      CirRegister(elem, initval)
+      CirRegister(elem, initval, vol.isDefined)
     }
   }
 
   lazy val cmem: P[CirExpr] = positioned {
-    "memory" ~> parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^
-      { case elem ~ _ ~
-      addr ~ ports => CirMem(elem, addr, ports.getOrElse(1)); }
+    ("volatile".? <~ "memory") ~ parens(sizedInt ~ "," ~ posint ~ opt("," ~> posint)) ^^ {
+      case vol ~ (elem ~ _ ~ addr ~ ports) => CirMem(elem, addr, ports.getOrElse(1), vol.isDefined)
+    }
   }
 
   lazy val crf: P[CirExpr] = positioned {
-    "regfile" ~> parens(sizedInt ~ "," ~ posint) ^^ { case elem ~ _ ~ addr => CirRegFile(elem, addr) }
+    ("volatile".? <~ "regfile") ~ parens(sizedInt ~ "," ~ posint) ^^ {
+      case vol ~ (elem ~ _ ~ addr) => CirRegFile(elem, addr, vol.isDefined)
+    }
   }
 
   lazy val clockrf: P[CirExpr] = positioned {

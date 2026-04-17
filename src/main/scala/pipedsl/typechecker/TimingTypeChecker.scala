@@ -1,6 +1,6 @@
 package pipedsl.typechecker
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import TypeChecker.TypeChecks
 import pipedsl.common.Errors.{MissingType, UnavailableArgUse, UnexpectedAsyncReference, UnexpectedCommand, UnexpectedType, UnsupportedLockOperation}
 import pipedsl.common.{LockImplementation, Syntax}

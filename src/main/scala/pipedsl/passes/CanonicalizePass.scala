@@ -1,6 +1,6 @@
 package pipedsl.passes
 
-import pipedsl.common.Syntax._
+import pipedsl.common.Syntax.*
 import pipedsl.common.Utilities.getAllVarNames
 import pipedsl.passes.Passes.{CommandPass, FunctionPass, ModulePass, ProgPass}
 
@@ -70,10 +70,13 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
     {
       case CSeq(c1, c2) => CSeq(extractCastVars(c1), extractCastVars(c2)).setPos(c.pos)
       case CTBar(c1, c2) => CTBar(extractCastVars(c1), extractCastVars(c2)).setPos(c.pos)
-      case CIf(cond, cons, alt) => val (ncond, nassgns) = extractCastVars(cond)
+      case CIf(cond, cons, alt) => {
+        val (ncond, nassgns) = extractCastVars(cond)
         val nif = CIf(ncond, extractCastVars(cons), extractCastVars(alt)).setPos(c.pos)
         CSeq(nassgns, nif).setPos(c.pos)
-      case CSplit(cases, default) => val ndef = extractCastVars(default)
+      }
+      case CSplit(cases, default) => {
+        val ndef = extractCastVars(default)
         var assngs: Command = CEmpty()
         val ncases = cases.foldLeft(List[CaseObj]())((l, cobj) =>
           {
@@ -83,30 +86,45 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
             l :+ CaseObj(ncond, nbody).setPos(cobj.pos)
           })
         CSeq(assngs, CSplit(ncases, ndef).setPos(c.pos)).setPos(c.pos)
-      case CAssign(lhs, rhs) => val (nrhs, nassgns) = extractCastVars(rhs)
+      }
+      case CAssign(lhs, rhs) => {
+        val (nrhs, nassgns) = extractCastVars(rhs)
         val nc = CAssign(lhs, nrhs).setPos(c.pos)
         CSeq(nassgns, nc).setPos(c.pos)
-      case CRecv(lhs, rhs) => val (nrhs, na1) = extractCastVars(rhs)
+      }
+      case CRecv(lhs, rhs) => {
+        val (nrhs, na1) = extractCastVars(rhs)
         val (nlhs, na2) = extractCastVars(lhs)
         val nassgns = CSeq(na1, na2).setPos(c.pos)
         CSeq(nassgns, CRecv(nlhs, nrhs).setPos(c.pos)).setPos(c.pos)
-      case CSpecCall(handle, pipe, args) => val (nargs, nc) = extractCastVars(args)
+      }
+      case CSpecCall(handle, pipe, args) => {
+        val (nargs, nc) = extractCastVars(args)
         CSeq(nc, CSpecCall(handle, pipe, nargs).setPos(c.pos)).setPos(c.pos)
+      }
       case CCheckSpec(_) => c
-      case CVerify(handle, args, preds, upd, cHandles) =>
+      case CVerify(handle, args, preds, upd, cHandles) => {
         val (nargs, nc) = extractCastVars(args)
         CSeq(nc, CVerify(handle, nargs, preds, upd, cHandles).setPos(c.pos)).setPos(c.pos)
-      case CUpdate(newHandle, handle, args, preds, cHandles) =>
+      }
+      case CUpdate(newHandle, handle, args, preds, cHandles) => {
         val (nargs, nc) = extractCastVars(args)
         CSeq(nc, CUpdate(newHandle, handle, nargs, preds, cHandles).setPos(c.pos)).setPos(c.pos)
+      }
       case CInvalidate(_,_) => c
       case CPrint(_) => c
-      case COutput(exp) => val (nexp, nasgn) = extractCastVars(exp)
+      case COutput(exp) => {
+        val (nexp, nasgn) = extractCastVars(exp)
         CSeq(nasgn, COutput(nexp).setPos(c.pos)).setPos(c.pos)
-      case CReturn(exp) => val (nexp, nasgn) = extractCastVars(exp)
+      }
+      case CReturn(exp) => {
+        val (nexp, nasgn) = extractCastVars(exp)
         CSeq(nasgn, CReturn(nexp).setPos(c.pos)).setPos(c.pos)
-      case CExpr(exp) => val (nexp, nasgn) = extractCastVars(exp)
+      }
+      case CExpr(exp) => {
+        val (nexp, nasgn) = extractCastVars(exp)
         CSeq(nasgn, CExpr(nexp).setPos(c.pos)).setPos(c.pos)
+      }
       case CCheckpoint(_,_) => c
       case CLockStart(_) => c
       case CLockEnd(_) => c
@@ -135,43 +153,66 @@ class CanonicalizePass() extends CommandPass[Command] with ModulePass[ModuleDef]
      * @return */
     def extractCastVars(e: Expr): (Expr, Command) = e match
     {
-      case EIsValid(ex) => val (ne, nc) = extractCastVars(ex)
+      case EIsValid(ex) => {
+        val (ne, nc) = extractCastVars(ex)
         (EIsValid(ne).setPos(e.pos), nc)
-      case EFromMaybe(ex) => val (ne, nc) = extractCastVars(ex)
+      }
+      case EFromMaybe(ex) => {
+        val (ne, nc) = extractCastVars(ex)
         (EFromMaybe(ne).setPos(e.pos), nc)
-      case EToMaybe(ex) => val (ne, nc) = extractCastVars(ex)
+      }
+      case EToMaybe(ex) => {
+        val (ne, nc) = extractCastVars(ex)
         (EToMaybe(ne).setPos(e.pos), nc)
-      case EUop(op, ex) => val (ne, nc) = extractCastVars(ex)
+      }
+      case EUop(op, ex) => {
+        val (ne, nc) = extractCastVars(ex)
         (EUop(op, ne).setPos(e.pos), nc)
-      case EBinop(op, e1, e2) => val (ne1, nc1) = extractCastVars(e1)
+      }
+      case EBinop(op, e1, e2) => {
+        val (ne1, nc1) = extractCastVars(e1)
         val (ne2, nc2) = extractCastVars(e2)
         (EBinop(op, ne1, ne2).setPos(e.pos), CSeq(nc1, nc2).setPos(nc1.pos))
-      case EMemAccess(mem, index, Some(mask), inHandle, outHandle, isAtomic) => val (ne, nc) = extractCastVars(index)
+      }
+      case EMemAccess(mem, index, Some(mask), inHandle, outHandle, isAtomic) => {
+        val (ne, nc) = extractCastVars(index)
         val (nm, ncm) = extractCastVars(mask)
         (EMemAccess(mem, ne, Some(nm), inHandle, outHandle, isAtomic).setPos(e.pos), CSeq(nc, ncm).setPos(e.pos))
-      case EMemAccess(mem, index, None, inHandle, outHandle, isAtomic) => val (ne, nc) = extractCastVars(index)
+      }
+      case EMemAccess(mem, index, None, inHandle, outHandle, isAtomic) => {
+        val (ne, nc) = extractCastVars(index)
         (EMemAccess(mem, ne, None, inHandle, outHandle, isAtomic).setPos(e.pos), nc)
-      case EBitExtract(num, start, end) => val (ne, nc) = extractCastVars(num)
+      }
+      case EBitExtract(num, start, end) => {
+        val (ne, nc) = extractCastVars(num)
         ne match {
           case _:EVar => (EBitExtract(ne, start, end).setPos(e.pos), nc)
-          case _ => val asn = freshTmp(ne)
+          case _ =>
+            val asn = freshTmp(ne)
             (EBitExtract(asn.lhs, start, end).setPos(e.pos), CSeq(nc, asn).setPos(e.pos))
-
         }
-
-      case ETernary(cond, tval, fval) => val (ncond, nc) = extractCastVars(cond)
+      }
+      case ETernary(cond, tval, fval) => {
+        val (ncond, nc) = extractCastVars(cond)
         val (net, nct) = extractCastVars(tval)
         val (nef, ncf) = extractCastVars(fval)
         (ETernary(ncond, net, nef).setPos(e.pos), CSeq(CSeq(nc, nct).setPos(e.pos), ncf).setPos(e.pos))
-      case EApp(func, args) => val (nargs, nc) = extractCastVars(args)
+      }
+      case EApp(func, args) => {
+        val (nargs, nc) = extractCastVars(args)
         (EApp(func, nargs).setPos(e.pos), nc)
-      case ECall(mod, name, args, isAtomic) => val (nargs, nc) = extractCastVars(args)
+      }
+      case ECall(mod, name, args, isAtomic) => {
+        val (nargs, nc) = extractCastVars(args)
         (ECall(mod, name, nargs, isAtomic).setPos(e.pos), nc)
-      case ECast(ctyp, e) => val (ne, nc) = extractCastVars(e)
+      }
+      case ECast(ctyp, exp) => {
+        val (ne, nc) = extractCastVars(exp)
         val ncast = ECast(ctyp, ne)
         ncast.typ = Some(ctyp)
         val nassgn = freshTmp(ncast)
-        (nassgn.lhs, CSeq(nc, nassgn).setPos(e.pos))
+        (nassgn.lhs, CSeq(nc, nassgn).setPos(exp.pos))
+      }
       case _ => (e, CEmpty())
     }
   }
