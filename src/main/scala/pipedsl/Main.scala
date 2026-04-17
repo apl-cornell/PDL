@@ -103,6 +103,9 @@ object Main {
       linChecker.check(recvProg, None)
       val specChecker = new SpeculationChecker(ctx)
       specChecker.check(recvProg, None)
+      // Exception-specific checks (only affect exception pipelines)
+      FinalblocksConstraintChecker.check(recvProg)
+      VolatileAccessChecker.check(recvProg)
       val lock_prog = LockOpTranslationPass.run(recvProg)
       TimingTypeChecker.check(lock_prog, Some(basetypes))
       if (printOutput) {

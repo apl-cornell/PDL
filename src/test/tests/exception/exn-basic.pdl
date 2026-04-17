@@ -1,0 +1,19 @@
+// Basic exception pipeline -- should typecheck correctly
+pipe counter(pc: int<16>)[rf: int<32>[5]<c,2,s,2>] {
+    acquire(rf[pc{4:0}], R);
+    int<32> val = rf[pc{4:0}];
+    release(rf[pc{4:0}]);
+    reserve(rf[pc{4:0}], W);
+    ---
+    if (val == 0) {
+        throw(pc);
+    }
+    ---
+    block(rf[pc{4:0}]);
+    rf[pc{4:0}] <- val + 1;
+commit:
+    release(rf[pc{4:0}]);
+    call counter(pc + 1);
+except(error_pc: int<16>):
+    call counter(error_pc);
+}

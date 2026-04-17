@@ -33,6 +33,7 @@ interface CheckpointQueueLock#(type id, type cid);
    method Bool canRes1();
    method ActionValue#(cid) checkpoint();
    method Action rollback(cid id, Bool doRoll, Bool doRel);
+   method Action abort();
 endinterface
 
 interface AddrLock#(type id, type addr, numeric type size);
@@ -189,8 +190,15 @@ module mkCheckpointQueueLock(CheckpointQueueLock#(LockId#(d), LockId#(d)));
 	    nextId[0] <= i;
 	    empty <= i == owner; //if i is Owner, then this is actually empty after rollback
 	 end
-   endmethod   
-   
+   endmethod
+
+   // Abort: reset all uncommitted state. Releases (commits) are permanent.
+   // Resets nextId back to owner, clearing all pending reservations.
+   method Action abort();
+      nextId[0] <= owner;
+      empty <= True;
+   endmethod
+
 endmodule
 
 typedef UInt#(TLog#(n)) LockIdx#(numeric type n);

@@ -213,4 +213,27 @@ object Errors {
   case class BadConstraintsAtCall(app :EApp) extends RuntimeException(
     withPos(s"Constraints for $app not satisfied", app.pos)
   )
+
+  // Exception handling errors
+  case class MustThrowWithExnPipe(pos: Position) extends RuntimeException(
+    withPos("Exception pipeline must contain at least one 'throw' statement in the body", pos)
+  )
+  case class NoWriteReleaseInBody(pos: Position) extends RuntimeException(
+    withPos("Write lock release not allowed in pipeline body of exception pipeline (must be in commit block)", pos)
+  )
+  case class IllegalThrowPlacement(pos: Position) extends RuntimeException(
+    withPos("'throw' is only allowed in the pipeline body, not in commit or except blocks", pos)
+  )
+  case class NoCommittingWriteInBody(pos: Position) extends RuntimeException(
+    withPos("Stateful operation (other than lock release) not allowed in commit block", pos)
+  )
+  case class IllegalVolatileWrite(pos: Position) extends RuntimeException(
+    withPos("Writes to volatile memory are only allowed in final blocks (commit/except)", pos)
+  )
+  case class NoMultipleVolatileAccess(pos: Position) extends RuntimeException(
+    withPos("Only one read and one write per volatile memory per instruction", pos)
+  )
+  case class MustEndBeforeCall(pos: Position) extends RuntimeException(
+    withPos("Lock region must end before recursive call in except block", pos)
+  )
 }

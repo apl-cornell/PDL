@@ -12,6 +12,7 @@ interface SpecTable#(type sid, numeric type bypcnt);
     method Action free(sid s);
     method Action validate(sid s, Integer i);
     method Action invalidate(sid s, Integer i);
+    method Action clear();  // Reset all entries (for exception handling)
 endinterface
 
 module mkSpecTable(SpecTable#(SpecId#(entries), bypassCnt));
@@ -84,7 +85,15 @@ module mkSpecTable(SpecTable#(SpecId#(entries), bypassCnt));
 	  if ((s == lv || isNewer(lv, s)) && inUse[lv]) specStatus[lv][j] <= tagged Valid False;
        end
     endmethod
-   
+
+    // Clear all entries (for exception pipeline flush)
+    method Action clear();
+       for (Integer i = 0; i < valueOf(entries); i = i + 1) begin
+          inUse[fromInteger(i)] <= False;
+       end
+       head <= 0;
+    endmethod
+
 endmodule
 
 

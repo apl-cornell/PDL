@@ -155,7 +155,7 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
   }
 
   private def checkCirExpr(c: CirExpr, tenv: Environment[Id, Type]): (Type, Environment[Id, Type]) = c match {
-    case CirMem(elemTyp, addrSize, numPorts) => {
+    case CirMem(elemTyp, addrSize, numPorts, _) => {
       if(numPorts > 2) throw TooManyPorts(c.pos, 2)
       val mtyp = TMemType(elemTyp, addrSize, Asynchronous, Asynchronous, numPorts, numPorts)
       c.typ = Some(mtyp)
@@ -175,12 +175,12 @@ object BaseTypeChecker extends TypeChecks[Id, Type] {
       c.typ = Some(newtyp)
       (newtyp, tenv)
     }
-    case CirRegister(elemTyp, _) => {
+    case CirRegister(elemTyp, _, _) => {
       val mtyp = TMemType(elemTyp, 0, Combinational, Sequential, 0, 0)
       c.typ = Some(mtyp)
       (mtyp, tenv)
     }
-    case CirRegFile(elemTyp, addrSize) => {
+    case CirRegFile(elemTyp, addrSize, _) => {
       val mtyp = TMemType(elemTyp, addrSize, Combinational, Sequential, defaultReadPorts, defaultWritePorts)
       c.typ = Some(mtyp)
       (mtyp, tenv)

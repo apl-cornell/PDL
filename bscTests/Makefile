@@ -53,7 +53,12 @@ TESTS = \
 	mkTestBHT_SaturationStrong \
 	mkTestBHT_DifferentPCs \
 	mkTestBHT_SameCycleReqUpd \
-	mkTestBHT_AliasingBehavior
+	mkTestBHT_AliasingBehavior \
+	mkTestAbort_LockBasic \
+	mkTestAbort_AfterRelease \
+	mkTestAbort_ReserveAfterAbort \
+	mkTestAbort_AsyncMemClear \
+	mkTestAbort_AsyncMemClearAndReuse
 
 # Source files per test module
 mkTestQL_BasicLifecycle_SRC = TestQueueLock.bsv
@@ -96,6 +101,11 @@ mkTestBHT_SaturationStrong_SRC = TestBHT.bsv
 mkTestBHT_DifferentPCs_SRC = TestBHT.bsv
 mkTestBHT_SameCycleReqUpd_SRC = TestBHT.bsv
 mkTestBHT_AliasingBehavior_SRC = TestBHT.bsv
+mkTestAbort_LockBasic_SRC = TestAbort.bsv
+mkTestAbort_AfterRelease_SRC = TestAbort.bsv
+mkTestAbort_ReserveAfterAbort_SRC = TestAbort.bsv
+mkTestAbort_AsyncMemClear_SRC = TestAbort.bsv
+mkTestAbort_AsyncMemClearAndReuse_SRC = TestAbort.bsv
 
 VSIM = -vsim iverilog
 VPATH_FLAG = -vsearch $(BLUESPECDIR)/lib/Verilog:$(VDIR)
