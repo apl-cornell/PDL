@@ -14,8 +14,13 @@ miscnotes
 \#*
 tmp/
 
+### Generated ###
+config.env
+config.mk
+
 ### Claude ###
-.claude-logs/*
+.claude-logs/
+.claude/settings.local.json
 
 ### SBT ###
 

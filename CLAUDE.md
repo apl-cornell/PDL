@@ -15,18 +15,32 @@ Key language abstractions:
 
 The compiler uses Z3 SMT solving for path-sensitive type checking of lock usage and speculation correctness.
 
-## Build Commands
+## Setup
+
+```bash
+./configure         # Detect toolchain, write config.env (run once)
+make                # Build compiler JAR + BSV runtime libraries
+```
+
+**Requirements**: JDK (8+), SBT, Bluespec compiler (`bsc`), IVerilog, timeout/gtimeout.
+
+On macOS: `brew install openjdk sbt bsc coreutils`
+On Ubuntu: `apt install default-jdk sbt iverilog` + install `bsc` from https://github.com/B-Lang-org/bsc
+
+`./configure` detects all tool paths and writes `config.env`, which is sourced by all Makefiles and `bin/runbsc`. Re-run if you update tools.
+
+## Build and Test
 
 ```bash
 make                # Full build: check setup, build compiler JAR, build BSV runtime libs
-make compiler       # Build compiler JAR only (sbt assembly -> target/scala-2.13/pdl.jar)
+make compiler       # Build compiler JAR only (sbt assembly -> target/scala-3.3.6/pdl.jar)
 make runtime        # Build BSV memory libraries only
 make clean          # Clean compiler and BSV outputs
-sbt test            # Run all tests
+sbt test            # Run all 247 compiler tests (parse, typecheck, compile, simulate)
 sbt "testOnly pipedsl.MainSuite"    # Run a single test suite
+cd bscTests && make test             # Run 40 BSV runtime module tests
+cd verilogTests && make test         # Run 25 Verilog RF module tests
 ```
-
-**Requirements**: JDK 1.8, Bluespec compiler (`bsc`) with `BLUESPECDIR` env var set, IVerilog (for simulation tests), Z3.
 
 ## Running the Compiler
 
